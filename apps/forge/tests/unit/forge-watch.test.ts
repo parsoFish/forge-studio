@@ -20,6 +20,7 @@ import {
   buildUiSpawnArgs,
   startUiSpawnArgs,
   terminateChild,
+  runExitSequence,
   type BridgeIdentity,
 } from '../../forge-watch.ts';
 
@@ -378,4 +379,43 @@ test('terminateChild: resolves cleanly when a DIFFERENT listener on the same "ex
   await assert.doesNotReject(() => terminateChild(captured, { graceMs: 200 }));
   assert.equal(shared.current, null, 'the shared var WAS nulled by the concurrent listener');
   assert.equal(captured.exitCode, 0, 'yet the locally-captured reference still resolved cleanly');
+});
+
+// ---------------------------------------------------------------------------
+// runExitSequence — stop serve, close the bridge, then exit, in that order.
+// runWatch spawns real child processes end to end and cannot be driven in a
+// unit test, so its exit sequencing is this one function: every exit path
+// (shutdown() on SIGINT/SIGTERM and on the UI spawn 'error', and the
+// production-build-failure branch) stops the serve supervisor before the
+// bridge closes, so none of them leaves a live `forge serve` behind.
+// ---------------------------------------------------------------------------
+
+test('runExitSequence: stops serve, closes the bridge, then exits — in that order', async () => {
+  const calls: string[] = [];
+  await runExitSequence(1, {
+    stopServe: () => calls.push('stop'),
+    closeBridge: async () => { calls.push('close'); },
+    exit: (code) => calls.push(`exit:${code}`),
+  });
+  assert.deepEqual(calls, ['stop', 'close', 'exit:1']);
+});
+
+test('runExitSequence: still stops serve and exits with the given code when closeBridge rejects', async () => {
+  const calls: string[] = [];
+  await runExitSequence(1, {
+    stopServe: () => calls.push('stop'),
+    closeBridge: async () => { throw new Error('boom'); },
+    exit: (code) => calls.push(`exit:${code}`),
+  });
+  assert.deepEqual(calls, ['stop', 'exit:1'], 'closeBridge rejecting must not skip exit, nor skip the prior stop');
+});
+
+test('runExitSequence: exits code 0 when there is nothing to stop (a no-op stopServe, e.g. no supervisor under the dry bridge)', async () => {
+  const calls: string[] = [];
+  await runExitSequence(0, {
+    stopServe: () => calls.push('stop'),
+    closeBridge: async () => { calls.push('close'); },
+    exit: (code) => calls.push(`exit:${code}`),
+  });
+  assert.deepEqual(calls, ['stop', 'close', 'exit:0']);
 });

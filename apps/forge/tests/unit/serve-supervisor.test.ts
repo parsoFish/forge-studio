@@ -21,6 +21,7 @@ import {
   SERVE_BACKOFF_INITIAL_MS,
   SERVE_BACKOFF_CAP_MS,
   type ServeSupervisorDeps,
+  type KillOutcome,
 } from '../../serve-supervisor.ts';
 
 // ---------------------------------------------------------------------------
@@ -78,25 +79,35 @@ function makeFakeClock(): FakeClock {
 
 /** A fake, in-memory "disk" shared by one or more supervisor instances —
  *  mirrors the pid file + stop marker two real `forge studio` processes
- *  would share via the filesystem. */
+ *  would share via the filesystem. `foreign` names pids that are alive but
+ *  are NOT our `forge serve` (pid reuse) — disjoint from `alive` by
+ *  convention in these tests, mirroring `isForgeServePid` combined with
+ *  liveness at the real call sites. */
 type FakeDisk = {
   pid: number | null;
   stoppingPid: number | null;
   alive: Set<number>;
+  foreign: Set<number>;
 };
 
 function makeFakeDisk(): FakeDisk {
-  return { pid: null, stoppingPid: null, alive: new Set() };
+  return { pid: null, stoppingPid: null, alive: new Set(), foreign: new Set() };
 }
 
 function makeDeps(
   clock: FakeClock,
   disk: FakeDisk,
   overrides: Partial<ServeSupervisorDeps> & { spawnPid?: () => number } = {},
-): ServeSupervisorDeps & { killed: Array<{ pid: number; signal: string }>; spawnCalls: number[]; logs: string[] } {
+): ServeSupervisorDeps & {
+  killed: Array<{ pid: number; signal: string }>;
+  spawnCalls: number[];
+  logs: string[];
+  clearStaleCalls: number[];
+} {
   const killed: Array<{ pid: number; signal: string }> = [];
   const spawnCalls: number[] = [];
   const logs: string[] = [];
+  const clearStaleCalls: number[] = [];
   let nextSpawnPid = 1000;
   const defaultSpawn = (): number => {
     const pid = overrides.spawnPid ? overrides.spawnPid() : nextSpawnPid++;
@@ -108,7 +119,8 @@ function makeDeps(
   const deps: ServeSupervisorDeps = {
     readPid: overrides.readPid ?? (() => disk.pid),
     readStoppingPid: overrides.readStoppingPid ?? (() => disk.stoppingPid),
-    isAlive: overrides.isAlive ?? ((pid: number) => disk.alive.has(pid)),
+    isAlive: overrides.isAlive ?? ((pid: number) => disk.alive.has(pid) || disk.foreign.has(pid)),
+    isForgeServe: overrides.isForgeServe ?? ((pid: number) => disk.alive.has(pid) && !disk.foreign.has(pid)),
     spawn: overrides.spawn ?? defaultSpawn,
     // A SIGTERM is not instant — `forge serve` traps it and drains in-flight
     // cycles before exiting. The fake therefore records the signal but does
@@ -117,16 +129,24 @@ function makeDeps(
     // exactly as a real exit event would.
     kill:
       overrides.kill ??
-      ((pid: number, signal: NodeJS.Signals) => {
+      ((pid: number, signal: NodeJS.Signals): KillOutcome => {
         killed.push({ pid, signal });
+        return { status: 'signalled' };
       }),
     markStopping: overrides.markStopping ?? ((pid: number) => { disk.stoppingPid = pid; }),
+    clearStaleRecord:
+      overrides.clearStaleRecord ??
+      (() => {
+        clearStaleCalls.push(1);
+        disk.pid = null;
+        disk.stoppingPid = null;
+      }),
     setTimer: overrides.setTimer ?? clock.setTimer,
     clearTimer: overrides.clearTimer ?? clock.clearTimer,
     now: overrides.now ?? clock.now,
     log: overrides.log ?? ((line: string) => logs.push(line)),
   };
-  return Object.assign(deps, { killed, spawnCalls, logs });
+  return Object.assign(deps, { killed, spawnCalls, logs, clearStaleCalls });
 }
 
 // ---------------------------------------------------------------------------
@@ -373,4 +393,187 @@ test('never signals a pid twice across studio restarts — start, stop, reboot o
   studio2.stop();
   assert.deepEqual(deps2.killed, [{ pid: pidB, signal: 'SIGTERM' }]);
   assert.equal(deps1.killed.length, 1, 'A was signalled exactly once total, by instance 1, never again');
+});
+
+// ---------------------------------------------------------------------------
+// Pid reuse (M7-E review MEDIUM): a pid file or stop marker names a pid the
+// OS has since handed to an unrelated process must never be adopted, never
+// be waited on as "draining", and must not wedge the supervisor forever —
+// the stale record is cleared and a fresh `forge serve` spawns immediately.
+// `disk.foreign` (see `makeFakeDisk`) stands in for such a pid: alive, but
+// `isForgeServe` reports false for it.
+// ---------------------------------------------------------------------------
+
+test('boot: a MARKED pid that is alive but is no longer our serve (pid reuse) — no wait, stale record cleared, fresh spawn', () => {
+  const clock = makeFakeClock();
+  const disk = makeFakeDisk();
+  disk.pid = 777;
+  disk.stoppingPid = 777; // marked stopping by a previous instance
+  disk.foreign.add(777); // alive, but NOT our serve (its number was reused)
+  const deps = makeDeps(clock, disk);
+
+  const handle = superviseServe({ forgeRoot: '/irrelevant', ...deps });
+
+  assert.equal(deps.spawnCalls.length, 1, 'spawns immediately — never waits out a foreign pid as a drain');
+  assert.notEqual(handle.getStatus().pid, 777);
+  assert.equal(handle.getStatus().state, 'running');
+  assert.ok(deps.clearStaleCalls.length >= 1, 'the stale pid file + stop marker are cleared before spawning');
+  handle.stop();
+});
+
+test('boot: an UNMARKED live pid that is not our serve (pid reuse) — not adopted; spawns fresh', () => {
+  const clock = makeFakeClock();
+  const disk = makeFakeDisk();
+  disk.pid = 555;
+  disk.foreign.add(555); // alive, but NOT our serve; no stop marker at all
+  const deps = makeDeps(clock, disk);
+
+  const handle = superviseServe({ forgeRoot: '/irrelevant', ...deps });
+
+  assert.equal(deps.spawnCalls.length, 1, 'a foreign live pid is never adopted');
+  assert.notEqual(handle.getStatus().pid, 555);
+  assert.ok(deps.clearStaleCalls.length >= 1, 'the stale record is cleared so a real spawnServeDetached cannot re-read it as "already running"');
+  handle.stop();
+});
+
+test('drain-wait: the pid being waited out turns foreign mid-poll (its number got reused) — treated as gone, stale record cleared, fresh spawn', () => {
+  const clock = makeFakeClock();
+  const disk = makeFakeDisk();
+
+  // Instance 1 spawns A, then stops: marks A, SIGTERMs it, A stays "alive"
+  // (draining) per the usual SIGTERM-is-not-instant convention.
+  const deps1 = makeDeps(clock, disk);
+  const studio1 = superviseServe({ forgeRoot: '/irrelevant', ...deps1 });
+  const pidA = deps1.spawnCalls[0];
+  studio1.stop();
+  assert.ok(disk.alive.has(pidA));
+
+  // Instance 2 boots onto A while it is genuinely still draining (ours).
+  const deps2 = makeDeps(clock, disk, { spawnPid: () => 2000 });
+  const studio2 = superviseServe({ forgeRoot: '/irrelevant', ...deps2 });
+  assert.equal(studio2.getStatus().state, 'draining');
+  assert.equal(deps2.spawnCalls.length, 0);
+
+  // Before A's real exit is observed, the OS hands pid A to an unrelated
+  // process (the extreme case) — A is still "alive" but no longer ours.
+  disk.alive.delete(pidA);
+  disk.foreign.add(pidA);
+  clock.advance(SERVE_POLL_MS);
+
+  assert.equal(deps2.killed.length, 0, 'the foreign process on A is never signalled — just no longer waited on');
+  assert.equal(deps2.spawnCalls.length, 1, 'treated as gone — a fresh serve spawns rather than waiting forever');
+  assert.notEqual(deps2.spawnCalls[0], pidA);
+  assert.ok(deps2.clearStaleCalls.length >= 1, 'the stale record is cleared before the fresh spawn');
+  studio2.stop();
+});
+
+// ---------------------------------------------------------------------------
+// Default kill + stop() logging (M7-E review MEDIUM): the default `kill`
+// must not swallow every error, and `stop()` must log the REAL outcome
+// (signalled / already gone / FAILED) rather than unconditionally claiming
+// "stopping". These three drive the REAL default `kill` (no `kill` override)
+// so the production `process.kill` wrapping itself is exercised.
+// ---------------------------------------------------------------------------
+
+function superviseWithRealKill(
+  pid: number,
+  overrides: Partial<ServeSupervisorDeps> = {},
+): { logs: string[]; marked: number[]; clearStaleCalls: number[] } {
+  const logs: string[] = [];
+  const marked: number[] = [];
+  const clearStaleCalls: number[] = [];
+  const noopTimer = { setTimer: () => 0, clearTimer: () => {} };
+  const handle = superviseServe({
+    forgeRoot: '/irrelevant',
+    readPid: () => pid,
+    readStoppingPid: () => null,
+    isAlive: () => true,
+    isForgeServe: () => true,
+    spawn: () => { throw new Error('must not spawn — a live pid is adopted'); },
+    markStopping: (p: number) => { marked.push(p); },
+    clearStaleRecord: () => { clearStaleCalls.push(1); },
+    now: () => 0,
+    log: (line: string) => { logs.push(line); },
+    ...noopTimer,
+    ...overrides,
+  });
+  handle.stop();
+  return { logs, marked, clearStaleCalls };
+}
+
+test('default kill: ESRCH (pid already gone) → stop() logs "already gone", never claims it signalled, and leaves the mark (next boot clears it)', () => {
+  // A pid number nothing owns — real process.kill throws ESRCH on it, the
+  // same constant `packages/flows/tests/integration/daemon.test.ts` uses for
+  // "definitely not a running process".
+  const deadPid = 2_147_483_640;
+  const { logs, marked, clearStaleCalls } = superviseWithRealKill(deadPid);
+
+  assert.deepEqual(marked, [deadPid], 'mark-before-kill still records the pid it attempted to signal');
+  assert.ok(
+    logs.some((l) => /already gone/i.test(l)),
+    `expected an "already gone" log line, got: ${JSON.stringify(logs)}`,
+  );
+  assert.ok(
+    !logs.some((l) => /stopping pid .* \(SIGTERM\)/.test(l)),
+    'must never claim "stopping" for a signal that was not delivered',
+  );
+  assert.equal(clearStaleCalls.length, 0, 'ESRCH leaves the mark — a future boot/poll clears it once observed dead');
+});
+
+test('default kill: a non-ESRCH failure (EPERM) → stop() logs FAILED with the real error code and UNDOES the premature mark', () => {
+  // pid 1 (init) — this test's own process has no permission to signal it,
+  // so the real process.kill(1, 'SIGTERM') reliably throws EPERM.
+  const { logs, marked, clearStaleCalls } = superviseWithRealKill(1);
+
+  assert.deepEqual(marked, [1], 'mark-before-kill recorded the pid before the signal attempt failed');
+  assert.ok(
+    logs.some((l) => /FAILED/.test(l) && /EPERM/.test(l)),
+    `expected a FAILED log line naming EPERM, got: ${JSON.stringify(logs)}`,
+  );
+  assert.ok(
+    !logs.some((l) => /stopping pid .* \(SIGTERM\)/.test(l)),
+    'must never claim "stopping" for a signal that failed to deliver',
+  );
+  assert.equal(clearStaleCalls.length, 1, 'a non-ESRCH failure undoes the premature mark-before-kill');
+});
+
+test('default kill: a real, signallable child → stop() logs "stopping pid … (SIGTERM)"', async () => {
+  const { spawn: spawnChild } = await import('node:child_process');
+  const child = spawnChild(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  try {
+    const { logs, clearStaleCalls } = superviseWithRealKill(child.pid!);
+    assert.ok(
+      logs.some((l) => new RegExp(`stopping pid ${child.pid} \\(SIGTERM\\)`).test(l)),
+      `expected a "stopping pid ${child.pid} (SIGTERM)" log line, got: ${JSON.stringify(logs)}`,
+    );
+    assert.equal(clearStaleCalls.length, 0, 'a successful signal never undoes its own mark');
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+test('a spawn that throws reads as a death at uptime 0: status restarting, backoff respawn, nothing escapes the timer', () => {
+  const clock = makeFakeClock();
+  const disk = makeFakeDisk();
+  let failing = true;
+  let next = 500;
+  const deps = makeDeps(clock, disk, {
+    spawn: () => {
+      if (failing) throw new Error('spawn EAGAIN');
+      return next++;
+    },
+  });
+
+  const handle = superviseServe({ forgeRoot: '/irrelevant', ...deps });
+  assert.equal(handle.getStatus().pid, null, 'the failed boot spawn supervises nothing');
+
+  clock.advance(SERVE_POLL_MS);
+  assert.equal(handle.getStatus().state, 'restarting');
+  assert.equal(deps.logs.some((l) => l.includes('FAILED to spawn forge serve: spawn EAGAIN')), true);
+
+  failing = false;
+  clock.advance(SERVE_BACKOFF_INITIAL_MS);
+  assert.equal(handle.getStatus().state, 'running');
+  assert.equal(handle.getStatus().pid, 500);
+  handle.stop();
 });

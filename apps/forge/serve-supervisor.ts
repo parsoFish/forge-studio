@@ -12,13 +12,15 @@
  * real `@forge/flows` daemon helpers and the real clock; tests inject fakes
  * and never touch a real process or a real timer.
  *
- * BOOT: the pid file names a live process that the stop marker does NOT also
- * name → ADOPT it (supervise that pid; spawn nothing). The pid file names a
- * live process the marker DOES name → that process is DRAINING from a stop
- * issued by a previous `forge studio` (or a previous boot of this one) —
- * never adopt it as healthy and never signal it again; just wait for it to
- * actually exit, then spawn a fresh one. Otherwise (no pid, or a dead one) →
- * spawn fresh.
+ * BOOT: the pid file names a pid that is genuinely alive AND genuinely our
+ * `forge serve` (never merely alive — pids are reused, see `isForgeServe`)
+ * and the stop marker does NOT also name it → ADOPT it (supervise that pid;
+ * spawn nothing). Same pid, but the marker DOES also name it → that process
+ * is DRAINING from a stop issued by a previous `forge studio` (or a previous
+ * boot of this one) — never adopt it as healthy and never signal it again;
+ * just wait for it to actually exit, then spawn a fresh one. Otherwise (no
+ * pid, a dead one, or a live one that is not our serve) → clear whatever
+ * stale pid/marker is on disk and spawn fresh.
  *
  * POLL every SERVE_POLL_MS. A supervised pid that is dead (and we are not
  * stopped) triggers a crash-loop backoff respawn: the delay starts at
@@ -32,7 +34,9 @@
  * currently supervised, marks it stopping and sends it exactly ONE SIGTERM —
  * never a second one, and never to a pid the stop marker already names (that
  * pid belongs to someone else's stop). The drain itself is not awaited; the
- * detached `forge serve` finishes in-flight cycles on its own.
+ * detached `forge serve` finishes in-flight cycles on its own. The log states
+ * the real outcome of that signal — delivered, already gone, or failed (and
+ * undoes the mark on a failed delivery) — never an unconditional "stopping".
  *
  * Every boot/spawn/respawn/stop transition logs one line via the injected
  * `log`, including the pid and, for a respawn, why (exit → backoff delay).
@@ -44,7 +48,9 @@ import {
   isAlive as isAliveImpl,
   spawnServeDetached,
   markStopping as markStoppingFile,
+  clearPidFile as clearPidFileImpl,
 } from '@forge/flows';
+import { isForgeServePid } from '@forge/kernel';
 
 export const SERVE_POLL_MS = 2_000;
 export const SERVE_MIN_UPTIME_MS = 30_000;
@@ -75,6 +81,13 @@ export const UNSUPERVISED_SERVE_STATUS: ServeSupervisorStatus = {
   nextRestartAt: null,
 };
 
+/** What the default `kill` reports back to `stop()` so it can log the REAL
+ *  outcome instead of unconditionally claiming success: `signalled` (the
+ *  SIGTERM was delivered), `gone` (ESRCH — the pid had already exited), or
+ *  `failed` (any other error, e.g. EPERM — the signal was NOT delivered,
+ *  carrying the error's `code`, or its message when there is none). */
+export type KillOutcome = { status: 'signalled' } | { status: 'gone' } | { status: 'failed'; code: string };
+
 /** The injected test seam. Production defaults (see `superviseServe`) wrap
  *  the real `@forge/flows` daemon helpers, `process.kill`, `setTimeout` and
  *  `Date.now`. */
@@ -85,13 +98,24 @@ export type ServeSupervisorDeps = {
   readStoppingPid: () => number | null;
   /** True when `pid` is a genuinely running process. */
   isAlive: (pid: number) => boolean;
+  /** True when `pid` is genuinely OUR `forge serve` — not merely alive. A
+   *  pid file or stop marker can outlive the process it named; the OS then
+   *  reuses the number for something else. Call sites combine this with
+   *  `isAlive` (`isAlive(pid) && isForgeServe(pid)`) — a live pid that fails
+   *  this is treated as dead for adoption and drain-wait purposes. */
+  isForgeServe: (pid: number) => boolean;
   /** Spawn a fresh detached `forge serve`, returning its pid. */
   spawn: () => number;
-  /** Signal a pid. */
-  kill: (pid: number, signal: NodeJS.Signals) => void;
+  /** Signal a pid; reports the real outcome (see {@link KillOutcome}) —
+   *  never swallows an error it cannot explain as "already gone". */
+  kill: (pid: number, signal: NodeJS.Signals) => KillOutcome;
   /** Record that `pid` was just signalled to stop (the drain marker other
    *  supervisor instances must honour at boot). */
   markStopping: (pid: number) => void;
+  /** Clear the on-disk pid file AND stop marker together — the record a
+   *  stale (dead, reused, or never-delivered-a-signal) pid left behind, so
+   *  neither a later boot/poll nor a fresh `spawn` misreads it. */
+  clearStaleRecord: () => void;
   /** Schedule `fn` to run after `ms`; returns an opaque handle. */
   setTimer: (fn: () => void, ms: number) => unknown;
   /** Cancel a handle returned by `setTimer`. */
@@ -128,6 +152,7 @@ function resolveDeps(opts: SuperviseServeOptions): ServeSupervisorDeps {
     readPid: opts.readPid ?? (() => readPidFile(paths.pidFile)),
     readStoppingPid: opts.readStoppingPid ?? (() => readPidFile(paths.stoppingFile)),
     isAlive: opts.isAlive ?? ((pid: number) => isAliveImpl(pid)),
+    isForgeServe: opts.isForgeServe ?? ((pid: number) => isForgeServePid(pid, forgeRoot)),
     spawn:
       opts.spawn ??
       (() => {
@@ -141,8 +166,20 @@ function resolveDeps(opts: SuperviseServeOptions): ServeSupervisorDeps {
         }
         return pid;
       }),
-    kill: opts.kill ?? ((pid: number, signal: NodeJS.Signals) => { try { process.kill(pid, signal); } catch { /* already gone */ } }),
+    kill:
+      opts.kill ??
+      ((pid: number, signal: NodeJS.Signals): KillOutcome => {
+        try {
+          process.kill(pid, signal);
+          return { status: 'signalled' };
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException)?.code;
+          if (code === 'ESRCH') return { status: 'gone' };
+          return { status: 'failed', code: code ?? (err as Error)?.message ?? String(err) };
+        }
+      }),
     markStopping: opts.markStopping ?? ((pid: number) => markStoppingFile(forgeRoot, pid)),
+    clearStaleRecord: opts.clearStaleRecord ?? (() => clearPidFileImpl(forgeRoot)),
     setTimer: opts.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms)),
     clearTimer: opts.clearTimer ?? ((handle: unknown) => clearTimeout(handle as NodeJS.Timeout)),
     now: opts.now ?? (() => Date.now()),
@@ -191,11 +228,19 @@ export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHand
   }
 
   function doSpawn(isRestart: boolean): void {
-    const pid = deps.spawn();
-    currentPid = pid;
     startedAt = deps.now();
     if (isRestart) restarts += 1;
-    deps.log(`${isRestart ? 'respawned' : 'spawned'} pid ${pid}`);
+    try {
+      const pid = deps.spawn();
+      currentPid = pid;
+      deps.log(`${isRestart ? 'respawned' : 'spawned'} pid ${pid}`);
+    } catch (err) {
+      // A spawn that throws is a death at uptime 0: the next poll sees no
+      // pid and takes the crash-loop backoff, and the status reads
+      // `restarting` — never an exception escaping a timer into Studio.
+      currentPid = null;
+      deps.log(`FAILED to spawn forge serve: ${(err as Error).message}`);
+    }
   }
 
   function poll(): void {
@@ -203,12 +248,21 @@ export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHand
     if (stopped) return;
 
     if (drainingPid !== null) {
-      if (deps.isAlive(drainingPid)) {
+      const alive = deps.isAlive(drainingPid);
+      if (alive && deps.isForgeServe(drainingPid)) {
         schedulePoll();
         return;
       }
-      deps.log(`drained pid ${drainingPid} has exited — spawning`);
+      // Either it exited, or (pid reuse) the OS handed its number to an
+      // unrelated process while we waited — both mean nothing is left to
+      // drain. Clear the stale record before spawning (M7-E review MEDIUM).
+      deps.log(
+        alive
+          ? `drained pid ${drainingPid} is alive but is no longer our serve — treating as gone`
+          : `drained pid ${drainingPid} has exited — spawning`,
+      );
       drainingPid = null;
+      deps.clearStaleRecord();
       doSpawn(false);
       schedulePoll();
       return;
@@ -235,21 +289,37 @@ export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHand
   function boot(): void {
     const pid = deps.readPid();
     if (pid !== null) {
+      const alive = deps.isAlive(pid);
+      const ours = alive && deps.isForgeServe(pid);
       const stoppingPid = deps.readStoppingPid();
       if (stoppingPid === pid) {
-        // Someone already signalled THIS pid to stop — it is draining, not
-        // healthy. Never adopt it, never signal it again; just wait it out.
-        drainingPid = pid;
-        deps.log(`pid ${pid} is draining (already signalled to stop) — waiting for it to exit`);
-        schedulePoll();
-        return;
-      }
-      if (deps.isAlive(pid)) {
+        if (ours) {
+          // Someone already signalled THIS pid to stop — it is draining, not
+          // healthy. Never adopt it, never signal it again; just wait it out.
+          drainingPid = pid;
+          deps.log(`pid ${pid} is draining (already signalled to stop) — waiting for it to exit`);
+          schedulePoll();
+          return;
+        }
+        // The marked pid is gone, or (pid reuse) no longer our serve —
+        // nothing is left to drain. Clear the stale record (review MEDIUM)
+        // and fall through to spawn fresh below.
+        deps.log(`pid ${pid} was marked stopping but is ${alive ? 'no longer our serve' : 'gone'} — clearing the stale record`);
+        deps.clearStaleRecord();
+      } else if (ours) {
         currentPid = pid;
         startedAt = deps.now();
         deps.log(`adopted pid ${pid}`);
         schedulePoll();
         return;
+      } else if (alive) {
+        // A live process sits on the recorded pid, but it is not our `forge
+        // serve` (pid reuse) — never adopt a stranger. Clear the stale
+        // record so the default `spawn` (which itself treats "pid file names
+        // a live process" as already-running) cannot re-read this same
+        // foreign pid back as its own result.
+        deps.log(`pid ${pid} is alive but is not our serve — not adopting; clearing the stale record`);
+        deps.clearStaleRecord();
       }
     }
     doSpawn(false);
@@ -264,9 +334,25 @@ export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHand
     currentPid = null;
     drainingPid = null;
     if (pidToSignal !== null && deps.readStoppingPid() !== pidToSignal) {
+      // Mark BEFORE signalling, not after: two `forge studio` instances can
+      // race this exact stop, and marking first is what lets the SECOND
+      // caller's `readStoppingPid() !== pidToSignal` guard above see the
+      // FIRST caller's mark in time to skip its own signal — avoiding a
+      // double SIGTERM. The marker means "this pid was asked to drain", so a
+      // signal that provably never reached it (anything but ESRCH) UNDOES
+      // the mark immediately below — only ESRCH (already gone) leaves it,
+      // since a future boot/poll already clears a marked-but-dead pid on its
+      // own (review MEDIUM).
       deps.markStopping(pidToSignal);
-      deps.kill(pidToSignal, 'SIGTERM');
-      deps.log(`stopping pid ${pidToSignal} (SIGTERM)`);
+      const outcome = deps.kill(pidToSignal, 'SIGTERM');
+      if (outcome.status === 'signalled') {
+        deps.log(`stopping pid ${pidToSignal} (SIGTERM)`);
+      } else if (outcome.status === 'gone') {
+        deps.log(`pid ${pidToSignal} was already gone before the stop signal`);
+      } else {
+        deps.log(`FAILED to signal pid ${pidToSignal}: ${outcome.code} — not marked as stopping`);
+        deps.clearStaleRecord();
+      }
     }
   }
 

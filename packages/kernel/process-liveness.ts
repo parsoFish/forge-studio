@@ -34,6 +34,7 @@
  * `procRoot` is a seam for tests; every real caller gets the real `/proc`.
  */
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const NOT_RUNNING_STATES = new Set(['Z', 'X']);
 
@@ -58,4 +59,38 @@ export function isProcessRunning(pid: number | string, procRoot = '/proc'): bool
   const at = stat.lastIndexOf(')');
   const state = at === -1 ? '' : stat.slice(at + 2, at + 3);
   return !NOT_RUNNING_STATES.has(state);
+}
+
+/**
+ * Is `pid` genuinely OUR `forge serve`, rooted at `forgeRoot` — not merely
+ * alive (M7-E review, pid reuse)? A pid file or stop marker names a pid at
+ * write time; by the time a later boot or poll reads it, the OS may have
+ * handed that same number to an unrelated process. Reading `/proc/<pid>/
+ * cmdline` and requiring it to name BOTH this forgeRoot's `apps/forge/
+ * cli.ts` AND the `serve` argument is the same ownership test
+ * `scripts/stories/sweep-teardown-scheduler.mjs`'s `ownSchedulerPidState`
+ * already applies to the scheduler's own pid — a recycled pid that merely
+ * shares an argv token never passes.
+ *
+ * ANY cmdline read failure (gone, or unreadable for any other reason) reads
+ * as `false`. This is deliberately NOT the same ENOENT-only split
+ * `isProcessRunning` uses: callers combine this with `isProcessRunning`
+ * (`isProcessRunning(pid) && isForgeServePid(pid, forgeRoot)`), so a false
+ * here only ever demotes an already-"alive" pid to "not ours" — worst case
+ * a redundant respawn, never a signal sent to, or a wait on, a stranger.
+ *
+ * `procRoot` is a test seam; real callers get the real `/proc`.
+ */
+export function isForgeServePid(pid: number, forgeRoot: string, procRoot = '/proc'): boolean {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  let cmdlineRaw: string;
+  try {
+    cmdlineRaw = readFileSync(`${procRoot}/${n}/cmdline`, 'utf8');
+  } catch {
+    return false;
+  }
+  const tokens = cmdlineRaw.split('\0').filter((t) => t !== '');
+  const cliPath = resolve(forgeRoot, 'apps', 'forge', 'cli.ts');
+  return tokens.includes(cliPath) && tokens.includes('serve');
 }

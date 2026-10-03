@@ -269,6 +269,27 @@ export async function terminateChild(proc: ChildProcess, opts: { graceMs?: numbe
   }
 }
 
+/**
+ * The exit sequence every non-SIGINT exit path in `runWatch` runs: stop the
+ * serve supervisor (a no-op `stopServe` when none exists), close the
+ * bridge, then exit with `code` — `closeBridge` rejecting still exits.
+ * Pulled out as a pure/injectable function since `runWatch` spawns real
+ * children and cannot be unit-tested; `shutdown()` and the build-failure
+ * branch below share it so neither orphans a live `forge serve`.
+ */
+export async function runExitSequence(
+  code: number,
+  deps: { stopServe: () => void; closeBridge: () => Promise<void>; exit: (code: number) => void },
+): Promise<void> {
+  deps.stopServe();
+  try {
+    await deps.closeBridge();
+  } catch {
+    /* ignore — exiting regardless */
+  }
+  deps.exit(code);
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** A fetch-like probe: returns true when the URL answers (status considered
@@ -542,11 +563,12 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
     // Operating on a local capture instead is immune to that race.
     const proc = uiProc;
     if (proc) await terminateChild(proc);
-    // M7-E row 205: stop supervising BEFORE the bridge closes, so the health
-    // route never answers mid-shutdown with a supervisor that outlived it.
-    serveSupervisor?.stop();
-    try { await bridge.close(); } catch { /* ignore */ }
-    process.exit(0);
+    // runExitSequence stops supervising before the bridge closes (M7-E row 205).
+    await runExitSequence(0, {
+      stopServe: () => serveSupervisor?.stop(),
+      closeBridge: () => bridge.close(),
+      exit: (code) => process.exit(code),
+    });
   };
   process.on('SIGINT', () => { void shutdown(); });
   process.on('SIGTERM', () => { void shutdown(); });
@@ -599,8 +621,12 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
             console.error(
               `${label} forge-ui production build failed (exit code ${buildExitCode ?? 'signal'}) — aborting.`,
             );
-            try { await bridge.close(); } catch { /* ignore */ }
-            process.exit(1);
+            // A build failure is a real exit path too — stop serve, not just the bridge.
+            await runExitSequence(1, {
+              stopServe: () => serveSupervisor?.stop(),
+              closeBridge: () => bridge.close(),
+              exit: (code) => process.exit(code),
+            });
           }
           // Stamp ONLY on proven success (exit 0, just confirmed above) — the
           // other half of the "stamp only on proven success" property.
@@ -618,6 +644,8 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
       const launchedProc = uiProc as ChildProcess;
       launchedProc.on('error', (err) => {
         console.error(`${label} forge-ui ${mode} server failed to start: ${err.message}`);
+        // A failed spawn is an exit path too — shutdown() stops serve.
+        if (!shuttingDown) void shutdown();
       });
       // If Next.js dies after startup (OOM, crash, port conflict) we must
       // surface it and tear the bridge down — otherwise the launcher blocks
