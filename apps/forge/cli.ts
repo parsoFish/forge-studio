@@ -207,13 +207,9 @@ async function cmdServe(rest: string[]): Promise<void> {
   // Row 211 (forge-8vfn.8.5.47) — `forge serve` is the OTHER process (besides
   // the Studio bridge) that spawns agents against this forge install; it must
   // install the same ref guard before `serve()` can dispatch anything. See
-  // `ui-bridge.ts`'s `startBridge` for why this is a log-and-continue, never
-  // a reason `forge serve` itself fails to start.
-  try {
-    installForgeRefGuardHook(FORGE_ROOT, createLogger(bridgeCycleId(), join(FORGE_ROOT, '_logs')));
-  } catch (err) {
-    console.error(`forge serve: forge-ref-guard install failed (continuing without it): ${String(err)}`);
-  }
+  // `ui-bridge.ts`'s `startBridge`: no catch — a serve that cannot guard the
+  // forge repo's refs does not start.
+  installForgeRefGuardHook(FORGE_ROOT, createLogger(bridgeCycleId(), join(FORGE_ROOT, '_logs')));
   await serve({ mode: once ? 'once' : 'forever', phaseWiring: (await requireInstalledFactory('forge serve')).phaseWiring });
   if (once) {
     // Once-mode is the showcase / debug entry point — surface the most

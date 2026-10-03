@@ -54,8 +54,8 @@ type Broadcastable = { type: string; cycleId?: string; event?: { event_type?: st
 export function makeRecordingBroadcast<T extends Broadcastable>(
   clients: Set<{ readyState: number; OPEN: number; send: (payload: string) => void }>,
   forgeRoot: string,
+  log: EventLogger = createLogger(bridgeCycleId(), join(forgeRoot, '_logs')),
 ): (msg: T) => void {
-  const log: EventLogger = createLogger(bridgeCycleId(), join(forgeRoot, '_logs'));
   return (msg: T): void => {
     const payload = JSON.stringify(msg);
     for (const ws of clients) {
