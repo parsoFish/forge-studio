@@ -89,6 +89,7 @@ import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { createLogger, bridgeCycleId, installForgeRefGuardHook } from '@forge/kernel';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
@@ -152,6 +153,15 @@ type TailState = {
 
 export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { forgeRoot } = opts;
+  // Row 211 (forge-8vfn.8.5.47) — install the forge-repo ref guard BEFORE
+  // anything below can spawn an agent, logging its outcome into the bridge's
+  // ONE boot-time `_bridge-*` run (the same logger the recording broadcast
+  // writes to — a second run dir would be a second dispatch-shaped `_logs`
+  // entry, see bridge-broadcast-log.ts). No catch: a bridge that cannot guard
+  // the forge repo's refs does not start; refused-foreign and not-a-repo are
+  // named outcomes, not exceptions.
+  const bridgeLog = createLogger(bridgeCycleId(), join(forgeRoot, '_logs'));
+  installForgeRefGuardHook(forgeRoot, bridgeLog);
   // ADR 048 clause 2, FIRST: every factory-backed default below reads this, and
   // the bridge must come up whether or not an example package is installed.
   await resolveInstalledFactory();
@@ -243,7 +253,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // 7.6.35 — sends AND records (type, cycleId, timestamp, subscriber count) so
   // "did `cycle-list-changed` fire, and was anyone listening?" is answerable
   // from bytes. See `bridge-broadcast-log.ts` for why it opens at boot.
-  const broadcast = makeRecordingBroadcast<WsOutbound>(clients, forgeRoot);
+  const broadcast = makeRecordingBroadcast<WsOutbound>(clients, forgeRoot, bridgeLog);
   // R27 (forge-6gv.5.2): collapses watchQueue's 6-dir fan-out into one trailing broadcast — see broadcast-coalescer.ts.
   const queueChangeCoalescer = makeTrailingCoalescer(() => broadcast({ type: 'cycle-list-changed' }));
 

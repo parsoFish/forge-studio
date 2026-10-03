@@ -125,7 +125,7 @@ export async function runGenerateStep(args: {
     disallowedTools: [...(agentSpec.disallowedTools ?? []), ...denied],
     // W8-B6 — hook dispatch comes from the driver already bound to this turn's
     // logger and initiative id, so no kind can spawn hook-blind.
-    ...plumbing.hooksForSkill(agentSpec.skill, status.project_repo_path),
+    ...plumbing.hooksForSkill(agentSpec.skill),
     maxTurns,
     onToolUse: plumbing.onToolUse,
     onHeartbeat: plumbing.onHeartbeat,

@@ -18,15 +18,6 @@
         ],
         "maxTurns": 6,
         "abortController": "<AbortController>",
-        "hooks": {
-          "PreToolUse": [
-            {
-              "hooks": [
-                "<anonymous>"
-              ]
-            }
-          ]
-        },
         "permissionMode": "default",
         "allowedTools": [
           "Read",
@@ -57,15 +48,6 @@
         ],
         "maxTurns": 8,
         "abortController": "<AbortController>",
-        "hooks": {
-          "PreToolUse": [
-            {
-              "hooks": [
-                "<anonymous>"
-              ]
-            }
-          ]
-        },
         "permissionMode": "default",
         "allowedTools": [],
         "canUseTool": "<canUseTool>"
@@ -85,15 +67,6 @@
         ],
         "maxTurns": 16,
         "abortController": "<AbortController>",
-        "hooks": {
-          "PreToolUse": [
-            {
-              "hooks": [
-                "<anonymous>"
-              ]
-            }
-          ]
-        },
         "permissionMode": "default",
         "allowedTools": [
           "Read",

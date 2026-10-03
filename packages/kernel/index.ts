@@ -89,7 +89,8 @@ export * from './bounded-log.ts';
  *  `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler
  *  preflight so the two can never disagree about a zombie pid (forge-8vfn.8.1.6). */
 export * from './process-liveness.ts';
-/** The pure "does this Bash command commit to or move a ref of the forge
- *  repo" decision every agent/session/factory spawn must consult
- *  (forge-8vfn.8.5.44, row 208) — see the module for the incident this closes. */
-export * from './forge-repo-git-fence.ts';
+/** The `reference-transaction` git hook that refuses an agent spawn's ref
+ *  move against the FORGE repo itself, and the idempotent installer for it
+ *  (forge-8vfn.8.5.47, row 211) — replaces the PreToolUse Bash-command
+ *  analysis (`forge-repo-git-fence.ts`) that misfired on a project commit. */
+export * from './forge-ref-guard-hook.ts';

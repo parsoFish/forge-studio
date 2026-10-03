@@ -230,10 +230,6 @@ export async function runAgentStyleStep(args: {
   turnBudgetUsd?: () => number | undefined;
 }): Promise<RunInteractiveTurnResult> {
   const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, onToolUse, onHeartbeat, onText, onThinking } = args;
-  // forge-8vfn.8.5.44 (row 208) — the forge-repo-git fence's own `forgeRoot`,
-  // mirroring `interactive-runner.ts`'s identical `ctx.forgeRoot ?? resolve('.')`
-  // default (`resolve('.')` === `process.cwd()`, so no new import is needed here).
-  const forgeRoot = ctx.forgeRoot ?? process.cwd();
   // The pinned SDK default lives with the code that SPAWNS, not with the
   // dispatcher that hands it down: a file that imports the query as a value
   // and wires no hooks is hook-blind by the enumeration ratchet's definition,
@@ -292,7 +288,7 @@ export async function runAgentStyleStep(args: {
       // W8-B6 — this session kind's agent may carry bound library hooks.
       // Derived from the SAME spec the model/tools came from, so a kind
       // re-pointed at another agent can never fire the old agent's hooks.
-      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId, cwd: sessionDir, forgeRoot }),
+      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId }),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
       writeRoots,
       bashFence: resolveBashFence(turnSpec),
@@ -335,7 +331,7 @@ export async function runAgentStyleStep(args: {
     const { output, costUsd } = await runStructuredTurn({
       queryFn, prompt, schema, model, maxBudgetUsd: args.turnBudgetUsd?.(),
       allowedTools: agentSpec.allowedTools, disallowedTools: agentSpec.disallowedTools,
-      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId, cwd: sessionDir, forgeRoot }),
+      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId }),
       cwd: sessionDir, onToolUse, onHeartbeat, onText, onThinking,
       label: `interactive-${descriptor.id}-${ctx.sessionId}`,
       ...(args.onTurnEndedUnpriced ? { onTurnEndedUnpriced: args.onTurnEndedUnpriced } : {}),

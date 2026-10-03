@@ -32,6 +32,7 @@ import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/p
 import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
+import { createLogger, bridgeCycleId, installForgeRefGuardHook } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows';
 import { cmdAgent, cmdAgentRun } from './agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
@@ -203,6 +204,12 @@ function cmdInit(): void {
 async function cmdServe(rest: string[]): Promise<void> {
   const once = rest.includes('--once');
   console.log(once ? 'forge serve --once: claiming one initiative…' : 'forge serve: starting…');
+  // Row 211 (forge-8vfn.8.5.47) — `forge serve` is the OTHER process (besides
+  // the Studio bridge) that spawns agents against this forge install; it must
+  // install the same ref guard before `serve()` can dispatch anything. See
+  // `ui-bridge.ts`'s `startBridge`: no catch — a serve that cannot guard the
+  // forge repo's refs does not start.
+  installForgeRefGuardHook(FORGE_ROOT, createLogger(bridgeCycleId(), join(FORGE_ROOT, '_logs')));
   await serve({ mode: once ? 'once' : 'forever', phaseWiring: (await requireInstalledFactory('forge serve')).phaseWiring });
   if (once) {
     // Once-mode is the showcase / debug entry point — surface the most

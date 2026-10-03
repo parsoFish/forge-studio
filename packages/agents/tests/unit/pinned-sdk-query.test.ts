@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createPinnedSdkQuery, pinnedSdkQuery } from '../../pinned-sdk-query.ts';
+import { AGENT_SPAWN_ENV } from '../../spawn-marker.ts';
 
 /** These tests exercise the ENV-PINNING seam with a fake `queryImpl` and never
  *  spawn, so they name a CLI rather than require one on disk (7.6.116). The
@@ -84,6 +85,67 @@ test('createPinnedSdkQuery: pins options.env even when the caller passes no opti
 
   assert.equal(calls.length, 1);
   assert.ok(calls[0]!.options?.env, 'env is always populated, even with no caller-supplied options');
+});
+
+// ---------------------------------------------------------------------------
+// Row 211, bead `forge-8vfn.8.5.47` — the forge repo's `reference-transaction`
+// ref guard hook reads FORGE_AGENT_SPAWN=1 to refuse a ref-moving git command
+// run by an agent child, with no shell-command parsing of its own (the
+// PreToolUse fence it replaces misfired on a project commit it misparsed).
+// It must therefore be present on EVERY production spawn through this ONE
+// seam — this is the seam's own guarantee, not a per-caller opt-in.
+// ---------------------------------------------------------------------------
+
+test('createPinnedSdkQuery: FORGE_AGENT_SPAWN=1 rides on every spawn, even with no caller options at all (row 211)', () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p' } as never);
+
+  const env = calls[0]!.options?.env as Record<string, string | undefined>;
+  assert.equal(env[AGENT_SPAWN_ENV], '1');
+});
+
+test('createPinnedSdkQuery: FORGE_AGENT_SPAWN=1 is preserved ALONGSIDE a caller-supplied env override (row 211)', () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({
+    prompt: 'p',
+    options: { env: { GIT_AUTHOR_NAME: 'forge-ralph', GIT_AUTHOR_EMAIL: 'forge-ralph+WI-7@forge.local' } },
+  } as never);
+
+  const env = calls[0]!.options?.env as Record<string, string | undefined>;
+  assert.equal(env[AGENT_SPAWN_ENV], '1', 'the spawn flag is never crowded out by a caller override');
+  assert.equal(env.GIT_AUTHOR_NAME, 'forge-ralph', 'and the caller override is not crowded out either');
+  assert.equal(env.GIT_AUTHOR_EMAIL, 'forge-ralph+WI-7@forge.local');
+});
+
+test('createPinnedSdkQuery: a caller cannot un-set FORGE_AGENT_SPAWN by naming the same key — the seam always wins', () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({
+    prompt: 'p',
+    options: { env: { [AGENT_SPAWN_ENV]: '0' } },
+  } as never);
+
+  const env = calls[0]!.options?.env as Record<string, string | undefined>;
+  assert.equal(env[AGENT_SPAWN_ENV], '1', 'the seam-applied flag is layered LAST and always wins');
+});
+
+test('createPinnedSdkQuery: the git-identity overlay (4 keys) plus the spawn flag stays within MAX_ENV_OVERRIDE_KEYS — buildChildEnv does not throw its over-cap error', () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  const gitIdentity = {
+    GIT_AUTHOR_NAME: 'forge',
+    GIT_AUTHOR_EMAIL: 'forge@example.invalid',
+    GIT_COMMITTER_NAME: 'forge',
+    GIT_COMMITTER_EMAIL: 'forge@example.invalid',
+  };
+  // 4 git-identity keys + the seam's own spawn flag = 5, well inside the
+  // 8-key cap `buildChildEnv` throws past — proof is that this does NOT throw
+  // and the call actually reaches `queryImpl`, not a re-derivation of the count.
+  assert.doesNotThrow(() =>
+    createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p', options: { env: gitIdentity } } as never),
+  );
+  assert.equal(calls.length, 1);
+  const env = calls[0]!.options?.env as Record<string, string | undefined>;
+  assert.equal(env[AGENT_SPAWN_ENV], '1');
+  assert.equal(env.GIT_AUTHOR_NAME, 'forge');
 });
 
 test('createPinnedSdkQuery: returns whatever the wrapped query returns (pass-through, not a new Query)', () => {

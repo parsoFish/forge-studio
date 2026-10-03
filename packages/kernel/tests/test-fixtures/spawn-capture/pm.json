@@ -22,15 +22,6 @@
     ],
     "maxTurns": 70,
     "maxBudgetUsd": 2.5,
-    "abortController": "<AbortController>",
-    "hooks": {
-      "PreToolUse": [
-        {
-          "hooks": [
-            "<anonymous>"
-          ]
-        }
-      ]
-    }
+    "abortController": "<AbortController>"
   }
 }

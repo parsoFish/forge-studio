@@ -3196,12 +3196,13 @@ or written through it.
 `scripts/request-path-sinks.baseline.txt` accepts the `execFileSync` row via `--write` in
 the same commit that adds this section, per this document's own rule.
 
-### Row 208 (bead `forge-8vfn.8.5.44`) — the forge-repo git fence's repo-identity resolver
+### Row 211 (bead `forge-8vfn.8.5.47`) — the forge-repo ref guard installer
 
 | file (function) | sink (delta) | input | classification | why |
 |---|---|---|---|---|
-| `packages/agents/studio/repo-identity.ts` (`resolveRepoCommonDir`) | `statSync` (0 → 1) | a directory named in an agent's own Bash command, or the run's trusted `forgeRoot` | not-request-derived `[read]` | Reached from a bridge route only because every agent spawn carries the PreToolUse fence. The path comes from the model's tool input or the trusted root, never from a request field. It stats `<dir>/.git` while walking up to `/`, and only to tell a directory from a file. Nothing is written. |
-| `packages/agents/studio/repo-identity.ts` (`resolveRepoCommonDir`) | `readFileSync` (0 → 2) | same | not-request-derived `[read]` | Reads a worktree's `.git` pointer file (`gitdir: …`) and that gitdir's `commondir` file, and only to name the repository. The content is matched by regex and resolved; it is never echoed into a response. |
-| `packages/agents/studio/repo-identity.ts` (`resolveRepoCommonDir`) | `realpathSync` (0 → 2) | same | not-request-derived `[read]` | Canonicalises the common dir, so two spellings of one repository compare equal. That is the property the fence depends on: a sibling worktree outside `forgeRoot` resolves to the forge repo and is refused. |
+| `packages/kernel/forge-ref-guard-hook.ts` (`resolveHooksDir`) | `execFileSync` (0 → 1) | `forgeRoot` — the run's own trusted root, the SAME value every other kernel/agents seam already treats as trusted, never a request field | not-request-derived `[exec]` | Runs `git rev-parse --git-path hooks` with `cwd: forgeRoot` to resolve the repo's hooks directory (honouring `core.hooksPath`, and a linked worktree's COMMON hooks dir). Fixed argv, no untrusted interpolation; a failure (not a git repo) is caught and reported as `skipped-not-a-repo`, never thrown through a route. |
+| `packages/kernel/forge-ref-guard-hook.ts` (`installForgeRefGuardHook`) | `existsSync` / `readFileSync` (0 → 1 each) | the resolved hooks dir joined with the fixed literal `reference-transaction`, never a request-derived segment | not-request-derived `[read]` | Checks whether a hook file already exists, and reads it back to recognise forge's own marker vs. a foreign hook. The leaf name is a compile-time constant (`FORGE_REF_GUARD_HOOK_NAME`); nothing here is chosen by a caller. |
+| `packages/kernel/forge-ref-guard-hook.ts` (`installForgeRefGuardHook`) | `mkdirSync` / `writeFileSync` (0 → 1 / 0 → 2) | same resolved path; content is `forgeRefGuardHookScript()`, a pure function of no input | not-request-derived `[read]` | Writes (or rewrites) the hook script, mode `0o755`. Called at bridge start and `forge serve` start — never from a per-request route handler — with `forgeRoot` as its only path input, the identical trust boundary `init.ts`'s `ensureLayoutDirs`/`ensureDefaultConfig` already write under with no guard, for the same reason: this seam's caller IS the trusted root, not a request forwarding one. |
 
-`scripts/request-path-sinks.baseline.txt` accepts these three rows via `--write` in the same commit that adds this section, per this document's own rule.
+`scripts/request-path-sinks.baseline.txt` accepts these five rows via `--write` in the
+same commit that adds this section, per this document's own rule.

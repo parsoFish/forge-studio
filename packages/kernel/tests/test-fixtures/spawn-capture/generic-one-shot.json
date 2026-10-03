@@ -22,15 +22,6 @@
       "Agent"
     ],
     "maxTurns": 25,
-    "maxBudgetUsd": 3.5,
-    "hooks": {
-      "PreToolUse": [
-        {
-          "hooks": [
-            "<anonymous>"
-          ]
-        }
-      ]
-    }
+    "maxBudgetUsd": 3.5
   }
 }
