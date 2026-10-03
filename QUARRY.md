@@ -63,11 +63,11 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 64 | 21,033 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
+| `stations` | 45 | 12,301 | **12,301** | ratified 12,301 — row 212 follow-up 3 (forge-8vfn.8.5.48), lane-ratified under ruling 666 (measured ceiling); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 8,041 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **487** | **131,371** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **487** | **131,406** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -178,7 +178,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/community-registry-lock.ts | library | verbatim | 126 |
 | packages/projects/contract-compliance-loop.ts | projects | verbatim | 167 |
 | packages/projects/contract-stages.ts | projects | verbatim | 332 |
-| packages/stations/cycle-recap.ts | stations | verbatim | 396 |
+| packages/stations/cycle-recap.ts | stations | verbatim | 411 |
 | packages/factory/class-profiles.ts | factory | rewritten | 135 |
 | packages/stations/class-profile-port.ts | stations | rewritten | 133 |
 | packages/stations/index.ts | stations | rewritten | 33 |
@@ -393,7 +393,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/pm-acceptance-gate.ts | stations | rewritten | 257 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
-| packages/stations/phases/reflector.ts | stations | verbatim | 722 |
+| packages/stations/phases/reflector.ts | stations | verbatim | 742 |
 | packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 394 |
 | packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |

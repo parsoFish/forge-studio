@@ -38,6 +38,19 @@ import type { LintStatus } from '@forge/flows';
 
 export type WriteRecapInput = {
   forgeRoot: string;
+  /**
+   * ABSOLUTE `_logs` root for this cycle's recap + the event log/brain-gaps/
+   * lint-report/retro it reads back out of `_logs/<cycleId>/` — mirrors
+   * `CycleInput.logsRoot` (forge-8vfn.8.1.10); omitted ⇒ `<forgeRoot>/_logs`,
+   * this module's original (and still only production) shape. Row 212
+   * follow-up 3 (bead forge-8vfn.8.5.48): `forgeRoot` alone used to anchor
+   * these paths too, so a caller whose `logger`/`cycleLogDir` pointed
+   * elsewhere (a test's tmp root) still had its recap land in the REAL
+   * checkout's `_logs/<cycleId>/recap.md`. `forgeRoot` itself keeps anchoring
+   * `toRelative`'s cosmetic path labels below — only the four scratch-file
+   * locations move with `logsRoot`.
+   */
+  logsRoot?: string;
   cycleId: string;
   initiativeId: string;
   manifestPath: string;
@@ -71,7 +84,8 @@ export type RecapResult = {
  * with `written: false` so the recap never crashes the reflector close path.
  */
 export function writeCycleRecap(input: WriteRecapInput): RecapResult {
-  const recapDir = resolve(input.forgeRoot, '_logs', input.cycleId);
+  const logsRoot = input.logsRoot ?? resolve(input.forgeRoot, '_logs');
+  const recapDir = resolve(logsRoot, input.cycleId);
   const recapPath = resolve(recapDir, 'recap.md');
   try {
     mkdirSync(recapDir, { recursive: true });
@@ -88,11 +102,12 @@ export function writeCycleRecap(input: WriteRecapInput): RecapResult {
  * non-empty string.
  */
 export function renderCycleRecap(input: WriteRecapInput): string {
-  const eventLogPath = resolve(input.forgeRoot, '_logs', input.cycleId, 'events.jsonl');
+  const logsRoot = input.logsRoot ?? resolve(input.forgeRoot, '_logs');
+  const eventLogPath = resolve(logsRoot, input.cycleId, 'events.jsonl');
   const events = readEvents(eventLogPath);
   const manifest = readManifestSafe(input.manifestPath);
   const stats = computeStats(events, input.reflectorCostUsd, input.reflectorDurationMs);
-  const brainGaps = readBrainGaps(input.forgeRoot, input.cycleId, events);
+  const brainGaps = readBrainGaps(logsRoot, input.cycleId, events);
 
   const lines: string[] = [];
   lines.push(`# Cycle recap — ${input.initiativeId}`, '');
@@ -134,7 +149,7 @@ export function renderCycleRecap(input: WriteRecapInput): string {
   // 5. Lint
   lines.push('## Lint', '');
   lines.push(`- Status: ${input.lintStatus}`);
-  const lintReportPath = resolve(input.forgeRoot, '_logs', input.cycleId, 'brain-lint.md');
+  const lintReportPath = resolve(logsRoot, input.cycleId, 'brain-lint.md');
   if (existsSync(lintReportPath)) {
     lines.push(`- Report: ${toRelative(input.forgeRoot, lintReportPath)}`);
   }
@@ -142,7 +157,7 @@ export function renderCycleRecap(input: WriteRecapInput): string {
 
   // 6. Links
   lines.push('## Links', '');
-  const retroPath = resolve(input.forgeRoot, '_logs', input.cycleId, 'retro.md');
+  const retroPath = resolve(logsRoot, input.cycleId, 'retro.md');
   if (existsSync(retroPath)) {
     lines.push(`- Retro: ${toRelative(input.forgeRoot, retroPath)}`);
   }
@@ -258,8 +273,8 @@ type BrainGaps = {
  *
  * Otherwise it's outstanding. Best-effort — a missing file yields empty lists.
  */
-function readBrainGaps(forgeRoot: string, cycleId: string, events: EventLogEntry[]): BrainGaps {
-  const gapsPath = resolve(forgeRoot, '_logs', cycleId, 'brain-gaps.jsonl');
+function readBrainGaps(logsRoot: string, cycleId: string, events: EventLogEntry[]): BrainGaps {
+  const gapsPath = resolve(logsRoot, cycleId, 'brain-gaps.jsonl');
   if (!existsSync(gapsPath)) return { closed: [], outstanding: [] };
   let raw: string;
   try {

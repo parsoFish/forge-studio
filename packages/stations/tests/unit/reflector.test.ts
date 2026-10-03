@@ -13,10 +13,10 @@
  * cleanly. `runReflector` below (forge-ler4) wraps every call with this
  * file's own lease lock — see `../test-fixtures/reflector-lease-test-fixture.ts`.
  *
- * IMPORTANT: the reflector uses `import.meta.dirname` to resolve the forge root
- * for writes (brain/, _logs/). Tests use unique cycle ids and clean up after
- * each run. The stub agent never writes themes — it just streams a `result`
- * message, so brain-write side-effects are minimal.
+ * IMPORTANT: `brain/` writes resolve off the NOT-injectable `import.meta
+ * .dirname`, isolated via `acquireIsolatedReflectorLease`; `_logs/<cycleId>/*`
+ * writes DO honour an injected `CycleInput.logsRoot` (`setupHarness`,
+ * forge-8vfn.8.5.48) — unique cycle ids, cleaned up per run.
  */
 
 import { test } from 'node:test';
@@ -44,6 +44,7 @@ type Harness = {
   cycleId: string;
   manifestPath: string;
   cycleLogDir: string;
+  logsRoot: string;
   events: () => EventLogEntry[];
   logger: ReturnType<typeof createLogger>;
   cleanup: () => void;
@@ -79,14 +80,17 @@ function setupHarness(opts: { suffix: string }): Harness {
     ].join('\n'),
   );
 
-  // Logger writes to <FORGE_ROOT>/_logs/<cycleId>/events.jsonl.
-  const cycleLogDir = resolve(FORGE_ROOT, '_logs', cycleId);
-  const logger = createLogger(cycleId, resolve(FORGE_ROOT, '_logs'));
+  // forge-8vfn.8.5.48: a tmp `logsRoot` (`CycleInput.logsRoot`, honoured by
+  // `runReflector`/`cycle-recap.ts`) keeps this suite off the real `_logs/`.
+  const logsRoot = join(tmp, '_logs');
+  const cycleLogDir = resolve(logsRoot, cycleId);
+  const logger = createLogger(cycleId, logsRoot);
 
   return {
     cycleId,
     manifestPath,
     cycleLogDir,
+    logsRoot,
     logger,
     events: () => {
       if (!existsSync(logger.logFilePath)) return [];
@@ -108,11 +112,6 @@ function setupHarness(opts: { suffix: string }): Harness {
       } catch {
         /* best-effort */
       }
-      try {
-        rmSync(cycleLogDir, { recursive: true, force: true });
-      } catch {
-        /* best-effort */
-      }
     },
   };
 }
@@ -124,6 +123,7 @@ function makeInput(h: Harness): CycleInput {
     projectRepoPath: FORGE_ROOT,
     worktreePath: FORGE_ROOT,
     cycleId: h.cycleId,
+    logsRoot: h.logsRoot,
   };
 }
 

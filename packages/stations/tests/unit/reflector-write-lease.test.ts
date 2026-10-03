@@ -48,6 +48,7 @@ function setupHarness(suffix: string): {
   cycleId: string;
   manifestPath: string;
   cycleLogDir: string;
+  logsRoot: string;
   events: () => EventLogEntry[];
   logger: ReturnType<typeof createLogger>;
   cleanup: () => void;
@@ -73,13 +74,25 @@ function setupHarness(suffix: string): {
     ].join('\n'),
   );
 
-  const cycleLogDir = resolve(FORGE_ROOT, '_logs', cycleId);
-  const logger = createLogger(cycleId, resolve(FORGE_ROOT, '_logs'));
+  // Row 212 follow-up 3 (bead forge-8vfn.8.5.48): a tmp `logsRoot`, threaded
+  // through `makeInput` as `CycleInput.logsRoot` — which `runReflector` AND
+  // `cycle-recap.ts` now honour for every `_logs/<cycleId>/*` path — instead
+  // of the real checkout's `_logs/`. `node --test` runs files in parallel,
+  // and each one's generalised residue guard diffs the SAME shared repo
+  // `_logs/` over its own lifetime: a transient real-tree write here, even
+  // one this file's own `cleanup` always removed, could be observed
+  // appearing and disappearing by a sibling file's guard and misattributed
+  // to IT. `cycleLogDir` lives inside `tmp`, so the single `rmSync(tmp, ...)`
+  // below is the only cleanup needed.
+  const logsRoot = join(tmp, '_logs');
+  const cycleLogDir = resolve(logsRoot, cycleId);
+  const logger = createLogger(cycleId, logsRoot);
 
   return {
     cycleId,
     manifestPath,
     cycleLogDir,
+    logsRoot,
     logger,
     events: () => {
       if (!existsSync(logger.logFilePath)) return [];
@@ -101,22 +114,18 @@ function setupHarness(suffix: string): {
       } catch {
         /* best-effort */
       }
-      try {
-        rmSync(cycleLogDir, { recursive: true, force: true });
-      } catch {
-        /* best-effort */
-      }
     },
   };
 }
 
-function makeInput(h: { manifestPath: string; cycleId: string }): CycleInput {
+function makeInput(h: { manifestPath: string; cycleId: string; logsRoot: string }): CycleInput {
   return {
     initiativeId: 'INIT-2026-05-23-ler4',
     manifestPath: h.manifestPath,
     projectRepoPath: FORGE_ROOT,
     worktreePath: FORGE_ROOT,
     cycleId: h.cycleId,
+    logsRoot: h.logsRoot,
   };
 }
 

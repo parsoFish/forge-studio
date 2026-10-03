@@ -19,6 +19,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cpSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -268,17 +269,23 @@ test('a SYMLINKED SKILL.md FILE escaping the forge root → 404, no leak', async
 // ---------------------------------------------------------------------------
 
 test('REAL REPO: demo-builder (library:false, strategy:range) returns allowedTiers [sonnet, opus] off its real SKILL.md', async () => {
-  const realForgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-  const realQueueDone = join(realForgeRoot, '_queue', 'done');
-  const realLogs = join(realForgeRoot, '_logs');
-  // Real repo checkouts always carry these (gitignored but present in dev/CI);
-  // scaffold defensively rather than assume, mirroring other real-repo smoke
-  // tests in this suite family.
-  mkdirSync(realQueueDone, { recursive: true });
-  mkdirSync(realLogs, { recursive: true });
+  // Row 212 (bead forge-8vfn.8.5.48): this test needs demo-builder's REAL
+  // SKILL.md (not a synthetic fixture) to prove the real frontmatter parses
+  // to the expected allowedTiers — but it used to point `startBridge` AT the
+  // real repo root to get it, which (since row 211) installs the ref-guard
+  // hook and opens its own `_logs/_bridge-*` run at `forgeRoot`, leaving
+  // residue in this checkout on every run and scaffolding `_queue/done` +
+  // `_logs` into the real tree besides. Copy only the one real skill this
+  // test needs into a tmp forgeRoot instead — never point `startBridge` at
+  // the real tree (idiom: bridge-studio-write.test.ts).
+  const realRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+  const root = mkdtempSync(join(tmpdir(), 'bridge-agent-capability-realrepo-'));
+  mkdirSync(join(root, '_queue', 'done'), { recursive: true });
+  mkdirSync(join(root, '_logs'), { recursive: true });
+  cpSync(join(realRoot, 'skills', 'demo-builder'), join(root, 'skills', 'demo-builder'), { recursive: true });
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
-  const { url, close } = await startBridge({ forgeRoot: realForgeRoot, port: 0 });
+  const { url, close } = await startBridge({ forgeRoot: root, port: 0 });
   try {
     const res = await fetch(`${url}/api/studio/agents/demo-builder/capability`);
     const text = await res.text();
@@ -288,5 +295,6 @@ test('REAL REPO: demo-builder (library:false, strategy:range) returns allowedTie
     assert.deepEqual(body.capability.allowedTiers, ['sonnet', 'opus']);
   } finally {
     await close();
+    rmSync(root, { recursive: true, force: true });
   }
 });

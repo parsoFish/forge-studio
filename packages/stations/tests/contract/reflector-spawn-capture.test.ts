@@ -17,16 +17,20 @@
  *  - The reflector resolves its own forge root via `import.meta.dirname` —
  *    NOT injectable (unlike the PM's worktree, this is always the real repo
  *    checkout) — so `cwd` and every forgeRoot-derived path the prompt embeds
- *    (`_logs/...`, `brain/...`) is normalized to `<REPO_ROOT>`, keeping the
- *    fixture portable across machines/CI checkouts.
- *  - The manifest lives in a mkdtemp dir (as in reflector.test.ts) ->
- *    normalized to `<TMP>`.
+ *    (`brain/...`, the PR description) is normalized to `<REPO_ROOT>`,
+ *    keeping the fixture portable across machines/CI checkouts.
+ *  - The manifest AND `_logs/` both live under the SAME mkdtemp dir ->
+ *    normalized to `<TMP>` (row 212 follow-up 3, bead forge-8vfn.8.5.48 —
+ *    `_logs/` moved out from under the real checkout into `CycleInput
+ *    .logsRoot`, which `runReflector`/`cycle-recap.ts` now honour, so this
+ *    test leaves no transient write in the real tree for a PARALLEL
+ *    `node --test` file's residue guard to misattribute to itself).
  *  - The cycle id is a FIXED literal (not the `uniqueCycleId()` helper
  *    reflector.test.ts uses elsewhere) precisely so the prompt — which
  *    embeds it verbatim in prose, not only inside resolved paths — is
  *    deterministic without further normalization. It's distinct + greppable
- *    so it can never collide with a real cycle, and its `_logs/` dir is
- *    removed in `finally` regardless of outcome.
+ *    so it can never collide with a real cycle, and the whole `tmp` dir
+ *    (manifest + `_logs/`) is removed in `finally` regardless of outcome.
  *
  * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
  * `composition.guards`, 2026-08-04): `reflector.json` moved by exactly one
@@ -68,7 +72,18 @@ const INITIATIVE_ID = 'INIT-2026-01-01-spawn-capture';
 
 test('runReflector: pins the exact {prompt, options} spawn call (characterization)', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'reflector-spawn-capture-'));
-  const cycleLogDir = resolve(FORGE_ROOT, '_logs', CYCLE_ID);
+  // Row 212 follow-up 3 (bead forge-8vfn.8.5.48): a tmp `logsRoot` (inside
+  // `tmp`, already normalized to `<TMP>` below), threaded through
+  // `CycleInput.logsRoot` — which `runReflector`/`cycle-recap.ts` now honour
+  // for every `_logs/<cycleId>/*` path — instead of the real checkout's
+  // `_logs/`. `node --test` runs files in parallel, and each one's
+  // generalised residue guard diffs the SAME shared repo `_logs/` over its
+  // own lifetime: this test's FIXED (not random) `CYCLE_ID` made its
+  // transient real-tree write especially likely to collide with a sibling
+  // file's window. The embedded `_logs/...` prompt paths below now normalize
+  // to `<TMP>/_logs/...` rather than `<REPO_ROOT>/_logs/...` — an expected,
+  // reviewed fixture shift from `UPDATE_SNAPSHOT=1`, not a behaviour change.
+  const logsRoot = join(tmp, '_logs');
   try {
     const manifestPath = join(tmp, 'manifest.md');
     writeFileSync(
@@ -93,13 +108,14 @@ test('runReflector: pins the exact {prompt, options} spawn call (characterizatio
       ].join('\n'),
     );
 
-    const logger = createLogger(CYCLE_ID, resolve(FORGE_ROOT, '_logs'));
+    const logger = createLogger(CYCLE_ID, logsRoot);
     const input: CycleInput = {
       initiativeId: INITIATIVE_ID,
       manifestPath,
       projectRepoPath: FORGE_ROOT,
       worktreePath: FORGE_ROOT,
       cycleId: CYCLE_ID,
+      logsRoot,
     };
 
     let captured: { prompt: string; options: Record<string, unknown> } | null = null;
@@ -135,7 +151,8 @@ test('runReflector: pins the exact {prompt, options} spawn call (characterizatio
     ]);
     assertMatchesJsonSnapshot(FIXTURE_PATH, normalized);
   } finally {
+    // runReflector's own cycleLogDir lives inside tmp (both rooted at the
+    // same mkdtemp logsRoot above), so this one rmSync is the whole cleanup.
     rmSync(tmp, { recursive: true, force: true });
-    rmSync(cycleLogDir, { recursive: true, force: true });
   }
 });
