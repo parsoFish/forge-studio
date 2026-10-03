@@ -26,7 +26,7 @@ import {
 } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import { isProcessRunning } from '@forge/kernel';
+import { isForgeServePid, isProcessRunning } from '@forge/kernel';
 import lockfile from 'proper-lockfile';
 
 export type DaemonPaths = {
@@ -168,8 +168,8 @@ export function spawnServeDetached(forgeRoot: string): { pid: number; logFile: s
   if (typeof child.pid !== 'number') {
     throw new Error('spawnServeDetached: failed to spawn the scheduler process');
   }
-  // The LOCK (below), not this pre-write, decides if the child may run.
-  writePidFile(forgeRoot, child.pid);
+  // The child writes its own pid once it holds the serve lock (below), so
+  // forge.pid only ever names a serve that won the lock.
   return { pid: child.pid, logFile };
 }
 
@@ -243,6 +243,14 @@ export function clearOwnPidFile(forgeRoot: string, pid: number): void {
  *  which skips `cmdServe`'s own finally). Null + one stderr line on
  *  contention; anything else re-throws. */
 export async function startServeLock(forgeRoot: string): Promise<(() => Promise<void>) | null> {
+  // A live serve of this root named by forge.pid refuses this one whatever
+  // the lock's age: a holder blocked in a synchronous call stops refreshing
+  // the lock but is still running.
+  const named = readPid(daemonPaths(forgeRoot).pidFile);
+  if (named !== null && named !== process.pid && isAlive(named) && isForgeServePid(named, forgeRoot)) {
+    console.error(`forge serve: pid ${named} already holds ${forgeRoot} — refusing a second serve for the same root.`);
+    return null;
+  }
   let release: () => Promise<void>;
   try {
     release = await acquireServeLock(forgeRoot);

@@ -200,3 +200,27 @@ test('isForgeServePid: no cmdline file (pid gone) → false', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('isForgeServePid: `forge serve` through a PATH symlink named forge -> <root>/bin/forge.mjs → true; a forge symlink to another tree → false', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-isserve-'));
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'forge-isserve-root-'));
+  const other = mkdtempSync(join(tmpdir(), 'forge-isserve-other-'));
+  const pathBin = mkdtempSync(join(tmpdir(), 'forge-isserve-path-'));
+  try {
+    for (const tree of [forgeRoot, other]) {
+      mkdirSync(join(tree, 'bin'), { recursive: true });
+      writeFileSync(join(tree, 'bin', 'forge.mjs'), '');
+    }
+    symlinkSync(join(forgeRoot, 'bin', 'forge.mjs'), join(pathBin, 'forge'));
+    writeCmdline(root, '1', [process.execPath, '--experimental-strip-types', join(pathBin, 'forge'), 'serve']);
+    writeCwd(root, '1', forgeRoot);
+    assert.equal(isForgeServePid(1, forgeRoot, root), true);
+
+    symlinkSync(join(other, 'bin', 'forge.mjs'), join(pathBin, 'forge-other'));
+    writeCmdline(root, '2', [process.execPath, join(pathBin, 'forge-other'), 'serve']);
+    writeCwd(root, '2', forgeRoot);
+    assert.equal(isForgeServePid(2, forgeRoot, root), false);
+  } finally {
+    for (const d of [root, forgeRoot, other, pathBin]) rmSync(d, { recursive: true, force: true });
+  }
+});

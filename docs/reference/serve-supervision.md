@@ -14,11 +14,16 @@ state.
 
 **Exactly one `forge serve` runs for a given forge root, enforced by `serve`
 itself.** Before `serve()` runs, `forge serve` (forever or `--once`) takes an
-exclusive per-root lock and writes its own pid to `_logs/daemon/forge.pid` —
-never only the pid file, which any starter can write, but the LOCK, which
-only one process can hold. A second `forge serve` or `forge serve --once` for
-the same root refuses immediately: a non-zero exit and one clear stderr line
-naming the pid already holding the root. `forge studio` adopts whichever
+exclusive per-root lock and then writes its own pid to
+`_logs/daemon/forge.pid`, so the pid file only ever names a serve that holds
+the lock. A second `forge serve` or `forge serve --once` for the same root
+refuses immediately — a non-zero exit and one clear stderr line naming the
+pid already holding the root — and it refuses whenever `forge.pid` names a
+live serve of this root, even one blocked in a long synchronous call that has
+let the lock age. A serve is recognised by its working directory (the forge
+root) and its argv (`bin/forge.mjs` or `apps/forge/cli.ts`, symlinks resolved,
+so `forge serve` through an npm-linked `forge` on `PATH` counts) with
+`serve`. `forge studio` adopts whichever
 `serve` already holds that lock — started by hand, by `forge studio` itself,
 or by systemd/pm2 (below) — rather than spawning a second one beside it.
 

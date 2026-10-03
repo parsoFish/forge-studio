@@ -110,10 +110,15 @@ export function isForgeServePid(pid: number, forgeRoot: string, procRoot = '/pro
   }
   if (cwd !== root) return false;
 
-  const cliPath = resolve(forgeRoot, 'apps', 'forge', 'cli.ts');
-  const binPath = resolve(forgeRoot, 'bin', 'forge.mjs');
-  return tokens.some((t) => {
-    const abs = isAbsolute(t) ? t : resolve(cwd, t);
-    return abs === cliPath || abs === binPath;
-  });
+  // Real paths on both sides: the documented `forge serve` runs through a
+  // PATH symlink (an npm-linked `forge` -> `<root>/bin/forge.mjs`).
+  const real = (path: string): string => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
+  const targets = new Set([real(resolve(root, 'apps', 'forge', 'cli.ts')), real(resolve(root, 'bin', 'forge.mjs'))]);
+  return tokens.some((t) => targets.has(real(isAbsolute(t) ? t : resolve(cwd, t))));
 }

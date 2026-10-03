@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, existsSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
@@ -254,4 +254,37 @@ test('clearOwnPidFile: clears forge.pid only while it still names the given pid'
   clearOwnPidFile(root, process.pid);
   assert.equal(readPid(daemonPaths(root).pidFile), null, 'clears its own');
   rmSync(root, { recursive: true, force: true });
+});
+
+test('startServeLock: a live serve of this root named by forge.pid refuses a second one even when its lock is aged past stale', async () => {
+  const root = tmpForge();
+  // A stand-in serve: cwd = the root, argv = <root>/apps/forge/cli.ts serve,
+  // blocked (it never refreshes a lock) but alive.
+  mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
+  writeFileSync(join(root, 'apps', 'forge', 'cli.ts'), 'setInterval(() => {}, 1_000_000);\n');
+  const holder = spawn(process.execPath, [join(root, 'apps', 'forge', 'cli.ts'), 'serve'], { cwd: root, stdio: 'ignore' });
+  const { dir, pidFile } = daemonPaths(root);
+  try {
+    assert.equal(typeof holder.pid, 'number');
+    await new Promise((r) => setTimeout(r, 200));
+    mkdirSync(join(dir, 'serve.lock'), { recursive: true });
+    const old = new Date(Date.now() - 10 * 60_000);
+    utimesSync(join(dir, 'serve.lock'), old, old);
+    writeFileSync(pidFile, String(holder.pid));
+
+    const originalError = console.error;
+    const lines: string[] = [];
+    console.error = (line: string) => { lines.push(String(line)); };
+    let second: (() => Promise<void>) | null;
+    try {
+      second = await startServeLock(root);
+    } finally {
+      console.error = originalError;
+    }
+    assert.equal(second, null, 'an aged lock never lets a second serve run beside a live one');
+    assert.match(lines[0] ?? '', new RegExp(`pid ${holder.pid} `), 'the refusal names the real holder');
+  } finally {
+    holder.kill('SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  }
 });
