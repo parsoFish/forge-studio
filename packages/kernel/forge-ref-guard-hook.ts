@@ -1,8 +1,7 @@
 /**
  * Row 211 (bead `forge-8vfn.8.5.47`) — git's OWN mechanism refuses an agent
  * spawn that commits to or moves a ref of the FORGE repo, replacing row 208's
- * PreToolUse Bash-command analysis (`forge-repo-git-fence.ts`, removed by this
- * same change).
+ * PreToolUse Bash-command analysis (removed by the same change).
  *
  * THE INCIDENT THAT RETIRED ROW 208. A real run (S2 run 7) had the fence deny
  * a developer agent's

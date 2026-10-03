@@ -9,7 +9,7 @@
 //
 // check-owner is resolved FROM THE ROOT BEING MEASURED, never from this script's own location:
 // a measurement tool that resolves its input from somewhere else answers a different question in
-// each checkout (§15.148 — `boundary-share.mjs` read main's baseline from inside a lane worktree
+// each checkout (§15.148, historical: `boundary-share.mjs` read main's baseline from inside a lane worktree
 // and reported 25 where the worktree held 21). Every figure this prints names its root.
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';

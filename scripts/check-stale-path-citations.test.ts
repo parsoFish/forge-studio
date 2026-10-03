@@ -712,3 +712,28 @@ test('it inspects a real population against the real tree (population sanity, no
   assert.ok(json.scannedCode > 500, `expected the real code-file population, got ${json.scannedCode}`);
   assert.ok(json.scannedProse > 50, `expected the real prose-file population, got ${json.scannedProse}`);
 });
+
+// Row 214 (bead forge-8vfn.8.5.50). `--write` regenerates the committed
+// retired-stem candidates from `git log` on purpose (see the checker's header).
+// When #1081 deleted a module, regenerating them surfaced three comments
+// that still named retired basenames. This pins those three files clean under
+// the PLAIN check against the COMMITTED stems. No `git log` runs here, so the
+// verdict does not depend on clone depth (CI checks out depth 1), and it does
+// not depend on the rest of the tree either: the population test above
+// explains why a whole-tree verdict is the CI step's job, not a test's.
+test('row 214: the files whose comments named retired modules stay clean under the committed stems', () => {
+  let stdout: string;
+  try {
+    stdout = execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' });
+  } catch (err) {
+    stdout = (err as { stdout?: string }).stdout ?? '';
+  }
+  const json = JSON.parse(stdout) as { introduced: Array<{ file: string }> };
+  const pinned = new Set([
+    'packages/kernel/index.ts',
+    'packages/kernel/forge-ref-guard-hook.ts',
+    '.claude/skills/tiered-orchestration/scripts/prod-lines.mjs',
+  ]);
+  const hits = json.introduced.filter((f) => pinned.has(f.file));
+  assert.deepEqual(hits, [], `retired-module citations reappeared: ${JSON.stringify(hits)}`);
+});
