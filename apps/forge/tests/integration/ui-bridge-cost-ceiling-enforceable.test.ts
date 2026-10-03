@@ -27,7 +27,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -159,13 +159,24 @@ test('GET /api/studio/agents: costCeilingEnforceable coexists with the existing 
 // serialization) gets the real project-manager/architect agents right, not
 // just a synthetic fixture that might not mirror the real YAML shape.
 test('GET /api/studio/agents: real roster — project-manager true, architect TRUE (⚑ AMENDED W7-B5 agents-21: legacy path enforceable), developer-ralph false, served over the real bridge process', async () => {
-  // Deliberately NOT scaffoldForgeRoot() here — this test points the bridge
-  // at the REAL repo root (this process's cwd, expected to be the forge
-  // install root when run via `node --test`) so it exercises the full route
-  // (skill discovery + real SKILL.md frontmatter parse + descriptor +
-  // serialization) against the genuine project-manager/architect skills, not
-  // a synthetic fixture. Nothing here is created or deleted — read-only GET.
-  const bridge = await startBridge({ forgeRoot: process.cwd(), port: 0 });
+  // Row 212 (bead forge-8vfn.8.5.48): this test needs the REAL
+  // project-manager/architect/developer-ralph SKILL.md files (not synthetic
+  // fixtures) so it exercises the full route — skill discovery + real
+  // frontmatter parse + descriptor + serialization — against the genuine
+  // YAML shapes. It used to point `startBridge` AT the real repo root
+  // (`process.cwd()`) to get them, but `startBridge` installs the ref-guard
+  // hook and opens its own `_logs/_bridge-*` run at `forgeRoot` on every
+  // boot, so that left residue in this checkout on every run. Copy only the
+  // three real skills this test needs into a tmp forgeRoot instead — never
+  // point `startBridge` at the real tree (idiom: bridge-studio-write.test.ts).
+  const realRoot = process.cwd();
+  const root = mkdtempSync(join(tmpdir(), 'bridge-ceiling-real-roster-'));
+  mkdirSync(join(root, '_queue', 'done'), { recursive: true });
+  mkdirSync(join(root, '_logs'), { recursive: true });
+  for (const slug of ['project-manager', 'architect', 'developer-ralph']) {
+    cpSync(join(realRoot, 'skills', slug), join(root, 'skills', slug), { recursive: true });
+  }
+  const bridge = await startBridge({ forgeRoot: root, port: 0 });
   try {
     const { agents } = await fetchAgents(bridge.url);
     const pm = agents.find((a) => a.slug === 'project-manager');
@@ -179,5 +190,6 @@ test('GET /api/studio/agents: real roster — project-manager true, architect TR
     assert.equal(ralph!.capability!.costCeilingEnforceable, false, 'developer-ralph declares loopStrategy: ralph — standalone dispatch is refused outright');
   } finally {
     await bridge.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
