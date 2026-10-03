@@ -124,3 +124,4 @@ report green, not to claim it did.
   if it can't converge, report the `stopReason` — do not loop by hand forever.
 - **Idempotent edits only:** every fix must be safe to re-apply (the auto-fixers
   already are); never clobber an operator-authored file.
+- **Write the project's central `profile.md` in the forge repo (Step 4) — never run `git` there.** No `commit`, `branch`, `checkout`, `update-ref`, `merge`, or any other ref-mutating command against the forge repo; forge owns those operations (ruling 208, forge-8vfn.8.5.44). `git add`/`git commit` are for THIS project's own repo only (Step 1 onward).

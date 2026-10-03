@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 366 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 116 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 117 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -55,19 +55,19 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
-| `kernel` | 31 | 5,620 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 32 | 5,935 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 48 | 11,185 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 48 | 11,188 | **9,415** | ratified 9,415 — row 208 (forge-8vfn.8.5.44): `onboarding-agent`/`forge-onboard-project`'s SKILL.md files gain an explicit never-run-git-in-the-forge-repo line, +3 on 9,412, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,410 | **12,832** | ratified 12,832 — row 199 (forge-8vfn.8.5.39): the KB drain and consolidate hand each fix turn its remaining budget and count it (unknown spend stops them), +64 on 12,768, lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 44 | 12,482 | **12,482** | ratified 12,482 — row 198 (forge-8vfn.8.5.36): a standalone run's end is its own skill's, never a hook's, +26 on 12,456, lane-ratified under ruling 666; row 193 (8.5.37) +6 before it; see git history for prior changes. |
+| `agents` | 44 | 12,556 | **12,556** | ratified 12,556 — row 208 (forge-8vfn.8.5.44): `hook-dispatch.ts`'s `withForgeRepoGitFence` merges the forge-repo-git fence into every spawn's `PreToolUse` hooks (both `run-agent.ts` spawn shapes), +74 on 12,482, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,939 | **20,915** | ratified 20,915 — row 199 (forge-8vfn.8.5.39): the session-less fix turn runs under the cost ceiling and an unbounded unpriced fix turn is unknown spend, +44 on 20,871, lane-ratified under ruling 666; row 193b (8.5.38) +185 before it; see git history for prior changes. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
+| `stations` | 45 | 12,268 | **12,268** | ratified 12,268 — row 208 (forge-8vfn.8.5.44): `release-finalize.ts` and the dev-loop's per-WI spawn both wired to the forge-repo-git fence, +2 net (release-finalize +4, developer-loop −2) on 12,266, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 8,010 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **486** | **130,947** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **487** | **131,341** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -383,7 +383,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/decompose-completeness.ts | stations | verbatim | 197 |
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
-| packages/stations/phases/developer-loop.ts | stations | verbatim | 1831 |
+| packages/stations/phases/developer-loop.ts | stations | verbatim | 1829 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 22 |
 | packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 135 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
@@ -395,7 +395,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
 | packages/stations/phases/reflector.ts | stations | verbatim | 722 |
 | packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 394 |
-| packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
+| packages/stations/phases/release-finalize.ts | stations | verbatim | 303 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 180 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
@@ -481,7 +481,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/validate-agent.ts | agents | rewritten | 297 |
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 122 |
 | packages/agents/studio/derive.ts | agents | verbatim | 300 |
-| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 546 |
+| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 620 |
 | packages/library/studio/hook-library.ts | library | verbatim | 536 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
 | packages/library/studio/hook-runtime.ts | library | verbatim | 619 |
@@ -540,10 +540,10 @@ operator-ratified new cap — never a silent raise.
 | skills/demo/SKILL.md | factory | verbatim | 306 |
 | skills/developer-ralph/SKILL.md | factory | verbatim | 108 |
 | skills/doc-updater/SKILL.md | flows | verbatim | 52 |
-| skills/forge-onboard-project/SKILL.md | projects | verbatim | 202 |
+| skills/forge-onboard-project/SKILL.md | projects | verbatim | 204 |
 | skills/handoff/SKILL.md | sessions | verbatim | 38 |
 | skills/instructions-creator/SKILL.md | projects | verbatim | 124 |
-| skills/onboarding-agent/SKILL.md | projects | verbatim | 126 |
+| skills/onboarding-agent/SKILL.md | projects | verbatim | 127 |
 | skills/pre-impl-interview/SKILL.md | factory | verbatim | 39 |
 | skills/preflight-fix/SKILL.md | projects | verbatim | 71 |
 | skills/project-brain-builder/SKILL.md | knowledge | verbatim | 102 |
@@ -570,7 +570,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/gh-identity.ts | kernel | verbatim | 111 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 143 |
-| packages/kernel/index.ts | kernel | verbatim | 91 |
+| packages/kernel/index.ts | kernel | verbatim | 95 |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 285 |
 | packages/kernel/tool-fence.ts | kernel | rewritten | 94 **Written for bead `forge-a9o9` (T1 rulings 670/691) — deny-by-default tool access, with no enumeration anywhere. Here rather than beside `makeToolEventSink` in `agents` because the spawn paths that need it span `sessions`, `agents` and `factory`, and the kernel is the only layer all three already stand on; `spawn-env.ts` next door settled the same class for env vars.** |
@@ -587,6 +587,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/findings.ts | kernel | verbatim | 37 |
 | packages/kernel/project-layout.ts | kernel | verbatim | 202 |
 | packages/kernel/process-liveness.ts | kernel | rewritten | 63 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
+| packages/kernel/forge-repo-git-fence.ts | kernel | rewritten | 311 **Written for bead `forge-8vfn.8.5.44` (row 208, 2026-10-03 incident — onboarding-agent's `git commit`/`git branch`/`git update-ref` against the shared-ref forge-root worktree moved the operator's own `main`) — the pure "does this Bash command commit to or move a ref of the forge repo" decision every agent/session/factory spawn must consult. Here rather than in `agents` because the ruling binds every spawn site across all three, and kernel is the one layer all three already stand on — same reasoning as `tool-fence.ts` next door.** |
 | packages/knowledge/index.ts | knowledge | verbatim | 112 |
 | packages/library/index.ts | library | verbatim | 115 |
 | packages/projects/index.ts | projects | verbatim | 106 |

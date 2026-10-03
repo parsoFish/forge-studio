@@ -22,11 +22,10 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
-import { sdkHooksForAgent } from '@forge/agents';
+import { pinnedSdkQuery as sdkQuery, sdkHooksForAgent, withForgeRepoGitFence } from '@forge/agents';
 import { releaseFinalizeAgentSpec } from '../release-finalize-invocation.ts';
 
-import type { EventLogger } from '@forge/kernel';
+import { FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import { loadProjectConfig } from '@forge/projects';
 import { releaseFinalizeSteps, hasReleaseProcess } from '../release-process.ts';
 import {
@@ -158,10 +157,15 @@ export async function runReleaseFinalize(
     disallowedTools: [...RELEASE_FINALIZE_DISALLOWED_TOOLS],
     maxTurns: RELEASE_FINALIZE_LIVE_MAX_TURNS,
     maxBudgetUsd: RELEASE_FINALIZE_LIVE_MAX_BUDGET_USD,
-    ...(() => {
-      const hooks = sdkHooksForAgent({ skill: releaseFinalizeAgentSpec.skill, logger, initiativeId: input.initiativeId });
-      return hooks !== undefined ? { hooks } : {};
-    })(),
+    // forge-8vfn.8.5.44 (row 208): merged unconditionally, same as every
+    // other spawn site — this agent legitimately commits + pushes INSIDE
+    // `input.worktreePath` (the PROJECT's own PR worktree), so `workdir`
+    // below is that same path; only an escape OUT of it toward `FORGE_ROOT`
+    // is refused.
+    hooks: withForgeRepoGitFence(
+      sdkHooksForAgent({ skill: releaseFinalizeAgentSpec.skill, logger, initiativeId: input.initiativeId }),
+      { cwd: input.worktreePath, workdir: input.worktreePath, forgeRoot: FORGE_ROOT, logger, initiativeId: input.initiativeId },
+    ),
   };
 
   const toolUseSummary: ReleaseFinalizeToolUseSummary = { editWrites: 0, bashCalls: 0 };

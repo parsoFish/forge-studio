@@ -11,9 +11,9 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
-import { sdkHooksForAgent } from '@forge/agents';
+import { sdkHooksForAgent, withForgeRepoGitFence } from '@forge/agents';
 
-import type { EventLogger } from '@forge/kernel';
+import { FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import { classifyCrash } from '@forge/agents';
 import {
   resolveDevSpawnModel, buildDevSystemPrompt,
@@ -613,15 +613,13 @@ export async function runDeveloperLoop(
         // W8-B6 — this def's own bound library hooks, derived from its
         // SKILL.md path (never a copy carried on the spec). The dev loop
         // spawns one SDK session per Ralph iteration, so hooks fire per
-        // iteration, which is the SDK's own session semantics.
-        ...(() => {
-          const hooks = sdkHooksForAgent({
-            skill: skillPathRelative(agentDef.slug),
-            logger,
-            initiativeId: input.initiativeId,
-          });
-          return hooks !== undefined ? { hooks } : {};
-        })(),
+        // iteration, which is the SDK's own session semantics. forge-8vfn.8.5.44
+        // (row 208): ALWAYS merged with the forge-repo-git fence too — `wiWorktree.path`
+        // is this WI's OWN worktree of the project's repo, so committing there is fine.
+        hooks: withForgeRepoGitFence(
+          sdkHooksForAgent({ skill: skillPathRelative(agentDef.slug), logger, initiativeId: input.initiativeId }),
+          { cwd: wiWorktree.path, workdir: wiWorktree.path, forgeRoot: FORGE_ROOT, logger, initiativeId: input.initiativeId },
+        ),
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
         queryFn: tallyingQueryFn,
         // R2-03-F4: chain the node wedge-kill into this WI's Ralph iterations.
