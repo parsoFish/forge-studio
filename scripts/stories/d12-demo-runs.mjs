@@ -8,18 +8,30 @@
  * it: this driver never approves, never merges, so a `positive` run's PR
  * stays open for a human to judge.
  *
- * WHY THE MANIFEST NEVER RACES THE SCHEDULER. `POST /api/develop/start`
- * (`enqueueDevelopRun`) is a manifest-move ONLY — "none spawns in-request;
- * the scheduler daemon claims the manifest and runs the flow later"
- * (`apps/forge/bridge-run-triggers.ts`'s own header). And `forge studio`
- * boots NO persistent scheduler daemon of its own — that is a SEPARATE
- * detached process, started only by an explicit `POST /api/scheduler/start`
- * (`apps/forge/bridge-scheduler.ts`), which this driver never calls. So a
- * manifest sitting in `_queue/pending/` with `flow_id: forge-architect` is
- * inert from the moment Studio boots until THIS driver itself spawns
- * `forge serve --once` (`waitForDevelopOutcome`, below) — after the
- * hand-off has already repointed it to `forge-develop`. Nothing here ever
- * spawns a real architect session.
+ * `forge studio` starts and supervises a forever-mode `forge serve`
+ * (ADR 011/031): whenever serve is live it claims every eligible manifest in
+ * `_queue/pending/` on its own. This driver never spawns `forge serve`
+ * itself and never calls `POST /api/develop/start` — `writeHandoffArtifacts`
+ * writes the manifest ALREADY on `forge-develop` (`d12-demo-runs-core.mjs`'s
+ * `planRun`), and only after `bootStudioStep` has confirmed a live
+ * supervised serve (`assertServeRunning`) and the hard-clause preflight +
+ * declared-gate baseline checks have both passed — so the one moment this
+ * manifest becomes claimable is also the one moment it is both CORRECT (the
+ * flow its worktree + hand-off `WI-1.md` are actually shaped for — never
+ * `forge-architect`, so no claim can ever spawn a real, no-operator
+ * architect session) and READY (the claim the scheduler would run against it
+ * would not be refused). `waitForDevelopOutcome` then watches the SAME two
+ * observables the product itself exposes — the queue directory the manifest
+ * sits in and its own `_logs/<cycleId>/events.jsonl`
+ * (`scripts/lib/serve-wait.mjs`) — rather than a spawned child process's
+ * stdout, since nothing here spawns one.
+ *
+ * `--dry-run` writes this SAME claimable manifest (there is no other shape
+ * to write — `writeManifest`'s containment guard only accepts the real
+ * `_queue/pending/` under this process's own `forgeRoot`), so its studio
+ * boots on the dry bridge (`FORGE_DRY_BRIDGE=1`), which supervises no serve:
+ * nothing claims the manifest, and `runTeardown`'s `removeQueueManifest`
+ * sweeps it.
  *
  * WHY THE WORKTREE IS REUSED, NOT RE-CREATED. `decideWorktreeStrategy`
  * (`packages/flows/worktree.ts`) reuses a preserved worktree whenever it is
@@ -29,11 +41,11 @@
  * `.forge/work-items/WI-1.md`).
  *
  * EFFECTS: provisions a fixture ground under `projects/`, mints a REAL
- * private GitHub remote, boots a real `forge studio`, drives a real
- * `forge serve --once` (which spawns a real agent), and — unless
- * `--keep-remote` — deletes that remote on the way out. `--plan-only` is the
- * only mode safe to run while developing this file; every other mode is the
- * lane's own job, run against a real ground with real spend.
+ * private GitHub remote, boots a real `forge studio` (whose supervised serve
+ * claims and runs a real agent against the manifest this driver writes), and
+ * — unless `--keep-remote` — deletes that remote on the way out. `--plan-only`
+ * is the only mode safe to run while developing this file; every other mode
+ * is the lane's own job, run against a real ground with real spend.
  *
  * Usage:
  *   node scripts/stories/d12-demo-runs.mjs <control|positive> --plan-only
@@ -41,7 +53,7 @@
  *   node scripts/stories/d12-demo-runs.mjs <control|positive> --report <path> [--keep-remote]
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
 import {
@@ -57,38 +69,30 @@ import { sweepStoryRemotesFromManifest } from './sweep-remotes.mjs';
 import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest, manifestQueueState } from './d12-demo-runs-teardown.mjs';
 import { installGroundDeps, runDeclaredGateAtHead } from './d12-demo-runs-ground.mjs';
 import { spawnStudioReady } from '../lib/boot-studio.mjs';
-import { createStageTwo } from '../verify-cycle-stage2.mjs';
-import { classifyServeStageOutcome } from '../verify-cycle-stage-outcome.mjs';
+import { assertServeRunning, waitForManifestOutcome } from '../lib/serve-wait.mjs';
 
 import { add as addWorktree, decideWorktreeStrategy } from '../../packages/flows/worktree.ts';
-import { parseManifest, writeManifest } from '../../packages/flows/manifest.ts';
+import { parseManifest, writeManifest, readManifestCycleId } from '../../packages/flows/manifest.ts';
 import { readWorkItemsFromDir, writeWorkItem } from '../../packages/flows/work-item.ts';
 import { getPaths, worktreeDemoJsonPath } from '@forge/flows';
 import { ghRunnerFor, assertGhOwner, recordMintedRemote } from '@forge/kernel';
 
 const STUDIO_TIMEOUT_MS = 150_000;
-/** One `forge serve --once` pass runs a whole develop cycle (dev-loop → demo
- *  → adversarial-review → verdict) to `ready-for-review`, synchronously, per
- *  `scripts/verify-cycle.mjs`'s own header. This is the per-pass child-process
- *  budget, not the overall outcome-wait budget (`MAX_SERVE_PASSES`, below). */
-const SERVE_ONCE_TIMEOUT_MS = 45 * 60_000;
-/** How many `serve --once` passes this driver will spend trying to reach
- *  `ready-for-review`/`failed` before giving up and reporting a timeout — a
- *  single independent initiative should need exactly one; a couple more are
- *  this driver's own defensive margin, mirroring `scripts/verify-cycle.mjs`'s
- *  `maxPasses = initiatives.length + 2` for its own (larger) batches. */
-const MAX_SERVE_PASSES = 3;
+/** How long this driver waits for its ONE hand-authored initiative to reach
+ *  `ready-for-review` or `failed` once forge studio's supervised serve has
+ *  claimed it — one develop cycle's dev-loop → integrate → adversarial-review
+ *  band, run for real, to a human-reviewable PR. Mirrors the per-stage
+ *  budgets `scripts/verify-cycle.mjs` already uses for the same kind of wait
+ *  (its architect stage alone gets 25 minutes); generous, since what this
+ *  bounds is a real agent run, not a fixed process's exit. */
+const DEVELOP_OUTCOME_DEADLINE_MS = 45 * 60_000;
 
 function log(msg) {
   process.stdout.write(`[d12-demo-runs] ${msg}\n`);
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 /**
- * The spawn env for both Studio and `serve --once`: this run's own cost
+ * The spawn env for Studio: this run's own cost
  * ceiling threaded via `FORGE_COST_CEILING_USD` — the SAME env var
  * `scripts/verify-cycle.mjs` passes `--cost-ceiling` through as (it takes
  * precedence over the manifest's own `cost_ceiling_usd`, which this driver
@@ -107,24 +111,6 @@ function buildSpawnEnv(plan) {
     log('headroom proxy detected on ANTHROPIC_BASE_URL — stripped it so forge streams direct');
   }
   return env;
-}
-
-/** `scripts/verify-cycle.mjs`'s own `bridgePost` — a generic POST + CSRF
- *  header + best-effort JSON parse. Not exported there, so copied verbatim
- *  rather than edited in. */
-async function bridgePost(bridgeUrl, path, payload) {
-  try {
-    const res = await fetch(`${bridgeUrl}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify(payload),
-    });
-    let body = null;
-    try { body = await res.json(); } catch { /* non-JSON */ }
-    return { ok: res.ok, status: res.status, body };
-  } catch (err) {
-    return { ok: false, status: 0, body: { error: err.message } };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -211,88 +197,68 @@ function writeHandoffArtifacts(plan, handle) {
  *  header on why nothing here can race a real operator session; a healthy
  *  bridge on 4123 would make this hang until `spawnStudioReady`'s own
  *  timeout, which is the right failure mode: never attach to someone else's
- *  live cycle). */
-async function bootStudioStep(plan) {
-  log('booting forge studio…');
-  const studio = await spawnStudioReady({ fullEnv: buildSpawnEnv(plan), timeoutMs: STUDIO_TIMEOUT_MS, log: (s) => log(`[studio] ${s}`) });
+ *  live cycle). Its supervised serve is what will claim the manifest this
+ *  driver writes — nothing here spawns `forge serve` itself. */
+async function bootStudioStep(plan, { dry = false } = {}) {
+  log(dry ? 'booting forge studio on the dry bridge (it supervises no serve)…' : 'booting forge studio…');
+  const env = dry ? { ...buildSpawnEnv(plan), FORGE_DRY_BRIDGE: '1' } : buildSpawnEnv(plan);
+  const studio = await spawnStudioReady({ fullEnv: env, timeoutMs: STUDIO_TIMEOUT_MS, log: (s) => log(`[studio] ${s}`) });
   log(`studio ready: ui=${studio.uiUrl} bridge=${studio.bridgeUrl}`);
   return studio;
 }
 
-/** `POST /api/develop/start` via the SAME `createStageTwo` helper
- *  `scripts/verify-cycle-stage2.mjs` composes with — repoints the manifest
- *  at `forge-develop` and makes it claimable. Spawns nothing itself. */
-async function handoffToDevelop(plan, bridgeUrl) {
-  log(`hand-off — POST /api/develop/start [${plan.initiativeId}]…`);
-  const stageTwo = createStageTwo({
-    forgeRoot: plan.forgeRoot,
-    flow: { flowId: 'forge-develop', door: 'develop-start' },
-    flowReflects: false,
-    bridgePost,
-    log,
-    sleep,
-  });
-  const results = await stageTwo.handoff(bridgeUrl, [plan.initiativeId]);
-  log(`hand-off enqueued: cycle_id ${results[0]?.cycleId ?? '?'}`);
-  return results[0];
-}
-
-/** One `forge serve --once` pass — spawned exactly as
- *  `scripts/verify-cycle.mjs`'s own (unexported) `startServe` does, with this
- *  run's cost-ceiling env. */
-function spawnServeOnce(plan) {
-  return spawn(process.execPath, ['--experimental-strip-types', 'apps/forge/cli.ts', 'serve', '--once'], {
-    cwd: plan.forgeRoot,
-    env: buildSpawnEnv(plan),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-}
-
-/** Manifest resting in `ready-for-review` or `failed` — the two outcomes this
- *  driver ever waits for (it never approves, so `merged`/`done` never happen). */
-function developOutcomeState(plan) {
+/** The manifest's own path, wherever it currently sits in `_queue/` — it
+ *  moves pending → in-flight → ready-for-review/failed as serve works it.
+ *  `null` once it is in none of them (never happens for this driver, which
+ *  stops waiting at ready-for-review/failed, well short of any merge/done
+ *  move). */
+function currentManifestPath(plan) {
+  const state = manifestQueueState(plan.forgeRoot, plan.initiativeId);
+  if (state === 'absent') return null;
   const paths = getPaths(join(plan.forgeRoot, '_queue'));
-  const filename = `${plan.initiativeId}.md`;
-  if (existsSync(join(paths.readyForReview, filename))) return 'ready-for-review';
-  if (existsSync(join(paths.failed, filename))) return 'failed';
-  return null;
+  return join(paths[state], `${plan.initiativeId}.md`);
 }
+
+/** The manifest's own persisted `cycle_id`, re-read on every poll: serve
+ *  mints it fresh, inside the product, only once it actually claims this
+ *  manifest (`packages/flows/cycle.ts`'s `newCycleId`) — there is no way for
+ *  this driver to know it in advance. */
+function currentCycleId(plan) {
+  const path = currentManifestPath(plan);
+  return path ? readManifestCycleId(path) : null;
+}
+
+/** `QUEUE_STATES`/`manifestQueueState`'s camelCase key names, rendered as
+ *  the queue directory's own hyphenated name — the vocabulary this driver's
+ *  report + exit-code check already use. */
+const QUEUE_STATE_LABELS = { readyForReview: 'ready-for-review', merged: 'merged', done: 'done', failed: 'failed' };
 
 /**
- * Drive `forge serve --once` passes until the initiative parks at
- * `ready-for-review` (success) or `failed`, or `MAX_SERVE_PASSES` is spent.
- * Each pass's stdout+stderr is classified by `classifyServeStageOutcome`
- * (`scripts/verify-cycle-stage-outcome.mjs`) — imported, not re-implemented —
- * so a pass that printed a phase failure or no outcome at all is named, not
- * silently retried into a false "it worked eventually".
+ * Wait for the hand-authored initiative to reach `ready-for-review`
+ * (success) or `failed`, or `DEVELOP_OUTCOME_DEADLINE_MS` to pass —
+ * `forge studio`'s supervised serve claims and runs it; nothing here spawns
+ * `forge serve`. Classification reads the SAME two observables the product
+ * itself exposes (`scripts/lib/serve-wait.mjs`'s `waitForManifestOutcome`:
+ * the queue directory + the cycle's own `events.jsonl`), so a cycle that
+ * failed mid-run or printed a decisive event-log error is named, not
+ * silently waited past.
  */
 async function waitForDevelopOutcome(plan, evidence) {
-  for (let pass = 1; pass <= MAX_SERVE_PASSES; pass++) {
-    evidence.mark(`before serve pass ${pass}`);
-    log(`spawning forge serve --once (pass ${pass}/${MAX_SERVE_PASSES})…`);
-    const proc = spawnServeOnce(plan);
-    const captured = [];
-    const raw = { stdout: '', stderr: '' };
-    const cap = (d) => { for (const l of String(d).split('\n')) if (l.trim()) captured.push(l); };
-    proc.stdout.on('data', (d) => { raw.stdout += String(d); cap(d); });
-    proc.stderr.on('data', (d) => { raw.stderr += String(d); cap(d); });
-    const exit = await new Promise((res) => {
-      const timer = setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, SERVE_ONCE_TIMEOUT_MS);
-      proc.on('exit', (code) => { clearTimeout(timer); res(code); });
-    });
-    const outcome = classifyServeStageOutcome(captured);
-    log(`serve --once (pass ${pass}) exited ${exit} — ${outcome.ok ? 'ok' : `FAILED: ${outcome.errors.join('; ')}`}`);
-    evidence.save(`serve-pass-${pass}.stdout.log`, raw.stdout);
-    evidence.save(`serve-pass-${pass}.stderr.log`, raw.stderr);
-    evidence.mark(`after serve pass ${pass} (exit ${exit})`);
-
-    const state = developOutcomeState(plan);
-    if (state !== null) return { state, passes: pass, lastOutcome: outcome };
-    if (!outcome.ok && pass === MAX_SERVE_PASSES) {
-      return { state: 'timed-out', passes: pass, lastOutcome: outcome };
-    }
-  }
-  return { state: 'timed-out', passes: MAX_SERVE_PASSES, lastOutcome: null };
+  evidence.mark('before waiting for develop outcome');
+  const deadlineMs = Date.now() + DEVELOP_OUTCOME_DEADLINE_MS;
+  let lastCycleId = null;
+  const result = await waitForManifestOutcome(plan.forgeRoot, {
+    initiativeId: plan.initiativeId,
+    cycleId: () => {
+      lastCycleId = currentCycleId(plan);
+      return lastCycleId;
+    },
+    deadlineMs,
+  });
+  const state = result.outcome === 'timeout' ? 'timed-out' : (QUEUE_STATE_LABELS[result.state] ?? result.state);
+  log(`develop outcome: ${state}${result.errors.length ? ` — ${result.errors.join('; ')}` : ''}`);
+  evidence.mark(`after waiting for develop outcome (${state})`);
+  return { state, cycleId: lastCycleId, errors: result.errors };
 }
 
 /** Every `.webm` under the worktree's demo dir, with its size — passed
@@ -581,11 +547,17 @@ async function main(argv) {
 
     const handle = createInitiativeWorktree(plan);
     state.worktreeCreated = true; // the worktree dir exists now — teardown must own it even if the next line throws
-    const written = writeHandoffArtifacts(plan, handle);
 
-    state.studio = await bootStudioStep(plan);
+    // A dry run writes the same claimable manifest, so its studio runs on the
+    // dry bridge and supervises no serve: nothing can claim it. A live run
+    // confirms its studio's supervised serve is up before waiting on it — a
+    // wait against a serve that will never claim would otherwise hang
+    // silently until its own deadline.
+    state.studio = await bootStudioStep(plan, { dry: opts.dryRun });
+    await assertServeRunning(state.studio.bridgeUrl, { expect: opts.dryRun ? 'unsupervised' : 'running' });
 
     if (opts.dryRun) {
+      const written = writeHandoffArtifacts(plan, handle);
       const strategy = decideWorktreeStrategy({
         resumeMarkerPresent: false,
         worktreePresent: existsSync(plan.worktreePath),
@@ -598,18 +570,22 @@ async function main(argv) {
       return;
     }
 
-    // Never hand off a ground the scheduler would refuse to claim — name the clauses instead (row 128).
+    // Never let the manifest become claimable at all when the scheduler
+    // would refuse the claim (row 128) or the develop loop would refuse a
+    // red baseline (row 132) — named BEFORE `writeHandoffArtifacts` below,
+    // which is the one moment this manifest becomes claimable.
     const failing = hardClauseFailures(runPreflight(plan.projectRepoPath, { forgeRoot: plan.forgeRoot }));
     if (failing.length > 0) throw new Error(`HARD preflight clause(s) fail, so the develop claim would be refused: ${failing.join('; ')}`);
-    // …and never hand off a red baseline the develop loop would refuse (row 132).
     const baseline = runDeclaredGateAtHead(plan.projectRepoPath, plan.worktreePath);
     if (!baseline.ok) throw new Error(`the declared quality gate is red at HEAD, so the develop loop would refuse it: ${baseline.detail}`);
     log(`baseline: ${baseline.detail}`);
-    const handoff = await handoffToDevelop(plan, state.studio.bridgeUrl);
-    state.cycleId = handoff?.cycleId ?? null;
-    evidence.mark('after develop/start');
+
+    // The manifest is born already on forge-develop (`planRun`'s own
+    // `flow_id`) — studio's supervised serve claims it the instant this
+    // write lands in `_queue/pending/`. No repoint, no second request.
+    writeHandoffArtifacts(plan, handle);
     const outcome = await waitForDevelopOutcome(plan, evidence);
-    log(`develop outcome: ${outcome.state} (${outcome.passes} pass(es))`);
+    state.cycleId = outcome.cycleId;
 
     const artifacts = readArtifacts(plan);
     const verdict = judgeRun(plan, {
@@ -623,7 +599,7 @@ async function main(argv) {
     report = {
       ...report,
       developOutcome: outcome.state,
-      servePasses: outcome.passes,
+      developOutcomeErrors: outcome.errors,
       demoJsonPath: artifacts.demoJsonPath,
       // Evidence teardown never touches — named here, not swept.
       logsPath: state.cycleId ? join(plan.forgeRoot, '_logs', state.cycleId) : null,

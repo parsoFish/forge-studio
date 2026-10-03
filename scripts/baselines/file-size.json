@@ -47,6 +47,6 @@
   "packages/library/tests/integration/skill-library.test.ts": 1779,
   "scripts/check-raw-fs-guarded.mjs": 1346,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
-  "scripts/verify-cycle.mjs": 1219,
+  "scripts/verify-cycle.mjs": 1193,
   ".claude/skills/tiered-orchestration/scripts/lanes.sh": 1064
 }

@@ -130,7 +130,7 @@ describe('renderManifest / renderWorkItem round-trip', () => {
       assert.equal(parsed.phase, 'pending');
       assert.equal(parsed.origin, 'human-directed');
       assert.equal(parsed.class, 'code');
-      assert.equal(parsed.flow_id, 'forge-architect');
+      assert.equal(parsed.flow_id, 'forge-develop');
       assert.equal(parsed.disposable, true);
       assert.deepEqual(parsed.acceptance_criteria, p.manifest.acceptance_criteria);
     });

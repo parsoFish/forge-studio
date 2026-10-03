@@ -1,92 +1,124 @@
 /**
- * bead forge-8vfn.6.10.6 — the harness handed off to develop while stage 1 had
- * already failed.
+ * bead forge-8vfn.6.10.6, reworked for M7-E row 205 — `classifyCycleEventLog`
+ * reads the cycle's own `events.jsonl`, not a spawned `forge serve --once`'s
+ * stdout (there is none: `forge studio` supervises serve continuously and
+ * claims every eligible manifest itself).
  *
- * G1 run 3, 2026-09-04: the serve pass printed
- *   `INIT-… · PM FAILED · $0.66 · subtype=success · WIs=3`
- *   `INIT-… · cycle ERROR: project-manager phase failed: set errors: WI-3: …`
- * and nine seconds later `verify-cycle.mjs` POSTed `/api/develop/start` anyway,
- * because `runServeStage` returned nothing and the caller had nothing to check.
- * The initiative then merged to a real project on a rejected work-item set.
- *
- * The decision is a pure function of the serve output, so it is tested as one —
- * the same shape as `ci-terminal.sh classify`, and for the same reason: a
- * predicate that can only be exercised by a live $7 run is a predicate nobody
- * exercises (§15.163).
+ * G1 run 3, 2026-09-04: a project-manager phase failure wrote a
+ * `project-manager`/`error` event AND an `orchestrator`/`cycle`/`error`
+ * event, and the caller handed off to develop nine seconds later because
+ * nothing read either one. The decision is a pure function of the event
+ * log, so it is tested as one.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
+import { classifyCycleEventLog } from './verify-cycle-stage-outcome.mjs';
 
-test('a clean serve pass is ok', () => {
-  const r = classifyServeStageOutcome([
-    '[serve] claimed: INIT-2026-09-04-x (gitpulse)',
-    '[15:38:26] INIT-2026-09-04-x · PM OK · $0.66 · WIs=3',
-    '[serve] INIT-2026-09-04-x · cycle done',
+function line(obj) {
+  return JSON.stringify(obj);
+}
+
+test('a clean cycle (cycle.end, no failure markers) is ok', () => {
+  const r = classifyCycleEventLog([
+    line({ phase: 'orchestrator', skill: 'cycle', event_type: 'start', message: 'cycle.start' }),
+    line({ phase: 'project-manager', event_type: 'start' }),
+    line({ phase: 'orchestrator', skill: 'cycle', event_type: 'end', message: 'cycle.end', metadata: { status: 'ready-for-review' } }),
   ]);
-  assert.equal(r.ok, true);
   assert.deepEqual(r.errors, []);
+  assert.equal(r.sawEnd, true);
+  assert.equal(r.endStatus, 'ready-for-review');
 });
 
-test('THE RUN-3 LINE: a cycle ERROR is not ok, and the reason is carried out verbatim', () => {
-  const r = classifyServeStageOutcome([
-    '[15:38:26] INIT-2026-09-04-include-path-filter-flag · PM FAILED · $0.66 · 2m51s · subtype=success · WIs=3',
-    '[15:38:26] INIT-2026-09-04-include-path-filter-flag · cycle ERROR: project-manager phase failed: set errors: WI-3: creates is required (ADR 037) unless verification_artifact is set',
+test('THE RUN-3 LINES: a PM error + a cycle error are both reported, verbatim', () => {
+  const r = classifyCycleEventLog([
+    line({
+      phase: 'project-manager',
+      event_type: 'error',
+      metadata: { result_subtype: 'success', work_item_count: 3 },
+    }),
+    line({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'project-manager phase failed: set errors: WI-3: creates is required (ADR 037) unless verification_artifact is set',
+    }),
   ]);
-  assert.equal(r.ok, false, 'this is the exact line the harness ignored on 2026-09-04');
-  // Two distinct failure lines, and both are reported: the phase verdict and the
-  // cycle's terminal error are separate facts, and collapsing them would hide the
-  // `subtype=success` line that makes bead 8vfn.6.1 visible in the first place.
   assert.equal(r.errors.length, 2);
   assert.ok(r.errors.some((e) => /creates is required \(ADR 037\)/.test(e)),
-    'the caller must be able to print WHY it refused to hand off, not just that it did');
+    'the caller must be able to print WHY the cycle refused, not just that it did');
   assert.ok(r.errors.some((e) => /subtype=success/.test(e)),
     'the agent-turn-says-success line is evidence and must not be swallowed');
+  assert.equal(r.sawEnd, false, 'a thrown cycle error never reaches cycle.end');
 });
 
-test('a PM FAILED line alone is enough — subtype=success on the same line must not rescue it', () => {
-  const r = classifyServeStageOutcome([
-    '[15:38:26] INIT-x · PM FAILED · $0.66 · 2m51s · subtype=success · WIs=3',
+test('a PM error alone is enough — no cycle.end is needed to call it a failure', () => {
+  const r = classifyCycleEventLog([
+    line({ phase: 'project-manager', event_type: 'error', metadata: { result_subtype: 'success', work_item_count: 3 } }),
   ]);
-  assert.equal(r.ok, false,
-    'the agent turn reporting success while the phase failed is bead 8vfn.6.1 — the harness must read the phase');
-});
-
-test('every failing initiative is named, not just the first (a batch hand-off must not proceed on the survivors)', () => {
-  const r = classifyServeStageOutcome([
-    '[t] INIT-a · cycle ERROR: boom',
-    '[t] INIT-b · cycle done',
-    '[t] INIT-c · cycle ERROR: bang',
-  ]);
-  assert.equal(r.ok, false);
-  assert.equal(r.errors.length, 2);
-});
-
-test('an empty pass is NOT ok — no output is not the same as success (§15.92)', () => {
-  const r = classifyServeStageOutcome([]);
-  assert.equal(r.ok, false, 'a serve stage that printed nothing has not demonstrated a claim');
-  assert.match(r.errors[0], /no .*outcome|nothing/i);
-});
-
-test('the word "error" in ordinary prose does not fail the stage', () => {
-  const r = classifyServeStageOutcome([
-    '[serve] INIT-x · dev-loop: retrying after a transient error in the gate command',
-    '[serve] INIT-x · cycle done',
-  ]);
-  assert.equal(r.ok, true, 'the marker is `· cycle ERROR:`, not the substring "error"');
-});
-
-test('a claim refusal is named with its reason and clause ids, never read as "printed no cycle outcome" (row 128)', () => {
-  const r = classifyServeStageOutcome([
-    'forge serve --once: claiming one initiative…',
-    '[serve] claimed: INIT-x (story-x)',
-    '[serve] INIT-x — claim refused (non-terminal, left in pending): project "story-x" is not contract-ready (failing hard clause(s): C4) — fix the project contract before retrying',
-  ]);
-  assert.equal(r.ok, false);
   assert.equal(r.errors.length, 1);
-  assert.match(r.errors[0], /claim refused \(non-terminal, left in pending\)/);
-  assert.match(r.errors[0], /failing hard clause\(s\): C4/);
-  assert.doesNotMatch(r.errors[0], /printed no cycle outcome/);
 });
 
+test('every failing cycle in a batch of lines is named, not just the first', () => {
+  const r = classifyCycleEventLog([
+    line({ phase: 'orchestrator', skill: 'cycle', event_type: 'error', message: 'boom' }),
+    line({ phase: 'orchestrator', skill: 'cycle', event_type: 'end', message: 'cycle.end', metadata: { status: 'done' } }),
+    line({ phase: 'orchestrator', skill: 'cycle', event_type: 'error', message: 'bang' }),
+  ]);
+  assert.equal(r.errors.length, 2);
+  assert.ok(r.errors.some((e) => /boom/.test(e)));
+  assert.ok(r.errors.some((e) => /bang/.test(e)));
+});
+
+test('no lines at all is NOT success — sawEnd stays false (§15.92)', () => {
+  const r = classifyCycleEventLog([]);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.sawEnd, false);
+  assert.equal(r.endStatus, null);
+});
+
+test('a claim refusal is named with its reason and terminal/non-terminal kind', () => {
+  const r = classifyCycleEventLog([
+    line({
+      phase: 'orchestrator',
+      skill: 'scheduler',
+      event_type: 'error',
+      message: 'claim.refused',
+      metadata: { reason: 'project "story-x" is not contract-ready (failing hard clause(s): C4)', terminal: false },
+    }),
+  ]);
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /claim refused \(non-terminal\)/);
+  assert.match(r.errors[0], /failing hard clause\(s\): C4/);
+});
+
+test('a terminal claim refusal is named as terminal', () => {
+  const r = classifyCycleEventLog([
+    line({
+      phase: 'orchestrator',
+      skill: 'scheduler',
+      event_type: 'error',
+      message: 'claim.refused',
+      metadata: { reason: 'flow_id names a flow that does not exist', terminal: true },
+    }),
+  ]);
+  assert.match(r.errors[0], /claim refused \(terminal\)/);
+});
+
+test('malformed JSON lines are skipped, not thrown on', () => {
+  const r = classifyCycleEventLog([
+    'not json at all',
+    line({ phase: 'orchestrator', skill: 'cycle', event_type: 'end', message: 'cycle.end', metadata: { status: 'merged' } }),
+    '',
+  ]);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.sawEnd, true);
+  assert.equal(r.endStatus, 'merged');
+});
+
+test('an unrelated "error" event_type on an unrelated phase is not a decisive failure', () => {
+  const r = classifyCycleEventLog([
+    line({ phase: 'review-loop', event_type: 'error', message: 'a transient retry, not a cycle failure' }),
+  ]);
+  assert.deepEqual(r.errors, [], 'only the three named markers (claim.refused, orchestrator/cycle error, project-manager error) are decisive');
+});

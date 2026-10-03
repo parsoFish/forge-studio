@@ -28,6 +28,12 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { getPaths } from '@forge/flows';
+import { QUEUE_STATES, manifestQueueState } from '../lib/queue-state.mjs';
+
+// Re-exported for this module's existing callers (`d12-demo-runs.mjs`,
+// `d12-demo-runs-teardown.test.ts`) — the read itself lives in
+// `scripts/lib/queue-state.mjs` now, shared with `scripts/lib/serve-wait.mjs`.
+export { manifestQueueState };
 
 /**
  * Remove the git worktree at EXACTLY `worktreePath` (`git worktree remove
@@ -89,15 +95,6 @@ export function deleteLocalBranch(projectRepoPath, branch) {
  * @param {string} initiativeId
  * @returns {{removed: boolean, state?: string, path?: string, reason?: string}}
  */
-const QUEUE_STATES = /** @type {const} */ (['pending', 'inFlight', 'readyForReview', 'merged', 'done', 'failed']);
-
-/** Which `_queue/<state>/` holds this run's manifest right now (the getPaths key), or `absent`. Evidence only: it moves nothing. */
-export function manifestQueueState(forgeRoot, initiativeId) {
-  const paths = getPaths(join(forgeRoot, '_queue'));
-  const found = QUEUE_STATES.find((state) => existsSync(join(paths[state], `${initiativeId}.md`)));
-  return found ?? 'absent';
-}
-
 export function removeQueueManifest(forgeRoot, initiativeId) {
   const paths = getPaths(join(forgeRoot, '_queue'));
   const filename = `${initiativeId}.md`;
