@@ -474,12 +474,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T12-28-29-f7fa1fed"
+        "architectSessionId": "2026-10-03T22-56-00-bf5448f7"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T12-28-29-f7fa1fed"
+        "architect-session-id": "2026-10-03T22-56-00-bf5448f7"
       },
       "expect": {
         "page": "architect-new",
@@ -735,12 +735,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T12-40-43-dce9b756"
+        "architectSessionId": "2026-10-03T23-08-29-c8ad3ba3"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T12-40-43-dce9b756"
+        "architect-session-id": "2026-10-03T23-08-29-c8ad3ba3"
       },
       "expect": {
         "page": "architect-new",
@@ -996,12 +996,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T12-54-11-22c8ae66"
+        "architectSessionId": "2026-10-03T23-19-59-bb092746"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T12-54-11-22c8ae66"
+        "architect-session-id": "2026-10-03T23-19-59-bb092746"
       },
       "expect": {
         "page": "architect-new",
@@ -1074,19 +1074,19 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 1369560,
-        "dir": "_logs/_architect-2026-10-03T12-28-29-f7fa1fed",
-        "reason": "pid 1369560: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2352966,
+        "dir": "_logs/_architect-2026-10-03T22-56-00-bf5448f7",
+        "reason": "pid 2352966: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1462691,
-        "dir": "_logs/_architect-2026-10-03T12-40-43-dce9b756",
-        "reason": "pid 1462691: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2446367,
+        "dir": "_logs/_architect-2026-10-03T23-08-29-c8ad3ba3",
+        "reason": "pid 2446367: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1526444,
-        "dir": "_logs/_architect-2026-10-03T12-54-11-22c8ae66",
-        "reason": "pid 1526444: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2510634,
+        "dir": "_logs/_architect-2026-10-03T23-19-59-bb092746",
+        "reason": "pid 2510634: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -1148,12 +1148,12 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 8.5134354,
+    "usd": 8.25542695,
     "unmeasured": false
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "5451aaab1b5175ea17483cb7ecbed9292c72dc9a",
+    "dirty": false
   },
   "storyDigest": "696ab984486f2709"
 }
