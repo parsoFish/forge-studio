@@ -56,7 +56,7 @@ import type { KbDrainRunFixTurnFn } from '@forge/knowledge';
  *     on `null` instead (`bridge-studio-kb-drain.ts`);
  *   - an `error` row with no unpriced marker — a refusal before the SDK call,
  *     e.g. `TurnBudgetExhaustedError` — 0: nothing was spent.
- * Exported for `tests/unit/brain-fix-turn-cost.test.ts`.
+ * Exported for `apps/forge/tests/unit/brain-fix-turn-cost.test.ts`.
  */
 export function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number | null {
   const evPath = join(forgeRoot, '_logs', `_brainfix-${subRunId}`, 'events.jsonl');

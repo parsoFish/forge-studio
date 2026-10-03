@@ -11,7 +11,7 @@
  *
  * Driven through a minimal variant rather than either real kind, so the cap
  * arithmetic is judged on its own; the real kinds' bags stay pinned
- * byte-for-byte by `tests/regression/fix-turn-capture.test.ts`, which runs with
+ * byte-for-byte by `packages/sessions/tests/regression/fix-turn-capture.test.ts`, which runs with
  * no ceiling and is therefore unchanged.
  */
 import { test, describe, beforeEach, afterEach } from 'node:test';
