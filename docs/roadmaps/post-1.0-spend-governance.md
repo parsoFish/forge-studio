@@ -4,7 +4,7 @@
 
 ## Why this exists
 
-The pre-1.0 simplification removed the scheduler toggle: a factory built on forge picks up claimable work the moment it is claimable, `forge studio` starts and supervises `forge serve`, and the only way to stop the factory is **one emergency halt** — user-triggered, no new claims, active jobs run to completion, no progress lost. That left four questions open on purpose. They are recorded here, in the operator's intent, so nobody re-derives them from scratch.
+A factory built on forge picks up claimable work the moment it is claimable, `forge studio` starts and supervises `forge serve`, and the only way to stop the factory is **one emergency halt** — user-triggered, no new claims, active jobs run to completion, no progress lost. Four questions about stopping a factory are open on purpose. They are recorded here, in the operator's intent, so nobody re-derives them from scratch.
 
 ## (c) A user-settable global spend budget that pulls the brake
 
@@ -34,5 +34,5 @@ The pre-1.0 simplification removed the scheduler toggle: a factory built on forg
 ## What is already decided (so this doc does not reopen it)
 
 - One brake, user-triggered or budget-triggered. No automatic halt on any other system condition.
-- Removing the toggle and refusing a second start for a run id are pre-1.0 work and are not described here.
+- Refusing a second start for a run id is pre-1.0 work and is not described here.
 - The factory never pauses itself between gates its flow does not declare ([`CLAUDE.md`](../../CLAUDE.md), unattended operation).

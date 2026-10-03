@@ -43,9 +43,11 @@ replacing, deferring the rip-out. The result is **dual-surface debt**:
 1. **Two UIs.** The pre-Studio `/dashboard` (its own `AgentGraphCanvas` /
    `HexDetailDrawer` / cycles-tab, ~2.6k LOC of components + lib) is still fully
    reachable next to the Studio library + per-flow monitor.
-2. **Two operator APIs.** ~21 `forge` CLI subcommands, many now duplicated by
-   bridge HTTP routes the UI already drives (`/api/scheduler/*`, `/api/runs`,
-   `/api/verdict`).
+2. **Two operator APIs.** ~21 `forge` CLI subcommands: some now duplicated by
+   bridge HTTP routes the UI already drives (`/api/runs`, `/api/verdict`), and
+   a scheduler lifecycle group (`start`/`stop`/`pause`/`resume`/`status`) that
+   needs no operator-facing control at all once something supervises the
+   daemon directly.
 3. **A brittle launcher.** `forge watch` spawns the bridge + `next dev`, scrapes
    stdout for ready-URLs, opens the browser on a hardcoded 2 s timer with no UI
    readiness probe.
@@ -86,14 +88,15 @@ override, activity panel, real architect cost) are preserved on the new surface.
 live Studio "Open gate →" links repoint to `/artifact?...&mode=review`).
 
 **4. The bridge is the operator API; the CLI keeps only the runtime spine.**
-- **Removed** (the UI/bridge covers them): `start`, `stop`, `pause`, `resume`,
-  `status` (the bridge `/api/scheduler/*` routes), and `review --approve` (the
-  bridge `POST /api/verdict 'approve'`, a strict superset that also merges).
+- **Removed** (the UI/bridge covers them, or need no control surface at all):
+  `start`, `stop`, `pause`, `resume`, `status` (the daemon has no lifecycle
+  control surface — see decision 5), and `review --approve` (the bridge
+  `POST /api/verdict 'approve'`, a strict superset that also merges).
   `architect run` is internalised (bridge-spawned, hidden from `--help`).
-- The bridge stops *spawning* `forge start` for `POST /api/scheduler/start`; it
-  calls the shared daemon helpers (`daemonState` / `setPaused` / `daemonPaths` /
-  pid-file) directly, removing the bridge→CLI coupling that previously blocked
-  removal.
+- There is no bridge→CLI coupling on the daemon's lifecycle to sever, because
+  there never needs to be one: `forge studio` spawns and supervises
+  `forge serve` directly (decision 5), so no route exists whose job is to
+  start, stop, pause or resume it.
 - `verify-cycle.mjs` migrates off `forge review --approve` onto the bridge
   verdict POST **before** the command is removed (this closes the sole-operator-surface
   deferral folded above).
@@ -101,43 +104,25 @@ live Studio "Open gate →" links repoint to `/artifact?...&mode=review`).
   `serve`, `cycle`, `enqueue`, `preflight`, `brain index|lint`, `studio lint`,
   `demo render|capture`, `log`, `review --inspect|--abandon`, `requeue`.
 
-**5. `forge studio` replaces `forge watch` as the canonical launcher.** It brings
-up the bridge + UI with **deterministic readiness**: poll the bridge
-`GET /api/health` until ready, then the UI port, *then* open the browser and emit
-a structured ready signal (a `forge-studio-ready {bridgeUrl,uiUrl}` line / a
-`--ready-file`) so automation no longer scrapes log wording. The WSL2 multi-tool
-port-takeover (`lsof`/`ss`/`fuser`) is retained. `forge watch` stays as a
-deprecated alias for one milestone.
+**5. `forge studio` is the canonical launcher, and it owns the scheduler
+daemon's lifecycle.** It brings up the bridge, the UI, and `forge serve`
+together with **deterministic readiness**: poll the bridge `GET /api/health`
+until ready, then the UI port, *then* open the browser and emit a structured
+ready signal (a `forge-studio-ready {bridgeUrl,uiUrl}` line / a
+`--ready-file`) so automation no longer scrapes log wording. The WSL2
+multi-tool port-takeover (`lsof`/`ss`/`fuser`) is retained. Every "start"
+control in Studio (Plan →, Start development, Start Run, the architect
+approve) writes a manifest into `_queue/pending/`; the daemon that
+`forge studio` already brought up claims it immediately, so there is no
+second, operator-visible step between enqueuing work and it running, and no
+scheduler lifecycle control surface for the UI to expose. Studio never claims
+a run is in progress unless a daemon is actually alive and claiming it
+(`describePostCommit`). `forge watch` stays as a deprecated alias for one
+milestone.
 
 > **Amended (M8-E):** that one-milestone grace is over — the `forge watch`
 > alias was removed. `forge studio` is the sole launcher; the bridge is the
 > operator API.
-
-> **Amended (Wave 7 — W7-A3 loop closure, 2026-08-19): the scheduler is a
-> Studio object again.** Decision 1 deleted the dashboard's `SchedulerBanner`
-> with the dashboard, and decision 4 removed the `start`/`stop`/`pause`/
-> `resume`/`status` CLI commands in favour of the bridge `/api/scheduler/*`
-> routes — but nothing in Studio ever mounted those routes. Every "start"
-> control in Studio (Plan →, Start development, Start Run, the architect
-> approve) is a **queue write**; `forge serve` is the only thing that turns a
-> queued manifest into a run. With no scheduler surface, a queued initiative
-> could never be started from the UI and every enqueue success line read as
-> "started" (walkthrough findings flows-01/23, projects-16, sessions-kinds-08/
-> 12). Wave 7 re-homes the banner as a first-class Studio object:
-> `forge-ui/components/SchedulerCard.tsx` (status running / paused / stopping /
-> stopped / unknown, Start / Pause / Resume / Stop, honest copy derived by
-> `lib/scheduler-view.ts`; W7-FIX-A3: `stopping` is the drain window after Stop
-> — the bridge marks the signalled pid and `daemonState` reports it while that
-> pid is alive, and a repeat Stop never re-signals it; Start clears the queue's
-> `.paused` flag on a fresh spawn so its promise holds, and leaves a running
-> daemon's deliberate pause alone;
-> an unreadable status is never rendered as "stopped") mounted on Home, `/flows` (index + monitor), the
-> project roadmap tab, and inline wherever an enqueue outcome needs "start
-> it?" (the architect committed panel, the roadmap success lines, the flow
-> kickoff). The bridge routes are unchanged; the CLI commands stay removed —
-> the operator API remains the bridge, now with a UI on top of it. The claim
-> "the autonomous loop is building it now" is only ever rendered when a run
-> is active AND the daemon is running (`describePostCommit`).
 
 ## Consequences
 
