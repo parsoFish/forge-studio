@@ -89,6 +89,7 @@ import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { createLogger, bridgeCycleId, installForgeRefGuardHook } from '@forge/kernel';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
@@ -152,6 +153,18 @@ type TailState = {
 
 export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { forgeRoot } = opts;
+  // Row 211 (forge-8vfn.8.5.47) — install the forge-repo ref guard BEFORE
+  // anything below can spawn an agent. Idempotent on every call (the common
+  // case, after the first), and never fatal to the bridge coming up: a
+  // filesystem error writing a git hook is a worse outage than a bridge that
+  // starts without the guard installed, and the refusal/skip outcomes are
+  // already named events a caller can act on without the bridge itself dying
+  // for them.
+  try {
+    installForgeRefGuardHook(forgeRoot, createLogger(bridgeCycleId(), join(forgeRoot, '_logs')));
+  } catch (err) {
+    console.error(`[bridge] forge-ref-guard install failed (continuing without it): ${String(err)}`);
+  }
   // ADR 048 clause 2, FIRST: every factory-backed default below reads this, and
   // the bridge must come up whether or not an example package is installed.
   await resolveInstalledFactory();

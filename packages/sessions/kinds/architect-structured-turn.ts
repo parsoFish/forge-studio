@@ -12,7 +12,7 @@ import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts'
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { classifyCrash, type ToolUseLiveDetail } from '@forge/agents';
 import { StreamDeadlineError } from '@forge/agents/stream-deadline.ts';
-import { FORGE_ROOT, type EventLogger } from '@forge/kernel';
+import type { EventLogger } from '@forge/kernel';
 import { architectAgentSpec } from './architect-session.ts';
 
 export type StructuredResult<T> = {
@@ -70,7 +70,7 @@ export async function runStructured<T>(args: {
     cwd: args.cwd,
     allowedTools: architectAgentSpec.allowedTools,
     disallowedTools: architectAgentSpec.disallowedTools,
-    ...hooksSpreadForAgent({ skill: architectAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId, cwd: args.cwd, forgeRoot: FORGE_ROOT }),
+    ...hooksSpreadForAgent({ skill: architectAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId }),
     onToolUse: args.onToolUse,
     onHeartbeat: args.onHeartbeat,
     onText: args.onText,

@@ -723,23 +723,14 @@ describe('runAgent reaches the SDK options bag with the bound hooks (end-to-end 
       ['PreToolUse'],
       'SessionEnd must NEVER reach the SDK options bag for a headless one-shot spawn (forge-8vfn.8.1.7): the SDK ExitReasons are all interactive teardown actions a query() call never performs, so a SessionEnd registration here would be permanently dead; PreToolUse (tool-scoped) still lands under its own declared event exactly as before',
     );
-    assert.equal(
-      hooks['PreToolUse']!.length,
-      2,
-      'the declared pre-pr-security-review binding PLUS the ALWAYS-ON forge-repo-git fence (forge-8vfn.8.5.44, row 208) — two independent PreToolUse matchers, never merged into one',
-    );
-    for (const matcher of hooks['PreToolUse']!) {
-      assert.equal(matcher.hooks.length, 1);
-      assert.equal(typeof matcher.hooks[0], 'function');
-    }
+    assert.equal(hooks['PreToolUse']!.length, 1);
+    assert.equal(hooks['PreToolUse']![0]!.hooks.length, 1);
+    assert.equal(typeof hooks['PreToolUse']![0]!.hooks[0], 'function');
   });
 
-  it('an agent binding NOTHING still carries the forge-repo-git fence under PreToolUse — it is not an opt-in library hook (forge-8vfn.8.5.44, row 208) (kills: HEAD, where every agent kind was free to commit to or move a ref of the forge repo)', async () => {
+  it('an agent binding nothing produces NO hooks key at all — the shape every shipped agent spawns with (kills: an always-on key, which would diff every golden spawn-capture fixture)', async () => {
     const options = await optionsFor(fixtureAgent('w8b6-unbound-fixture', []));
-    const hooks = options['hooks'] as Record<string, Array<{ hooks: unknown[] }>> | undefined;
-    assert.ok(hooks, 'the fence must be present even when composition.hooks is empty');
-    assert.deepEqual(Object.keys(hooks), ['PreToolUse']);
-    assert.equal(hooks['PreToolUse']!.length, 1, 'no agent-declared binding here — ONLY the fence');
+    assert.equal('hooks' in options, false);
   });
 
   it('no agent in the shipped roster binds a hook, so no shipped spawn shape changed', () => {

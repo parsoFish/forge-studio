@@ -33,12 +33,14 @@ import test from 'node:test';
 
 import { MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '@forge/kernel';
 
-import { resolveRunQuery, withRunMarker, type StreamQueryFn } from '../../pinned-sdk-query.ts';
+import { createPinnedSdkQuery, resolveRunQuery, withRunMarker, type StreamQueryFn } from '../../pinned-sdk-query.ts';
 import { createClaudeAgent } from '../../ralph/claude-agent.ts';
 
 import {
   AGENT_RUN_MARKER_ENV,
   AGENT_RUN_MARKER_FILE,
+  AGENT_SPAWN_ENV,
+  agentSpawnEnvOverlay,
   markerEnvOverlay,
   mintRunMarker,
   processesCarryingMarker,
@@ -126,6 +128,26 @@ test('the marker overlay and the 4-key git-identity overlay never combine past M
   assert.ok(5 <= MAX_ENV_OVERRIDE_KEYS, `the cap is ${MAX_ENV_OVERRIDE_KEYS}; the composed overlay is 5`);
   const env = buildChildEnv({ PATH: '/usr/bin' }, overrides);
   assert.equal(env[AGENT_RUN_MARKER_ENV], 'token-1');
+  assert.equal(env['GIT_AUTHOR_NAME'], 'forge');
+  assert.equal(env['PATH'], '/usr/bin', 'the allowlisted ambient snapshot survives underneath the overrides');
+});
+
+test('row 211: the git-identity overlay, the marker, AND agentSpawnEnvOverlay together never combine past MAX_ENV_OVERRIDE_KEYS', () => {
+  // `createPinnedSdkQuery` (`pinned-sdk-query.ts`) layers `agentSpawnEnvOverlay()`
+  // on top of whatever `withRunMarker` already composed — the REAL production
+  // shape for every marked spawn is 4 git-identity + 1 marker + 1 spawn flag.
+  const gitIdentity = {
+    GIT_AUTHOR_NAME: 'forge',
+    GIT_AUTHOR_EMAIL: 'forge@example.invalid',
+    GIT_COMMITTER_NAME: 'forge',
+    GIT_COMMITTER_EMAIL: 'forge@example.invalid',
+  };
+  const overrides = { ...gitIdentity, ...markerEnvOverlay('token-1'), ...agentSpawnEnvOverlay() };
+  assert.equal(Object.keys(overrides).length, 6);
+  assert.ok(6 <= MAX_ENV_OVERRIDE_KEYS, `the cap is ${MAX_ENV_OVERRIDE_KEYS}; the composed overlay is 6`);
+  const env = buildChildEnv({ PATH: '/usr/bin' }, overrides);
+  assert.equal(env[AGENT_RUN_MARKER_ENV], 'token-1');
+  assert.equal(env[AGENT_SPAWN_ENV], '1');
   assert.equal(env['GIT_AUTHOR_NAME'], 'forge');
   assert.equal(env['PATH'], '/usr/bin', 'the allowlisted ambient snapshot survives underneath the overrides');
 });
@@ -405,6 +427,52 @@ test('resolveRunQuery marks the PRODUCTION query and returns an INJECTED one ver
     /* drained */
   }
   assert.equal((seen[0]!.env as Record<string, string>)[AGENT_RUN_MARKER_ENV], 'token-1');
+});
+
+test('row 211: resolveRunQuery through the REAL createPinnedSdkQuery seam carries BOTH the marker and FORGE_AGENT_SPAWN=1', async () => {
+  // Every other test in this file drives `withRunMarker`/`resolveRunQuery`
+  // against a hand-rolled `production` stand-in, which never touches
+  // `createPinnedSdkQuery` and so never sees `agentSpawnEnvOverlay()` — that
+  // seam is where row 211's flag is actually applied. This test closes that
+  // gap: the "production" query here IS `createPinnedSdkQuery`, the same
+  // function `pinnedSdkQuery` is bound from.
+  const seen: Array<Record<string, unknown>> = [];
+  const fakeQuery = ((params: { prompt: string; options: Record<string, unknown> }) => {
+    seen.push(params.options);
+    return (async function* () {})();
+  }) as unknown as StreamQueryFn;
+  const realProduction = createPinnedSdkQuery(fakeQuery as never, () => '/stub/claude') as unknown as StreamQueryFn;
+
+  const token = mintRunMarker('2026-09-03T10-00-00-abcdef12');
+  const resolved = resolveRunQuery(undefined, token, realProduction);
+  for await (const _ of resolved({ prompt: 'p', options: {} })) {
+    /* drained */
+  }
+
+  assert.equal(seen.length, 1);
+  const env = seen[0]!.env as Record<string, string>;
+  assert.equal(env[AGENT_RUN_MARKER_ENV], token, 'the per-run marker still reaches the child');
+  assert.equal(env[AGENT_SPAWN_ENV], '1', 'and row 211\'s constant flag rides alongside it, unconditionally');
+});
+
+test('row 211: an UNMARKED production spawn (session runners, Ralph, release-finalize — no resolveRunQuery involved) still carries FORGE_AGENT_SPAWN=1', async () => {
+  // `spawn-marker.ts`'s own header names these as the callers that reach
+  // `pinnedSdkQuery` directly, with no `runId`/marker at all. Row 211 exists
+  // precisely because the ref guard hook must not depend on a run token being
+  // present — this is the production shape for the OTHER half of the fleet.
+  const seen: Array<Record<string, unknown>> = [];
+  const fakeQuery = ((params: { prompt: string; options: Record<string, unknown> }) => {
+    seen.push(params.options);
+    return (async function* () {})();
+  }) as unknown as StreamQueryFn;
+  const realProduction = createPinnedSdkQuery(fakeQuery as never, () => '/stub/claude');
+
+  await realProduction({ prompt: 'p', options: {} } as never);
+
+  assert.equal(seen.length, 1);
+  const env = seen[0]!.env as Record<string, string | undefined>;
+  assert.equal(env[AGENT_SPAWN_ENV], '1');
+  assert.equal(env[AGENT_RUN_MARKER_ENV], undefined, 'no marker was ever applied here — the spawn flag does not depend on one');
 });
 
 test('END-TO-END: a real child spawned with the env the SDK would receive IS found by the sweep', async (t) => {

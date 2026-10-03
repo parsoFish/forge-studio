@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 366 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 118 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 117 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -55,19 +55,19 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
-| `kernel` | 32 | 6,074 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 32 | 5,864 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 48 | 11,188 | **9,415** | ratified 9,415 — row 208 (forge-8vfn.8.5.44): `onboarding-agent`/`forge-onboard-project`'s SKILL.md files gain an explicit never-run-git-in-the-forge-repo line, +3 on 9,412, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 48 | 11,190 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,410 | **12,832** | ratified 12,832 — row 199 (forge-8vfn.8.5.39): the KB drain and consolidate hand each fix turn its remaining budget and count it (unknown spend stops them), +64 on 12,768, lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 45 | 12,656 | **12,656** | ratified 12,656 — row 208 (forge-8vfn.8.5.44) T1 follow-up: `repo-identity.ts`, the real repo-identity resolver the fence injects as `repoOf`, +100 on 12,556 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 64 | 20,957 | **20,919** | ratified 20,919 — row 208 (forge-8vfn.8.5.44): `hooksSpreadForAgent`/`hooksForSkill` thread `cwd`/`forgeRoot` to the forge-repo-git fence across all 6 interactive-kind spawn sites, +4 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 44 | 12,532 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 64 | 20,939 | **20,915** | ratified 20,915 — row 199 (forge-8vfn.8.5.39): the session-less fix turn runs under the cost ceiling and an unbounded unpriced fix turn is unknown spend, +44 on 20,871, lane-ratified under ruling 666; row 193b (8.5.38) +185 before it; see git history for prior changes. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 45 | 12,268 | **12,268** | ratified 12,268 — row 208 (forge-8vfn.8.5.44): `release-finalize.ts` and the dev-loop's per-WI spawn both wired to the forge-repo-git fence, +2 net (release-finalize +4, developer-loop −2) on 12,266, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 34 | 8,010 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 34 | 8,034 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **488** | **131,598** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **487** | **131,270** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -257,7 +257,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/contained-read.ts | kernel | verbatim | 34 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| apps/forge/ui-bridge.ts | apps/forge | rewritten | 770 |
+| apps/forge/ui-bridge.ts | apps/forge | rewritten | 783 |
 | apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 381 |
 | apps/forge/bridge-scheduler.ts | apps/forge | rewritten | 146 |
 | apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
@@ -302,13 +302,13 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/architect-brain-read.ts | sessions | rewritten | 93 **New file, M7-C ABR (forge-8vfn.8.3.5, ruling 666):** the architect's own `brain.read` tally + emission, wrapping each phase's `KindStepHandler` from outside `architect-steps.ts` (near the file cap) and `kind-turn.ts` (ruling 78's hook budget). Priced into `sessions`'s cap-table raise 20,000 → 20,093. |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
 | packages/sessions/kinds/brain-fix.ts | sessions | rewritten | 276 |
-| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 360 Row 164 (forge-8vfn.8.1.51, ruling 1904): wires the shared interval heartbeat ticker around its own stream loop, stopped in a `finally`. |
+| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 355 Row 164 (forge-8vfn.8.1.51, ruling 1904): wires the shared interval heartbeat ticker around its own stream loop, stopped in a `finally`. |
 | packages/sessions/kinds/fix-registry.ts | sessions | rewritten | 76 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 198 |
 | packages/flows/claim-validator.ts | flows | verbatim | 294 |
-| apps/forge/cli.ts | apps/forge | pruned | 782 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
+| apps/forge/cli.ts | apps/forge | pruned | 793 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | apps/forge/routes.ts | apps/forge | verbatim | 243 |
-| packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 450 |
+| packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 447 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
 | packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |
@@ -347,7 +347,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/instructions.ts | sessions | verbatim | 744 |
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 589 |
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 302 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
-| packages/sessions/interactive-agent-step.ts | sessions | rewritten | 738 |
+| packages/sessions/interactive-agent-step.ts | sessions | rewritten | 734 |
 | packages/sessions/interactive-session.ts | sessions | rewritten | 780 Row 164 (forge-8vfn.8.1.51, ruling 1904): wires the shared interval heartbeat ticker around `runStructuredTurn`/`runAgentTurn`'s stream loops, stopped in a `finally`. |
 | packages/sessions/heartbeat.ts | sessions | rewritten | 109 Row 164 (forge-8vfn.8.1.51, ruling 1904): adds `startHeartbeatTicker`, the interval ticker every SDK-call path shares — see the function's own doc comment. |
 | packages/sessions/turn-cost-rows.ts | sessions | verbatim | 167 |
@@ -383,7 +383,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/decompose-completeness.ts | stations | verbatim | 197 |
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
-| packages/stations/phases/developer-loop.ts | stations | verbatim | 1829 |
+| packages/stations/phases/developer-loop.ts | stations | verbatim | 1831 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 22 |
 | packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 135 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
@@ -395,15 +395,15 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
 | packages/stations/phases/reflector.ts | stations | verbatim | 722 |
 | packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 394 |
-| packages/stations/phases/release-finalize.ts | stations | verbatim | 303 |
+| packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |
-| packages/agents/pinned-sdk-query.ts | agents | verbatim | 180 |
+| packages/agents/pinned-sdk-query.ts | agents | verbatim | 193 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
 | packages/flows/pr-branch-sync.ts | flows | verbatim | 597 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 171 |
-| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 455 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
+| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 449 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 183 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/sessions/kinds/architect-ports.ts | sessions | rewritten | 48 |
@@ -442,7 +442,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/requeue-resume.ts | flows | verbatim | 305 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
-| packages/agents/spawn-marker.ts | agents | verbatim | 276 |
+| packages/agents/spawn-marker.ts | agents | verbatim | 313 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 45 |
 | packages/flows/run-model-derive-status.ts | flows | verbatim | 481 |
 | packages/flows/run-model-derive-cost.ts | flows | verbatim | 373 |
@@ -481,8 +481,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/validate-agent.ts | agents | rewritten | 297 |
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 122 |
 | packages/agents/studio/derive.ts | agents | verbatim | 300 |
-| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 625 |
-| packages/agents/studio/repo-identity.ts | agents | rewritten | 95 **Written for bead `forge-8vfn.8.5.44` (row 208, T1 review follow-up) — `resolveRepoCommonDir`/`cachedRepoCommonDir`: the real `.git`-walking resolver the forge-repo-git fence injects as `repoOf`/`forgeRepoId`, so "the forge repo" is decided by repository IDENTITY (the shared `.git` common dir across every worktree) rather than a lexical `forgeRoot` path prefix, which missed the operator's own main checkout and any sibling session worktree.** |
+| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 546 |
 | packages/library/studio/hook-library.ts | library | verbatim | 536 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
 | packages/library/studio/hook-runtime.ts | library | verbatim | 619 |
@@ -541,7 +540,7 @@ operator-ratified new cap — never a silent raise.
 | skills/demo/SKILL.md | factory | verbatim | 306 |
 | skills/developer-ralph/SKILL.md | factory | verbatim | 108 |
 | skills/doc-updater/SKILL.md | flows | verbatim | 52 |
-| skills/forge-onboard-project/SKILL.md | projects | verbatim | 204 |
+| skills/forge-onboard-project/SKILL.md | projects | verbatim | 206 |
 | skills/handoff/SKILL.md | sessions | verbatim | 38 |
 | skills/instructions-creator/SKILL.md | projects | verbatim | 124 |
 | skills/onboarding-agent/SKILL.md | projects | verbatim | 127 |
@@ -571,7 +570,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/gh-identity.ts | kernel | verbatim | 111 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 143 |
-| packages/kernel/index.ts | kernel | verbatim | 95 |
+| packages/kernel/index.ts | kernel | verbatim | 96 |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 285 |
 | packages/kernel/tool-fence.ts | kernel | rewritten | 94 **Written for bead `forge-a9o9` (T1 rulings 670/691) — deny-by-default tool access, with no enumeration anywhere. Here rather than beside `makeToolEventSink` in `agents` because the spawn paths that need it span `sessions`, `agents` and `factory`, and the kernel is the only layer all three already stand on; `spawn-env.ts` next door settled the same class for env vars.** |
@@ -588,7 +587,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/findings.ts | kernel | verbatim | 37 |
 | packages/kernel/project-layout.ts | kernel | verbatim | 202 |
 | packages/kernel/process-liveness.ts | kernel | rewritten | 63 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
-| packages/kernel/forge-repo-git-fence.ts | kernel | rewritten | 450 **Written for bead `forge-8vfn.8.5.44` (row 208, 2026-10-03 incident — onboarding-agent's `git commit`/`git branch`/`git update-ref` against the shared-ref forge-root worktree moved the operator's own `main`) — the pure "does this Bash command commit to or move a ref of the forge repo" decision every agent/session/factory spawn must consult. Here rather than in `agents` because the ruling binds every spawn site across all three, and kernel is the one layer all three already stand on — same reasoning as `tool-fence.ts` next door.** |
+| packages/kernel/forge-ref-guard-hook.ts | kernel | rewritten | 239 **New file, row 211 (forge-8vfn.8.5.47):** the `reference-transaction` git hook script + its idempotent installer, replacing row 208's PreToolUse Bash-command fence (`forge-repo-git-fence.ts`/`repo-identity.ts`, both deleted by this same change) after it misfired on a project commit it misparsed. Asks git's own ref-moving machinery instead, from inside git itself. |
 | packages/knowledge/index.ts | knowledge | verbatim | 112 |
 | packages/library/index.ts | library | verbatim | 115 |
 | packages/projects/index.ts | projects | verbatim | 106 |

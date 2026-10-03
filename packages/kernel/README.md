@@ -16,7 +16,7 @@ package above kernel — `library`, `knowledge`, `projects`, `agents`,
 `sessions`, `flows`, `stations`, `factory`, and both apps — imports it
 directly.
 
-## API (150 values)
+## API (156 values)
 
 | the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` |
 | the SDK tool-use fence | `toolFenceOptions` |
@@ -46,23 +46,22 @@ directly.
 | the shared YAML-field readers | `reqString` · `optString` · `reqNumber` · `optNumber` · `optBool` · `stringArray` · `reqObject` · `RegistryError` · `oneOf` · `loadYaml` · `loadYamlWithRaw` |
 | bounded per-key JSON log | `readBoundedLog` · `appendBoundedLog` · `boundedLogSegments` · `truncateTail` |
 | process liveness (`/proc` pid check) | `isProcessRunning` |
-| the forge-repo-git fence (row 208) | `decideForgeRepoGit` |
+| the forge-repo ref guard (git's own `reference-transaction` hook, row 211) | `FORGE_REF_GUARD_HOOK_NAME` · `FORGE_REF_GUARD_MARKER_PREFIX` · `FORGE_REF_GUARD_MARKER` · `FORGE_AGENT_SPAWN_ENV` · `FORGE_AGENT_RUN_MARKER_ENV` · `forgeRefGuardHookScript` · `installForgeRefGuardHook` |
 
-### Types (46)
+### Types (45)
 
 `BandExecutor` · `BandRegistry` · `CanUseTool` · `CaseFoldingProbe` ·
 `ClauseId` · `ClauseResult` · `ConfigResult` · `CostStreamFacts` ·
 `DiscoveredProject` · `DryBridgeAction` · `DryBridgeRefusalInput` ·
 `DryBridgeStubAction` · `DryClassification` · `EnvAssertionMode` ·
 `EventLogEntry` · `EventLogger` · `EventType` · `Finding` · `ForgeConfig` ·
-`ForgeRepoGitDecision` · `ForgeRepoGitFenceInput` ·
 `FrontmatterDoc` · `GhExec` · `GitIdentity` · `HookTemplateOrigin` ·
 `InitReport` · `LayoutDirsResult` · `LayoutResult` · `LoggerOptions` ·
 `PathGuardOk` · `PathGuardReject` · `PathGuardResult` · `Phase` ·
 `PhaseExecutor` · `PreflightOptions` · `PreflightReport` · `ProjectGate` ·
-`ProjectStarterDescription` · `Provenance` · `RootMatch` · `RouteContext` ·
-`RouteEntry` · `RouteMethod` · `RouteTable` · `StudioContext` ·
-`ToolFenceOptions`
+`ProjectStarterDescription` · `Provenance` · `RefGuardInstallOutcome` ·
+`RootMatch` · `RouteContext` · `RouteEntry` · `RouteMethod` · `RouteTable` ·
+`StudioContext` · `ToolFenceOptions`
 
 ## Crash and recovery
 

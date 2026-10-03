@@ -80,6 +80,23 @@
  * simpler options than defeating a marker.
  *
  * Controls both ways live in `./spawn-marker.test.ts`, on real processes.
+ *
+ * `agentSpawnEnvOverlay` BELOW is a DIFFERENT, narrower signal, added for a
+ * different consumer (row 211, bead `forge-8vfn.8.5.47`). `FORGE_AGENT_RUN_MARKER`
+ * is this file's own per-run identity, applied only where `runAgent` threads a
+ * marker through (see "THE SCOPE, STATED EXACTLY" above — NOT the session
+ * runners, Ralph, or `release-finalize`, which reach `pinnedSdkQuery` directly).
+ * `FORGE_AGENT_SPAWN=1` is a constant, content-free flag that
+ * `createPinnedSdkQuery` (`./pinned-sdk-query.ts`) applies UNCONDITIONALLY on
+ * EVERY production spawn through that ONE seam — marked or not — because the
+ * forge repo's `reference-transaction` ref guard hook needs to ask one
+ * question ("is the calling process a forge agent spawn at all") that must
+ * hold for every spawn, not only the subset this file's own marker covers.
+ * Kept as two separate env vars rather than widening the marker's own scope:
+ * the marker's value is an IDENTIFIER the reaper sweeps by (it must stay
+ * per-run and absent where no reaper-swept token was minted); the ref guard
+ * only ever asks a yes/no question, and conflating the two would make a
+ * future change to either one's contract an unreviewed change to both.
  */
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -127,6 +144,26 @@ export function mintRunMarker(runId: string): string {
 /** The one-key override every spawn layers over the allowlist-filtered env. */
 export function markerEnvOverlay(token: string): Record<string, string> {
   return { [AGENT_RUN_MARKER_ENV]: token };
+}
+
+/**
+ * Row 211 (`forge-8vfn.8.5.47`) — the env var naming "this process is a forge
+ * agent spawn", read by the forge repo's own `reference-transaction` ref
+ * guard hook (`@forge/kernel`'s `forge-ref-guard-hook.ts`). See the module
+ * doc's addendum above for why this is a SEPARATE constant from
+ * `AGENT_RUN_MARKER_ENV` rather than an extension of it.
+ */
+export const AGENT_SPAWN_ENV = 'FORGE_AGENT_SPAWN';
+
+/**
+ * The one-key override `createPinnedSdkQuery` layers onto EVERY production
+ * spawn, unconditionally — never gated on whether a run token exists. A
+ * function (not a bare constant) for the same reason `markerEnvOverlay` is
+ * one: both are overlays a caller spreads into an `env` composition, and a
+ * matched shape makes the two read as siblings at their one call site.
+ */
+export function agentSpawnEnvOverlay(): Record<string, string> {
+  return { [AGENT_SPAWN_ENV]: '1' };
 }
 
 /**

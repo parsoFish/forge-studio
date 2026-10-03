@@ -80,9 +80,6 @@ packages/agents/spawn-marker.ts mkdirSync 1
 packages/agents/spawn-marker.ts readdirSync 1
 packages/agents/spawn-marker.ts readFileSync 2
 packages/agents/spawn-marker.ts statSync 1
-packages/agents/studio/repo-identity.ts readFileSync 2
-packages/agents/studio/repo-identity.ts realpathSync 2
-packages/agents/studio/repo-identity.ts statSync 1
 packages/factory/class-profiles.ts readFileSync 1
 packages/flows/bridge-recovery.ts execFileSync 4
 packages/flows/bridge-recovery.ts existsSync 8
@@ -285,6 +282,11 @@ packages/kernel/config.ts readFileSync 2
 packages/kernel/contained-read.ts readFileSync 1
 packages/kernel/contained-read.ts realpathSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
+packages/kernel/forge-ref-guard-hook.ts execFileSync 1
+packages/kernel/forge-ref-guard-hook.ts existsSync 1
+packages/kernel/forge-ref-guard-hook.ts mkdirSync 1
+packages/kernel/forge-ref-guard-hook.ts readFileSync 1
+packages/kernel/forge-ref-guard-hook.ts writeFileSync 2
 packages/kernel/gh-identity.ts execFileSync 1
 packages/kernel/guarded-scan.ts openSync 1
 packages/kernel/guarded-scan.ts statSync 2

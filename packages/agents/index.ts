@@ -110,7 +110,7 @@ export {
   matchesDnsFailureSignature,
 } from './failure-classifier.ts';
 export { takeScopeSnapshot, scopeViolations } from './phases/agent-scope-guard.ts';
-export { sdkHooksForAgent, withForgeRepoGitFence, type ForgeRepoGitFenceRunContext } from './studio/hook-dispatch.ts';
+export { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 
 // ---- AGENTS.md composition, and the HTTP routes ---------------------------
 export { composeAgentsMd } from './agents-md-compose.ts';

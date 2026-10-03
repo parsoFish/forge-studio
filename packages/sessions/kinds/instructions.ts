@@ -332,7 +332,7 @@ async function runInterviewStep(args: {
     disallowedTools: instructionsAgentSpec.disallowedTools,
     // W8-B6 — hook dispatch comes from the driver already bound to this turn's
     // logger and initiative id, so no kind can spawn hook-blind.
-    ...plumbing.hooksForSkill(instructionsAgentSpec.skill, plumbing.forgeRoot),
+    ...plumbing.hooksForSkill(instructionsAgentSpec.skill),
     onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat,
     onText: plumbing.onText, onThinking: plumbing.onThinking, label: 'instructions-structured',
   });
@@ -428,7 +428,7 @@ async function runDraftStep(args: {
     queryFn: plumbing.queryFn, prompt, schema: DRAFT_SCHEMA, maxBudgetUsd: plumbing.turnBudgetUsd(),
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
-    ...plumbing.hooksForSkill(instructionsAgentSpec.skill, plumbing.forgeRoot),
+    ...plumbing.hooksForSkill(instructionsAgentSpec.skill),
     onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat,
     onText: plumbing.onText, onThinking: plumbing.onThinking, label: 'instructions-structured',
   });

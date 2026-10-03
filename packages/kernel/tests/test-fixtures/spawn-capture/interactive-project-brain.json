@@ -15,15 +15,6 @@
       ],
       "maxTurns": 30,
       "abortController": "<AbortController>",
-      "hooks": {
-        "PreToolUse": [
-          {
-            "hooks": [
-              "<anonymous>"
-            ]
-          }
-        ]
-      },
       "permissionMode": "default",
       "allowedTools": [
         "Read",

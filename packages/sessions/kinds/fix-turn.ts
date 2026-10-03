@@ -249,14 +249,9 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   const unpriced = (reason: string): Record<string, unknown> =>
     ({ priced: false, unpriced_reason: reason, ...(capUsd !== undefined ? { upper_bound_usd: capUsd } : {}) });
   const abortController = new AbortController();
-  // forge-8vfn.8.5.44 (row 208): `spawn.options.cwd` is this variant's OWN
-  // `prepare` function's choice (the header's "complete except for
-  // abortController"); a variant that declared none inherits the bridge's
-  // cwd, same as `architect-critic.ts`'s identical fallback.
-  const fenceCwd = typeof spawn.options.cwd === 'string' ? spawn.options.cwd : input.forgeRoot;
   const options: Record<string, unknown> = {
     ...spawn.options,
-    ...hooksSpreadForAgent({ skill: variant.eventSkill, logger, initiativeId: cycleId, cwd: fenceCwd, forgeRoot: input.forgeRoot }),
+    ...hooksSpreadForAgent({ skill: variant.eventSkill, logger, initiativeId: cycleId }),
     ...(capUsd !== undefined ? { maxBudgetUsd: capUsd } : {}),
     abortController,
   };

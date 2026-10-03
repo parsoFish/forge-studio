@@ -33,7 +33,7 @@
 
 import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage, type Settings } from '@anthropic-ai/claude-agent-sdk';
 import { buildChildEnv, sdkStderrSink } from '@forge/kernel';
-import { markerEnvOverlay } from './spawn-marker.ts';
+import { agentSpawnEnvOverlay, markerEnvOverlay } from './spawn-marker.ts';
 import { resolveClaudeCliPath } from '@forge/kernel';
 
 /** The exact shape of the SDK's `query` function. */
@@ -101,7 +101,18 @@ export function createPinnedSdkQuery(
       ...params,
       options: {
         ...params.options,
-        env: buildChildEnv(process.env, params.options?.env ?? {}),
+        // Row 211 (`forge-8vfn.8.5.47`) — `FORGE_AGENT_SPAWN=1` rides on EVERY
+        // production spawn through this ONE seam, unconditionally, layered
+        // last so it always wins (it is a constant, never a caller's own
+        // deliberate override): the forge repo's `reference-transaction` ref
+        // guard hook reads it to refuse a ref-moving git command run BY an
+        // agent, with no shell-command parsing of its own. This covers the
+        // marked `runAgent` paths AND the unmarked ones `spawn-marker.ts`'s
+        // own header names (the session runners, Ralph, `release-finalize`) —
+        // every one of them reaches the SDK through `createPinnedSdkQuery`,
+        // which is exactly why the flag lives here and not inside
+        // `withRunMarker` below, which only the marked paths go through.
+        env: buildChildEnv(process.env, { ...params.options?.env, ...agentSpawnEnvOverlay() }),
         stderr: sdkStderrSink(params.options),
         // `forge-8vfn.8.5.26` — no Co-Authored-By trailer on any agent commit.
         settings: settingsWithoutAttribution(params.options?.settings),
@@ -144,8 +155,10 @@ export const pinnedStreamQuery: StreamQueryFn = pinnedSdkQuery as unknown as Str
  * time the token shape changed.
  *
  * The caller's own `options.env` (the git-identity overlay's four keys) is
- * PRESERVED and the marker layered on top: five keys, well inside
- * `MAX_ENV_OVERRIDE_KEYS` (8) — a cap that throws by design, so the
+ * PRESERVED and the marker layered on top: five keys here, PLUS the one
+ * `agentSpawnEnvOverlay()` (row 211) adds downstream inside
+ * `createPinnedSdkQuery` itself — six keys at the final `buildChildEnv` call,
+ * well inside `MAX_ENV_OVERRIDE_KEYS` (8). A cap that throws by design, so the
  * interaction is pinned in `./spawn-marker.test.ts` rather than assumed.
  */
 export function withRunMarker(query: StreamQueryFn, token: string): StreamQueryFn {

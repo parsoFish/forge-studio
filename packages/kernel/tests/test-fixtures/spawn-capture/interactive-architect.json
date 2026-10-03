@@ -61,15 +61,6 @@
           ]
         }
       },
-      "hooks": {
-        "PreToolUse": [
-          {
-            "hooks": [
-              "<anonymous>"
-            ]
-          }
-        ]
-      },
       "cwd": "<TMP>/projects/project",
       "disallowedTools": [
         "Write",

@@ -10,7 +10,7 @@ Rank 3 in the allow-graph. It may import `contracts`, `kernel`, `library`,
 import. That is why the route table and the band surface take a deps object
 rather than importing what they need.
 
-## API (68 values)
+## API (67 values)
 
 | seam | exports |
 |---|---|
@@ -29,15 +29,15 @@ rather than importing what they need.
 | studio agent validation | `validateAgent` |
 | model resolution | `modelForSpec` · `resolveSessionModel` · `MODEL_BY_TIER` · `resolveModelTier` |
 | events and classification | `makeToolEventSink` · `extractLiveToolDetails` · `classifyCycleFailure` · `classifyCrash` · `matchesRateLimitSignature` · `matchesDnsFailureSignature` |
-| scope and hooks | `takeScopeSnapshot` · `scopeViolations` · `sdkHooksForAgent` · `withForgeRepoGitFence` |
+| scope and hooks | `takeScopeSnapshot` · `scopeViolations` · `sdkHooksForAgent` |
 | AGENTS.md and HTTP | `composeAgentsMd` · `agentsRoutes` |
 
-### Types (15)
+### Types (14)
 
 `BandGuardId` · `BandAgentDeps` · `StreamQueryFn` · `ModelTier` ·
 `AgentsRouteDeps` · `AgentUsageIndex` · `AgentUsageKind` · `AgentInvocation` ·
 `QueryFn` · `ClaudeAgentOptions` · `ToolUseLiveDetail` · `GateRunInfo` ·
-`PhaseAgentSpec` · `SdkHooksOption` · `ForgeRepoGitFenceRunContext`
+`PhaseAgentSpec` · `SdkHooksOption`
 
 ### Eight literal production subpaths, forced by a cycle
 

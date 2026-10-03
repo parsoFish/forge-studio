@@ -147,8 +147,7 @@
 
 import { resolve } from 'node:path';
 
-import { decideForgeRepoGit, type EventLogger } from '@forge/kernel';
-import { cachedRepoCommonDir } from './repo-identity.ts';
+import type { EventLogger } from '@forge/kernel';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
 import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library';
@@ -544,82 +543,4 @@ export async function withSessionEndHooks<T>(
   } finally {
     await fireSessionEndHooks(sessionEnd);
   }
-}
-
-// ---------------------------------------------------------------------------
-// forge-repo-git fence (forge-8vfn.8.5.44, row 208) — merged into EVERY
-// spawn's `PreToolUse` hooks, never agent-declared. 2026-10-03 incident:
-// onboarding-agent correctly wrote `brain/projects/<name>/profile.md`
-// straight into the forge repo (ADR 035, by design), then — imitating the
-// `git add && git commit` it had just run, correctly, in the PROJECT's own
-// nested repo one Bash call earlier — ran the same shape against the FORGE
-// repo, and a later call moved the operator's own `main` with `git
-// update-ref`. `decideForgeRepoGit` (`@forge/kernel`) is the pure decision;
-// this is the glue that makes a real spawn consult it UNCONDITIONALLY,
-// regardless of what hooks the running agent itself declares — the ruling
-// binds every agent kind, not an opt-in roster, which is also why this
-// lives beside `sdkHooksForAgent` rather than inside it: that function
-// returns `undefined` for the (overwhelmingly common) agent that binds no
-// hook at all, and this fence must still be present on that exact path.
-// ---------------------------------------------------------------------------
-
-export type ForgeRepoGitFenceRunContext = {
-  /** This spawn's own starting cwd — the SAME value already handed to the
-   *  SDK's `options.cwd` (one-shot path) or the adapter's `worktreePath`
-   *  (legacy invocation path) for THIS run; see `decideForgeRepoGit`'s own
-   *  doc for why a live, cross-call shell cwd is not available here. */
-  cwd: string;
-  forgeRoot: string;
-  logger: EventLogger | (() => EventLogger);
-  initiativeId: string;
-};
-
-function forgeRepoGitPreToolUseCallback(ctx: ForgeRepoGitFenceRunContext): SdkHookCallback {
-  return async (input) => {
-    if (input.tool_name !== 'Bash') return { continue: true };
-    const command = (input.tool_input as { command?: unknown } | undefined)?.command;
-    if (typeof command !== 'string') return { continue: true }; // no command string: not this fence's shape to judge
-    // Row 208 follow-up — IDENTITY via `cachedRepoCommonDir` (memoised per process), never a path prefix; see that module's own header.
-    const decision = decideForgeRepoGit({
-      command,
-      cwd: ctx.cwd,
-      forgeRoot: ctx.forgeRoot,
-      forgeRepoId: cachedRepoCommonDir(ctx.forgeRoot),
-      repoOf: cachedRepoCommonDir,
-    });
-    if (decision.allow) return { continue: true };
-    // Every refusal is logged (forge-8vfn.8.5.44's own requirement) — an
-    // agent whose onboarding run moves `main` and leaves NO trace anywhere
-    // is exactly the gap row 208 closes twice over: once by refusing the
-    // call, once by making the refusal itself discoverable.
-    const logger = typeof ctx.logger === 'function' ? ctx.logger() : ctx.logger;
-    logger.emit({
-      phase: 'orchestrator',
-      skill: 'forge-repo-git-fence',
-      event_type: 'error',
-      initiative_id: ctx.initiativeId,
-      input_refs: [],
-      output_refs: [],
-      message: 'forge-repo-git.denied',
-      metadata: { command, reason: decision.reason },
-    });
-    return {
-      continue: true,
-      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: decision.reason },
-    };
-  };
-}
-
-/**
- * Merge the forge-repo-git fence into `bag`'s `PreToolUse` list, alongside
- * whatever agent-declared hooks `sdkHooksForAgent` already built for this
- * spawn — never REPLACING them: any callback returning `deny` wins, so the
- * merge order decides nothing. `bag` is commonly `undefined` (no agent in
- * today's OOTB roster declares a hook binding); the returned bag always
- * carries at least this one `PreToolUse` entry regardless, because the
- * fence is NOT opt-in the way a bound library hook is.
- */
-export function withForgeRepoGitFence(bag: SdkHooksOption | undefined, ctx: ForgeRepoGitFenceRunContext): SdkHooksOption {
-  const preToolUse = bag?.PreToolUse ?? [];
-  return { ...bag, PreToolUse: [...preToolUse, { hooks: [forgeRepoGitPreToolUseCallback(ctx)] }] };
 }
