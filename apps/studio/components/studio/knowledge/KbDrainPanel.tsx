@@ -272,6 +272,7 @@ export function KbDrainPanel({
         startedAt={status?.startedAt}
         maxRounds={status?.maxRounds}
         maxCostUsd={status?.maxCostUsd}
+        spendUnknown={status?.spendUnknown === true}
         nowMs={nowMs}
         attaching={attaching}
         dispatchError={dispatchError}
@@ -329,6 +330,9 @@ export type KbDrainPanelViewProps = {
   startedAt?: string;
   maxRounds?: number;
   maxCostUsd?: number;
+  /** Row 201: the run stopped because a fix turn's spend could not be priced
+   *  — `costUsd` is then a floor, never the spend. */
+  spendUnknown?: boolean;
   nowMs: number;
   attaching: boolean;
   dispatchError: string | null;
@@ -351,14 +355,14 @@ export type KbDrainPanelViewProps = {
 
 export function KbDrainPanelView({
   displayState, round, runId, costUsd, counts, perFinding, kbId,
-  startedAt, maxRounds, maxCostUsd, nowMs,
+  startedAt, maxRounds, maxCostUsd, spendUnknown = false, nowMs,
   attaching, dispatchError, readError = null,
   cancelArmed, cancelBusy, cancelMsg,
   userIdx, userNote, userBusy, userMsg, events,
   onCancel, onCancelDisarm, onRecheck, onUserNoteChange, onSubmitUserAnswer, onSkipUser,
 }: KbDrainPanelViewProps) {
   const hasStatus = displayState !== 'idle' && displayState !== 'attaching';
-  const copy = drainStateCopy(displayState, costUsd);
+  const copy = drainStateCopy(displayState, costUsd, { spendUnknown });
   const tiers = findingsByTier(perFinding);
   const userStep = resolveUserTierStep(tiers.user, userIdx);
   const progressFindings = [...tiers.auto, ...tiers.agent];
@@ -376,6 +380,7 @@ export function KbDrainPanelView({
       data-drain-state={displayState}
       data-drain-round={round}
       data-drain-run-id={runId ?? ''}
+      {...(spendUnknown ? { 'data-drain-spend': 'unknown' } : {})}
       {...(readError ? { 'data-drain-read-error': readError } : {})}
       style={{ borderBottom: '1px solid var(--line)', padding: '14px 16px' }}
     >
@@ -393,7 +398,7 @@ export function KbDrainPanelView({
 
         {hasStatus && (
           <span style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
-            auto {counts.auto} · agent {counts.agent} · you {counts.user} · ${costUsd.toFixed(2)}{typeof maxCostUsd === 'number' ? ` of $${maxCostUsd.toFixed(2)}` : ''}
+            auto {counts.auto} · agent {counts.agent} · you {counts.user} · {spendUnknown ? '≥ ' : ''}${costUsd.toFixed(2)}{typeof maxCostUsd === 'number' ? ` of $${maxCostUsd.toFixed(2)}` : ''}
           </span>
         )}
 

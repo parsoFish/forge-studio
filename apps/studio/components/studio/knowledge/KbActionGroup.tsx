@@ -39,7 +39,7 @@ import {
   type KbActiveJob,
 } from '@/lib/studio-client';
 import { pollAgentFix, pollDisplayState, type PolledAgentFixStatus, type PollDisplayState } from '@/lib/agent-dispatch';
-import { consolidateResultLabel } from '@/lib/kb-consolidate';
+import { consolidateResultLabel, consolidateSpendToken } from '@/lib/kb-consolidate';
 import type { KbDrainDisplayState } from '@/lib/kb-drain-view';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -221,6 +221,7 @@ export function KbActionGroup({
       busy={busy}
       consolidatePollState={consolidatePollState}
       consolidateState={consolidateStatus?.state ?? null}
+      consolidateSpend={consolidateSpendToken(consolidateStatus)}
       actionResult={actionResult}
       actionError={actionError}
       deleteArmed={deleteArmed}
@@ -250,6 +251,8 @@ export type KbActionGroupViewProps = {
   busy: 'drain' | 'consolidate' | 'index' | 'delete' | null;
   consolidatePollState: PollDisplayState | null;
   consolidateState: string | null;
+  /** Row 201: why a consolidate batch stopped on its spend — absent otherwise. */
+  consolidateSpend?: 'unknown' | 'ceiling-hit' | null;
   actionResult: string | null;
   actionError: string | null;
   deleteArmed: boolean;
@@ -282,7 +285,7 @@ function localGateReason(drainState: KbDrainDisplayState, consolidatePollState: 
 
 export function KbActionGroupView({
   kbId, activeJob, activeJobReason, drainState, busy,
-  consolidatePollState, consolidateState, actionResult, actionError,
+  consolidatePollState, consolidateState, consolidateSpend = null, actionResult, actionError,
   deleteArmed, deleteText,
   onDrain, onConsolidate, onRecheckConsolidate, onCleanupPlan, onRefreshIndex,
   onDeleteArm, onDeleteCancel, onDeleteTextChange, onDeleteConfirm,
@@ -362,6 +365,7 @@ export function KbActionGroupView({
         <div
           data-component="kb-action-result"
           {...(consolidateState ? { 'data-consolidate-state': consolidateState } : {})}
+          {...(consolidateSpend ? { 'data-consolidate-spend': consolidateSpend } : {})}
           {...(consolidatePollState ? { 'data-poll-state': consolidatePollState } : {})}
           style={{ fontSize: 11.5, color: actionError ? 'var(--error, #f87171)' : 'var(--dim)', fontFamily: 'var(--font-mono)', padding: '8px 0 2px' }}
         >
@@ -372,6 +376,7 @@ export function KbActionGroupView({
         <div
           data-component="kb-action-consolidate-state"
           {...(consolidateState ? { 'data-consolidate-state': consolidateState } : {})}
+          {...(consolidateSpend ? { 'data-consolidate-spend': consolidateSpend } : {})}
           {...(consolidatePollState ? { 'data-poll-state': consolidatePollState } : {})}
           style={{ fontSize: 0, height: 0, overflow: 'hidden' }}
         />

@@ -41,6 +41,9 @@ import { parseContractStageRow, type ContractStageRow } from './session-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
 import { carryWireFieldIfDefined } from './run-wire-field';
+// Row 201: the agent-fix status wire type + its parse live in their own module.
+import { parseAgentFixStatus, type AgentFixStatus, type AgentFixWire } from './agent-fix-status';
+export type { AgentFixStatus } from './agent-fix-status';
 // agents-15 (forge-6gv.5.1): the Agent wire type + its parse function(s) and
 // agent-only helpers live in their own module now, split out so this file
 // can grow the fields the Definition Preview needs
@@ -1293,43 +1296,10 @@ export async function dispatchAgentFix(
   return { ok: r.ok, error: r.error, runId: r.ok && typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }
 
-/** W7-FIX-A1 (A1-10): `'unknown'` is BOTH the bridge's own honest "no state
- *  recorded" (`ok:true`) AND the failed-read shape (`ok:false` + `error`, the
- *  bridge's text verbatim / "bridge unreachable (…)") — never a fabricated
- *  `'running'`. `agent-dispatch.ts`'s poll wrappers keep watching on `ok:false`
- *  (bounded), so a blip is a visible read failure, not a stopped run. */
-export type AgentFixStatus = {
-  ok: boolean;
-  state: 'running' | 'cleared' | 'not-cleared' | 'failed' | 'unknown';
-  cleared: boolean;
-  /** Present only for a `consolidate` run's terminal status — the bridge's
-   *  `readBrainFixState` threads them through from the terminal event's own
-   *  metadata (W8-F1 / knowledge-42). A per-finding `fix-agent` run never
-   *  writes these, so they stay genuinely absent for it — never fabricated. */
-  total?: number;
-  clearedCount?: number;
-  /** Present only on a failed read (`ok:false`). */
-  error?: string;
-  /** On a failed read: the HTTP status iff the bridge ANSWERED (a 404 "no
-   *  such run" is a definitive answer, not a blip); absent = transport. */
-  status?: number;
-};
-
-function parseAgentFixStatus(r: BridgeReadResult<{ state?: string; cleared?: boolean; total?: number; clearedCount?: number }>): AgentFixStatus {
-  if (!r.ok) return { ok: false, state: 'unknown', cleared: false, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
-  return {
-    ok: true,
-    state: (r.data.state as AgentFixStatus['state']) ?? 'unknown',
-    cleared: r.data.cleared === true,
-    ...(typeof r.data.total === 'number' ? { total: r.data.total } : {}),
-    ...(typeof r.data.clearedCount === 'number' ? { clearedCount: r.data.clearedCount } : {}),
-  };
-}
-
 /** Poll a dispatched agent-fix run's state (status-shaped: never throws;
  *  a failed read is `{ok:false, state:'unknown', error}`). */
 export async function getAgentFixStatus(id: string, runId: string): Promise<AgentFixStatus> {
-  return parseAgentFixStatus(await studioGet<{ state?: string; cleared?: boolean; total?: number; clearedCount?: number }>(
+  return parseAgentFixStatus(await studioGet<AgentFixWire>(
     `/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`,
   ));
 }
@@ -1410,6 +1380,11 @@ export type KbDrainStatus = {
   startedAt?: string;
   maxRounds?: number;
   maxCostUsd?: number;
+  /** Row 201 (forge-8vfn.8.5.41) — mirrors the server's `spendUnknown`: set
+   *  only on a `cost-ceiling` terminal whose fix turn ended UNPRICED and
+   *  UNBOUNDED. The run's real spend is unknown, `costUsd` is only the priced
+   *  floor, and the ceiling was never provably hit. Absent on every other run. */
+  spendUnknown?: boolean;
   /** HTTP status of a FAILED read — CLIENT-ONLY (set by
    *  {@link failedKbDrainStatus}; never present in a server-written
    *  status.json). The drain vocab has no 'unknown' token, so a failed read
@@ -1956,7 +1931,7 @@ export async function preflightFixAgent(
  *  `AgentFixStatus` shape as `getAgentFixStatus` (status-shaped: never
  *  throws; a failed read is `{ok:false, state:'unknown', error}`). */
 export async function preflightFixStatus(projectId: string, runId: string): Promise<AgentFixStatus> {
-  return parseAgentFixStatus(await studioGet<{ state?: string; cleared?: boolean }>(
+  return parseAgentFixStatus(await studioGet<AgentFixWire>(
     `/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent/${encodeURIComponent(runId)}`,
   ));
 }

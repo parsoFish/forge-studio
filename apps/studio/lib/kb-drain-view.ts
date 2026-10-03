@@ -64,7 +64,13 @@ export type DrainStateCopy = { label: string; detail: string };
 /** Operator-facing label + explanation for every state the panel can show.
  *  Pure text derivation — the panel renders this verbatim, never re-deciding
  *  wording at the call site (keeps every terminal's copy in one place). */
-export function drainStateCopy(state: KbDrainDisplayState, costUsd: number): DrainStateCopy {
+export function drainStateCopy(state: KbDrainDisplayState, costUsd: number, opts: { spendUnknown?: boolean } = {}): DrainStateCopy {
+  // Row 201 (forge-8vfn.8.5.41) — a `cost-ceiling` terminal carrying
+  // `spendUnknown` stopped because a fix turn could not be priced: the
+  // ceiling was never provably hit, and `costUsd` is only the priced floor.
+  if (state === 'cost-ceiling' && opts.spendUnknown === true) {
+    return { label: 'spend unknown', detail: `Stopped: a fix turn's spend could not be priced — at least $${costUsd.toFixed(2)} spent, and the cost ceiling can't be enforced past it. Re-run to continue with a fresh budget.` };
+  }
   switch (state) {
     case 'idle':
       return { label: 'not yet run', detail: 'Click "Drain to green" to fix every auto- and agent-tier lint finding, round by round.' };

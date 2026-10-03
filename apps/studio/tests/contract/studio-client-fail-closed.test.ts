@@ -388,3 +388,15 @@ for (const poll of POLLS) {
     expect(v.error).toBeUndefined();
   });
 }
+
+// Row 201 (forge-8vfn.8.5.41) — `readBrainFixState` publishes a consolidate
+// batch's `ceilingHit`/`spendUnknown`; the parse passes them through as `true`
+// only, never coerces a non-boolean, and leaves them absent otherwise.
+test('getAgentFixStatus passes a consolidate terminal\'s ceilingHit/spendUnknown through, and only a literal true', async () => {
+  mockBridgeFetch.mockResolvedValueOnce(jsonRes(200, { ok: true, state: 'not-cleared', cleared: false, total: 3, clearedCount: 1, ceilingHit: true, spendUnknown: true }));
+  expect(await sc.getAgentFixStatus('k', 'r')).toMatchObject({ ceilingHit: true, spendUnknown: true });
+  mockBridgeFetch.mockResolvedValueOnce(jsonRes(200, { ok: true, state: 'not-cleared', cleared: false, ceilingHit: 'yes', spendUnknown: 1 }));
+  const loose = await sc.getAgentFixStatus('k', 'r');
+  expect('ceilingHit' in loose).toBe(false);
+  expect('spendUnknown' in loose).toBe(false);
+});

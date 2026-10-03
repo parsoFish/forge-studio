@@ -65,6 +65,22 @@ test('drainStateCopy: "cost-ceiling" names the actual dollar amount spent, not a
   expect(drainStateCopy('cost-ceiling', 1.5).detail).toContain('$1.50');
 });
 
+// Row 201 (forge-8vfn.8.5.41) — a `cost-ceiling` terminal carrying
+// `spendUnknown` was stopped by a fix turn whose spend could not be priced:
+// the ceiling was never provably hit and `costUsd` is only the priced FLOOR.
+test('drainStateCopy: "cost-ceiling" with spendUnknown never claims the ceiling was hit, and calls the dollar figure a floor', () => {
+  const copy = drainStateCopy('cost-ceiling', 0.4, { spendUnknown: true });
+  expect(copy.detail).not.toMatch(/hit this run's cost ceiling/i);
+  expect(copy.detail).not.toContain('$0.40 spent)');
+  expect(copy.detail).toContain('at least $0.40');
+  expect(copy.detail.toLowerCase()).toContain('could not be priced');
+  expect(copy.label).not.toBe(drainStateCopy('cost-ceiling', 0.4).label);
+});
+
+test('drainStateCopy: spendUnknown is ignored outside the cost-ceiling terminal (the server only sets it there)', () => {
+  expect(drainStateCopy('green', 0.4, { spendUnknown: true })).toEqual(drainStateCopy('green', 0.4));
+});
+
 test('drainStateCopy: "round-cap" names the real max-rounds constant', () => {
   expect(drainStateCopy('round-cap', 0).detail).toContain(String(KB_DRAIN_MAX_ROUNDS_DISPLAY));
 });

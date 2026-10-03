@@ -5248,7 +5248,13 @@ is what this contract reads — but it cannot be the only distinguisher.
     server-refused, 403). `[data-action="goto-kb-runs"]` cross-links the
     run-history widget below. Results/errors render persistently in
     `[data-component="kb-action-result"]` (carrying `[data-consolidate-state]`
-    + `[data-poll-state]` when a consolidate has run; the hidden
+    + `[data-poll-state]` when a consolidate has run, +
+    `[data-consolidate-spend="unknown"|"ceiling-hit"]` when the batch
+    stopped on its spend — row 201: `"unknown"` = a fix turn's spend could
+    not be priced (it wins over `"ceiling-hit"`, which the server also sets
+    then), `"ceiling-hit"` = the batch reached its cost ceiling; absent
+    otherwise, derived by `consolidateSpendToken`, `lib/kb-consolidate.ts`,
+    and the result label names the stop reason; the hidden
     `[data-component="kb-action-consolidate-state"]` div carries them while
     no textual result is shown). `start-kb-cleanup` does NOT POST on click
     (knowledge-33): it routes to the ONE kickoff form,
@@ -5288,7 +5294,16 @@ is what this contract reads — but it cannot be the only distinguisher.
     W7-B2 moved the DISPATCH button into `KbActionGroup` above it. Root:
     `#kb-drain-panel[data-component="kb-drain-panel"]
     [data-drain-state][data-drain-round][data-drain-run-id]` (+
-    `data-drain-read-error=<msg>` whenever the latest status read failed).
+    `data-drain-read-error=<msg>` whenever the latest status read failed;
+    + `data-drain-spend="unknown"` when the run's status carries
+    `spendUnknown` — row 201, forge-8vfn.8.5.41: the server stopped the
+    drain in its `cost-ceiling` terminal because a fix turn ended UNPRICED
+    and UNBOUNDED, so `data-drain-state` stays the server's own
+    `'cost-ceiling'` while this qualifier says the ceiling was never
+    provably hit. The chip reads "spend unknown", the detail says "at least
+    $X spent" and the cost line prefixes `≥` — `costUsd` is only the priced
+    floor (`drainStateCopy`, `lib/kb-drain-view.ts`). The attribute is ABSENT
+    on every run whose spend is known — there is no `"known"` value).
     `data-drain-state` is one of the server's own `KbDrainState` values
     (`'running'|'green'|'needs-you'|'no-progress'|'round-cap'|'cost-ceiling'
     |'cancelled'|'failed'` — `'cancelled'` added W7-B2, knowledge-14) plus
