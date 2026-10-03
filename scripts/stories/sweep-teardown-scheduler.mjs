@@ -138,13 +138,13 @@ export function ownSchedulerPid(root) {
 /**
  * Stop the scheduler daemon THIS RUN started — T1 ruling 657(ii).
  *
- * S10 run 9's beat 7 pressed Start and a real daemon came up
- * (`{"running":true,"pid":1868172}`, the same second the beat pressed). The
+ * S10 run 9's own daemon came up (`{"running":true,"pid":1868172}`) and the
  * sweep then ran and the daemon was still alive afterwards. A scheduler left
- * running is not cosmetic residue: `scheduler-start` renders ONLY at
- * `status: stopped` (`lib/scheduler-view.ts:44`), so the NEXT run's beat 7
- * reds at t+0 on a missing handle while the state it wants already holds —
- * and the run after this one would have inherited exactly that.
+ * running is not cosmetic residue: `forge studio` ADOPTS a pid that is
+ * already alive rather than spawning fresh (`apps/forge/serve-supervisor.ts`,
+ * ADR 011), so the NEXT run inherits this one's queue state and env wholesale
+ * — `scheduler-preflight.mjs`'s own refusal exists for exactly that reason,
+ * on the costed side.
  *
  * BY PID, FROM THE PID FILE, AND ONLY IF IT IS OURS. The cwd is checked
  * against the run's own tree before signalling: another lane's daemon is

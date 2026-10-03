@@ -122,12 +122,13 @@ test('594(2): an untracked artifact is not resurrected, and nothing outside the 
 
 /**
  * Stopping the scheduler the run started — T1 ruling 657(ii), bought by S10
- * run 9, where beat 7 pressed Start, a real daemon came up, and it was still
- * alive after the sweep.
+ * run 9, where a real daemon came up and it was still alive after the sweep.
  *
- * A scheduler left running is not cosmetic: `scheduler-start` renders ONLY at
- * `status: stopped` (`lib/scheduler-view.ts:44`), so the next run's beat 7 reds
- * at t+0 on a missing handle while the state it wants already holds.
+ * A scheduler left running is not cosmetic: `forge studio` ADOPTS a pid that
+ * is already alive rather than spawning fresh
+ * (`apps/forge/serve-supervisor.ts`, ADR 011), so the next run inherits this
+ * one's queue state and env wholesale — `scheduler-preflight.mjs`'s own
+ * refusal exists for exactly that reason, on the costed side.
  */
 test('657(ii): the pid file path is the PRODUCT\'s, bound by this test', async () => {
   // `run.mjs` is plain node and cannot import the TypeScript, so the path is

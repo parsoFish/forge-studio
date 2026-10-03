@@ -67,7 +67,7 @@ test('7.6.118: S10 beat 8\'s `terminal` and `boundBasis` survive validateStory',
   assert.equal(beat8.wait.terminal, 'ready-for-review', 'the watch would never run');
   assert.ok(typeof beat8.wait.boundBasis === 'string' && beat8.wait.boundBasis !== '', 'the verdict would print a bare integer again');
   assert.match(beat8.wait.boundBasis, /ground\.budget_usd/, beat8.wait.boundBasis);
-  assert.equal(beat8.wait.anchor, 'scheduler-start', 'and the anchor 7.6.27 wired is still there');
+  assert.equal(beat8.wait.anchor, 'approve-plan', 'and the anchor 7.6.27 wired is still there');
 });
 
 test('7.6.118: the bound S10 declares is the DERIVED one, and the parser accepts it', async () => {

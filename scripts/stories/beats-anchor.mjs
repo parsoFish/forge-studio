@@ -8,12 +8,12 @@
  * born earlier can belong to it.
  *
  * It is wrong for a beat that WATCHES work another beat started, and S10 run 11
- * measured the cost. Beat 7 pressed `scheduler-start`; the daemon claimed the
- * initiative and had its cycle dir on disk at `13:21:29.798`, **449 ms before
- * beat 7's own green** and so before beat 8 pressed at all. Beat 8's door found
- * nothing born since its press — correctly — and printed `nothing under _logs/
- * was created by this press`, which asserts more than the door knows. The cycle
- * it could not see reached `cycle.end` sixty seconds before the beat gave up.
+ * measured the cost. The daemon claimed the initiative and had its cycle dir
+ * on disk at `13:21:29.798`, **449 ms before beat 7 itself went green** and so
+ * before beat 8 pressed at all. Beat 8's door found nothing born since its
+ * press — correctly — and printed `nothing under _logs/ was created by this
+ * press`, which asserts more than the door knows. The cycle it could not see
+ * reached `cycle.end` sixty seconds before the beat gave up.
  *
  * So a beat may NAME the earlier press whose work it is watching, and the search
  * window opens there instead.

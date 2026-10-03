@@ -51,7 +51,7 @@ const GH_TOKEN_ENV = 'GH_TOKEN';
  * reads it from its OWN env, never from a spawned agent's.
  *
  * (a) `resolveCostCeilingOverride` ignores a value `<= 0`, so `--ceiling 0` on a costed story does not halt at 0.
- * (b) This env binds only a scheduler THIS bridge spawns — a pre-existing one keeps its own; see `scheduler-preflight.mjs`'s refusal.
+ * (b) This env binds only a `forge serve` studio's own supervisor SPAWNS fresh at boot — one it ADOPTS instead keeps its own, already-fixed env; see `scheduler-preflight.mjs`'s refusal.
  */
 const COST_CEILING_ENV = 'FORGE_COST_CEILING_USD';
 

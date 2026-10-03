@@ -298,73 +298,27 @@ export default {
       say: 'The plan is approved. The operator goes back to the project to start the work it planned.',
     },
     {
-      // T1 ruling 622, bought by G1/S10 run 7. THE ENQUEUE WORKED AND NOTHING
-      // CLAIMED IT. Beat 7 spent its full 20-minute ceiling with
-      // `data-plan-state` never leaving `unplanned` — not even reaching
-      // `planning` — because `POST /api/initiatives/:id/plan` "repoints the
-      // manifest at forge-architect + threads its cycle_id, then THE SCHEDULER
-      // CLAIMS IT" (`lib/bridge-client.ts:670-680`), and no scheduler was
-      // running. Measured, not inferred: no PM run dir under `_logs/` at all,
-      // `_queue/in-flight/` and `_queue/done/` both empty, and every manifest
-      // still sitting in `_queue/pending/` with its mtime moved by the press.
+      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
+      // `page`/`page-ready`, nothing else) — the press switches a CLIENT-SIDE
+      // tab, never the route. `project-tab-roadmap` lives on `/projects/[id]`
+      // (`ProjectTabs.tsx:47`, a template-literal handle) and nowhere else;
+      // the tab's own root publishes `data-section="project-roadmap"`
+      // (`app/projects/[id]/page.tsx:1124`), which is this beat's
+      // deterministic proof of having arrived.
       //
-      // THE PRODUCT SAYS SO AND THE STORY DID NOT LISTEN.
-      // `data-needs-scheduler-start` is published on `EnqueueOutcomeLine.tsx:69`
-      // and `ArchitectCommittedView.tsx:20`, and the Start control is right
-      // there on this page — `<SchedulerCard variant="strip">`,
-      // `app/projects/[id]/page.tsx:1228`. Pressing it is the operator's real
-      // path; having the harness start it silently would hide a state the
-      // product deliberately shows.
-      //
-      // SOURCE-DERIVED, AND THE STATE MACHINE MATTERS HERE.
-      // `lib/scheduler-view.ts` gives each status its own action list:
-      //   `stopped`  → ['start']            ← the only state carrying this handle
-      //   `running`  → ['pause', 'stop']
-      //   `paused`   → ['resume', 'stop']
-      //   `unknown`  → []   (status not yet read from the bridge — a transient
-      //                      on first paint, which is why the press waits for
-      //                      the handle rather than assuming it)
-      // So `scheduler-start` EXISTS ONLY WHILE THE SCHEDULER IS STOPPED. If a
-      // previous run left one running, this beat reds at t+0 on a missing
-      // handle while the state it wants already holds. That is a residue
-      // hazard, not a product defect: the preflight re-hashes the ground and
-      // must also leave no scheduler running.
-      //
-      // THIS COMMENT USED TO SAY the preflight "clears `_logs/_agent-*`". It
-      // never did — `reap.mjs` reaps PROCESSES by pid and deletes no directory,
-      // and `sweep.mjs` had no `_agent-*` rule at all. The sentence described the
-      // system as it ought to be and was read as a description of what it was.
-      // The reusable half, C's words: A COMMENT THAT DESCRIBES AN INTENTION AS
-      // A FACT IS A CLAIM NOTHING CHECKS, and it outlives everyone who knew it
-      // was aspirational. Its author believed it on re-reading too.
-      // `forge-8vfn.7.6.24` makes the leading sweep claim them for real; until
-      // that landed, S5 run 3 met run 2b's dir and a beat that had been red all
-      // campaign went GREEN by reading a different run's row (T1 ruling 716(ii)).
-      // `_queue/pending/` is the same class (run 7's `queue-residue.md`).
-      // AMEND-6, bought by run 8 at twelve seconds of act bound and a whole
-      // beat. `scheduler-start` was absent and I called the product wrong
-      // before the evidence did: `/api/scheduler/status` answered
-      // `{"running":false}` live during the run, which `scheduler-view.ts`
-      // maps to `stopped` → actions `['start']`. The button was renderable.
-      //
-      // It is on the ROADMAP TAB. `<SchedulerCard variant="strip">` lives at
-      // `app/projects/[id]/page.tsx:1228`, inside the block rooted at
-      // `data-section="project-roadmap"`, three lines above the Plan and
-      // Start-development controls — and the project page opens on
-      // `useState<ProjectTab>('editor')` (`:104`). The beat below has pressed
-      // `project-tab-roadmap` first all along, for exactly this reason.
-      //
-      // I verified the handle EXISTS and that its state was reachable, and
-      // never verified WHERE IT RENDERS (§15.358). Existence is not
-      // reachability from the page the beat is standing on, and only the
-      // second is what a beat asserts.
-      act: 'Start the scheduler so queued work can be claimed',
-      do: [{ press: 'project-tab-roadmap' }, { press: 'scheduler-start' }],
+      // NOTHING IS ENQUEUED HERE. Approving the plan (beat 5) is what writes
+      // the initiative into `_queue/pending/`. `forge studio` starts and
+      // supervises `forge serve` from boot (ADR 011) and claims every
+      // eligible manifest in `_queue/pending/` as capacity allows, so by the
+      // time the operator presses anything on this page the initiative is
+      // already claimable — there is no separate control left to throw.
+      act: 'Go to the roadmap, where the approved plan is already being worked',
+      do: [{ press: 'project-tab-roadmap' }],
       expect: {
         route: '/projects/gitpulse',
-        data: { page: 'projects', 'project-id': 'gitpulse', 'scheduler-status': 'running' },
+        data: { page: 'projects', 'project-id': 'gitpulse', section: 'project-roadmap' },
       },
-      say: 'Planning and building are done by a scheduler that claims queued work. Nothing the operator enqueues moves until it is running, and the product says so plainly rather than leaving the work to sit — so starting it is part of the journey, not setup hidden behind it.',
+      say: 'The plan is approved, and the factory is already at work on it. The roadmap is where that work becomes visible to the operator.',
     },
     {
       // T1 ruling 604, bought by G1/S10 run 6. THE STORY WAS MISSING A STATION.
@@ -383,7 +337,7 @@ export default {
       // WHY THE CONSEQUENCE IS `plan-state`, NOT THE OUTCOME LINE. Pressing Plan
       // ENQUEUES: `POST /api/initiatives/:id/plan` "repoints the manifest at
       // forge-architect + threads its cycle_id, then the scheduler claims it"
-      // (`lib/bridge-client.ts:670-680`). So `data-start-work-outcome="ok"`
+      // (`lib/bridge-client-runs.ts:103`). So `data-start-work-outcome="ok"`
       // means the enqueue succeeded, NOT that planning is done — asserting it
       // would let the next beat press Develop while the pass was still running
       // and reproduce run 6's red with a different message. The roadmap node
@@ -398,19 +352,41 @@ export default {
       // cycle that spent $3.99 and finished 116 s after the beat gave up
       // (§15.559). It is derived from the story's own funding now, not chosen.
       act: 'Watch the factory plan and build the initiative',
-      // NO PRESS. The daemon beat 7 started has already claimed this
-      // initiative — run 11 measured the claim at `13:21:29`, with the cycle
-      // dir born `13:21:29.798`, **449 ms BEFORE beat 7's own green at
-      // 13:21:30.247**. There is nothing for the operator to press; the factory
-      // is already running, and a press here asserts the operator doing what
-      // the factory did.
+      // NO PRESS. `forge studio` supervises `forge serve` from boot (ADR 011)
+      // and claims every eligible manifest in `_queue/pending/` as capacity
+      // allows — the finalize turn beat 5's approve started is what writes
+      // this initiative's manifest there, so the claim follows that commit on
+      // its own. There is nothing for the operator to press; a press here
+      // would assert the operator doing work the daemon already does.
       do: [],
-      // ANCHORED ON BEAT 7'S PRESS (718(1)). The door searches `_logs/` for a
-      // dispatch born since a moment the caller names, and that moment used to
-      // be the wait's own start — correct for a press that dispatches its OWN
-      // work, and wrong here by half a second. Run 11 reded `no-channel:
-      // nothing under _logs/ was created by this press` about a cycle that
-      // reached `cycle.end` sixty seconds before the beat gave up.
+      // ANCHORED ON BEAT 5'S `approve-plan` PRESS (718(1)), NOT ON THIS WAIT'S
+      // OWN START. The door searches `_logs/` for a dispatch born since a
+      // moment the caller names; the default is this wait's own start, which
+      // is correct only for a press that dispatches its OWN work. This beat
+      // presses nothing, so the default would open the search window AFTER
+      // the daemon may already have claimed the initiative — the same half-
+      // second-class gap 718(1) exists to close, one beat over. `approve-plan`
+      // is the one earlier press this story has performed whose timing
+      // precedes the claim, so it is what the anchor names.
+      //
+      // WHY THE ARCHITECT'S OWN FINALIZE TURN CANNOT BE MISTAKEN FOR THIS
+      // CHANNEL. Approving the plan spawns a finalize turn
+      // (`applyPlanVerdict`, `packages/flows/bridge-studio-runs.ts:245`)
+      // into the SAME `_architect-<sessionId>` directory `spawnAgentTurn`
+      // minted at beat 3 (`mkdirSync(logDir, { recursive: true })`,
+      // `apps/forge/bridge-agent-dispatch.ts:171`, a no-op on an existing
+      // dir — it does not reset the directory's birth time). The scan this
+      // wait falls back to, `newestChannelSince`, excludes any dispatch dir
+      // born before the anchor (`scripts/stories/beats-channel-scan.mjs:105`),
+      // so the finalize turn's channel — born at beat 3's mint, well before
+      // `approve-plan` — can never be read as "the newest channel since the
+      // anchor". This beat stands on `/projects/gitpulse`, which publishes no
+      // `data-run` (so `readRunId` always returns null here) and binds no
+      // run id before this wait resolves, so the named/bound resolution
+      // branches never apply either — the scan is the only path, for both the
+      // stall door and its `earlyDeath` twin (`beats-agent-proc.mjs:619-794`).
+      // The only dispatch dir that CAN be born at or after `approve-plan` is
+      // the daemon's own cycle dir for this initiative.
       //
       // The BOUND still runs from this wait's start; only the search window
       // moves.
@@ -430,7 +406,7 @@ export default {
       // 17's red printed `declared 360000 ms` and that bare integer is why its
       // first readers believed the product had stalled when it had succeeded.
       wait: {
-        for: 'agent', anchor: 'scheduler-start',
+        for: 'agent', anchor: 'approve-plan',
         // The product's own word for "this cycle is done", read from the queue
         // rather than from the card: run 17 reached it at 22:46:55 while this
         // beat had already given up at 22:44:59 asserting the card alone.
@@ -440,28 +416,21 @@ export default {
       },
       expect: {
         route: '/projects/gitpulse',
-        // `needs-scheduler-start` IS GONE — amend-6, and it never worked.
-        // 622 added it so a scheduler-less environment would "red in seconds
-        // instead of burning the bound in silence". Run 8 returned
-        // `expected "false", ABSENT from the page`: the attribute is published
-        // by `EnqueueOutcomeLine.tsx:69` and `ArchitectCommittedView.tsx:20`,
-        // neither of which is on the roadmap tab this beat stands on. Same
-        // mistake as beat 7 above — the attribute exists in the product and
-        // not on this page (§15.358).
-        //
-        // It could not have failed fast even where it renders:
-        // `waitForConsequence` waits for ALL declared keys until the deadline,
-        // so one key that can never hold still costs the whole bound. THE DOOR
-        // IS THE FAIL-FAST NOW — ruling 640 put the channel door in that same
-        // wait, so a press that dispatches nothing ends at the 180-second
-        // stall ceiling with `no-channel`, three minutes instead of twenty.
+        // A WAIT WHOSE CHANNEL NEVER APPEARS FAILS FAST, NOT AT THE FULL
+        // BOUND. `waitForConsequence` waits for ALL declared keys until the
+        // deadline, so one key that can never hold would otherwise cost the
+        // whole bound — THE DOOR IS WHAT MAKES IT FAIL FAST (ruling 640 put
+        // the channel door in that same wait), so a press that dispatches
+        // nothing ends at the 180-second stall ceiling with `no-channel`,
+        // three minutes instead of thirty.
         //
         // AMEND-7 (T1 690/696). `plan-state: 'planned'` NOW MEANS WORK ITEMS
         // EXIST. It did not when this beat was written, and run 10 paid to find
         // that out: `planStateAttr` read `unplanned = status === 'pending' &&
         // !planned` and returned `'planned'` for anything that was merely no
-        // longer pending — so the SCHEDULER'S CLAIM, 288 ms after beat 7 started
-        // it, flipped this key green on an initiative nothing had planned. The
+        // longer pending — so the SCHEDULER'S CLAIM, which can land within
+        // milliseconds of the manifest existing in `_queue/pending/`, flipped
+        // this key green on an initiative nothing had planned. The
         // PM had been running for 0.48 s and would not write its first file for
         // another ten seconds; it was killed mid-decomposition and never wrote a
         // work item at all. The beat passed anyway.
@@ -513,12 +482,13 @@ export default {
         // `_queue/ready-for-review/` with its worktree preserved on
         // `forge/INIT-2026-09-11-exclude-author-flag`, so this is the state the
         // run really reaches — read from the product, cited, not guessed (718(2)).
-        // `<runId>` BINDS HERE, and it has to: the beat that used to bind it —
-        // "Open the roadmap and start development" — is dropped, because the
-        // daemon had already started development. Every later beat routes on
-        // `/flows/forge-develop/run/<runId>`, and the story-file validator
-        // caught the dangling placeholder before any run did, which is the
-        // check earning its keep.
+        // `<runId>` BINDS HERE: this beat presses nothing and is the first
+        // point the story reads the initiative's own id, because by the time
+        // it looks the daemon has already started development on it — there
+        // is no beat in between that opens the roadmap to press anything.
+        // Every later beat routes on `/flows/forge-develop/run/<runId>`, and
+        // the story-file validator catches a dangling placeholder before any
+        // run does, which is the check earning its keep.
         //
         // IT BINDS FROM `initiative-id`, and the basis is the product's own
         // line: `RoadmapCanvas.tsx:74` says the success line links THAT run as
@@ -537,7 +507,7 @@ export default {
           'initiative-id': '<runId>',
         },
       },
-      say: 'Starting the scheduler was the operator\'s last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.',
+      say: 'Approving the plan was the operator\'s last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.',
     },
     {
       // 7.6.54 / ruling 795 — THE BEAT THAT MAKES THE RUN REACHABLE.

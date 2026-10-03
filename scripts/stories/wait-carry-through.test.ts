@@ -12,7 +12,7 @@
  * comment forbids: *"REFUSE, NEVER FALL BACK. A silent fallback to the wait's
  * start restores exactly the defect this exists to fix, and does it invisibly:
  * the beat reds `no-channel` again and the verdict is indistinguishable from a
- * real one."* So `S10.story.mjs:398` — `anchor: 'scheduler-start'`, the only
+ * real one."* So `S10.story.mjs:409` — `anchor: 'approve-plan'`, the first
  * anchored wait in any shipped story — took the pre-718(1) search window on
  * every run since it landed, and the typo-catching refusal at `:46` was
  * unreachable because the field never arrived to be wrong.
@@ -48,7 +48,7 @@ function storyWithWait(wait: Record<string, unknown>) {
     beats: [
       {
         act: 'press the thing and wait for the agent',
-        do: [{ press: 'scheduler-start' }],
+        do: [{ press: 'approve-plan' }],
         wait,
         expect: { route: '/x', data: { page: 'p' } },
         say: 'a beat that waits',
@@ -62,7 +62,7 @@ function storyWithWait(wait: Record<string, unknown>) {
  *  fall behind the validator. */
 const VALID_SHAPES: Record<string, unknown>[] = [
   { for: 'agent', upTo: 1_000 },
-  { for: 'agent', upTo: 1_000, anchor: 'scheduler-start' },
+  { for: 'agent', upTo: 1_000, anchor: 'approve-plan' },
   { for: 'settle', upTo: 1_000, key: 'preflight-status', while: 'pending' },
   // 7.6.77's shape, added because the meta-door below DEMANDED it: the moment
   // `validateWait` began inspecting `perTransition`/`progressKey`, that door
@@ -110,10 +110,10 @@ describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
   // returns the ANCHOR's press time — not the wait's own start, which is the
   // forbidden fallback and what S10 has been silently getting.
   test('S10\'s shape: an anchored wait resolves from the press, not from the wait\'s start', () => {
-    const declared = { for: 'agent', upTo: 600_000, anchor: 'scheduler-start' };
+    const declared = { for: 'agent', upTo: 600_000, anchor: 'approve-plan' };
     const v = validateStory(storyWithWait(declared)) as { beats: { wait: { for?: string; anchor?: string } }[] };
 
-    const pressedAt = new Map([['scheduler-start', 1_000]]);
+    const pressedAt = new Map([['approve-plan', 1_000]]);
     const waitStartedMs = 5_000;
     assert.equal(
       resolveAnchorMs(v.beats[0]!.wait, pressedAt, waitStartedMs), 1_000,
@@ -168,7 +168,7 @@ describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
 /*
  * `forge-8vfn.27` — the wiring, not the function.
  *
- * S10 run 16 died at beat 8 with `wait anchor "scheduler-start": no beat pressed
+ * S10 run 16 died at beat 8 with `wait anchor "approve-plan": no beat pressed
  * it before this wait (pressed so far: none)` after four beats had pressed. The
  * cause was not `resolveAnchorMs`, which the doors above prove correct: it was
  * that the RUNNER never threaded a map into `driveBeat`. The ninth parameter
@@ -179,7 +179,7 @@ describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
  * that introduced it.
  *
  * WHY THE DOORS ABOVE COULD NOT CATCH IT, and it is the species this campaign
- * keeps meeting: they build their own map — `new Map([['scheduler-start', 1000]])`
+ * keeps meeting: they build their own map — `new Map([['approve-plan', 1000]])`
  * — and call `resolveAnchorMs` directly. A fixture that constructs the shape
  * itself cannot fail on a producer that never fills it.
  *

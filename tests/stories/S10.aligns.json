@@ -8,7 +8,7 @@
     {
       "path": "docs/decisions/011-unattended-scheduler.md",
       "digest": "74cdd177c2fe5a07",
-      "why": "Beats 7-9: scheduler claim mechanics, _queue/pending|in-flight|ready-for-review state machine, scheduler-start handle"
+      "why": "Beats 7-9: _queue/pending|in-flight|ready-for-review state machine and forge serve's always-on claim, supervised by forge studio; beat 8 anchors its wait on the architect's own approve-plan commit"
     },
     {
       "path": "docs/decisions/019-cycle-resume-from-unifier.md",

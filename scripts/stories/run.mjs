@@ -569,22 +569,19 @@ async function main() {
       .filter((usd) => Number.isFinite(usd));
     const bridgeCeilingUsd = costedCeilings.length > 0 ? Math.min(...costedCeilings) : null;
 
-    // 4c. `forge-8vfn.8.1.6` follow-up — 4b's ceiling only ever reaches a
-    //     cycle THROUGH the bridge process this run boots: `spawnServeDetached`
-    //     (packages/flows/daemon.ts) starts nothing new while a scheduler pid
-    //     is already alive, so a LEFTOVER daemon from an earlier run (or an
-    //     operator's own) keeps its own, ceiling-less env — silently, since
-    //     the beat that presses Start still succeeds. Scoped to a run that
-    //     actually has a ceiling to lose: a costless batch never needed the
-    //     bridge's env to carry one.
-    if (bridgeCeilingUsd !== null) {
-      const sched = preexistingSchedulerVerdict(ROOT);
-      if (!sched.ok) {
-        console.error(`[stories] REFUSING: ${sched.reason}`);
-        return 1;
-      }
-      console.log(`[stories] scheduler ok — ${sched.reason}`);
+    // 4c. `forge-8vfn.8.1.6` follow-up — the `forge studio` this run boots
+    //     supervises `forge serve`, and a studio that finds a live serve pid
+    //     ADOPTS it instead of spawning one (`apps/forge/serve-supervisor.ts`).
+    //     An adopted serve keeps its own env: 4b's ceiling binds nothing, and
+    //     it claims whatever sits in `_queue/pending/` on this run's ground —
+    //     in a costless batch too, which sets no ceiling at all. So every run
+    //     refuses to start beside a serve it did not start.
+    const sched = preexistingSchedulerVerdict(ROOT);
+    if (!sched.ok) {
+      console.error(`[stories] REFUSING: ${sched.reason}`);
+      return 1;
     }
+    console.log(`[stories] serve ok — ${sched.reason}`);
 
     if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.
@@ -651,10 +648,14 @@ async function main() {
     // runner doing exactly the right thing, still left three committed files
     // deleted. Only paths git tracks AND that are absent right now are touched,
     // so a finished run's own output is never destroyed by its own teardown.
-    // T1 ruling 657(ii). Beat 7 presses Start and a real daemon comes up; run 9's
-    // was still alive after the sweep, and `scheduler-start` renders only at
-    // `status: stopped`, so the NEXT run's beat 7 would red at t+0 on a missing
-    // handle while the state it wants already holds.
+    // T1 ruling 657(ii). A leftover `forge serve` from this run breaks the
+    // NEXT one, not just this one's own cleanup: `forge studio` ADOPTS a pid
+    // that is already alive rather than spawning fresh
+    // (`apps/forge/serve-supervisor.ts`), so a daemon this run leaves running
+    // carries this run's own queue state and env into whatever boots next —
+    // `scheduler-preflight.mjs`'s own refusal exists for exactly that reason,
+    // on the costed side. Clearing it here, every run, is what keeps the next
+    // one honest.
     //
     // Finding row 75 (T1 rulings 1258, 1332) — stopping the daemon and releasing
     // its claim used to be two calls in a row with nothing between them

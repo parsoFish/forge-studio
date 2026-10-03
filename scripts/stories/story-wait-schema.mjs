@@ -634,8 +634,8 @@ function validateWait(raw, at) {
     }
   }
   // 7.6.82 (T1 883) — `anchor` IS CARRIED. It was validated eleven lines above
-  // and then dropped by this rebuild, so `S10.story.mjs:398`'s
-  // `anchor: 'scheduler-start'` never reached `resolveAnchorMs` and beat 8 took
+  // and then dropped by this rebuild, so `S10.story.mjs:409`'s beat 8
+  // `anchor: 'approve-plan'` never reached `resolveAnchorMs` and beat 8 took
   // the pre-718(1) window on every run since it landed. Worse than inert: the
   // waiter's absent-anchor branch is the silent fallback its own comment
   // forbids, and the typo refusal beside it was unreachable because the field
