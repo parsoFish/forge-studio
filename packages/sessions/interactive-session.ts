@@ -547,7 +547,9 @@ export type UnpricedTurnInfo = {
   cacheCreationTokens?: number;
 };
 
-function unpricedReason(err: unknown): 'abort' | 'died' {
+/** Exported for `kinds/fix-turn.ts` (row 199): its crash row names the same
+ *  reason, from the same classifier, as every session turn's unpriced row. */
+export function unpricedReason(err: unknown): 'abort' | 'died' {
   return err instanceof StreamDeadlineError ? 'abort' : 'died';
 }
 

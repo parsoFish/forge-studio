@@ -178,6 +178,49 @@ test('runKbDrain: COST-CEILING stops dispatching mid-round the moment cumulative
   assert.equal(status.costUsd, 1.5);
 });
 
+test('runKbDrain: row 199 — each fix turn is handed what is LEFT of the run ceiling as its own cap', async () => {
+  // The ceiling check runs AFTER each turn, so before this a single turn could
+  // overshoot it without bound (the test above: $1.50 against $1.00). Handing
+  // the turn `maxCostUsd − costUsd` lets `kinds/fix-turn.ts` set the SDK's
+  // `maxBudgetUsd` to it.
+  const { root, brainDir } = makeDrainRoot('cap-kb');
+  const f1 = fixtureFinding(brainDir, 'cap-1', 'agent');
+  const f2 = fixtureFinding(brainDir, 'cap-2', 'agent');
+  const ceilings: Array<number | undefined> = [];
+  const opts: KbDrainOpts = {
+    maxCostUsd: 1.0,
+    lint: scriptedLint([[f1, f2], []]),
+    applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [f1, f2] }),
+    runFixTurn: async (input) => {
+      ceilings.push(input.costCeilingUsd);
+      return { runId: input.runId, cleared: true, costUsd: 0.25, editAudit: noKbEdits() };
+    },
+  };
+  await runKbDrain(root, 'cap-kb', 'cap-kb-drain-t1', opts);
+  assert.deepEqual(ceilings, [1.0, 0.75]);
+});
+
+test('runKbDrain: T1 1973gx — an unpriced, UNBOUNDED turn is unknown spend: the drain stops dispatching and says so, never counting $0', async () => {
+  const { root, brainDir } = makeDrainRoot('unknown-kb');
+  const f1 = fixtureFinding(brainDir, 'unknown-1', 'agent');
+  const f2 = fixtureFinding(brainDir, 'unknown-2', 'agent');
+  let turnCalls = 0;
+  const opts: KbDrainOpts = {
+    maxCostUsd: 1.0,
+    lint: scriptedLint([[f1, f2], [f1, f2]]),
+    applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [f1, f2] }),
+    runFixTurn: async (input) => {
+      turnCalls += 1;
+      return { runId: input.runId, cleared: false, costUsd: null, editAudit: noKbEdits() };
+    },
+  };
+  const status = await runKbDrain(root, 'unknown-kb', 'unknown-kb-drain-t1', opts);
+  assert.equal(turnCalls, 1, 'the second finding must not be dispatched against an unenforceable ceiling');
+  assert.equal(status.state, 'cost-ceiling', JSON.stringify(status));
+  assert.equal(status.spendUnknown, true);
+  assert.equal(status.costUsd, 0, 'the priced sum stays what was priced — the flag, not the figure, carries the unknown');
+});
+
 test('runKbDrain: knowledge-48 — status.counts reflects the round\'s REAL post-auto-fix backlog during agent turns, never the stale pre-round value (0-0-0 for round 1) while cost climbs', async () => {
   const { root, brainDir } = makeDrainRoot('counts-kb');
   const f1 = fixtureFinding(brainDir, 'counts-1', 'agent');

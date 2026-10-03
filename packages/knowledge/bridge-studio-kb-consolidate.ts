@@ -23,6 +23,7 @@ import { mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import matter from 'gray-matter';
 import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
+import { DEFAULT_KB_DRAIN_MAX_COST_USD } from './kb-drain-model.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { type Finding } from './brain-lint.ts';
 import { isDryBridge } from '@forge/kernel';
@@ -42,7 +43,7 @@ import { collectKbFindings, runBrainLintFullMemoized, runBrainLintFullFresh } fr
 export function writeConsolidateTerminalEvent(
   forgeRoot: string,
   runId: string,
-  outcome: { total: number; clearedCount: number },
+  outcome: { total: number; clearedCount: number; spend?: ConsolidateSpend },
 ): void {
   const logDir = join(forgeRoot, '_logs', `_brainfix-${runId}`);
   mkdirSync(logDir, { recursive: true });
@@ -53,7 +54,7 @@ export function writeConsolidateTerminalEvent(
   const line = JSON.stringify({
     event_type: 'end',
     message: `brain-fix-consolidate.end (cleared=${outcome.clearedCount}/${outcome.total})`,
-    metadata: { runId, cleared, total: outcome.total, clearedCount: outcome.clearedCount },
+    metadata: { runId, cleared, total: outcome.total, clearedCount: outcome.clearedCount, ...(outcome.spend ?? {}) },
   });
   try {
     appendFileSync(join(logDir, 'events.jsonl'), line + '\n', 'utf8');
@@ -157,6 +158,59 @@ function themeLinkLine(themeFile: string): string {
  * to open every theme file and compose its own lines, collapsing what would
  * otherwise be several exploratory tool-use turns into one.
  */
+/** What a consolidate batch spent, published on its terminal event (row 199). */
+export type ConsolidateSpend = { costUsd: number; maxCostUsd: number; ceilingHit: boolean; spendUnknown: boolean };
+
+/**
+ * Dispatch one fix turn per target-file group — row 199, T1 ruling 1973gz.
+ *
+ * Before this the loop handed the turn NO ceiling and discarded its `costUsd`:
+ * an unbounded batch whose spend was recorded nowhere. Consolidate has no
+ * budget of its own — no request field, no config — so it takes the drain's
+ * source, `DEFAULT_KB_DRAIN_MAX_COST_USD`, as the batch budget, and each turn
+ * is handed what is LEFT of it (`kinds/fix-turn.ts` makes that the SDK's
+ * `maxBudgetUsd`; the bridge's `FORGE_COST_CEILING_USD` is not consulted,
+ * because a declared ceiling wins in `turnBudgetUsd`). The batch stops, as the
+ * drain does, once the budget is reached OR a turn's spend comes back `null`
+ * — unpriced and unbounded, so UNKNOWN (1973gx): an unknown spend cannot be
+ * shown to be under the budget, and is never counted as $0. A turn that
+ * THROWS still does not abort the batch, as before; it returned no spend.
+ */
+export async function dispatchConsolidateTurns(args: {
+  forgeRoot: string; kbId: string; runId: string;
+  groups: ReadonlyMap<string, readonly AgentFinding[]>;
+  runFixTurn: KbDrainRunFixTurnFn;
+}): Promise<ConsolidateSpend> {
+  const maxCostUsd = DEFAULT_KB_DRAIN_MAX_COST_USD;
+  let costUsd = 0;
+  let spendUnknown = false;
+  let i = 0;
+  for (const [targetFile, group] of args.groups) {
+    if (spendUnknown || costUsd >= maxCostUsd) break;
+    const { message, fixHint } = describeConsolidateGroup(group);
+    try {
+      const result = await args.runFixTurn({
+        runId: `${args.runId}__${i}`,
+        kbId: args.kbId,
+        file: targetFile,
+        check: group[0].check,
+        kind: group[0].kind,
+        fixHint,
+        message,
+        forgeRoot: args.forgeRoot,
+        costCeilingUsd: maxCostUsd - costUsd,
+      });
+      if (result.costUsd === null) spendUnknown = true;
+      else costUsd += result.costUsd;
+    } catch {
+      // One group's agent turn failing must not abort the rest of the
+      // batch — every other scoped group still gets its own attempt.
+    }
+    i++;
+  }
+  return { costUsd, maxCostUsd, ceilingHit: spendUnknown || costUsd >= maxCostUsd, spendUnknown };
+}
+
 function describeConsolidateGroup(group: readonly AgentFinding[]): { message: string; fixHint?: string } {
   if (group.length === 1) return { message: group[0].message, fixHint: group[0].fixHint };
   if (group.every((f) => f.message.startsWith('not listed'))) {
@@ -352,6 +406,9 @@ export async function runBrainConsolidateNow(
 
     const residual = applyDeterministicConsolidateFixes(forgeRoot, agentTier);
     const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
+    // Absent when no turn was dispatched — nothing was spent, and the terminal
+    // stays byte-identical to the no-spawn shape the journey pins read.
+    let spend: ConsolidateSpend | undefined;
 
     if (!noSpawn) {
       const groups = groupConsolidateFindings(forgeRoot, residual);
@@ -369,26 +426,7 @@ export async function runBrainConsolidateNow(
             'the assembly. Refusing rather than reporting every finding uncleared.',
         );
       }
-      let i = 0;
-      for (const [targetFile, group] of groups) {
-        const { message, fixHint } = describeConsolidateGroup(group);
-        try {
-          await runFixTurn!({
-            runId: `${runId}__${i}`,
-            kbId,
-            file: targetFile,
-            check: group[0].check,
-            kind: group[0].kind,
-            fixHint,
-            message,
-            forgeRoot,
-          });
-        } catch {
-          // One group's agent turn failing must not abort the rest of the
-          // batch — every other scoped group still gets its own attempt.
-        }
-        i++;
-      }
+      if (groups.size > 0) spend = await dispatchConsolidateTurns({ forgeRoot, kbId, runId, groups, runFixTurn: runFixTurn! });
     }
     // else: CI-safe seam — any residual (non-deterministic) findings are left
     // for a real production run; the terminal event below still fires so the
@@ -417,7 +455,7 @@ export async function runBrainConsolidateNow(
       clearedCount = 0;
     }
 
-    writeConsolidateTerminalEvent(forgeRoot, runId, { total: agentTier.length, clearedCount });
+    writeConsolidateTerminalEvent(forgeRoot, runId, { total: agentTier.length, clearedCount, ...(spend ? { spend } : {}) });
   } catch (err) {
     // The repair phase threw before the normal terminal could fire. Emit an
     // honest error terminal so the poll resolves to 'failed' within its budget
