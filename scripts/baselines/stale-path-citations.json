@@ -414,12 +414,6 @@
     "count": 1
   },
   {
-    "file": "apps/forge/tests/integration/ui-bridge-scheduler.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/cli.ts",
-    "count": 1
-  },
-  {
     "file": "apps/forge/tests/integration/ui-bridge-sendback.test.ts",
     "kind": "stem",
     "cited": "demo-fix-loop",
@@ -4143,12 +4137,6 @@
     "file": "packages/flows/cycle-context.ts",
     "kind": "stem",
     "cited": "gh-shim",
-    "count": 1
-  },
-  {
-    "file": "packages/flows/daemon.ts",
-    "kind": "path",
-    "cited": "orchestrator/cli.ts",
     "count": 1
   },
   {
