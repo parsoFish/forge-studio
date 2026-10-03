@@ -7,7 +7,7 @@
     },
     {
       "path": "docs/decisions/011-unattended-scheduler.md",
-      "digest": "116d3c980ffcb8f4",
+      "digest": "74cdd177c2fe5a07",
       "why": "Beats 7-9: scheduler claim mechanics, _queue/pending|in-flight|ready-for-review state machine, scheduler-start handle"
     },
     {
@@ -17,7 +17,7 @@
     },
     {
       "path": "docs/decisions/028-flow-engine.md",
-      "digest": "918c5c17f2a60e7a",
+      "digest": "a80db2b426cf4912",
       "why": "forge-develop flow run: node ids dev/integrate/adversarial-review/review, timeline rows and per-node status/cost; Act2's non-destructive stop-run control (M7 row 150 amendment)"
     },
     {

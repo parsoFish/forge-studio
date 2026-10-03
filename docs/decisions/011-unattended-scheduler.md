@@ -19,8 +19,20 @@ A **persistent process named `forge serve`** runs the scheduler. The original sc
 - **Heartbeat** — each in-flight initiative writes `_queue/in-flight/<id>.heartbeat` every 30s. The scheduler uses this for crash recovery (see ADR 012).
 - **Per-initiative budgets** — `iteration_budget` and `cost_budget_usd` in the manifest frontmatter cap runaway loops.
 
+Whenever `forge serve` is live, it claims every eligible manifest in
+`_queue/pending/` as capacity allows. `forge studio` starts and supervises
+`forge serve` as part of bringing the operator surface up, the same way it
+starts the bridge and the UI, so the operator never manages the daemon's
+lifecycle as a separate step.
+
+The only operator brake is **one emergency halt**: user-triggered, it stops new
+claims, lets every active job run to completion, and loses no progress. Its
+mechanism is specified with its implementation.
+
 The scheduler exposes:
-- `forge serve` — run forever (or under systemd).
+- `forge serve` — run in the foreground (or under systemd/pm2 for process
+  supervision); normally spawned and supervised by `forge studio` rather than
+  invoked by the operator directly.
 - `forge serve --once` — claim and run a single initiative, then exit (used in tests and one-shot operation).
 - `forge enqueue <project> <initiative-spec>` — drop a manifest into `_queue/pending/`.
 - `forge status` — print current queue counts and in-flight phase/iteration info.
@@ -39,6 +51,11 @@ The scheduler exposes:
 - No DB, no IPC, no daemon protocol — the filesystem is the protocol.
 - Inspectable: `ls _queue/` is the entire system state.
 - Trivially recoverable from crash (see ADR 012).
+- No lifecycle control for the operator to keep track of. A separate
+  start/pause control would be an easy-to-forget second state: an operator could
+  pause and walk away believing work was still moving, or start a second
+  instance believing the first never launched. None exists; the emergency halt
+  is a deliberate brake the operator pulls, not a mode the daemon sits in.
 
 **Negative / accepted trade-offs:**
 - `mv`-atomic-claim assumes a single filesystem (no NFS-style network mounts). For our local-first model, fine.

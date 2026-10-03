@@ -245,8 +245,8 @@ PM and the dev-loop's per-WI Ralphs (R2-03-F4). An operator stop is declared a
 
 - A flag file, `_queue/in-flight/<initiativeId>.stop`, written by the bridge's
   `POST /api/recovery/:id/stop` for an ACTIVE (in-flight) run — plain JSON
-  (`{reason: "operator-stop", ts, actor}`), presence-based like `daemon.ts`'s
-  `.paused` flag ("presence, not contents, is the signal"). For a GATED
+  (`{reason: "operator-stop", ts, actor}`), presence-based — the file's
+  existence is the signal, not its contents. For a GATED
   (ready-for-review) run there is no live agent to signal at all; the bridge
   moves the manifest straight to `failed/` instead (`recoveryAbandon` minus
   the worktree/branch delete) and appends the equivalent event pair directly
