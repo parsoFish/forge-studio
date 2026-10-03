@@ -168,12 +168,15 @@ export type KindTurnPlumbing = {
    */
   hooksForSkill: (skill: string) => Record<string, unknown>;
   /**
-   * Row 193b (T1 ruling 1973gq) — the `maxBudgetUsd` for the NEXT SDK call this
-   * turn makes: the session's ceiling (`status.costCeilingUsd`, else the
-   * bridge's `FORGE_COST_CEILING_USD`) minus what the session has spent so far.
-   * `undefined` when no ceiling exists; THROWS `TurnBudgetExhaustedError` when
-   * nothing remains. A getter, not a number, because one turn makes several
-   * calls and each must be capped against what is left (`turn-budget.ts`).
+   * Row 193b (T1 ruling 1973gq), corrected by row 209 (forge-8vfn.8.5.45) —
+   * the `maxBudgetUsd` for the NEXT SDK call this turn makes: MIN(the
+   * session's own ceiling `status.costCeilingUsd` minus what THIS session has
+   * spent, the bridge's `FORGE_COST_CEILING_USD` minus what EVERY session and
+   * dispatch under this bridge has spent), each side computed only when its
+   * own ceiling exists. `undefined` when neither exists; THROWS
+   * `TurnBudgetExhaustedError` when nothing remains. A getter, not a number,
+   * because one turn makes several calls and each must be capped against what
+   * is left (`turn-budget.ts`'s own header carries the full rule).
    */
   turnBudgetUsd: () => number | undefined;
 };
@@ -384,6 +387,7 @@ export async function runKindTurn<
     turnBudgetUsd: () => turnBudgetUsd({
       declaredCeilingUsd: (status as { costCeilingUsd?: unknown }).costCeilingUsd,
       env: process.env,
+      logsRoot,
       spentUsd: () => sessionSpentUsd(logsRoot, cycleId),
       logger,
       identity: { initiativeId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.sessionId },

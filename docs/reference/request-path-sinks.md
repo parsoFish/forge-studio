@@ -3206,3 +3206,12 @@ the same commit that adds this section, per this document's own rule.
 
 `scripts/request-path-sinks.baseline.txt` accepts these five rows via `--write` in the
 same commit that adds this section, per this document's own rule.
+
+### Row 209 (bead `forge-8vfn.8.5.45`) — bridge-wide spend, the MIN turn-budget rule
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/sessions/turn-budget.ts` (`bridgeSpentUsd`) | `readdirSync` (0 → 1) | `logsRoot` | not-request-derived `[read]` | Reached from a bridge route only because every session turn now computes a bridge-wide remaining alongside its own. `logsRoot` is the same fixed, config-derived `<forgeRoot>/_logs` every caller (`kind-turn.ts`, `interactive-runner.ts`, `fix-turn.ts`) already resolves for its own logger — never a route parameter — and this enumerates it directly, the same shape `apps/forge/bridge-cycle-scan.ts`'s `scanCyclesFromDisk` already uses on the identical root. |
+| `packages/sessions/turn-budget.ts` (`bridgeSpentUsd`) | `statSync` (0 → 1) | a `readdirSync`-enumerated NAME directly under `logsRoot` | not-request-derived `[read]` | Stats each enumerated entry to confirm it is a directory and (when a `sinceIso` cutoff is given) to read its birth-proxy mtime; the name is server-enumerated, never caller-supplied, and the stat result is only compared, never echoed. The directory's `events.jsonl` (if any) is then read through the pre-existing guarded reader `parseGuardedEventsJsonl(logsRoot, name)`, unchanged. |
+
+`scripts/request-path-sinks.baseline.txt` accepts these two rows via `--write` in the same commit that adds this section, per this document's own rule.

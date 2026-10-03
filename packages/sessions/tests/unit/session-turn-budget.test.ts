@@ -10,11 +10,20 @@
  * it only on the cycle path (`run-agent.ts` → `ralph/claude-agent.ts`), never
  * on `runStructuredTurn` / `runAgentTurn`.
  *
+ * Row 209 (bead forge-8vfn.8.5.45) — corrects this file's own prior rule.
+ * MEASURED: a costed story bridge ran at `FORGE_COST_CEILING_USD=6`; three
+ * architect sessions each declared $25 on their own start form; the first two
+ * spent the run down to $0.44 left of its $6; the THIRD session's turns kept
+ * capping against $25 minus ITS OWN spend (the old "declared wins outright"
+ * rule), and one SDK turn overshot the bridge's ceiling by $2.47. The cap is
+ * now MIN(declared remaining, bridge-wide remaining) — see `turn-budget.ts`'s
+ * own header for the full rule.
+ *
  * The architect pins drive the REAL `runArchitectTurn` (interviewing) with a
  * fake `queryFn`, so they prove the dispatch wiring, not a helper in isolation:
- * cap = the session's own declared ceiling (`status.costCeilingUsd`, the start
- * form's figure), else `FORGE_COST_CEILING_USD`, minus what the session's own
- * `events.jsonl` says it spent (priced rows + bounded unpriced rows).
+ * cap = MIN(the session's own declared ceiling minus what ITS OWN
+ * `events.jsonl` says it spent, `FORGE_COST_CEILING_USD` minus what EVERY
+ * directory under the same `_logs/` says the bridge has spent).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +36,7 @@ import { createLogger, type EventLogger } from '@forge/kernel';
 import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts';
 import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from '../../interactive-session.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../../turn-cost-rows.ts';
-import { BRIDGE_COST_CEILING_ENV, TurnBudgetExhaustedError } from '../../turn-budget.ts';
+import { BRIDGE_COST_CEILING_ENV, TurnBudgetExhaustedError, bridgeSpentUsd } from '../../turn-budget.ts';
 
 const SESSION_ID = '2026-10-02T20-56-58-budget';
 
@@ -41,11 +50,16 @@ const ARCHITECT_SKILL_FIXTURE = [
 
 type Options = Record<string, unknown>;
 
-/** One architect interview turn; `seed` writes prior rows into the session's log. */
+/** One architect interview turn; `seed` writes prior rows into the session's
+ *  OWN log. `otherSessionUsd` (row 209) spends a DIFFERENT session's log under
+ *  the SAME `logsRoot`, before this turn runs — the bridge-wide spend this
+ *  session itself never touched, the way three separate architect sessions
+ *  under one bridge actually do. */
 async function architectTurn(opts: {
   costCeilingUsd?: number;
   env?: string;
   seed?: (logger: EventLogger) => void;
+  otherSessionUsd?: number;
 }): Promise<{ options: Options | null; error: unknown; rows: Array<Record<string, unknown>> }> {
   const root = mkdtempSync(join(tmpdir(), 'turn-budget-'));
   const prevEnv = process.env[BRIDGE_COST_CEILING_ENV];
@@ -64,6 +78,9 @@ async function architectTurn(opts: {
     };
     writeFileSync(join(sessionDir, 'status.json'), JSON.stringify(status));
     const logsRoot = join(root, '_logs');
+    if (opts.otherSessionUsd !== undefined) {
+      priced(opts.otherSessionUsd)(createLogger('_architect-other-session', logsRoot));
+    }
     const logger = createLogger(`_architect-${SESSION_ID}`, logsRoot);
     opts.seed?.(logger);
 
@@ -121,9 +138,40 @@ test('row 193b (b) no declared ceiling → the bridge process\'s FORGE_COST_CEIL
   assert.equal(r.options?.['maxBudgetUsd'], 0.75);
 });
 
-test('row 193b (b) the operator\'s declared ceiling wins over the bridge\'s', async () => {
-  const r = await architectTurn({ costCeilingUsd: 5, env: '2', seed: priced(1.25) });
-  assert.equal(r.options?.['maxBudgetUsd'], 3.75);
+test('row 209 — a DECLARED ceiling lower than the bridge-wide remaining still wins (MIN, not "bridge always wins")', async () => {
+  // declared remaining 2 − 1 = 1; bridge-wide remaining 10 − 1 (this same
+  // session's own spend, counted once under logsRoot too) = 9. MIN picks the
+  // declared arm.
+  const r = await architectTurn({ costCeilingUsd: 2, env: '10', seed: priced(1) });
+  assert.equal(r.error, null, String(r.error));
+  assert.equal(r.options?.['maxBudgetUsd'], 1);
+  const refusal = r.rows.find((e) => e['event_type'] === 'error');
+  assert.equal(refusal, undefined);
+});
+
+test('row 209 — the bridge is the LOWER remaining and BINDS even though the operator\'s own declared ceiling is nowhere near exhausted (the measured overshoot)', async () => {
+  // The exact measured shape: declared $25, bridge $6, $5.56 already spent by
+  // OTHER sessions under this same bridge, this session itself spent nothing.
+  // Declared remaining is $25; bridge-wide remaining is $0.44 — MIN is bridge.
+  const r = await architectTurn({ costCeilingUsd: 25, env: '6', otherSessionUsd: 5.56 });
+  assert.equal(r.error, null, String(r.error));
+  assert.ok(
+    Math.abs((r.options?.['maxBudgetUsd'] as number) - 0.44) < 1e-9,
+    `expected ~0.44, got ${String(r.options?.['maxBudgetUsd'])}`,
+  );
+});
+
+test('row 209 — bridge-wide spend by OTHER sessions can exhaust the bridge ceiling and refuse a session that itself spent nothing, naming the bridge', async () => {
+  const r = await architectTurn({ costCeilingUsd: 25, env: '6', otherSessionUsd: 7 });
+  assert.ok(r.error instanceof TurnBudgetExhaustedError, `expected a TurnBudgetExhaustedError, got ${String(r.error)}`);
+  assert.match((r.error as Error).message, /\$7\.0000 spent .* >= \$6\.00 bridge ceiling \(FORGE_COST_CEILING_USD\)/);
+  assert.equal(r.options, null, 'the SDK must never be called');
+  const refusal = r.rows.find((e) => e['event_type'] === 'error' && /turn budget exhausted/.test(String(e['message'])));
+  assert.ok(refusal, 'the refusal is on the session\'s own log');
+  const meta = refusal!['metadata'] as Record<string, unknown>;
+  assert.equal(meta['ceiling_source'], 'bridge');
+  assert.equal(meta['cost_ceiling_usd'], 6);
+  assert.equal(meta['cost_usd_spent'], 7);
 });
 
 test('row 193b (b) nothing remaining → the turn is REFUSED with a named reason; the SDK is never called with a cap <= 0', async () => {
@@ -134,6 +182,34 @@ test('row 193b (b) nothing remaining → the turn is REFUSED with a named reason
   const refusal = r.rows.find((e) => e['event_type'] === 'error' && /turn budget exhausted/.test(String(e['message'])));
   assert.ok(refusal, 'the refusal is on the session\'s own log');
   assert.equal((refusal!['metadata'] as Record<string, unknown>)['ceiling_source'], 'bridge');
+});
+
+// ---------------------------------------------------------------------------
+// bridgeSpentUsd — the bridge-wide tally itself (row 209)
+// ---------------------------------------------------------------------------
+
+test('bridgeSpentUsd sums every directory under logsRoot; a sinceIso cutoff excludes dirs this bridge did not spend (born before it booted)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bridge-spent-'));
+  try {
+    const logsRoot = join(root, '_logs');
+    priced(3)(createLogger('_architect-old-session', logsRoot));
+    assert.equal(bridgeSpentUsd(logsRoot, undefined), 3, 'no cutoff given: every dir under logsRoot counts');
+
+    // A cutoff "in the future" relative to the dir(s) already on disk reads
+    // every one of them as born BEFORE this bridge — none of them is this
+    // bridge's own spend.
+    const sinceIso = new Date(Date.now() + 10_000).toISOString();
+    assert.equal(bridgeSpentUsd(logsRoot, sinceIso), 0, 'a dir older than the bridge\'s own boot time is excluded');
+
+    priced(2)(createLogger('_architect-newer-session', logsRoot));
+    assert.equal(bridgeSpentUsd(logsRoot, sinceIso), 0, 'a dir created after the read but still before the (future) cutoff is excluded too');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bridgeSpentUsd: an unreadable logsRoot reads as $0, never a throw — a turn-budget check must not crash the turn it caps', () => {
+  assert.equal(bridgeSpentUsd(join(tmpdir(), 'does-not-exist-' + Date.now()), undefined), 0);
 });
 
 // ---------------------------------------------------------------------------

@@ -78,7 +78,10 @@ export type FixTurnInput = {
    * Row 199 (T1 ruling 1973gt) — the caller's own ceiling for THIS turn, in
    * the slot `turn-budget.ts` calls the declared ceiling. The KB drain passes
    * what is left of its run ceiling (`maxCostUsd − costUsd`); the CLI passes
-   * nothing, and the bridge's `FORGE_COST_CEILING_USD` is the fallback.
+   * nothing. Row 209 (forge-8vfn.8.5.45): this is only ONE of the two arms
+   * `turnBudgetUsd` takes the MIN of — the bridge's `FORGE_COST_CEILING_USD`
+   * (minus every session/dispatch it has funded) binds too, whichever of the
+   * two remainings is lower.
    */
   costCeilingUsd?: number;
 };
@@ -224,17 +227,18 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // sees. A kind that forgot the wiring would spawn hook-blind with nothing
   // red.
   //
-  // Row 199 (bead forge-8vfn.8.5.39, T1 ruling 1973gt) — the cap, by the SAME
-  // resolution every session turn uses since row 193b (`turn-budget.ts`):
-  // the declared ceiling (`input.costCeilingUsd`) first, else the bridge's
-  // `FORGE_COST_CEILING_USD` from this process's env, else none. REMAINING is
-  // the ceiling itself — `spentUsd` is 0 — because a fix turn has no session to
-  // have spent anything: it is ONE SDK call keyed by a fresh `runId`, and a
-  // caller that HAS spent (the drain) subtracts that before it declares. Before
-  // this the bag carried no `maxBudgetUsd` and nothing bounded the turn.
+  // Row 199 (bead forge-8vfn.8.5.39, T1 ruling 1973gt), updated for row 209
+  // (forge-8vfn.8.5.45) — the cap, by the SAME MIN resolution every session
+  // turn uses (`turn-budget.ts`'s own header): the declared ceiling
+  // (`input.costCeilingUsd`) minus `spentUsd` (0 — a fix turn has no session
+  // to have spent anything; a caller that HAS spent, the drain, subtracts
+  // that before it declares), and the bridge's `FORGE_COST_CEILING_USD` minus
+  // EVERY directory `logsRoot` carries, whichever remaining is lower. Before
+  // row 199 the bag carried no `maxBudgetUsd` and nothing bounded the turn.
   const capUsd = turnBudgetUsd({
     declaredCeilingUsd: input.costCeilingUsd,
     env: process.env,
+    logsRoot,
     spentUsd: () => 0,
     logger,
     identity: { initiativeId: cycleId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.runId },

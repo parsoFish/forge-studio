@@ -646,6 +646,8 @@ packages/sessions/studio/session-artifact-derivers.ts realpathSync 4
 packages/sessions/studio/session-kinds-validate.ts existsSync 1
 packages/sessions/studio/session-kinds-validate.ts readFileSync 1
 packages/sessions/studio/session-kinds.ts readFileSync 1
+packages/sessions/turn-budget.ts readdirSync 1
+packages/sessions/turn-budget.ts statSync 1
 packages/sessions/turn-cost-rows.ts appendFileSync 1
 packages/stations/cycle-recap.ts existsSync 9
 packages/stations/cycle-recap.ts mkdirSync 1
