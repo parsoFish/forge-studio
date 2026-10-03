@@ -2,9 +2,10 @@
   "story": {
     "id": "S9",
     "ground": {
-      "project": "mdtoc",
+      "project": "story-s9",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "fixture": "node-library"
     },
     "docs": {
       "kind": "how-to",
@@ -66,7 +67,7 @@
         "do": [
           {
             "fill": "kickoff-project",
-            "with": "mdtoc"
+            "with": "story-s9"
           },
           {
             "fill": "kickoff-prompt",
@@ -217,7 +218,7 @@
         "do": [
           {
             "fill": "kickoff-project",
-            "with": "mdtoc"
+            "with": "story-s9"
           },
           {
             "press": "start-session"
@@ -328,6 +329,12 @@
         "section": "sessions-needing-you",
         "active-session-count": "0"
       },
+      "expect": {
+        "page": "home",
+        "page-ready": "true",
+        "section": "sessions-needing-you",
+        "active-session-count": "0"
+      },
       "frame": "frames/01-open-studio.png"
     },
     {
@@ -337,6 +344,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "sessions-index",
+        "page-ready": "true",
+        "session-count": "0",
+        "fetch-status": "ok"
+      },
+      "expect": {
         "page": "sessions-index",
         "page-ready": "true",
         "session-count": "0",
@@ -355,6 +368,11 @@
         "page-ready": "true",
         "kickoff-kind": "authoring"
       },
+      "expect": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring"
+      },
       "frame": "frames/03-ask-the-assistant-to-do-s7-s-job-author-.png"
     },
     {
@@ -364,6 +382,14 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring",
+        "action": "start-session",
+        "existing-count": "0",
+        "confirming": "false"
+      },
+      "expect": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "authoring",
@@ -387,6 +413,14 @@
         "model-tier-picker": "range",
         "model-tier": "opus"
       },
+      "expect": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring",
+        "section": "kickoff-model-tier",
+        "model-tier-picker": "range",
+        "model-tier": "opus"
+      },
       "frame": "frames/05-set-the-sdk-the-model-and-the-effort-thi.png"
     },
     {
@@ -395,13 +429,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-09-18T03-41-24-c1b33793"
+        "authoringSessionId": "2026-10-03T13-21-31-3b50c152"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "authoring",
-        "minted-session-id": "2026-09-18T03-41-24-c1b33793"
+        "minted-session-id": "2026-10-03T13-21-31-3b50c152"
+      },
+      "expect": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring",
+        "minted-session-id": "<authoringSessionId>"
       },
       "frame": "frames/06-start-it.png"
     },
@@ -416,8 +456,16 @@
         "page-ready": "true",
         "session-kind": "authoring",
         "component": "session-model-chip",
-        "model-tier": "opus",
-        "lifecycle-state": "working"
+        "lifecycle-state": "working",
+        "model-tier": "opus"
+      },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "authoring",
+        "lifecycle-state": "working",
+        "component": "session-model-chip",
+        "model-tier": "opus"
       },
       "frame": "frames/07-check-the-session-is-running-on-the-mode.png"
     },
@@ -427,13 +475,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.41"
+        "authoringCostUsd": "0.49"
       },
       "data": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "authoring",
-        "ledger-cost-usd": "0.41"
+        "ledger-cost-usd": "0.49"
+      },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "authoring",
+        "ledger-cost-usd": "<authoringCostUsd>"
       },
       "frame": "frames/08-read-what-the-session-has-cost-so-far.png"
     },
@@ -447,6 +501,12 @@
         "page": "home",
         "page-ready": "true",
         "fetch-status": "ok",
+        "section": "sessions-needing-you",
+        "active-session-count": "1"
+      },
+      "expect": {
+        "page": "home",
+        "page-ready": "true",
         "section": "sessions-needing-you",
         "active-session-count": "1"
       },
@@ -467,6 +527,14 @@
         "session-state": "awaiting-operator",
         "needs-you": "true"
       },
+      "expect": {
+        "page": "sessions-index",
+        "page-ready": "true",
+        "session-count": "1",
+        "session-kind": "authoring",
+        "session-state": "awaiting-operator",
+        "needs-you": "true"
+      },
       "frame": "frames/10-press-view-all-sessions-and-find-it-on-t.png"
     },
     {
@@ -482,6 +550,13 @@
         "section": "kickoff-model-tier",
         "model-tier-picker": "range"
       },
+      "expect": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "onboarding",
+        "section": "kickoff-model-tier",
+        "model-tier-picker": "range"
+      },
       "frame": "frames/11-ask-the-assistant-to-do-s1-s-job-and-cho.png"
     },
     {
@@ -490,13 +565,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardingSessionId": "2026-09-18T03-42-12-0fd7ea91"
+        "onboardingSessionId": "2026-10-03T13-22-22-1f499de8"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "onboarding",
-        "minted-session-id": "2026-09-18T03-42-12-0fd7ea91"
+        "minted-session-id": "2026-10-03T13-22-22-1f499de8"
+      },
+      "expect": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "onboarding",
+        "minted-session-id": "<onboardingSessionId>"
       },
       "frame": "frames/12-start-it-and-let-both-of-them-run.png"
     },
@@ -507,6 +588,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "onboarding",
+        "session-phase": "running"
+      },
+      "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "onboarding",
@@ -528,6 +615,13 @@
         "section": "history-ledger",
         "ledger-count": "3"
       },
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "ledger-total": "3",
+        "section": "history-ledger",
+        "ledger-count": "3"
+      },
       "frame": "frames/14-open-the-monitor-and-read-what-the-two-o.png"
     },
     {
@@ -543,6 +637,12 @@
         "fetch-status": "ok",
         "ledger-agent": "creation-agent"
       },
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "ledger-total": "3",
+        "ledger-agent": "creation-agent"
+      },
       "frame": "frames/15-read-which-agent-the-paid-row-belongs-to.png"
     },
     {
@@ -551,14 +651,20 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.41"
+        "authoringCostUsd": "0.49"
       },
       "data": {
         "page": "monitor",
         "page-ready": "true",
         "fetch-status": "ok",
         "ledger-agent": "creation-agent",
-        "ledger-cost-usd": "0.41"
+        "ledger-cost-usd": "0.49"
+      },
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "ledger-agent": "creation-agent",
+        "ledger-cost-usd": "<authoringCostUsd>"
       },
       "frame": "frames/16-read-the-authoring-session-s-own-figure-.png"
     }
@@ -566,34 +672,47 @@
   "reap": {
     "reaped": [
       {
-        "pid": 884747,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T03-42-12-362-or3z",
+        "pid": 1697408,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 884490,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T03-42-12-362-or3z",
+        "pid": 1697407,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
         "signal": "SIGTERM",
-        "via": "marker"
+        "via": "descendant"
       },
       {
-        "pid": 884513,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T03-42-12-362-or3z",
+        "pid": 1697290,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
         "signal": "SIGTERM",
-        "via": "cwd"
+        "via": "descendant"
+      },
+      {
+        "pid": 1697232,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 1697196,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
+        "signal": "SIGTERM",
+        "via": "cwd",
+        "terminatedBeforeFirstPricedEvent": 30000
       }
     ],
     "skipped": [
       {
-        "pid": 880708,
-        "dir": "_logs/_authoring-2026-09-18T03-41-24-c1b33793",
-        "reason": "pid 880708: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1693951,
+        "dir": "_logs/_authoring-2026-10-03T13-21-31-3b50c152",
+        "reason": "pid 1693951: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T03-42-12-362-or3z",
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
         "kind": null,
         "sessionId": null,
         "project": null,
@@ -621,7 +740,15 @@
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
+      "[stories] trailing sweep KEPT projects/story-s9 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
@@ -632,53 +759,23 @@
   },
   "fence": {
     "restored": [],
-    "removed": [
-      "projects/mdtoc/_authoring/",
-      "projects/mdtoc/_onboarding/"
-    ],
-    "removedContents": [
-      {
-        "path": "projects/mdtoc/_authoring/",
-        "entries": [
-          {
-            "path": "2026-09-18T03-41-24-c1b33793/prompt.md",
-            "bytes": 154
-          },
-          {
-            "path": "2026-09-18T03-41-24-c1b33793/status.json",
-            "bytes": 398
-          },
-          {
-            "path": "2026-09-18T03-41-24-c1b33793/staging/SKILL.md",
-            "bytes": 3239
-          }
-        ],
-        "truncated": false,
-        "total": 3
-      },
-      {
-        "path": "projects/mdtoc/_onboarding/",
-        "entries": [
-          {
-            "path": "2026-09-18T03-42-12-0fd7ea91/prompt.md",
-            "bytes": 93
-          },
-          {
-            "path": "2026-09-18T03-42-12-0fd7ea91/questions.json",
-            "bytes": 148
-          },
-          {
-            "path": "2026-09-18T03-42-12-0fd7ea91/status.json",
-            "bytes": 279
-          }
-        ],
-        "truncated": false,
-        "total": 3
-      }
-    ],
+    "removed": [],
+    "removedContents": [],
     "failed": [],
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0.4941355,
+    "unmeasured": false
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "284fc3a6569816c8"
 }

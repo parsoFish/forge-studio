@@ -40,6 +40,9 @@
         "page": "projects-index",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "projects-index"
+      },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
     }
   ],
@@ -50,7 +53,37 @@
   },
   "sweep": {
     "removed": [],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
+    "lines": [
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
@@ -60,5 +93,14 @@
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0,
+    "unmeasured": false
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "201c1de3923c0ec6"
 }

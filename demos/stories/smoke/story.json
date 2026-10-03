@@ -49,6 +49,10 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "home",
+        "page-ready": "true"
+      },
       "frame": "frames/01-open-studio-on-home.png"
     },
     {
@@ -61,6 +65,10 @@
         "page": "projects-index",
         "page-ready": "true",
         "fetch-status": "ok"
+      },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true"
       },
       "frame": "frames/02-click-through-to-the-projects-pillar.png"
     }
@@ -88,6 +96,13 @@
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
@@ -105,5 +120,14 @@
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0,
+    "unmeasured": false
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "2169d167b954d96c"
 }

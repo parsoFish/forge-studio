@@ -538,10 +538,10 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-09-25T17-07-31-107c96d1"
+        "authoringSessionId": "2026-10-03T13-20-05-ae0fa7bf"
       },
       "data": {
-        "minted-session-id": "2026-09-25T17-07-31-107c96d1"
+        "minted-session-id": "2026-10-03T13-20-05-ae0fa7bf"
       },
       "expect": {
         "minted-session-id": "<authoringSessionId>"
@@ -734,16 +734,16 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookTestFireRunCount": "1",
-        "hookTestFireAt": "2026-09-25T15:11:45.382Z"
+        "hookTestFireRunCount": "2",
+        "hookTestFireAt": "2026-10-02T21:28:07.463Z"
       },
       "data": {
         "page": "hook-detail",
         "hook-id": "story-s7-hook",
-        "test-fire-run-count": "1",
-        "test-fire-at": "2026-09-25T15:11:45.382Z",
+        "test-fire-at": "2026-10-02T21:28:07.463Z",
         "test-fire-event": "SessionEnd",
         "test-fire-outcome": "ran",
+        "test-fire-run-count": "2",
         "carried-by-count": "0"
       },
       "expect": {
@@ -831,10 +831,10 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "instructionsSessionId": "2026-09-25T17-08-21-efed3a1f"
+        "instructionsSessionId": "2026-10-03T13-20-49-c6b333a3"
       },
       "data": {
-        "minted-session-id": "2026-09-25T17-08-21-efed3a1f"
+        "minted-session-id": "2026-10-03T13-20-49-c6b333a3"
       },
       "expect": {
         "minted-session-id": "<instructionsSessionId>"
@@ -920,13 +920,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookRunId": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
+        "hookRunId": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
       },
       "data": {
         "page": "agents",
         "agent-id": "brain-ingest",
         "run-status": "running",
-        "run-id": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
+        "run-id": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
       },
       "expect": {
         "page": "agents",
@@ -942,13 +942,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookRunId": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
+        "hookRunId": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
       },
       "data": {
         "page": "agents",
         "agent-id": "brain-ingest",
         "run-status": "done",
-        "run-id": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
+        "run-id": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
       },
       "expect": {
         "page": "agents",
@@ -982,12 +982,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookLastFireAt": "2026-09-25T17:08:31.881Z"
+        "hookLastFireAt": "2026-10-03T13:21:01.304Z"
       },
       "data": {
         "page": "hook-detail",
         "hook-id": "story-s7-hook",
-        "hook-last-fire-at": "2026-09-25T17:08:31.881Z",
+        "hook-last-fire-at": "2026-10-03T13:21:01.304Z",
         "hook-last-fire-outcome": "ran",
         "carried-by-count": "1"
       },
@@ -1005,14 +1005,14 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 2499746,
-        "dir": "_logs/_agent-brain-ingest-2026-09-25T17-08-23-640-73rf",
-        "reason": "pid 2499746: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1688403,
+        "dir": "_logs/_agent-brain-ingest-2026-10-03T13-20-51-845-kztc",
+        "reason": "pid 1688403: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 2494104,
-        "dir": "_logs/_authoring-2026-09-25T17-07-31-107c96d1",
-        "reason": "pid 2494104: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1684879,
+        "dir": "_logs/_authoring-2026-10-03T13-20-05-ae0fa7bf",
+        "reason": "pid 1684879: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -1069,7 +1069,7 @@
         "entries": [
           {
             "path": "SKILL.md",
-            "bytes": 3741
+            "bytes": 3561
           }
         ],
         "truncated": false,
@@ -1092,31 +1092,20 @@
       }
     ],
     "failed": [],
-    "escapes": [
-      {
-        "root": "forge-m7-a-rb",
-        "paths": [
-          "scripts/check-raw-fs-guarded.allowlist.mjs"
-        ],
-        "live": null,
-        "owner": "unattributable",
-        "reason": "no descendant of this run was seen in forge-m7-a-rb",
-        "rootKind": "sibling-basename"
-      }
-    ],
+    "escapes": [],
     "groundEscapes": [],
     "reappeared": []
   },
   "spend": {
-    "usd": 0.2600152,
+    "usd": 0.2510673,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "4a959fa0cce6a899cf0ffc9837ffe4a23fe8cd93",
-    "dirty": false
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
   },
   "storyDigest": "2ffdddb8d67da86f"
 }

@@ -2,9 +2,10 @@
   "story": {
     "id": "S6",
     "ground": {
-      "project": "mdtoc",
+      "project": "story-s6",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "fixture": "node-library"
     },
     "docs": {
       "kind": "how-to",
@@ -76,7 +77,9 @@
             "page-ready": "true",
             "kb-id": "story-s6",
             "node-count": "1",
-            "seed-session-id": "<seedSessionId>"
+            "seed-session-id": "<seedSessionId>",
+            "seed-session-phase": "<seedSessionPhase>",
+            "seed-session-running": "<seedSessionRunning>"
           }
         }
       },
@@ -168,14 +171,14 @@
         }
       },
       {
-        "act": "Open mdtoc",
-        "say": "mdtoc is the project this repo ships with, so it is the one a clean checkout can plan against.",
+        "act": "Open story-s6",
+        "say": "story-s6 is provisioned from the node-library fixture for this run, so it is the project a clean checkout can plan against.",
         "do": [],
         "expect": {
-          "route": "/projects/mdtoc",
+          "route": "/projects/story-s6",
           "data": {
             "page": "projects",
-            "project-id": "mdtoc",
+            "project-id": "story-s6",
             "page-ready": "true"
           }
         }
@@ -263,12 +266,18 @@
             "press": "drain-to-green"
           }
         ],
+        "wait": {
+          "for": "settle",
+          "upTo": 180000,
+          "key": "drain-state",
+          "while": "running"
+        },
         "expect": {
           "route": "/knowledge",
           "data": {
             "page": "knowledge",
             "page-ready": "true",
-            "drain-state": "running",
+            "drain-state": "green",
             "drain-run-id": "<drainRunId>"
           }
         }
@@ -301,6 +310,11 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
       "frame": "frames/01-open-studio-on-the-knowledge-pillar.png"
     },
     {
@@ -314,6 +328,11 @@
         "page-ready": "true",
         "section": "kb-new"
       },
+      "expect": {
+        "page": "knowledge-new",
+        "page-ready": "true",
+        "section": "kb-new"
+      },
       "frame": "frames/02-press-new-kb.png"
     },
     {
@@ -322,15 +341,28 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "seedSessionId": "2026-09-10T13-47-11-5ac53892"
+        "seedSessionId": "2026-10-03T13-18-10-305b4b75",
+        "seedSessionPhase": "briefing",
+        "seedSessionRunning": "false"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
-        "seed-session-id": "2026-09-10T13-47-11-5ac53892",
+        "seed-session-id": "2026-10-03T13-18-10-305b4b75",
         "fetch-status": "ok",
         "kb-id": "story-s6",
-        "node-count": "1"
+        "node-count": "1",
+        "seed-session-phase": "briefing",
+        "seed-session-running": "false"
+      },
+      "expect": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "kb-id": "story-s6",
+        "node-count": "1",
+        "seed-session-id": "<seedSessionId>",
+        "seed-session-phase": "<seedSessionPhase>",
+        "seed-session-running": "<seedSessionRunning>"
       },
       "frame": "frames/03-name-it-bind-it-to-the-forge-develop-flo.png"
     },
@@ -341,6 +373,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "project-brain",
+        "session-phase": "briefing"
+      },
+      "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "project-brain",
@@ -359,6 +397,11 @@
         "session-kind": "project-brain",
         "session-phase": "analyzing"
       },
+      "expect": {
+        "page": "session",
+        "session-kind": "project-brain",
+        "session-phase": "analyzing"
+      },
       "frame": "frames/05-brief-the-seeding-agent-on-what-this-kno.png"
     },
     {
@@ -372,6 +415,11 @@
         "session-kind": "project-brain",
         "session-phase": "committed"
       },
+      "expect": {
+        "page": "session",
+        "session-kind": "project-brain",
+        "session-phase": "committed"
+      },
       "frame": "frames/06-read-the-themes-it-drafted-and-approve-t.png"
     },
     {
@@ -380,15 +428,22 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "seedTheme": "compare-path-silent-discard"
+        "seedTheme": "live-evidence-gate-must-be-id-bound"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
         "fetch-status": "ok",
-        "theme-node": "compare-path-silent-discard",
+        "theme-node": "live-evidence-gate-must-be-id-bound",
         "theme-active": "false",
         "kb-id": "story-s6"
+      },
+      "expect": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "kb-id": "story-s6",
+        "theme-node": "<seedTheme>",
+        "theme-active": "false"
       },
       "frame": "frames/07-back-on-the-knowledge-base-find-a-real-t.png"
     },
@@ -403,20 +458,29 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true"
+      },
       "frame": "frames/08-go-to-the-projects-pillar-to-find-the-pr.png"
     },
     {
-      "act": "Open mdtoc",
-      "say": "mdtoc is the project this repo ships with, so it is the one a clean checkout can plan against.",
+      "act": "Open story-s6",
+      "say": "story-s6 is provisioned from the node-library fixture for this run, so it is the project a clean checkout can plan against.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "mdtoc",
+        "project-id": "story-s6",
         "page-ready": "true"
       },
-      "frame": "frames/09-open-mdtoc.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s6",
+        "page-ready": "true"
+      },
+      "frame": "frames/09-open-story-s6.png"
     },
     {
       "act": "Press \"Architect →\" to plan a piece of work on it",
@@ -430,6 +494,12 @@
         "section": "new-idea",
         "roster-state": "ok"
       },
+      "expect": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok"
+      },
       "frame": "frames/10-press-architect-to-plan-a-piece-of-work-.png"
     },
     {
@@ -438,10 +508,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-10T13-49-34-71117903"
+        "architectSessionId": "2026-10-03T13-19-21-f5737784"
       },
       "data": {
-        "architect-session-id": "2026-09-10T13-49-34-71117903"
+        "architect-session-id": "2026-10-03T13-19-21-f5737784"
+      },
+      "expect": {
+        "architect-session-id": "<architectSessionId>"
       },
       "frame": "frames/11-describe-the-work-cap-what-this-run-may-.png"
     },
@@ -452,6 +525,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "interviewing"
+      },
+      "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "architect",
@@ -471,6 +550,11 @@
         "fetch-status": "ok",
         "kb-id": "story-s6"
       },
+      "expect": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "kb-id": "story-s6"
+      },
       "frame": "frames/13-go-back-to-the-knowledge-base-and-see-th.png"
     },
     {
@@ -479,14 +563,20 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "drainRunId": "story-s6-drain-mtvl3bgs"
+        "drainRunId": "story-s6-drain-musf51mx"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
         "fetch-status": "ok",
-        "drain-state": "running",
-        "drain-run-id": "story-s6-drain-mtvl3bgs"
+        "drain-state": "green",
+        "drain-run-id": "story-s6-drain-musf51mx"
+      },
+      "expect": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "drain-state": "green",
+        "drain-run-id": "<drainRunId>"
       },
       "frame": "frames/14-open-the-knowledge-base-s-health-tab-and.png"
     },
@@ -505,55 +595,62 @@
         "drain-proposal-file": "brain/story-s6/antipatterns.md",
         "drain-proposal-disposition": "applied"
       },
+      "expect": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "drain-proposal-file": "<drainedFile>",
+        "drain-proposal-disposition": "applied"
+      },
       "frame": "frames/15-read-the-diff-the-drain-proposes-file-by.png"
     }
   ],
   "reap": {
     "reaped": [
       {
-        "pid": 658085,
-        "dir": "_logs/_architect-2026-09-10T13-49-34-71117903",
+        "pid": 1679725,
+        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 658023,
-        "dir": "_logs/_architect-2026-09-10T13-49-34-71117903",
+        "pid": 1679724,
+        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 658022,
-        "dir": "_logs/_architect-2026-09-10T13-49-34-71117903",
+        "pid": 1679625,
+        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 657402,
-        "dir": "_logs/_architect-2026-09-10T13-49-34-71117903",
+        "pid": 1679574,
+        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 657393,
-        "dir": "_logs/_architect-2026-09-10T13-49-34-71117903",
+        "pid": 1679509,
+        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
         "signal": "SIGTERM",
-        "via": "cwd"
+        "via": "cwd",
+        "terminatedBeforeFirstPricedEvent": 30000
       }
     ],
     "skipped": [
       {
-        "pid": 653955,
-        "dir": "_logs/_project-brain-2026-09-10T13-47-11-5ac53892",
-        "reason": "pid 653955: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1679142,
+        "dir": "_logs/_project-brain-2026-10-03T13-18-10-305b4b75",
+        "reason": "pid 1679142: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_architect-2026-09-10T13-49-34-71117903",
+        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
         "kind": "architect",
-        "sessionId": "2026-09-10T13-49-34-71117903",
-        "project": "mdtoc",
+        "sessionId": "2026-10-03T13-19-21-f5737784",
+        "project": "story-s6",
         "cancelledFrom": "interviewing",
         "written": true,
         "reason": null
@@ -561,8 +658,44 @@
     ]
   },
   "sweep": {
-    "removed": [],
-    "failed": []
+    "removed": [
+      "projects/.kb-story-s6",
+      "_logs/_kb-drain-story-s6-drain-musf51mx"
+    ],
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
+    "lines": [
+      "[stories] trailing sweep removed projects/.kb-story-s6",
+      "[stories] trailing sweep removed _logs/_kb-drain-story-s6-drain-musf51mx",
+      "[stories] trailing sweep KEPT projects/story-s6 — a fixture ground is judged before it is torn down",
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
@@ -575,36 +708,52 @@
         "entries": [
           {
             "path": "antipatterns.md",
-            "bytes": 704
+            "bytes": 428
           },
           {
             "path": "kb.yaml",
             "bytes": 268
           },
           {
+            "path": "patterns.md",
+            "bytes": 715
+          },
+          {
             "path": "profile.md",
-            "bytes": 2534
+            "bytes": 1558
           },
           {
-            "path": "themes/compare-path-silent-discard.md",
-            "bytes": 1674
+            "path": "themes/live-evidence-gate-must-be-id-bound.md",
+            "bytes": 1199
           },
           {
-            "path": "themes/gitignored-scratch-persistent-sweep.md",
-            "bytes": 1753
+            "path": "themes/unifier-cost-ratio-signals-ac-gaps.md",
+            "bytes": 1220
           },
           {
-            "path": "themes/review-severity-gate-blocker-only.md",
-            "bytes": 1639
+            "path": "themes/verifier-refute-rate-is-the-signal.md",
+            "bytes": 1112
           }
         ],
         "truncated": false,
-        "total": 6
+        "total": 7
       }
     ],
     "failed": [],
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0,
+    "unmeasured": false
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "ac3225f6f16e3c19"
 }

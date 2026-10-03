@@ -178,15 +178,15 @@
         }
       },
       {
-        "act": "Come back to the demo builder, brief it, and lock the demo it makes",
-        "say": "Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo to approve. Approving locks it — the demo this project will be shown by from now on is a recorded artifact, not a screenshot somebody took once.",
+        "act": "Come back to the demo builder, brief it, and lock the demo declaration it makes",
+        "say": "Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo declaration — the capture steps every cycle will run — and the sample it drives. Approving locks the declaration into the project contract, and only a declaration that actually drives a checkpoint can be locked: the demo this project will be shown by from now on is what every cycle captures, not a screenshot somebody took once.",
         "do": [
           {
             "press": "view-demo-session"
           },
           {
             "fill": "session-answer",
-            "with": "The demo should show the end-to-end scan and the human-readable summary the quality gate checks — that is this project's one capability worth seeing, and what a newcomer needs in order to believe it works. Design and write the demo; do not run the project to find out."
+            "with": "The demo should show the end-to-end scan and the human-readable summary the quality gate checks — that is this project's one capability worth seeing, and what a newcomer needs in order to believe it works. Declare how the demo is captured and write its sample; do not run the project to find out."
           },
           {
             "press": "submit-answers"
@@ -205,7 +205,8 @@
             "page": "session",
             "page-ready": "true",
             "session-kind": "demo",
-            "session-phase": "locked"
+            "session-phase": "locked",
+            "declaration-state": "drivable"
           }
         }
       },
@@ -229,7 +230,8 @@
             "until": {
               "preflight-status": "ok",
               "flow-ready": "true"
-            }
+            },
+            "on": "/projects/story-s1"
           }
         ],
         "wait": {
@@ -299,7 +301,8 @@
               "session-phase": "awaiting-verdict"
             },
             "perTransition": 480000,
-            "progressKey": "session-phase"
+            "progressKey": "session-phase",
+            "on": "/sessions/architect/<architectSessionId>"
           },
           {
             "press": "open-plan"
@@ -397,14 +400,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardRunId": "_agent-onboarding-agent-2026-09-26T10-23-18-824-qygn",
-        "sessionId": "2026-09-26T10-23-18-7c74e608"
+        "onboardRunId": "_agent-onboarding-agent-2026-10-03T10-47-33-029-zlkv",
+        "sessionId": "2026-10-03T10-47-33-f1d13416"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-run-id": "_agent-onboarding-agent-2026-09-26T10-23-18-824-qygn",
-        "onboard-session-id": "2026-09-26T10-23-18-7c74e608",
+        "onboard-run-id": "_agent-onboarding-agent-2026-10-03T10-47-33-029-zlkv",
+        "onboard-session-id": "2026-10-03T10-47-33-f1d13416",
         "onboard-attaching": "false"
       },
       "expect": {
@@ -466,12 +469,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "demoSessionId": "2026-09-26T10-25-26-0d266157"
+        "demoSessionId": "2026-10-03T10-54-00-edf2af16"
       },
       "data": {
         "action": "view-demo-session",
         "stage-detail-stage": "demo",
-        "demo-session-id": "2026-09-26T10-25-26-0d266157"
+        "demo-session-id": "2026-10-03T10-54-00-edf2af16"
       },
       "expect": {
         "stage-detail-stage": "demo",
@@ -481,8 +484,8 @@
       "frame": "frames/07-select-the-demo-stage-and-hand-it-to-the.png"
     },
     {
-      "act": "Come back to the demo builder, brief it, and lock the demo it makes",
-      "say": "Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo to approve. Approving locks it — the demo this project will be shown by from now on is a recorded artifact, not a screenshot somebody took once.",
+      "act": "Come back to the demo builder, brief it, and lock the demo declaration it makes",
+      "say": "Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo declaration — the capture steps every cycle will run — and the sample it drives. Approving locks the declaration into the project contract, and only a declaration that actually drives a checkpoint can be locked: the demo this project will be shown by from now on is what every cycle captures, not a screenshot somebody took once.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -490,13 +493,15 @@
         "page": "session",
         "page-ready": "true",
         "session-kind": "demo",
-        "session-phase": "locked"
+        "session-phase": "locked",
+        "declaration-state": "drivable"
       },
       "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "demo",
-        "session-phase": "locked"
+        "session-phase": "locked",
+        "declaration-state": "drivable"
       },
       "frame": "frames/08-come-back-to-the-demo-builder-brief-it-a.png"
     },
@@ -526,13 +531,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-26T10-30-37-40aefd0d"
+        "architectSessionId": "2026-10-03T10-58-22-4b0ca059"
       },
       "data": {
         "page": "projects",
         "project-id": "story-s1",
         "section": "new-idea",
-        "architect-session-id": "2026-09-26T10-30-37-40aefd0d"
+        "architect-session-id": "2026-10-03T10-58-22-4b0ca059"
       },
       "expect": {
         "page": "projects",
@@ -567,19 +572,19 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 18839,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-26T10-23-18-824-qygn",
-        "reason": "pid 18839: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 721233,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T10-47-33-029-zlkv",
+        "reason": "pid 721233: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 144609,
-        "dir": "_logs/_architect-2026-09-26T10-30-37-40aefd0d",
-        "reason": "pid 144609: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 845096,
+        "dir": "_logs/_architect-2026-10-03T10-58-22-4b0ca059",
+        "reason": "pid 845096: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 66711,
-        "dir": "_logs/_demo-2026-09-26T10-25-26-0d266157",
-        "reason": "pid 66711: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 789643,
+        "dir": "_logs/_demo-2026-10-03T10-54-00-edf2af16",
+        "reason": "pid 789643: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -593,9 +598,9 @@
       "ok": true,
       "claimed": [
         {
-          "path": "_queue/pending/INIT-2026-09-26-overlay-team-lint.md",
+          "path": "_queue/pending/INIT-2026-10-03-overlay-team-grant-lint.md",
           "state": "pending",
-          "reason": "created_at 2026-09-26T10:40:21.021Z falls inside this run"
+          "reason": "created_at 2026-10-03T11:06:34.137Z falls inside this run"
         }
       ],
       "left": [],
@@ -606,8 +611,8 @@
         "[stories] queue claim: failed/ holds 0",
         "[stories] queue claim: in-flight/ holds 0",
         "[stories] queue claim: merged/ holds 0",
-        "[stories] queue claim: pending/ holds 1 — INIT-2026-09-26-overlay-team-lint.md",
-        "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-09-26-overlay-team-lint.md — created_at 2026-09-26T10:40:21.021Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
+        "[stories] queue claim: pending/ holds 1 — INIT-2026-10-03-overlay-team-grant-lint.md",
+        "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-03-overlay-team-grant-lint.md — created_at 2026-10-03T11:06:34.137Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
@@ -625,8 +630,8 @@
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
       "[stories] queue claim: merged/ holds 0",
-      "[stories] queue claim: pending/ holds 1 — INIT-2026-09-26-overlay-team-lint.md",
-      "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-09-26-overlay-team-lint.md — created_at 2026-09-26T10:40:21.021Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
+      "[stories] queue claim: pending/ holds 1 — INIT-2026-10-03-overlay-team-grant-lint.md",
+      "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-03-overlay-team-grant-lint.md — created_at 2026-10-03T11:06:34.137Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
       "[stories] queue claim: ready-for-review/ holds 0"
     ]
   },
@@ -640,15 +645,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 4.533761,
+    "usd": 3.8196955,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "ef09d9d21a29680c33da29966bc1d2229f3aea16",
-    "dirty": false
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
   },
-  "storyDigest": "1adbc83d1f3e6bc0"
+  "storyDigest": "5c0722d1ea6c598d"
 }

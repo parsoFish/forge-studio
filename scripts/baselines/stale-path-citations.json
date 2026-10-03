@@ -6378,12 +6378,6 @@
     "count": 1
   },
   {
-    "file": "scripts/stories/gallery.mjs",
-    "kind": "path",
-    "cited": "demos/stories/S10/story.json",
-    "count": 1
-  },
-  {
     "file": "scripts/stories/ground-attribution.test.ts",
     "kind": "path",
     "cited": "brain/profile.md",
