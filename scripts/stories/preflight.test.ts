@@ -21,7 +21,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict, remoteSwitchVerdict, REMOTE_BINDING_STORIES, queueStateVerdict, declaredCommitsVerdict, groundPinVerdict } from './preflight.mjs';
+import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, resolveHostLockPath, foreignSessionVerdict, remoteSwitchVerdict, REMOTE_BINDING_STORIES, queueStateVerdict, declaredCommitsVerdict, groundPinVerdict } from './preflight.mjs';
 
 test('ample memory passes', () => {
   const v = memoryVerdict(8000);
@@ -68,6 +68,40 @@ test('the host lock lives OUTSIDE the worktree, so two worktrees contend for one
   const b = hostLockPath();
   assert.equal(a, b, 'every tree on this host must resolve the SAME lock path');
   assert.ok(!a.startsWith('/home/parso/forge'), 'the lock must not live inside any worktree');
+});
+
+// ── M7-E row 203: THE HOST LOCK MUST NOT LIVE WHERE A TMP CLEANER REACHES
+//
+// THE INCIDENT, costed gate 2 S1 (2026-10-03). After a WSL restart a boot-time
+// `systemd-tmpfiles --create --remove --boot` kept sweeping /tmp for minutes and
+// deleted `/tmp/forge-stories-host.lock.lock` under a live runner; proper-lockfile
+// threw ECOMPROMISED and killed the run at beat 8 with beats 1-7 green. The lock
+// sat in os.tmpdir() while its own comment claimed the operator root.
+
+test('the host lock never resolves under os.tmpdir()', () => {
+  const p = hostLockPath();
+  assert.ok(!p.startsWith(tmpdir()), `host lock ${p} must not live under ${tmpdir()}`);
+  assert.ok(!p.startsWith('/tmp/'), `host lock ${p} must not live under /tmp`);
+});
+
+test('the host lock prefers an existing XDG_RUNTIME_DIR', () => {
+  const p = resolveHostLockPath({ env: { XDG_RUNTIME_DIR: '/run/user/7' }, home: '/home/op', isDir: (d) => d === '/run/user/7' });
+  assert.equal(p, '/run/user/7/forge/forge-stories-host.lock');
+});
+
+test('an XDG_RUNTIME_DIR that does not exist (WSL) falls back to the state home, never tmp', () => {
+  const p = resolveHostLockPath({ env: { XDG_RUNTIME_DIR: '/run/user/7' }, home: '/home/op', isDir: () => false });
+  assert.equal(p, '/home/op/.local/state/forge/forge-stories-host.lock');
+});
+
+test('XDG_STATE_HOME, when set, is the fallback root', () => {
+  const p = resolveHostLockPath({ env: { XDG_STATE_HOME: '/srv/state' }, home: '/home/op', isDir: () => false });
+  assert.equal(p, '/srv/state/forge/forge-stories-host.lock');
+});
+
+test('a relative XDG path is ignored (the XDG spec says so)', () => {
+  const p = resolveHostLockPath({ env: { XDG_RUNTIME_DIR: 'run', XDG_STATE_HOME: 'state' }, home: '/home/op', isDir: () => true });
+  assert.equal(p, '/home/op/.local/state/forge/forge-stories-host.lock');
 });
 
 // ── 6.11.50: A COSTED RUN MUST NOT START BESIDE ANOTHER STORY'S SESSIONS
