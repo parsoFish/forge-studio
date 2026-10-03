@@ -106,7 +106,9 @@ Author `roadmap.md` (project root); the brain profile is **forge-owned and centr
 at `brain/projects/<name>/profile.md` (+ any `themes/`) in the forge repo (ADR 035),
 not authored in the project repo. **Correct stale facts** (renamed paths, dead conventions) — a
 wrong brain misleads the planner worse than an absent one. The profile is the
-queryable structure the PM/architect reads first.
+queryable structure the PM/architect reads first. **Writing it is the onboarding
+agent's job; running `git` in the forge repo (`commit`, `branch`, `checkout`,
+`update-ref`, `merge`, …) is not — forge owns those (ruling 208, forge-8vfn.8.5.44).**
 
 ### Step 8 — Untouchables, merge model, instruction file (C5/C6/C8)
 An operator-owned `AGENTS.md` (canonical single source; legacy projects may keep a

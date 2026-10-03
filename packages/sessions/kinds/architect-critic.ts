@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
-import type { EventLogger } from '@forge/kernel';
+import { FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import { hooksSpreadForAgent } from './kind-turn.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -284,7 +284,10 @@ export async function runCompletenessCritic(
       model: COMPLETENESS_CRITIC_MODEL,
       allowedTools: completenessCriticAgentSpec.allowedTools,
       disallowedTools: completenessCriticAgentSpec.disallowedTools,
-      ...hooksSpreadForAgent({ skill: completenessCriticAgentSpec.skill, logger: input.logger, initiativeId: input.initiativeId }),
+      // No explicit `cwd` ever reaches this call (unlike `architect-structured-turn.ts`'s
+      // `runStructured`) — the spawn inherits the bridge's own cwd, the forge
+      // root itself, so that is what the fence must judge it against too.
+      ...hooksSpreadForAgent({ skill: completenessCriticAgentSpec.skill, logger: input.logger, initiativeId: input.initiativeId, cwd: FORGE_ROOT, forgeRoot: FORGE_ROOT }),
       onToolUse: input.onToolUse,
       onHeartbeat: input.onHeartbeat,
       onText: input.onText,

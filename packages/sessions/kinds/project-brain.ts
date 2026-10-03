@@ -133,7 +133,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
         disallowedTools: projectBrainAgentSpec.disallowedTools,
         // W8-B6 — hook dispatch comes from the driver already bound to this
         // turn's logger and initiative id, so no kind can spawn hook-blind.
-        ...plumbing.hooksForSkill(projectBrainAgentSpec.skill),
+        ...plumbing.hooksForSkill(projectBrainAgentSpec.skill, cwd),
         maxTurns: 30,
         onToolUse: plumbing.onToolUse,
         onHeartbeat: plumbing.onHeartbeat,

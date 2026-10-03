@@ -89,3 +89,7 @@ export * from './bounded-log.ts';
  *  `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler
  *  preflight so the two can never disagree about a zombie pid (forge-8vfn.8.1.6). */
 export * from './process-liveness.ts';
+/** The pure "does this Bash command commit to or move a ref of the forge
+ *  repo" decision every agent/session/factory spawn must consult
+ *  (forge-8vfn.8.5.44, row 208) — see the module for the incident this closes. */
+export * from './forge-repo-git-fence.ts';

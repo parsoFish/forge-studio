@@ -31,6 +31,15 @@
           ]
         }
       },
+      "hooks": {
+        "PreToolUse": [
+          {
+            "hooks": [
+              "<anonymous>"
+            ]
+          }
+        ]
+      },
       "disallowedTools": [
         "Write",
         "Edit",

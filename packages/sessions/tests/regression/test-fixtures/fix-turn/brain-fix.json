@@ -20,6 +20,15 @@
       "Read"
     ],
     "canUseTool": "<fn>",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            "<fn>"
+          ]
+        }
+      ]
+    },
     "abortController": "<AbortController>"
   },
   "optionsKeyOrder": [
@@ -30,6 +39,7 @@
     "permissionMode",
     "allowedTools",
     "canUseTool",
+    "hooks",
     "abortController"
   ],
   "result": {

@@ -184,8 +184,8 @@ test('row 188: containmentVerdict reds a moved HEAD regardless of a green beat s
     spendHalt: null,
     galleryRegenFailure: null,
   };
-  assert.equal(containmentVerdict({ ...quiet, hostHead: { red: false } }), 0);
-  assert.equal(containmentVerdict({ ...quiet, hostHead: { red: true, summary: 'HEAD moved a..b on refs/heads/work' } }), 1);
+  assert.equal(containmentVerdict({ ...quiet, hostHead: { red: false }, hostRefs: { red: false } }), 0);
+  assert.equal(containmentVerdict({ ...quiet, hostHead: { red: true, summary: 'HEAD moved a..b on refs/heads/work' }, hostRefs: { red: false } }), 1);
 });
 
 test('row 188 wiring: run-story records HEAD beside the porcelain baseline, judges it after the fence, and hands it to the verdict', () => {

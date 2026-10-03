@@ -16,7 +16,7 @@ package above kernel — `library`, `knowledge`, `projects`, `agents`,
 `sessions`, `flows`, `stations`, `factory`, and both apps — imports it
 directly.
 
-## API (149 values)
+## API (150 values)
 
 | the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` |
 | the SDK tool-use fence | `toolFenceOptions` |
@@ -46,14 +46,16 @@ directly.
 | the shared YAML-field readers | `reqString` · `optString` · `reqNumber` · `optNumber` · `optBool` · `stringArray` · `reqObject` · `RegistryError` · `oneOf` · `loadYaml` · `loadYamlWithRaw` |
 | bounded per-key JSON log | `readBoundedLog` · `appendBoundedLog` · `boundedLogSegments` · `truncateTail` |
 | process liveness (`/proc` pid check) | `isProcessRunning` |
+| the forge-repo-git fence (row 208) | `decideForgeRepoGit` |
 
-### Types (44)
+### Types (46)
 
 `BandExecutor` · `BandRegistry` · `CanUseTool` · `CaseFoldingProbe` ·
 `ClauseId` · `ClauseResult` · `ConfigResult` · `CostStreamFacts` ·
 `DiscoveredProject` · `DryBridgeAction` · `DryBridgeRefusalInput` ·
 `DryBridgeStubAction` · `DryClassification` · `EnvAssertionMode` ·
 `EventLogEntry` · `EventLogger` · `EventType` · `Finding` · `ForgeConfig` ·
+`ForgeRepoGitDecision` · `ForgeRepoGitFenceInput` ·
 `FrontmatterDoc` · `GhExec` · `GitIdentity` · `HookTemplateOrigin` ·
 `InitReport` · `LayoutDirsResult` · `LayoutResult` · `LoggerOptions` ·
 `PathGuardOk` · `PathGuardReject` · `PathGuardResult` · `Phase` ·

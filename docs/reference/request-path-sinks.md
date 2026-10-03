@@ -3195,3 +3195,13 @@ or written through it.
 
 `scripts/request-path-sinks.baseline.txt` accepts the `execFileSync` row via `--write` in
 the same commit that adds this section, per this document's own rule.
+
+### Row 208 (bead `forge-8vfn.8.5.44`) — the forge-repo git fence's repo-identity resolver
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/agents/studio/repo-identity.ts` (`resolveRepoCommonDir`) | `statSync` (0 → 1) | a directory named in an agent's own Bash command, or the run's trusted `forgeRoot` | not-request-derived `[read]` | Reached from a bridge route only because every agent spawn carries the PreToolUse fence. The path comes from the model's tool input or the trusted root, never from a request field. It stats `<dir>/.git` while walking up to `/`, and only to tell a directory from a file. Nothing is written. |
+| `packages/agents/studio/repo-identity.ts` (`resolveRepoCommonDir`) | `readFileSync` (0 → 2) | same | not-request-derived `[read]` | Reads a worktree's `.git` pointer file (`gitdir: …`) and that gitdir's `commondir` file, and only to name the repository. The content is matched by regex and resolved; it is never echoed into a response. |
+| `packages/agents/studio/repo-identity.ts` (`resolveRepoCommonDir`) | `realpathSync` (0 → 2) | same | not-request-derived `[read]` | Canonicalises the common dir, so two spellings of one repository compare equal. That is the property the fence depends on: a sibling worktree outside `forgeRoot` resolves to the forge repo and is refused. |
+
+`scripts/request-path-sinks.baseline.txt` accepts these three rows via `--write` in the same commit that adds this section, per this document's own rule.
