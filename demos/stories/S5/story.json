@@ -2,9 +2,10 @@
   "story": {
     "id": "S5",
     "ground": {
-      "project": "mdtoc",
+      "project": "story-s5",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "fixture": "node-library"
     },
     "docs": {
       "kind": "how-to",
@@ -195,12 +196,12 @@
         }
       },
       {
-        "act": "Run the agent standalone against mdtoc",
+        "act": "Run the agent standalone against the story's own project",
         "say": "Standalone is an agent off the graph: no Flow, no station, just this agent against this project because the operator asked. It is how you find out whether the thing you assembled actually works before you wire it into a pipeline.",
         "do": [
           {
             "fill": "run-project",
-            "with": "mdtoc"
+            "with": "story-s5"
           },
           {
             "press": "run-agent"
@@ -263,6 +264,12 @@
         "fetch-status": "ok",
         "section": "agent-roster"
       },
+      "expect": {
+        "page": "agents-index",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "section": "agent-roster"
+      },
       "frame": "frames/01-open-studio-on-the-agents-pillar.png"
     },
     {
@@ -272,6 +279,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "agents",
+        "agent-id": "",
+        "page-ready": "true",
+        "section": "starter-picker"
+      },
+      "expect": {
         "page": "agents",
         "agent-id": "",
         "page-ready": "true",
@@ -291,6 +304,12 @@
         "check": "purpose",
         "ok": "true"
       },
+      "expect": {
+        "page": "agents",
+        "agent-id": "",
+        "check": "purpose",
+        "ok": "true"
+      },
       "frame": "frames/03-start-from-the-blank-agent-starter-name-.png"
     },
     {
@@ -300,6 +319,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "agents",
+        "agent-id": "",
+        "check": "process",
+        "ok": "true"
+      },
+      "expect": {
         "page": "agents",
         "agent-id": "",
         "check": "process",
@@ -318,6 +343,11 @@
         "accepts": "skill",
         "count": "2"
       },
+      "expect": {
+        "page": "agents",
+        "accepts": "skill",
+        "count": "2"
+      },
       "frame": "frames/05-open-advanced-and-compose-the-two-skills.png"
     },
     {
@@ -327,6 +357,11 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "agents",
+        "accepts": "tool",
+        "count": "2"
+      },
+      "expect": {
         "page": "agents",
         "accepts": "tool",
         "count": "2"
@@ -344,6 +379,11 @@
         "accepts": "mcp",
         "count": "0"
       },
+      "expect": {
+        "page": "agents",
+        "accepts": "mcp",
+        "count": "0"
+      },
       "frame": "frames/07-leave-the-mcp-zone-empty-the-fence-is-a-.png"
     },
     {
@@ -353,6 +393,11 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "agents",
+        "agent-id": "story-s5",
+        "page-ready": "true"
+      },
+      "expect": {
         "page": "agents",
         "agent-id": "story-s5",
         "page-ready": "true"
@@ -372,6 +417,13 @@
         "check-state": "ready",
         "ready-total": "7"
       },
+      "expect": {
+        "page": "agents",
+        "agent-id": "story-s5",
+        "ready-total": "7",
+        "check": "connections",
+        "check-state": "ready"
+      },
       "frame": "frames/09-check-the-agent-is-ready-every-readiness.png"
     },
     {
@@ -385,23 +437,34 @@
         "agent-id": "story-s5",
         "run-ceiling": "2"
       },
+      "expect": {
+        "page": "agents",
+        "agent-id": "story-s5",
+        "run-ceiling": "2"
+      },
       "frame": "frames/10-cap-what-this-run-may-spend-at-2.png"
     },
     {
-      "act": "Run the agent standalone against mdtoc",
+      "act": "Run the agent standalone against the story's own project",
       "say": "Standalone is an agent off the graph: no Flow, no station, just this agent against this project because the operator asked. It is how you find out whether the thing you assembled actually works before you wire it into a pipeline.",
       "status": "green",
       "failures": [],
       "bindings": {
-        "runId": "_agent-story-s5-2026-09-12T08-21-56-510-ul1h"
+        "runId": "_agent-story-s5-2026-10-03T13-17-51-386-chj0"
       },
       "data": {
         "page": "agents",
         "agent-id": "story-s5",
         "run-status": "running",
-        "run-id": "_agent-story-s5-2026-09-12T08-21-56-510-ul1h"
+        "run-id": "_agent-story-s5-2026-10-03T13-17-51-386-chj0"
       },
-      "frame": "frames/11-run-the-agent-standalone-against-mdtoc.png"
+      "expect": {
+        "page": "agents",
+        "agent-id": "story-s5",
+        "run-status": "running",
+        "run-id": "<runId>"
+      },
+      "frame": "frames/11-run-the-agent-standalone-against-the-sto.png"
     },
     {
       "act": "Watch the run land in the agent’s own history",
@@ -414,6 +477,11 @@
         "agent-id": "story-s5",
         "ledger-count": "1"
       },
+      "expect": {
+        "page": "agents",
+        "agent-id": "story-s5",
+        "ledger-count": "1"
+      },
       "frame": "frames/12-watch-the-run-land-in-the-agent-s-own-hi.png"
     },
     {
@@ -422,43 +490,70 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runCost": "0.33"
+        "runCost": "0.15"
       },
       "data": {
         "page": "agents",
         "agent-id": "story-s5",
         "run-status": "done",
         "ledger-link-kind": "standalone",
-        "ledger-cost-usd": "0.33"
+        "ledger-cost-usd": "0.15"
+      },
+      "expect": {
+        "page": "agents",
+        "agent-id": "story-s5",
+        "ledger-link-kind": "standalone",
+        "ledger-cost-usd": "<runCost>",
+        "run-status": "done"
       },
       "frame": "frames/13-read-the-row-what-it-cost-where-it-ran-a.png"
     }
   ],
   "reap": {
-    "reaped": [
+    "reaped": [],
+    "skipped": [
       {
-        "pid": 2457533,
-        "dir": "/home/parso/forge-m6-d/_logs/_agent-story-s5-2026-09-12T08-21-56-510-ul1h",
-        "signal": "SIGTERM",
-        "via": "cwd"
+        "pid": 1672862,
+        "dir": "_logs/_agent-story-s5-2026-10-03T13-17-51-386-chj0",
+        "reason": "pid 1672862: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
-    "skipped": [],
-    "cancelled": [
-      {
-        "dir": "/home/parso/forge-m6-d/_logs/_agent-story-s5-2026-09-12T08-21-56-510-ul1h",
-        "kind": null,
-        "sessionId": null,
-        "project": null,
-        "cancelledFrom": null,
-        "written": false,
-        "reason": "no start event names the session — nothing to terminate"
-      }
-    ]
+    "cancelled": []
   },
   "sweep": {
     "removed": [],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
+    "lines": [
+      "[stories] trailing sweep KEPT projects/story-s5 — a fixture ground is judged before it is torn down",
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
@@ -482,5 +577,17 @@
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0.15399910000000003,
+    "unmeasured": false
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "c49ecc168593257a"
 }

@@ -125,6 +125,12 @@
         "card-type": "project",
         "card-id": "mdtoc"
       },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "card-type": "project",
+        "card-id": "<someProjectId>"
+      },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
     },
     {
@@ -134,6 +140,10 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "projects",
+        "page-ready": "true"
+      },
+      "expect": {
         "page": "projects",
         "page-ready": "true"
       },
@@ -150,6 +160,10 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true"
+      },
       "frame": "frames/03-go-back-to-the-projects-pillar.png"
     },
     {
@@ -163,8 +177,13 @@
         "project-id": "new",
         "page-ready": "true",
         "fetch-status": "ok",
-        "section": "project-onboard",
-        "load-error": "false"
+        "section": "project-onboard"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-onboard"
       },
       "frame": "frames/04-click-onboard-a-project.png"
     },
@@ -175,6 +194,11 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "projects",
+        "project-id": "story-proof",
+        "page-ready": "true"
+      },
+      "expect": {
         "page": "projects",
         "project-id": "story-proof",
         "page-ready": "true"
@@ -208,6 +232,13 @@
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
       "[stories] trailing sweep removed projects/story-proof",
       "[stories] trailing sweep removed brain/projects/story-proof",
@@ -227,5 +258,14 @@
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0,
+    "unmeasured": false
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "aea680b8fc477330"
 }

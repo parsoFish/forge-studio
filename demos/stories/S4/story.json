@@ -461,13 +461,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-25T19-30-39-be6d7a3f"
+        "architectSessionId": "2026-10-03T13-10-03-39fa44c9"
       },
       "data": {
         "page": "flow-monitor",
         "flow-id": "story-s4",
         "section": "new-idea",
-        "architect-session-id": "2026-09-25T19-30-39-be6d7a3f"
+        "architect-session-id": "2026-10-03T13-10-03-39fa44c9"
       },
       "expect": {
         "page": "flow-monitor",
@@ -541,15 +541,16 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 1254385,
-        "dir": "_logs/_architect-2026-09-25T19-30-39-be6d7a3f",
-        "reason": "pid 1254385: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1620806,
+        "dir": "_logs/_architect-2026-10-03T13-10-03-39fa44c9",
+        "reason": "pid 1620806: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
   },
   "sweep": {
     "removed": [
+      "brain/projects/story-s4",
       "studio/flows/story-s4"
     ],
     "failed": [],
@@ -576,6 +577,7 @@
       "unremoved": []
     },
     "lines": [
+      "[stories] trailing sweep removed brain/projects/story-s4",
       "[stories] trailing sweep removed studio/flows/story-s4",
       "[stories] trailing sweep KEPT projects/story-s4 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
@@ -629,31 +631,20 @@
       }
     ],
     "failed": [],
-    "escapes": [
-      {
-        "root": "forge-m7-a-tl",
-        "paths": [
-          "QUARRY.md"
-        ],
-        "live": null,
-        "owner": "unattributable",
-        "reason": "no descendant of this run was seen in forge-m7-a-tl",
-        "rootKind": "sibling-basename"
-      }
-    ],
+    "escapes": [],
     "groundEscapes": [],
     "reappeared": []
   },
   "spend": {
-    "usd": 2.1638984999999997,
+    "usd": 2.0202968000000006,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6c1f6c1991104789871e364e96d87f85c05b2ad6",
-    "dirty": false
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
   },
-  "storyDigest": "2aad88a2ca00dcba"
+  "storyDigest": "4e5466b60a6e3490"
 }

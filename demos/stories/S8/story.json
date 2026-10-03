@@ -89,7 +89,7 @@
       },
       {
         "act": "Check what every declared source contributes — and what the ones contributing nothing say",
-        "say": "This is what \"browse the registry\" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.",
+        "say": "This is what \"browse the registry\" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages.",
         "do": [],
         "expect": {
           "route": "/community",
@@ -100,6 +100,22 @@
             "action": "filter-hub",
             "hub-id": "skills-sh",
             "hub-reason": "not-reachable"
+          }
+        }
+      },
+      {
+        "act": "Read the rows the refresh wrote into the registry",
+        "say": "A refresh does not only report what the sources publish — it writes it. Every skill a declared hub publishes that the registry did not carry is now a real row, counted on its hub’s chip and installable like any other, and a row the operator curated by hand is never overwritten. forge still reads only the hubs the operator declared.",
+        "do": [],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "item-kind": "skill",
+            "item-category": "uncategorized",
+            "item-id": "<writtenRowId>",
+            "item-hub": "<writtenRowHub>"
           }
         }
       },
@@ -387,6 +403,12 @@
         "section": "community",
         "count": "20"
       },
+      "expect": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "community",
+        "count": "20"
+      },
       "frame": "frames/01-open-the-library-and-look-at-the-shelf-f.png"
     },
     {
@@ -396,6 +418,14 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "item-count": "20",
+        "hub-count": "9",
+        "kind-filter": "all",
+        "last-refresh": "never"
+      },
+      "expect": {
         "page": "community-browser",
         "page-ready": "true",
         "item-count": "20",
@@ -420,6 +450,15 @@
         "hub-item-count": "0",
         "hub-declared-only": "true"
       },
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "hub-count": "9",
+        "action": "filter-hub",
+        "hub-id": "skills-sh",
+        "hub-item-count": "0",
+        "hub-declared-only": "true"
+      },
       "frame": "frames/03-read-where-the-twenty-items-actually-com.png"
     },
     {
@@ -434,11 +473,17 @@
         "section": "refresh-result",
         "refresh-state": "refreshed"
       },
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "section": "refresh-result",
+        "refresh-state": "refreshed"
+      },
       "frame": "frames/04-refresh-the-registry-against-those-sourc.png"
     },
     {
       "act": "Check what every declared source contributes — and what the ones contributing nothing say",
-      "say": "This is what \"browse the registry\" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.",
+      "say": "This is what \"browse the registry\" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -450,7 +495,42 @@
         "hub-id": "skills-sh",
         "hub-reason": "not-reachable"
       },
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "hub-count": "9",
+        "action": "filter-hub",
+        "hub-id": "skills-sh",
+        "hub-reason": "not-reachable"
+      },
       "frame": "frames/05-check-what-every-declared-source-contrib.png"
+    },
+    {
+      "act": "Read the rows the refresh wrote into the registry",
+      "say": "A refresh does not only report what the sources publish — it writes it. Every skill a declared hub publishes that the registry did not carry is now a real row, counted on its hub’s chip and installable like any other, and a row the operator curated by hand is never overwritten. forge still reads only the hubs the operator declared.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "writtenRowId": "academy-guide",
+        "writtenRowHub": "anthropics-skills"
+      },
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "item-kind": "skill",
+        "item-category": "uncategorized",
+        "item-id": "academy-guide",
+        "item-hub": "anthropics-skills"
+      },
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "item-kind": "skill",
+        "item-category": "uncategorized",
+        "item-id": "<writtenRowId>",
+        "item-hub": "<writtenRowHub>"
+      },
+      "frame": "frames/06-read-the-rows-the-refresh-wrote-into-the.png"
     },
     {
       "act": "Check the source forge could read and still had nothing to offer",
@@ -466,7 +546,15 @@
         "hub-declared-only": "true",
         "hub-reason": "no-installable-kind"
       },
-      "frame": "frames/06-check-the-source-forge-could-read-and-st.png"
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "action": "filter-hub",
+        "hub-id": "cc-templates",
+        "hub-declared-only": "true",
+        "hub-reason": "no-installable-kind"
+      },
+      "frame": "frames/07-check-the-source-forge-could-read-and-st.png"
     },
     {
       "act": "Check that no row is still a hand-curated seed",
@@ -480,7 +568,13 @@
         "component": "freshness-badge",
         "freshness": "fresh"
       },
-      "frame": "frames/07-check-that-no-row-is-still-a-hand-curate.png"
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "component": "freshness-badge",
+        "freshness": "fresh"
+      },
+      "frame": "frames/08-check-that-no-row-is-still-a-hand-curate.png"
     },
     {
       "act": "Take the first door in — press \"+ Add item\" to install by URL",
@@ -493,7 +587,12 @@
         "form-mode": "add",
         "page-ready": "true"
       },
-      "frame": "frames/08-take-the-first-door-in-press-add-item-to.png"
+      "expect": {
+        "page": "community-registry-form",
+        "form-mode": "add",
+        "page-ready": "true"
+      },
+      "frame": "frames/09-take-the-first-door-in-press-add-item-to.png"
     },
     {
       "act": "Give forge nothing but the upstream URL and what to call it",
@@ -508,7 +607,14 @@
         "item-kind": "skill",
         "install-state": "not-installed"
       },
-      "frame": "frames/09-give-forge-nothing-but-the-upstream-url-.png"
+      "expect": {
+        "page": "community-detail",
+        "item-id": "story-s8-skill",
+        "page-ready": "true",
+        "item-kind": "skill",
+        "install-state": "not-installed"
+      },
+      "frame": "frames/10-give-forge-nothing-but-the-upstream-url-.png"
     },
     {
       "act": "Install the thing that URL names",
@@ -523,7 +629,14 @@
         "section": "install",
         "install-action": "install"
       },
-      "frame": "frames/10-install-the-thing-that-url-names.png"
+      "expect": {
+        "page": "community-detail",
+        "item-id": "story-s8-skill",
+        "page-ready": "true",
+        "section": "install",
+        "install-action": "install"
+      },
+      "frame": "frames/11-install-the-thing-that-url-names.png"
     },
     {
       "act": "Go back to the browser",
@@ -535,7 +648,11 @@
         "page": "community-browser",
         "page-ready": "true"
       },
-      "frame": "frames/11-go-back-to-the-browser.png"
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true"
+      },
+      "frame": "frames/12-go-back-to-the-browser.png"
     },
     {
       "act": "Find the one item in the registry that is executable code",
@@ -553,7 +670,17 @@
         "item-hub": "forge-seed",
         "install-state": "not-installed"
       },
-      "frame": "frames/12-find-the-one-item-in-the-registry-that-i.png"
+      "expect": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "item-count": "1",
+        "card-type": "community-item",
+        "item-id": "block-protected-branch-push",
+        "item-kind": "hook",
+        "item-hub": "forge-seed",
+        "install-state": "not-installed"
+      },
+      "frame": "frames/13-find-the-one-item-in-the-registry-that-i.png"
     },
     {
       "act": "Open it and read every file in the package before trusting any of it",
@@ -571,7 +698,17 @@
         "file-count": "2",
         "active-file": "hook.yaml"
       },
-      "frame": "frames/13-open-it-and-read-every-file-in-the-packa.png"
+      "expect": {
+        "page": "community-detail",
+        "item-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "item-kind": "hook",
+        "install-state": "not-installed",
+        "component": "file-package",
+        "file-count": "2",
+        "active-file": "hook.yaml"
+      },
+      "frame": "frames/14-open-it-and-read-every-file-in-the-packa.png"
     },
     {
       "act": "Read the security scan that runs before the install exists",
@@ -588,7 +725,16 @@
         "finding-count": "0",
         "critical-count": "0"
       },
-      "frame": "frames/14-read-the-security-scan-that-runs-before-.png"
+      "expect": {
+        "page": "community-detail",
+        "item-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "section": "security-scan",
+        "scan-verdict": "clean",
+        "finding-count": "0",
+        "critical-count": "0"
+      },
+      "frame": "frames/15-read-the-security-scan-that-runs-before-.png"
     },
     {
       "act": "Take the second door in — install it by id",
@@ -604,7 +750,15 @@
         "section": "install",
         "install-action": "open-owning"
       },
-      "frame": "frames/15-take-the-second-door-in-install-it-by-id.png"
+      "expect": {
+        "page": "community-detail",
+        "item-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "install-state": "needs-review",
+        "section": "install",
+        "install-action": "open-owning"
+      },
+      "frame": "frames/16-take-the-second-door-in-install-it-by-id.png"
     },
     {
       "act": "Follow it to the page that owns the trust decision",
@@ -620,7 +774,15 @@
         "hook-trust": "needs-review",
         "hook-runnable": "false"
       },
-      "frame": "frames/16-follow-it-to-the-page-that-owns-the-trus.png"
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "hook-event": "PreToolUse",
+        "hook-trust": "needs-review",
+        "hook-runnable": "false"
+      },
+      "frame": "frames/17-follow-it-to-the-page-that-owns-the-trus.png"
     },
     {
       "act": "Approve it",
@@ -635,7 +797,14 @@
         "hook-trust": "approved",
         "hook-runnable": "true"
       },
-      "frame": "frames/17-approve-it.png"
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "hook-trust": "approved",
+        "hook-runnable": "true"
+      },
+      "frame": "frames/18-approve-it.png"
     },
     {
       "act": "Open the Agents pillar",
@@ -648,7 +817,11 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
-      "frame": "frames/18-open-the-agents-pillar.png"
+      "expect": {
+        "page": "agents-index",
+        "page-ready": "true"
+      },
+      "frame": "frames/19-open-the-agents-pillar.png"
     },
     {
       "act": "Find the installed hook in the palette an agent composes from",
@@ -663,7 +836,14 @@
         "id": "block-protected-branch-push",
         "kind": "hook"
       },
-      "frame": "frames/19-find-the-installed-hook-in-the-palette-a.png"
+      "expect": {
+        "page": "agents",
+        "page-ready": "true",
+        "agent-id": "brain-ingest",
+        "id": "block-protected-branch-push",
+        "kind": "hook"
+      },
+      "frame": "frames/20-find-the-installed-hook-in-the-palette-a.png"
     }
   ],
   "reap": {
@@ -736,7 +916,16 @@
     "groundEscapes": [],
     "reappeared": []
   },
+  "spend": {
+    "usd": 0,
+    "unmeasured": false
+  },
   "realGrounds": {
     "moved": []
-  }
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "4befd8aa7e6ebfe7"
 }

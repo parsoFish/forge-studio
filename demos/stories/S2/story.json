@@ -62,6 +62,15 @@
             "press": "create-project"
           }
         ],
+        "fork": {
+          "over": "create-app-type",
+          "cases": [
+            "api",
+            "cli",
+            "webapp"
+          ],
+          "from": 1
+        },
         "expect": {
           "route": "/projects/story-s2",
           "data": {
@@ -219,7 +228,13 @@
         "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
         "do": [
           {
-            "press": "open-session"
+            "pressWithin": {
+              "scope": {
+                "attr": "session-id",
+                "bind": "architectSessionId"
+              },
+              "action": "open-session"
+            }
           },
           {
             "repeat": [
@@ -238,7 +253,7 @@
         ],
         "wait": {
           "for": "agent",
-          "upTo": 600000
+          "upTo": 780000
         },
         "expect": {
           "route": "/sessions/architect/<architectSessionId>",
@@ -282,6 +297,10 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true"
+      },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
     },
     {
@@ -298,6 +317,13 @@
         "section": "project-create",
         "app-type-count": "3"
       },
+      "expect": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-create",
+        "app-type-count": "3"
+      },
       "frame": "frames/02-press-start-a-greenfield-project.png"
     },
     {
@@ -308,10 +334,15 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "story-s2",
+        "project-id": "story-s2-api",
         "page-ready": "true"
       },
-      "frame": "frames/03-name-it-say-what-it-is-for-pick-the-cli-.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-api",
+        "page-ready": "true"
+      },
+      "frame": "frames/03-name-it-say-what-it-is-for-pick-the-cli--3-api.png"
     },
     {
       "act": "Check the project is ready for a Flow, and what it still owes",
@@ -321,11 +352,17 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "story-s2",
+        "project-id": "story-s2-api",
         "preflight-status": "ok",
         "flow-ready": "true"
       },
-      "frame": "frames/04-check-the-project-is-ready-for-a-flow-an.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-api",
+        "preflight-status": "ok",
+        "flow-ready": "true"
+      },
+      "frame": "frames/04-check-the-project-is-ready-for-a-flow-an-4-api.png"
     },
     {
       "act": "Look at what forge says is still unresolved, and who owes it",
@@ -335,13 +372,21 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "story-s2",
+        "project-id": "story-s2-api",
         "section": "contract-resolution",
         "resolution-failing-count": "2",
         "resolution-user-count": "0",
         "resolution-agent-count": "2"
       },
-      "frame": "frames/05-look-at-what-forge-says-is-still-unresol.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-api",
+        "section": "contract-resolution",
+        "resolution-failing-count": "2",
+        "resolution-user-count": "0",
+        "resolution-agent-count": "2"
+      },
+      "frame": "frames/05-look-at-what-forge-says-is-still-unresol-5-api.png"
     },
     {
       "act": "Review the contract the starter filled in, element by element",
@@ -351,11 +396,17 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "story-s2",
+        "project-id": "story-s2-api",
         "section": "contract-checklist",
         "checklist-row-count": "5"
       },
-      "frame": "frames/06-review-the-contract-the-starter-filled-i.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-api",
+        "section": "contract-checklist",
+        "checklist-row-count": "5"
+      },
+      "frame": "frames/06-review-the-contract-the-starter-filled-i-6-api.png"
     },
     {
       "act": "Read the secrets element — the one a starter cannot guess from a template",
@@ -365,11 +416,17 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "story-s2",
+        "project-id": "story-s2-api",
         "checklist-row": "secrets",
         "checklist-status": "present"
       },
-      "frame": "frames/07-read-the-secrets-element-the-one-a-start.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-api",
+        "checklist-row": "secrets",
+        "checklist-status": "present"
+      },
+      "frame": "frames/07-read-the-secrets-element-the-one-a-start-7-api.png"
     },
     {
       "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
@@ -379,10 +436,15 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "story-s2",
+        "project-id": "story-s2-api",
         "step-count": "3"
       },
-      "frame": "frames/08-adjust-the-demo-the-starter-wrote-this-c.png"
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-api",
+        "step-count": "3"
+      },
+      "frame": "frames/08-adjust-the-demo-the-starter-wrote-this-c-8-api.png"
     },
     {
       "act": "Press \"Architect →\"",
@@ -397,7 +459,14 @@
         "roster-state": "ok",
         "new-idea-ready": "false"
       },
-      "frame": "frames/09-press-architect.png"
+      "expect": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok",
+        "new-idea-ready": "false"
+      },
+      "frame": "frames/09-press-architect-9-api.png"
     },
     {
       "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
@@ -405,14 +474,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-07T07-45-34-5aaa1d86"
+        "architectSessionId": "2026-10-03T12-28-29-f7fa1fed"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-09-07T07-45-34-5aaa1d86"
+        "architect-session-id": "2026-10-03T12-28-29-f7fa1fed"
       },
-      "frame": "frames/10-describe-the-first-piece-of-work-cap-wha.png"
+      "expect": {
+        "page": "architect-new",
+        "section": "new-idea",
+        "architect-session-id": "<architectSessionId>"
+      },
+      "frame": "frames/10-describe-the-first-piece-of-work-cap-wha-10-api.png"
     },
     {
       "act": "While it works, check Monitor",
@@ -426,7 +500,12 @@
         "fetch-status": "ok",
         "session-kind": "architect"
       },
-      "frame": "frames/11-while-it-works-check-monitor.png"
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "session-kind": "architect"
+      },
+      "frame": "frames/11-while-it-works-check-monitor-11-api.png"
     },
     {
       "act": "Open the session again and answer the Architect's questions about the project",
@@ -440,7 +519,13 @@
         "session-kind": "architect",
         "session-phase": "awaiting-verdict"
       },
-      "frame": "frames/12-open-the-session-again-and-answer-the-ar.png"
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "awaiting-verdict"
+      },
+      "frame": "frames/12-open-the-session-again-and-answer-the-ar-12-api.png"
     },
     {
       "act": "Open the plan and stand at the gate",
@@ -454,37 +539,604 @@
         "gate-armed": "true",
         "plan-mode": "gate"
       },
-      "frame": "frames/13-open-the-plan-and-stand-at-the-gate.png"
+      "expect": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
+      "frame": "frames/13-open-the-plan-and-stand-at-the-gate-13-api.png"
+    },
+    {
+      "act": "Open Studio on the Projects pillar",
+      "say": "The Projects pillar lists every project forge manages. The tool this story is about is not here — it does not exist yet, on disk or anywhere else. That is the starting state: no repo, no contract, nothing to point a Flow at.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true"
+      },
+      "frame": "frames/14-open-studio-on-the-projects-pillar-1-cli.png"
+    },
+    {
+      "act": "Press \"Start a greenfield project\"",
+      "say": "One page hosts both doors into forge: register a repo that already exists, or scaffold a new one. Three starters ship with forge, and the operator picks the one shaped like the thing they are about to build.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "section": "project-create",
+        "app-type-count": "3"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-create",
+        "app-type-count": "3"
+      },
+      "frame": "frames/15-press-start-a-greenfield-project-2-cli.png"
+    },
+    {
+      "act": "Name it, say what it is for, pick the \"cli\" starter, and press \"Create project\"",
+      "say": "Forge writes the repo from the starter, makes the first commit in it, and lands the operator on the project page. Nothing linked here a moment ago — the route exists because the button was pressed.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "page-ready": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "page-ready": "true"
+      },
+      "frame": "frames/16-name-it-say-what-it-is-for-pick-the-cli--3-cli.png"
+    },
+    {
+      "act": "Check the project is ready for a Flow, and what it still owes",
+      "say": "This is the promise a starter exists to keep, stated exactly. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow. Ready does not mean finished. Forge wrote every file it could write from a template; what a template cannot write is a demo of THIS project, and the form says so rather than showing a green tick it has not earned.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "preflight-status": "ok",
+        "flow-ready": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "preflight-status": "ok",
+        "flow-ready": "true"
+      },
+      "frame": "frames/17-check-the-project-is-ready-for-a-flow-an-4-cli.png"
+    },
+    {
+      "act": "Look at what forge says is still unresolved, and who owes it",
+      "say": "The panel that catches a half-onboarded repo is where the difference shows. Nothing here is waiting on the operator: the two open clauses are the demo skill and its alignment, and the contract says outright that an agent generates them. Creation does not promise a demo it has not run. Every clause a template can answer, the starter answered — and the two it cannot are named, owned and counted rather than quietly ticked.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "section": "contract-resolution",
+        "resolution-failing-count": "2",
+        "resolution-user-count": "0",
+        "resolution-agent-count": "2"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "section": "contract-resolution",
+        "resolution-failing-count": "2",
+        "resolution-user-count": "0",
+        "resolution-agent-count": "2"
+      },
+      "frame": "frames/18-look-at-what-forge-says-is-still-unresol-5-cli.png"
+    },
+    {
+      "act": "Review the contract the starter filled in, element by element",
+      "say": "This is the act that makes creating a project different from onboarding one. Onboarding fills a contract in, question by question, with an Agent. Creation hands the operator one that is already filled — contract, instructions, secrets, demo, roadmap — and asks them to read it. Five elements, every one already answered by the starter.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "section": "contract-checklist",
+        "checklist-row-count": "5"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "section": "contract-checklist",
+        "checklist-row-count": "5"
+      },
+      "frame": "frames/19-review-the-contract-the-starter-filled-i-6-cli.png"
+    },
+    {
+      "act": "Read the secrets element — the one a starter cannot guess from a template",
+      "say": "Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "checklist-row": "secrets",
+        "checklist-status": "present"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "checklist-row": "secrets",
+        "checklist-status": "present"
+      },
+      "frame": "frames/20-read-the-secrets-element-the-one-a-start-7-cli.png"
+    },
+    {
+      "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
+      "say": "Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "step-count": "3"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-cli",
+        "step-count": "3"
+      },
+      "frame": "frames/21-adjust-the-demo-the-starter-wrote-this-c-8-cli.png"
+    },
+    {
+      "act": "Press \"Architect →\"",
+      "say": "With a contract in place the Architect can plan. Studio carries the new project through, so the only thing still missing is the one thing forge cannot know: what the operator wants built first.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok",
+        "new-idea-ready": "false"
+      },
+      "expect": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok",
+        "new-idea-ready": "false"
+      },
+      "frame": "frames/22-press-architect-9-cli.png"
+    },
+    {
+      "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
+      "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on — the run exists, and it is nameable, before anything navigates anywhere.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "architectSessionId": "2026-10-03T12-40-43-dce9b756"
+      },
+      "data": {
+        "page": "architect-new",
+        "section": "new-idea",
+        "architect-session-id": "2026-10-03T12-40-43-dce9b756"
+      },
+      "expect": {
+        "page": "architect-new",
+        "section": "new-idea",
+        "architect-session-id": "<architectSessionId>"
+      },
+      "frame": "frames/23-describe-the-first-piece-of-work-cap-wha-10-cli.png"
+    },
+    {
+      "act": "While it works, check Monitor",
+      "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "monitor",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "session-kind": "architect"
+      },
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "session-kind": "architect"
+      },
+      "frame": "frames/24-while-it-works-check-monitor-11-cli.png"
+    },
+    {
+      "act": "Open the session again and answer the Architect's questions about the project",
+      "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "awaiting-verdict"
+      },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "awaiting-verdict"
+      },
+      "frame": "frames/25-open-the-session-again-and-answer-the-ar-12-cli.png"
+    },
+    {
+      "act": "Open the plan and stand at the gate",
+      "say": "This is the plan gate — the first Gate a human stands at, and where S2 ends. A starter became a repo, the repo became a contract-ready project, and the first Flow run on it reached the gate with a plan waiting on a decision. Nothing is approved yet: that decision is the operator's, and S10 is the story that makes it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
+      "expect": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
+      "frame": "frames/26-open-the-plan-and-stand-at-the-gate-13-cli.png"
+    },
+    {
+      "act": "Open Studio on the Projects pillar",
+      "say": "The Projects pillar lists every project forge manages. The tool this story is about is not here — it does not exist yet, on disk or anywhere else. That is the starting state: no repo, no contract, nothing to point a Flow at.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true"
+      },
+      "frame": "frames/27-open-studio-on-the-projects-pillar-1-webapp.png"
+    },
+    {
+      "act": "Press \"Start a greenfield project\"",
+      "say": "One page hosts both doors into forge: register a repo that already exists, or scaffold a new one. Three starters ship with forge, and the operator picks the one shaped like the thing they are about to build.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "section": "project-create",
+        "app-type-count": "3"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-create",
+        "app-type-count": "3"
+      },
+      "frame": "frames/28-press-start-a-greenfield-project-2-webapp.png"
+    },
+    {
+      "act": "Name it, say what it is for, pick the \"cli\" starter, and press \"Create project\"",
+      "say": "Forge writes the repo from the starter, makes the first commit in it, and lands the operator on the project page. Nothing linked here a moment ago — the route exists because the button was pressed.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "page-ready": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "page-ready": "true"
+      },
+      "frame": "frames/29-name-it-say-what-it-is-for-pick-the-cli--3-webapp.png"
+    },
+    {
+      "act": "Check the project is ready for a Flow, and what it still owes",
+      "say": "This is the promise a starter exists to keep, stated exactly. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow. Ready does not mean finished. Forge wrote every file it could write from a template; what a template cannot write is a demo of THIS project, and the form says so rather than showing a green tick it has not earned.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "preflight-status": "ok",
+        "flow-ready": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "preflight-status": "ok",
+        "flow-ready": "true"
+      },
+      "frame": "frames/30-check-the-project-is-ready-for-a-flow-an-4-webapp.png"
+    },
+    {
+      "act": "Look at what forge says is still unresolved, and who owes it",
+      "say": "The panel that catches a half-onboarded repo is where the difference shows. Nothing here is waiting on the operator: the two open clauses are the demo skill and its alignment, and the contract says outright that an agent generates them. Creation does not promise a demo it has not run. Every clause a template can answer, the starter answered — and the two it cannot are named, owned and counted rather than quietly ticked.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "section": "contract-resolution",
+        "resolution-failing-count": "2",
+        "resolution-user-count": "0",
+        "resolution-agent-count": "2"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "section": "contract-resolution",
+        "resolution-failing-count": "2",
+        "resolution-user-count": "0",
+        "resolution-agent-count": "2"
+      },
+      "frame": "frames/31-look-at-what-forge-says-is-still-unresol-5-webapp.png"
+    },
+    {
+      "act": "Review the contract the starter filled in, element by element",
+      "say": "This is the act that makes creating a project different from onboarding one. Onboarding fills a contract in, question by question, with an Agent. Creation hands the operator one that is already filled — contract, instructions, secrets, demo, roadmap — and asks them to read it. Five elements, every one already answered by the starter.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "section": "contract-checklist",
+        "checklist-row-count": "5"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "section": "contract-checklist",
+        "checklist-row-count": "5"
+      },
+      "frame": "frames/32-review-the-contract-the-starter-filled-i-6-webapp.png"
+    },
+    {
+      "act": "Read the secrets element — the one a starter cannot guess from a template",
+      "say": "Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "checklist-row": "secrets",
+        "checklist-status": "present"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "checklist-row": "secrets",
+        "checklist-status": "present"
+      },
+      "frame": "frames/33-read-the-secrets-element-the-one-a-start-7-webapp.png"
+    },
+    {
+      "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
+      "say": "Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "step-count": "3"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s2-webapp",
+        "step-count": "3"
+      },
+      "frame": "frames/34-adjust-the-demo-the-starter-wrote-this-c-8-webapp.png"
+    },
+    {
+      "act": "Press \"Architect →\"",
+      "say": "With a contract in place the Architect can plan. Studio carries the new project through, so the only thing still missing is the one thing forge cannot know: what the operator wants built first.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok",
+        "new-idea-ready": "false"
+      },
+      "expect": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok",
+        "new-idea-ready": "false"
+      },
+      "frame": "frames/35-press-architect-9-webapp.png"
+    },
+    {
+      "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
+      "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on — the run exists, and it is nameable, before anything navigates anywhere.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "architectSessionId": "2026-10-03T12-54-11-22c8ae66"
+      },
+      "data": {
+        "page": "architect-new",
+        "section": "new-idea",
+        "architect-session-id": "2026-10-03T12-54-11-22c8ae66"
+      },
+      "expect": {
+        "page": "architect-new",
+        "section": "new-idea",
+        "architect-session-id": "<architectSessionId>"
+      },
+      "frame": "frames/36-describe-the-first-piece-of-work-cap-wha-10-webapp.png"
+    },
+    {
+      "act": "While it works, check Monitor",
+      "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "monitor",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "session-kind": "architect"
+      },
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "session-kind": "architect"
+      },
+      "frame": "frames/37-while-it-works-check-monitor-11-webapp.png"
+    },
+    {
+      "act": "Open the session again and answer the Architect's questions about the project",
+      "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "awaiting-verdict"
+      },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "awaiting-verdict"
+      },
+      "frame": "frames/38-open-the-session-again-and-answer-the-ar-12-webapp.png"
+    },
+    {
+      "act": "Open the plan and stand at the gate",
+      "say": "This is the plan gate — the first Gate a human stands at, and where S2 ends. A starter became a repo, the repo became a contract-ready project, and the first Flow run on it reached the gate with a plan waiting on a decision. Nothing is approved yet: that decision is the operator's, and S10 is the story that makes it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
+      "expect": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
+      "frame": "frames/39-open-the-plan-and-stand-at-the-gate-13-webapp.png"
     }
   ],
   "reap": {
-    "reaped": [
+    "reaped": [],
+    "skipped": [
       {
-        "pid": 1537284,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-07T07-45-34-5aaa1d86",
-        "signal": "SIGTERM",
-        "via": "cwd"
+        "pid": 1369560,
+        "dir": "_logs/_architect-2026-10-03T12-28-29-f7fa1fed",
+        "reason": "pid 1369560: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+      },
+      {
+        "pid": 1462691,
+        "dir": "_logs/_architect-2026-10-03T12-40-43-dce9b756",
+        "reason": "pid 1462691: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+      },
+      {
+        "pid": 1526444,
+        "dir": "_logs/_architect-2026-10-03T12-54-11-22c8ae66",
+        "reason": "pid 1526444: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
-    "skipped": [],
-    "cancelled": [
-      {
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-07T07-45-34-5aaa1d86",
-        "kind": "architect",
-        "sessionId": "2026-09-07T07-45-34-5aaa1d86",
-        "project": "story-s2",
-        "cancelledFrom": "awaiting-verdict",
-        "written": true,
-        "reason": null
-      }
-    ]
+    "cancelled": []
   },
   "sweep": {
     "removed": [
-      "/home/parso/forge-m5-b/projects/story-s2",
-      "/home/parso/forge-m5-b/brain/projects/story-s2"
+      "projects/story-s2-api",
+      "projects/story-s2-cli",
+      "projects/story-s2-webapp",
+      "brain/projects/story-s2-api",
+      "brain/projects/story-s2-cli",
+      "brain/projects/story-s2-webapp"
     ],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
+    "lines": [
+      "[stories] trailing sweep removed projects/story-s2-api",
+      "[stories] trailing sweep removed projects/story-s2-cli",
+      "[stories] trailing sweep removed projects/story-s2-webapp",
+      "[stories] trailing sweep removed brain/projects/story-s2-api",
+      "[stories] trailing sweep removed brain/projects/story-s2-cli",
+      "[stories] trailing sweep removed brain/projects/story-s2-webapp",
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
@@ -492,6 +1144,16 @@
     "removedContents": [],
     "failed": [],
     "escapes": [],
-    "groundEscapes": []
-  }
+    "groundEscapes": [],
+    "reappeared": []
+  },
+  "spend": {
+    "usd": 8.5134354,
+    "unmeasured": false
+  },
+  "git": {
+    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "dirty": true
+  },
+  "storyDigest": "696ab984486f2709"
 }
