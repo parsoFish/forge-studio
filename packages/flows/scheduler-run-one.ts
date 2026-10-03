@@ -287,14 +287,14 @@ export async function runOne(
       } else {
         // Non-terminal (project not contract-ready): move back to pending/ and
         // log once. validateClaimable already recorded this initiativeId in the
-        // process-lifetime skip-set so tick() will not re-claim it on the next
-        // poll — no inFlight slot churn. A fresh `forge serve` after the
-        // operator fixes the project clears the set and re-checks.
+        // skip-set (bounded by NON_TERMINAL_RECHECK_MS) so tick() will not
+        // re-claim it on the next few polls — no inFlight slot churn. Past that
+        // window the next claim attempt re-checks on its own; no restart needed.
         moveTo(filename, 'pending', paths);
         // 7.6.18: the surfaces read the MANIFEST, not this log. Clause NAMES only — the prose has colons, and `annotateManifest` writes raw.
         annotateManifest(join(paths.pending, filename), { claim_blocked_clauses: claimCheck.blockedClauses ?? '' });
         console.warn(`[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`);
-        return; // runOne done — isNonTerminalRefused() guards future polls
+        return; // runOne done — isNonTerminalRefused() guards polls within the window
       }
     }
 

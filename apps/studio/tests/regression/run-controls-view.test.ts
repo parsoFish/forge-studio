@@ -29,8 +29,9 @@
  */
 import { test, expect } from 'vitest';
 
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsServe, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, queuedServeTone, runAwaitsServe, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
 import type { Run, RunStatus } from '../../lib/studio-client.ts';
+import type { ServeStatus } from '../../lib/bridge-client-core.ts';
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
   return {
@@ -267,4 +268,34 @@ test('row 150: stopOnBudget still wins over operatorStop when (hypothetically) b
 
 test('row 150: operatorStop on a non-failed run never renders (same status gate as stopOnBudget)', () => {
   expect(runFailureNoteKind(run('active', { operatorStop: true }))).toBe(null);
+});
+
+// ---------------------------------------------------------------------------
+// MEDIUM-2 (review): `queuedServeTone` — only a CONFIRMED running serve may
+// promise the pickup. `serve === null` (the read hasn't resolved, or failed)
+// and `'unsupervised'` (no supervisor on this bridge at all) are both
+// UNKNOWN, never the pickup promise — mirrors `describePostCommit`'s own
+// `unknown` rule (lib/architect-plan-view.ts).
+// ---------------------------------------------------------------------------
+
+function serveStatus(state: ServeStatus['state']): ServeStatus {
+  return { state, pid: 1, restarts: 0, nextRestartAt: null };
+}
+
+test('queuedServeTone: null (unread/failed) is unknown, never the pickup promise', () => {
+  expect(queuedServeTone(null)).toBe('unknown');
+});
+
+test('queuedServeTone: unsupervised (dry bridge / read-only attach) is unknown', () => {
+  expect(queuedServeTone(serveStatus('unsupervised'))).toBe('unknown');
+});
+
+test('queuedServeTone: running is the only tone that may promise the pickup', () => {
+  expect(queuedServeTone(serveStatus('running'))).toBe('running');
+});
+
+test('queuedServeTone: draining/restarting/down are CONFIRMED not-running — the shared notice, not unknown', () => {
+  for (const state of ['draining', 'restarting', 'down'] as const) {
+    expect(queuedServeTone(serveStatus(state)), state).toBe('not-running');
+  }
 });

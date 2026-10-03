@@ -74,8 +74,8 @@ Hard clauses (C1 quality gate, C2 scratch hygiene, C4 machine-readable context)
 must pass before forge will run a flow. DEPS is hard too: install the
 project's dependencies in `projects/<id>` (for a Node project, `npm ci`) before
 you kick off, or `forge serve` refuses the claim and the initiative stays
-pending until you fix the ground and restart `forge studio`, which restarts
-`serve`
+pending until you fix the ground — forge serve re-checks it within five minutes,
+no restart needed
 ([DEPS](../reference/project-contract.md#deps--the-declared-gate-is-runnable-in-the-ground-hard-at-claim-time-and-in-forge-preflight)). Advisory clauses (C5/C6/C8, DEMO,
 ARTIFACTS) only warn. Iterate until every hard clause is green. The same verdict
 renders live in the Studio project builder (the `ContractReadiness` panel).

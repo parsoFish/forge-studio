@@ -18,6 +18,7 @@
  * them without saying which was which.
  */
 import type { Run } from './studio-client';
+import type { ServeStatus } from './bridge-client';
 
 export type RunControlId = 'resume' | 'requeue' | 'abandon' | 'stop';
 
@@ -104,6 +105,25 @@ export function deriveRunControls(run: Run | null): RunControl[] {
  */
 export function runAwaitsServe(run: Run | null): boolean {
   return run !== null && run.status === 'planned';
+}
+
+export type QueuedServeTone = 'running' | 'not-running' | 'unknown';
+
+/**
+ * MEDIUM-2: the queued-run serve line's three tones. ONLY `running` may
+ * promise a pickup (`queued-awaits-serve`) — `unknown` (the read failed, or
+ * this bridge has no supervisor at all: the dry bridge, or a second studio
+ * attached read-only) must say it could not confirm rather than render the
+ * SAME pickup promise `running` does (ADR 031: Studio never claims a run is
+ * in progress unless a daemon is alive and claiming it). `not-running` (a
+ * CONFIRMED draining/restarting/down) keeps the shared `<ServeStatusNotice>`.
+ * Mirrors `describePostCommit`'s own `unknown = serve === null ||
+ * serve.state === 'unsupervised'` rule (lib/architect-plan-view.ts).
+ */
+export function queuedServeTone(serve: ServeStatus | null): QueuedServeTone {
+  if (serve === null || serve.state === 'unsupervised') return 'unknown';
+  if (serve.state === 'running') return 'running';
+  return 'not-running';
 }
 
 /**

@@ -526,8 +526,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   (or the status is not yet read) nothing renders and the page shows the
   ordinary claim/run-in-progress copy; while it is `restarting`, `draining`,
   `down` or `unsupervised` the read-only line says so, without anything to
-  click. A queued run whose `serve` is running shows the plain
-  `[data-component="queued-awaits-serve"]` line in the run controls.
+  click. **The one exception is a QUEUED run's line in the run controls**
+  (`lib/run-controls.ts`'s `queuedServeTone`): only a CONFIRMED `running`
+  serve renders the plain `[data-component="queued-awaits-serve"]` pickup
+  line — `serve === null` (unread/failed) and `unsupervised` (no supervisor
+  on this bridge) are both UNKNOWN there and render
+  `[data-component="queued-serve-unconfirmed"]` instead, never the pickup
+  promise; `restarting`/`draining`/`down` still render the shared
+  `serve-status-notice` as above.
   A second, attach-only `forge studio` never supervises `serve` and reads the
   same `serve` object off the owning studio's bridge. Three sections:
   - `section[data-section="attention-strip"]` — **W7-B1 (home-sessions-01/02):

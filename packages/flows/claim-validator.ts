@@ -45,36 +45,50 @@ export type ClaimValidationResult =
   | { ok: false; reason: string; terminal: boolean; /** 7.6.18: failing hard-clause NAMES, for the manifest the UI reads. */ blockedClauses?: string };
 
 // ---------------------------------------------------------------------------
-// Internal: skip-set — per-process set of initiative IDs refused for a
-// non-terminal reason (project not contract-ready). The scheduler's claim
-// path checks this set BEFORE calling claim() so a broken project is
-// evaluated once per `forge serve` process, not every 5-second poll tick —
-// killing the inFlight slot churn while preserving the manifest in pending/
-// so a fresh `forge serve` (after the operator fixes the project) re-checks.
+// Internal: skip-set — a per-initiative refusal for a non-terminal reason
+// (project not contract-ready), bounded to NON_TERMINAL_RECHECK_MS. The
+// scheduler's claim path checks this map BEFORE calling claim() so a broken
+// project is not re-walked every 5-second poll tick — avoiding inFlight slot
+// churn — and the next claim attempt past the window re-validates from
+// scratch against the ground's CURRENT state (e.g. whether DEPS's `npm ci`
+// has run), with no operator action required.
 // ---------------------------------------------------------------------------
 
-const _loggedPendingRefusals = new Set<string>();
+/** How long a non-terminal refusal is skipped before the next claim attempt
+ *  re-checks it. Mirrors the recovery sweep's own cadence (`recoverIntervalMs`
+ *  default, ADR 012) rather than inventing a second number. */
+export const NON_TERMINAL_RECHECK_MS = 5 * 60_000;
+
+const _pendingRefusals = new Map<string, number>(); // key -> next re-check epoch ms
 
 /**
- * Returns true if the given initiativeId has already been refused as
- * non-terminal in this process lifetime. The scheduler uses this to skip
- * re-claiming the initiative on subsequent poll ticks.
+ * True while `initiativeId`'s non-terminal refusal is still within its skip
+ * window. `nowMs` is a seam for tests; production callers take the default.
+ * Past the window the entry is dropped and this returns false, so the
+ * scheduler's next claim attempt re-validates instead of skipping forever.
  */
-export function isNonTerminalRefused(initiativeId: string): boolean {
-  return _loggedPendingRefusals.has(`${initiativeId}:preflight`);
+export function isNonTerminalRefused(initiativeId: string, nowMs: number = Date.now()): boolean {
+  const key = `${initiativeId}:preflight`;
+  const recheckAt = _pendingRefusals.get(key);
+  if (recheckAt === undefined) return false;
+  if (nowMs < recheckAt) return true;
+  _pendingRefusals.delete(key);
+  return false;
 }
 
-/**
- * Clear the skip-set for a given initiativeId. Exported for tests so they
- * can reset state between runs without module reload.
- */
+/** Record a non-terminal refusal, due for re-check after NON_TERMINAL_RECHECK_MS. */
+function recordPendingRefusal(initiativeId: string): void {
+  _pendingRefusals.set(`${initiativeId}:preflight`, Date.now() + NON_TERMINAL_RECHECK_MS);
+}
+
+/** Clear the skip-set for a given initiativeId (test utility). */
 export function clearPendingRefusalLog(initiativeId: string): void {
-  _loggedPendingRefusals.delete(`${initiativeId}:preflight`);
+  _pendingRefusals.delete(`${initiativeId}:preflight`);
 }
 
 /** Clear all skip-set state (test utility). */
 export function clearAllPendingRefusalLogs(): void {
-  _loggedPendingRefusals.clear();
+  _pendingRefusals.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -249,10 +263,10 @@ export function validateClaimable(
         `fix the project contract before retrying`;
 
       // Skip-set: record this initiative so the scheduler skips re-claiming it
-      // on subsequent poll ticks (once per process lifetime — a fresh `forge
-      // serve` after the operator fixes the project will re-check). The
-      // scheduler reads isNonTerminalRefused() before calling claim().
-      _loggedPendingRefusals.add(`${initiativeId}:preflight`);
+      // for NON_TERMINAL_RECHECK_MS (no restart needed — the next claim
+      // attempt past that window re-checks). The scheduler reads
+      // isNonTerminalRefused() before calling claim().
+      recordPendingRefusal(initiativeId);
       return {
         ok: false,
         reason,
@@ -277,7 +291,7 @@ export function validateClaimable(
   if (worktreePath !== undefined) {
     const refusal = demoCheckpointPreflightRefusal(worktreePath, manifestClass);
     if (refusal !== null) {
-      _loggedPendingRefusals.add(`${initiativeId}:preflight`);
+      recordPendingRefusal(initiativeId);
       return {
         ok: false,
         reason: refusal,

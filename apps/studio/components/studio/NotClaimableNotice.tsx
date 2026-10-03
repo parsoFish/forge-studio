@@ -27,7 +27,7 @@ export function NotClaimableNotice({
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
         forge serve refuses to claim this project&apos;s initiatives until its declared gate can run.
-        After installing, restart <code>forge studio</code> so the next serve re-checks it. {runnableGate.detail}
+        After installing, forge serve re-checks it within five minutes — no restart needed. {runnableGate.detail}
       </div>
     </div>
   );

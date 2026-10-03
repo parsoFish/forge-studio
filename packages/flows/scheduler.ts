@@ -159,11 +159,11 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
           continue;
         }
         announcedBlocked.delete(initiativeId);
-        // M3-6: skip initiatives refused as non-contract-ready in this process
-        // lifetime. validateClaimable already recorded the reason on the first
-        // attempt; re-claiming every 5 s would churn an inFlight slot and spam
-        // stdout. The manifest stays in pending/ so a fresh `forge serve` (after
-        // the operator fixes the project) re-checks from scratch.
+        // M3-6: skip initiatives refused as non-contract-ready, within the
+        // bounded re-check window (NON_TERMINAL_RECHECK_MS) — re-claiming every
+        // 5 s would churn an inFlight slot and spam stdout. The manifest stays
+        // in pending/; the next claim attempt past the window re-validates, no
+        // restart required.
         if (isNonTerminalRefused(initiativeId)) continue;
         const c = claim(filename, getPaths(cfg.queueRoot));
         if (c) {

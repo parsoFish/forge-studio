@@ -19,9 +19,11 @@
  *   flows-23 — `/flows/[id]/run/[runId]` rendered zero buttons, no status and
  *              no serve indicator, for any run in any state.
  */
-import { test, expect, vi } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+
+import type { ServeStatus } from '../../lib/bridge-client-core.ts';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, forward: () => {}, prefetch: () => {} }),
@@ -29,10 +31,24 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// MEDIUM-2 (review): `useServeStatus`'s fetch never resolves under
+// `renderToStaticMarkup` (no effects run), so the real hook always hands back
+// `null` — this repo's only way to exercise `running`/`draining`/etc. at this
+// render boundary is mocking the hook itself. `mockServeStatus` is read by the
+// factory on every call, so each test just sets it before rendering.
+let mockServeStatus: ServeStatus | null = null;
+vi.mock('@/lib/use-serve-status', () => ({
+  useServeStatus: () => ({ status: mockServeStatus, ready: true, refresh: async () => {} }),
+}));
+
 import { RunControls } from '../../components/studio/RunControls.tsx';
 import { FlowRunDetail } from '../../components/studio/FlowRunDetail.tsx';
 import { RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
 import type { Run, RunStatus, Flow } from '../../lib/studio-client.ts';
+
+beforeEach(() => {
+  mockServeStatus = null;
+});
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
   return {
@@ -132,12 +148,14 @@ test('flows-28/49 (S3-11): each control advertises BOTH ids — the run handle a
   expect(html).toContain(`data-initiative-id="${r.initiativeId}"`);
 });
 
-test('flows-23: a QUEUED run renders the serve line — the only thing that can start it, never a run-scoped button', () => {
-  // `useServeStatus`'s fetch never resolves under `renderToStaticMarkup` (no
-  // effects run), so `serve` is null here — the healthy-looking plain line,
-  // not the shared notice (that needs a CONFIRMED non-running status).
+test('flows-23 / MEDIUM-2: a QUEUED run with serve UNREAD (null) says it could not confirm — never the pickup promise', () => {
+  // KILLS: rendering `queued-awaits-serve` whenever `serve` is falsy. `null`
+  // means the read never resolved (or failed) — ADR 031: Studio never claims
+  // a run is in progress unless a daemon is alive and claiming it.
+  mockServeStatus = null;
   const html = markup(RunControls, { run: run('planned') });
-  expect(html).toContain('data-component="queued-awaits-serve"');
+  expect(html).toContain('data-component="queued-serve-unconfirmed"');
+  expect(html).not.toContain('data-component="queued-awaits-serve"');
   expect(html).toContain('data-run-status="planned"');
   // and no run-scoped recovery button, which would be a lie
   for (const action of RUN_CONTROL_ACTIONS) {
@@ -145,11 +163,38 @@ test('flows-23: a QUEUED run renders the serve line — the only thing that can 
   }
 });
 
+test('flows-23 / MEDIUM-2: a QUEUED run with serve UNSUPERVISED (dry bridge) also says it could not confirm', () => {
+  mockServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null };
+  const html = markup(RunControls, { run: run('planned') });
+  expect(html).toContain('data-component="queued-serve-unconfirmed"');
+  expect(html).not.toContain('data-component="queued-awaits-serve"');
+  expect(html).not.toContain('data-component="serve-status-notice"');
+});
+
+test('flows-23: a QUEUED run with serve CONFIRMED running renders the pickup promise', () => {
+  mockServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null };
+  const html = markup(RunControls, { run: run('planned') });
+  expect(html).toContain('data-component="queued-awaits-serve"');
+  expect(html).not.toContain('data-component="queued-serve-unconfirmed"');
+  expect(html).not.toContain('data-component="serve-status-notice"');
+});
+
+test('flows-23: a QUEUED run with serve CONFIRMED not-running (draining/restarting/down) renders the shared notice, never the pickup promise or the unconfirmed line', () => {
+  for (const state of ['draining', 'restarting', 'down'] as const) {
+    mockServeStatus = { state, pid: null, restarts: 1, nextRestartAt: null };
+    const html = markup(RunControls, { run: run('planned') });
+    expect(html, state).toContain('data-component="serve-status-notice"');
+    expect(html, state).toContain(`data-serve-state="${state}"`);
+    expect(html, state).not.toContain('data-component="queued-awaits-serve"');
+    expect(html, state).not.toContain('data-component="queued-serve-unconfirmed"');
+  }
+});
+
 test('flows-23: the queued-serve line can be opted out of where a surface already mounts one — and then a queued run renders nothing', () => {
   const html = markup(RunControls, { run: run('planned'), serveStrip: false });
   expect(html).toBe('');
-  // …while the default (the run detail page) still mounts it.
-  expect(markup(RunControls, { run: run('planned') })).toContain('data-component="queued-awaits-serve"');
+  // …while the default (the run detail page) still mounts it (serve unread → unconfirmed).
+  expect(markup(RunControls, { run: run('planned') })).toContain('data-component="queued-serve-unconfirmed"');
 });
 
 test('a run with neither recovery controls nor a queued-serve dependency renders nothing at all', () => {
@@ -179,6 +224,7 @@ test('flows-23: the run detail page of a FAILED run carries the recovery control
 });
 
 test('flows-23: the run detail page of a QUEUED run carries the serve-claim line', () => {
+  mockServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null };
   const html = detail(run('planned'));
   expect(html).toContain('data-component="queued-awaits-serve"');
 });

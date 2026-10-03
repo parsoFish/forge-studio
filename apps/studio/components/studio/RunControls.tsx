@@ -40,8 +40,9 @@
  *     [data-component="run-control-error"]      (verbatim failure text)
  *     [data-component="run-control-outcome"][data-outcome-control=<id>]
  *       -> EnqueueOutcomeLine's own contract ([data-component="enqueue-outcome"] …)
- *     [data-component="queued-awaits-serve"]                         (queued runs, serve healthy)
- *     [data-component="serve-status-notice"][data-serve-state]       (queued runs, serve not running)
+ *     [data-component="queued-awaits-serve"]                         (queued runs, serve CONFIRMED running)
+ *     [data-component="serve-status-notice"][data-serve-state]       (queued runs, serve CONFIRMED not running)
+ *     [data-component="queued-serve-unconfirmed"]                    (queued runs, serve status unknown — null or unsupervised)
  */
 
 import { useState } from 'react';
@@ -57,6 +58,7 @@ import {
   describeStopOnBudget,
   intentForControlClick,
   mayPostControl,
+  queuedServeTone,
   runAwaitsServe,
   runControlsShouldRender,
   runFailureNoteKind,
@@ -285,17 +287,28 @@ export function RunControls({
       )}
 
       {/* flows-23: a QUEUED run's control is `forge serve` claiming it, not a
-          run-scoped button. Healthy serve → a plain line (nothing to warn
-          about); otherwise the shared read-only notice. */}
-      {awaitsServe && (
-        serve && serve.state !== 'running' && serve.state !== 'unsupervised' ? (
-          <ServeStatusNotice status={serve} variant="strip" />
-        ) : (
-          <span data-component="queued-awaits-serve" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
-            Queued — forge serve will pick it up.
-          </span>
-        )
-      )}
+          run-scoped button. Only a CONFIRMED running serve may promise the
+          pickup — a CONFIRMED non-running serve gets the shared notice, and
+          an UNCONFIRMED serve (null or unsupervised) gets its own honest
+          line rather than the same promise `running` gets. */}
+      {awaitsServe && (() => {
+        const tone = queuedServeTone(serve);
+        if (tone === 'running') {
+          return (
+            <span data-component="queued-awaits-serve" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
+              Queued — forge serve will pick it up.
+            </span>
+          );
+        }
+        if (tone === 'unknown') {
+          return (
+            <span data-component="queued-serve-unconfirmed" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
+              Queued — could not confirm forge serve is running.
+            </span>
+          );
+        }
+        return <ServeStatusNotice status={serve} variant="strip" />;
+      })()}
     </section>
   );
 }
