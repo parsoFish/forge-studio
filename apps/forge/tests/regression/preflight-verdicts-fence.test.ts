@@ -16,7 +16,9 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   snapshotPreflightVerdicts,
@@ -150,5 +152,20 @@ describe('withPreflightVerdictsFence', () => {
       const afterCopy = readFileSync(file, 'utf8');
       assert.equal(afterCopy, beforeCopy, 'the pre-existing content must be byte-identical after the fence restores it');
     });
+  });
+});
+
+// Row 212b (bead forge-8vfn.8.5.52) — the fence above only works without
+// cross-talk if `_logs/preflight/` already exists in the real checkout. If the
+// CLI tests' spawn creates it and the fence removes it, the directory is a
+// TRANSIENT top-level `_logs` entry, and any test file running in parallel
+// whose residue-guard window overlaps reads it as its own residue (measured:
+// instructions-start-read-guard.test.ts went red naming `preflight`). The
+// checkout tracks the directory, so it never appears or disappears.
+describe('the real checkout keeps _logs/preflight/', () => {
+  test('_logs/preflight/.gitkeep is tracked, so the directory never appears mid-run', () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+    const tracked = execFileSync('git', ['ls-files', '--', '_logs/preflight/.gitkeep'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+    assert.equal(tracked, '_logs/preflight/.gitkeep', 'the checkout must track _logs/preflight/.gitkeep');
   });
 });
