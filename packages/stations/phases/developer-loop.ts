@@ -615,10 +615,10 @@ export async function runDeveloperLoop(
         // spawns one SDK session per Ralph iteration, so hooks fire per
         // iteration, which is the SDK's own session semantics. forge-8vfn.8.5.44
         // (row 208): ALWAYS merged with the forge-repo-git fence too — `wiWorktree.path`
-        // is this WI's OWN worktree of the project's repo, so committing there is fine.
+        // is this WI's OWN worktree of the project's repo, a DIFFERENT repo identity.
         hooks: withForgeRepoGitFence(
           sdkHooksForAgent({ skill: skillPathRelative(agentDef.slug), logger, initiativeId: input.initiativeId }),
-          { cwd: wiWorktree.path, workdir: wiWorktree.path, forgeRoot: FORGE_ROOT, logger, initiativeId: input.initiativeId },
+          { cwd: wiWorktree.path, forgeRoot: FORGE_ROOT, logger, initiativeId: input.initiativeId },
         ),
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
         queryFn: tallyingQueryFn,

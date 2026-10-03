@@ -51,7 +51,7 @@ import { resolve, join } from 'node:path';
 // architect-session.ts's own module doc — this file is reached from
 // `kinds/registry.ts` via `architect.ts`/`demo-builder.ts`).
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { sdkHooksForAgent, withForgeRepoGitFence } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
 
@@ -60,15 +60,19 @@ import { makeHeartbeatWriter } from '../heartbeat.ts';
 import { sessionSpentUsd, turnBudgetUsd } from '../turn-budget.ts';
 
 /**
- * The ONE "hooks, or nothing" spread. `sdkHooksForAgent` returns undefined when
- * the skill declares no hooks, so every spawn site spreads conditionally to keep
- * the options bag byte-identical when it does — a conditional that was copied at
- * four sites, twice as a nine-line IIFE. A site that gets it subtly wrong spawns
- * HOOK-BLIND with nothing red (`hook-dispatch-coverage.test.ts`'s own shape).
+ * The ONE hooks spread every session-kind spawn site owes — a conditional
+ * IIFE that was copied at four sites, twice as nine lines, before this
+ * existed. forge-8vfn.8.5.44 (row 208): `withForgeRepoGitFence` now merges
+ * in UNCONDITIONALLY (never `{}` — the fence binds every agent kind, not an
+ * opt-in roster, including these interactive kinds, which run unattended
+ * inside a story run exactly like a `runAgent` spawn does). `cwd` is THIS
+ * call's own spawn cwd, required rather than defaulted, for the identical
+ * reason `architect-structured-turn.ts`'s own `cwd` field is required: an
+ * optional field here would let a call site silently spawn judged against
+ * the wrong directory.
  */
-export function hooksSpreadForAgent(args: { skill: string; logger: EventLogger; initiativeId: string }): Record<string, unknown> {
-  const hooks = sdkHooksForAgent(args);
-  return hooks !== undefined ? { hooks } : {};
+export function hooksSpreadForAgent(args: { skill: string; logger: EventLogger; initiativeId: string; cwd: string; forgeRoot: string }): Record<string, unknown> {
+  return { hooks: withForgeRepoGitFence(sdkHooksForAgent(args), args) };
 }
 import { guardedReadSessionStatus, guardedWriteSessionStatus, statusWriteRefusalReason } from '../session-status-io.ts';
 
@@ -154,7 +158,7 @@ export type KindTurnPlumbing = {
   /**
    * W8-B6, hardened here: the hook-dispatch options for one skill, ALREADY
    * bound to this turn's logger and initiative id, ready to spread into a
-   * `runAgentTurn` options bag (`...plumbing.hooksForSkill(spec.skill)`).
+   * `runAgentTurn` options bag (`...plumbing.hooksForSkill(spec.skill, cwd)`).
    *
    * This lives on the plumbing, not in each kind, for a reason the hook
    * enumeration ratchet (`packages/agents/tests/contract/hook-dispatch-coverage.test.ts`)
@@ -162,11 +166,13 @@ export type KindTurnPlumbing = {
    * it to every handler, so the driver is a spawn-capable file. Leaving the
    * wiring to each kind would mean the one module every future kind spawns
    * through carries none — and a kind that forgot the six-line IIFE would
-   * spawn hook-blind with nothing red. Returns `{}` when the skill declares
-   * no hooks, so the spread is a no-op and the options bag is byte-identical
-   * to the per-kind form it replaces.
+   * spawn hook-blind with nothing red. `cwd` is the CALLER's — it cannot live
+   * on the plumbing itself, because it is whatever `runAgentTurn` call THIS
+   * one is paired with, which varies per step within one kind. forge-8vfn.8.5.44
+   * (row 208): the forge-repo-git fence rides along unconditionally now, so
+   * the bag is never `{}` — see that fence's own module doc for why.
    */
-  hooksForSkill: (skill: string) => Record<string, unknown>;
+  hooksForSkill: (skill: string, cwd: string) => Record<string, unknown>;
   /**
    * Row 193b (T1 ruling 1973gq) — the `maxBudgetUsd` for the NEXT SDK call this
    * turn makes: the session's ceiling (`status.costCeilingUsd`, else the
@@ -365,7 +371,7 @@ export async function runKindTurn<
     return out;
   };
 
-  const hooksForSkill = (skill: string): Record<string, unknown> => hooksSpreadForAgent({ skill, logger, initiativeId });
+  const hooksForSkill = (skill: string, cwd: string): Record<string, unknown> => hooksSpreadForAgent({ skill, logger, initiativeId, cwd, forgeRoot });
 
   const plumbing: KindTurnPlumbing = {
     sessionDir,

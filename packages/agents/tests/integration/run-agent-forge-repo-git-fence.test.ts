@@ -18,6 +18,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,6 +49,14 @@ function getFixtureDef(defs: AgentDefinition[], slug: string): AgentDefinition {
 
 function oneShotClone(def: AgentDefinition): AgentDefinition {
   return { ...def, runtime: { ...def.runtime, loopStrategy: 'one-shot' }, budgets: { maxTurns: 10, maxBudgetUsd: 1 } };
+}
+
+/** The fence now decides by REAL repo identity (row 208 follow-up), not a
+ *  lexical path prefix — `scratchForgeRoot` and `workdir` must each be a
+ *  genuine, INDEPENDENT `git init` repo (no commit needed: identity only
+ *  requires `.git` to exist) for the allow/deny split below to mean anything. */
+function gitInit(dir: string): void {
+  execFileSync('git', ['init', '-q'], { cwd: dir, stdio: 'pipe' });
 }
 
 function capturingQueryFn(sink: { options?: Record<string, unknown> }): StreamQueryFn {
@@ -86,6 +95,8 @@ test('runAgent one-shot path: options.hooks.PreToolUse really denies seq 52, and
   try {
     const workdir = join(scratchForgeRoot, 'projects', 'story-s1');
     mkdirSync(workdir, { recursive: true });
+    gitInit(scratchForgeRoot);
+    gitInit(workdir);
     const logsRoot = join(scratchForgeRoot, '_logs');
 
     const defs = listAgentDefinitions(join(FORGE_ROOT, 'skills'));
@@ -121,6 +132,56 @@ test('runAgent one-shot path: options.hooks.PreToolUse really denies seq 52, and
     // own nested repo): the fence must stay out of the way.
     const allowed = await fence({ tool_name: 'Bash', tool_input: { command: SEQ_46 } });
     assert.equal('hookSpecificOutput' in allowed, false, 'a legitimate project-repo commit must not be refused');
+  } finally {
+    rmSync(scratchForgeRoot, { recursive: true, force: true });
+    restoreEnv();
+  }
+});
+
+test('runAgent one-shot path: a REAL linked `git worktree add` sibling — lexically outside forgeRoot, same repo identity — is denied too (row 208 follow-up)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchForgeRoot = mkdtempSync(join(tmpdir(), 'forge-repo-git-fence-worktree-'));
+  try {
+    const workdir = join(scratchForgeRoot, 'projects', 'story-s1');
+    mkdirSync(workdir, { recursive: true });
+    gitInit(scratchForgeRoot);
+    gitInit(workdir);
+    // A real commit (worktree add needs a HEAD) + a REAL linked worktree,
+    // sitting OUTSIDE scratchForgeRoot entirely — the exact shape of the
+    // operator's main checkout vs. a `forge-m7-e-*` session worktree.
+    execFileSync('git', ['-c', 'user.email=t@e.com', '-c', 'user.name=T', 'commit', '-q', '--allow-empty', '-m', 'x'], {
+      cwd: scratchForgeRoot,
+      stdio: 'pipe',
+    });
+    const sibling = mkdtempSync(join(tmpdir(), 'forge-repo-git-fence-sibling-'));
+    rmSync(sibling, { recursive: true, force: true }); // worktree add must create the dir itself
+    execFileSync('git', ['worktree', 'add', '-q', '-b', 'sibling-branch', sibling], { cwd: scratchForgeRoot, stdio: 'pipe' });
+
+    try {
+      const logsRoot = join(scratchForgeRoot, '_logs');
+      const defs = listAgentDefinitions(join(FORGE_ROOT, 'skills'));
+      const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'));
+      const sink: { options?: Record<string, unknown> } = {};
+      await runAgent(def, {
+        runId: '_agent-fence-worktree',
+        workdir,
+        forgeRoot: scratchForgeRoot,
+        prompt: 'noop',
+        logsRoot,
+        queryFn: capturingQueryFn(sink),
+      });
+
+      const fence = soleFenceCallback(sink.options!);
+      const decision = await fence({ tool_name: 'Bash', tool_input: { command: `cd ${sibling} && git commit -m x` } });
+      const out = decision['hookSpecificOutput'] as Record<string, unknown> | undefined;
+      assert.ok(out, 'a sibling linked worktree, lexically outside forgeRoot, must still be refused — same repo identity');
+      assert.equal(out.permissionDecision, 'deny');
+    } finally {
+      try {
+        execFileSync('git', ['worktree', 'remove', '--force', sibling], { cwd: scratchForgeRoot, stdio: 'pipe' });
+      } catch { /* best-effort — the rmSync below removes the directory regardless */ }
+      rmSync(sibling, { recursive: true, force: true });
+    }
   } finally {
     rmSync(scratchForgeRoot, { recursive: true, force: true });
     restoreEnv();

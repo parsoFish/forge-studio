@@ -20,6 +20,15 @@
       "Agent"
     ],
     "maxTurns": 8,
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            "<fn>"
+          ]
+        }
+      ]
+    },
     "abortController": "<AbortController>"
   },
   "optionsKeyOrder": [
@@ -29,6 +38,7 @@
     "allowedTools",
     "disallowedTools",
     "maxTurns",
+    "hooks",
     "abortController"
   ],
   "result": {

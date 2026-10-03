@@ -565,7 +565,7 @@ async function runOneShotSpawn(
     logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs')),
     initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId,
     forgeRoot: ctx.forgeRoot,
-  }), { cwd: ctx.cwd ?? ctx.workdir, workdir: ctx.workdir, forgeRoot: ctx.forgeRoot ?? FORGE_ROOT, logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs')), initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId });
+  }), { cwd: ctx.cwd ?? ctx.workdir, forgeRoot: ctx.forgeRoot ?? FORGE_ROOT, logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs')), initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId });
   // R6-04 (WI-2): an explicit operator ceiling WINS over the agent's own
   // declared budget — not max()/min() of the two. `??` gives exactly that:
   // `ctx.kickoffCeilingUsd` short-circuits `resolveOneShotBudgetUsd` entirely
@@ -733,7 +733,7 @@ async function runInvocationSpawn(
   // ceiling WINS over the agent's own declared budget (`??`, not max/min).
   const invocationBudgetUsd = effectiveCeilingUsd(def, ctx);
   // W8-B6/forge-8vfn.8.1.7 — same derivation as the one-shot path above; forge-8vfn.8.5.44 (row 208) ALWAYS adds the forge-repo-git fence too.
-  const hooksBag = withForgeRepoGitFence(sdkHooksForAgent({ skill: spec.skill, logger, initiativeId, forgeRoot: ctx.forgeRoot }), { cwd: ctx.workdir, workdir: ctx.workdir, forgeRoot: ctx.forgeRoot ?? FORGE_ROOT, logger, initiativeId });
+  const hooksBag = withForgeRepoGitFence(sdkHooksForAgent({ skill: spec.skill, logger, initiativeId, forgeRoot: ctx.forgeRoot }), { cwd: ctx.workdir, forgeRoot: ctx.forgeRoot ?? FORGE_ROOT, logger, initiativeId });
   return withSessionEndHooks(hooksBag, async (sdkHooks) => {
     const agent = adapter.createAgent({
       model: modelForSpec(spec),

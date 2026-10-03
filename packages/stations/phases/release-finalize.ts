@@ -159,12 +159,12 @@ export async function runReleaseFinalize(
     maxBudgetUsd: RELEASE_FINALIZE_LIVE_MAX_BUDGET_USD,
     // forge-8vfn.8.5.44 (row 208): merged unconditionally, same as every
     // other spawn site — this agent legitimately commits + pushes INSIDE
-    // `input.worktreePath` (the PROJECT's own PR worktree), so `workdir`
-    // below is that same path; only an escape OUT of it toward `FORGE_ROOT`
-    // is refused.
+    // `input.worktreePath` (the PROJECT's own PR worktree, a DIFFERENT repo
+    // identity from `FORGE_ROOT`'s); only an escape toward the forge repo's
+    // own identity is refused.
     hooks: withForgeRepoGitFence(
       sdkHooksForAgent({ skill: releaseFinalizeAgentSpec.skill, logger, initiativeId: input.initiativeId }),
-      { cwd: input.worktreePath, workdir: input.worktreePath, forgeRoot: FORGE_ROOT, logger, initiativeId: input.initiativeId },
+      { cwd: input.worktreePath, forgeRoot: FORGE_ROOT, logger, initiativeId: input.initiativeId },
     ),
   };
 

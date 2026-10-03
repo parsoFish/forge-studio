@@ -148,6 +148,7 @@
 import { resolve } from 'node:path';
 
 import { decideForgeRepoGit, type EventLogger } from '@forge/kernel';
+import { cachedRepoCommonDir } from './repo-identity.ts';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
 import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library';
@@ -568,9 +569,6 @@ export type ForgeRepoGitFenceRunContext = {
    *  (legacy invocation path) for THIS run; see `decideForgeRepoGit`'s own
    *  doc for why a live, cross-call shell cwd is not available here. */
   cwd: string;
-  /** The project's own nested repo this run is bound to — committing HERE
-   *  is fine. */
-  workdir: string;
   forgeRoot: string;
   logger: EventLogger | (() => EventLogger);
   initiativeId: string;
@@ -581,7 +579,14 @@ function forgeRepoGitPreToolUseCallback(ctx: ForgeRepoGitFenceRunContext): SdkHo
     if (input.tool_name !== 'Bash') return { continue: true };
     const command = (input.tool_input as { command?: unknown } | undefined)?.command;
     if (typeof command !== 'string') return { continue: true }; // no command string: not this fence's shape to judge
-    const decision = decideForgeRepoGit({ command, cwd: ctx.cwd, forgeRoot: ctx.forgeRoot, workdir: ctx.workdir });
+    // Row 208 follow-up — IDENTITY via `cachedRepoCommonDir` (memoised per process), never a path prefix; see that module's own header.
+    const decision = decideForgeRepoGit({
+      command,
+      cwd: ctx.cwd,
+      forgeRoot: ctx.forgeRoot,
+      forgeRepoId: cachedRepoCommonDir(ctx.forgeRoot),
+      repoOf: cachedRepoCommonDir,
+    });
     if (decision.allow) return { continue: true };
     // Every refusal is logged (forge-8vfn.8.5.44's own requirement) — an
     // agent whose onboarding run moves `main` and leaves NO trace anywhere

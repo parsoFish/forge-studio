@@ -21,34 +21,76 @@
  * `branch` create/delete/move, `checkout`/`switch`, `merge`, `rebase`,
  * `reset`, `cherry-pick`, `revert`, `am`, `tag`, `stash`, `push`,
  * fetch-into-refs, `worktree add`/`remove` — via any route: a plain cwd'd
- * invocation, `git -C <dir>`, `--git-dir=`/`--work-tree=`, or `GIT_DIR=`/
- * `GIT_WORK_TREE=`. Writing the profile file stays allowed; this function
- * never sees a `Write` call at all, only `Bash`.
+ * invocation, `git -C <dir>`, `--git-dir=`/`--work-tree=`, `GIT_DIR=`/
+ * `GIT_WORK_TREE=`, OR a route that reaches a DIFFERENT worktree of the SAME
+ * repository. Writing the profile file stays allowed; this function never
+ * sees a `Write` call at all, only `Bash`.
+ *
+ * WHY REPO IDENTITY, NOT A PATH PREFIX (T1 review of the first cut, row
+ * 208). "Outside forgeRoot" is a LEXICAL question; "the same repository as
+ * forgeRoot" is not — a git repo's refs are owned by its `.git` COMMON dir,
+ * and every worktree of that repo (the main checkout, every sibling
+ * `forge-m7-e-*` linked worktree this install's own worktree-per-session
+ * model creates) shares exactly one. `cd /home/parso/forge && git
+ * update-ref refs/heads/main <sha>` — the operator's own main checkout, with
+ * `forgeRoot=/home/parso/forge-m7-e-docs` — is OUTSIDE forgeRoot by every
+ * lexical measure and STILL moves the exact ref this ruling exists to
+ * protect. So this function is never handed `forgeRoot` alone: it is handed
+ * `forgeRepoId` (forgeRoot's repo identity, precomputed once) and `repoOf`
+ * (a resolver from any directory to ITS repo identity), and the question it
+ * actually asks per mutating invocation is "does the effective target
+ * belong to the SAME repository as forgeRoot" — never "is it lexically
+ * under it". The project's own nested repo has its OWN `.git`, hence its
+ * OWN identity, and is allowed by this rule with no separate carve-out.
+ *
+ * WHY THE RESOLVER IS INJECTED, NOT CALLED HERE. This function stays
+ * filesystem-free (directly unit-testable with a fake `repoOf` table, no
+ * temp repos, no `git worktree add`). The REAL resolver
+ * (`packages/agents/studio/repo-identity.ts`, `resolveRepoCommonDir`) walks
+ * `.git` files and is exercised against real on-disk repos in that module's
+ * own test file. `forgeRepoId` is resolved and CACHED once per spawn by the
+ * agents-side glue (`hook-dispatch.ts`) rather than re-derived here, since
+ * it cannot change mid-run and a Bash-heavy run can fire this callback
+ * dozens of times.
+ *
+ * UNRESOLVABLE IS NEVER "SAFE". `forgeRepoId === null` (forge's own identity
+ * could not be resolved) or `repoOf(effectiveDir) === null` (the target
+ * isn't inside any repo this function can identify, or the walk failed) both
+ * DENY a mutating verb — an unprovable "not the forge repo" is not the same
+ * fact as a proven one, and the direction of a doubt-shaped gap is always
+ * deny, never allow.
  *
  * WHY A DENYLIST OF VERBS, NOT AN ALLOWLIST OF SAFE ONES (unlike
  * `tool-fence.ts` next door, which argues the opposite for TOOL NAMES). The
  * ruling names an exhaustive, closed set of REF-MOVING git verbs — that is
- * the actual shape of the harm ("commit to or move a ref"), and `git add`,
+ * the actual shape of the harm ("commit to or move a ref") — and `git add`,
  * `git config`, `git init`, `git submodule` etc. do not move a ref even when
  * run at the forge root, so denying them too would refuse operations the
  * ruling never asked to stop (and would have wrongly denied seq 46's own
  * legitimate `git add` had this fence applied to the project's repo instead
- * of the forge repo). Every verb NOT in the set passes with no location
+ * of the forge repo). Every verb NOT in the set passes with no identity
  * check at all — this function has nothing to say about it.
  *
- * WHY CONSERVATIVE ON THE TARGET, NOT THE VERB. A verb in the set is denied
- * UNLESS its effective target can be shown to be (a) outside the forge repo
- * entirely, or (b) inside the project's own nested repo (`workdir`) with no
- * `..`/`-C`/`--git-dir`/`GIT_DIR=` escape. Anything this function cannot
- * resolve lexically — a `cd` to a shell expansion, a `-C`/`GIT_DIR=` value
- * containing `$`/`~`, command/process substitution anywhere in the command —
- * is treated as "not shown to be outside", i.e. DENIED. Pure lexical
- * resolution (`node:path`'s `resolve`), never `realpathSync`: this function
- * takes no filesystem dependency, so it is directly testable against paths
- * that do not exist on the host running the test, and a symlink cannot move
- * its verdict either way (the escape this closes is "which directory did the
- * command NAME", not "what does that name really point at" — the forge repo
- * and the project's nested repo are both real, ordinary directories here).
+ * WRAPPED, SUBSHELL AND INDIRECT FORMS (T1 review, row 208 follow-up). The
+ * per-segment `cd`/`git` tracking below only reasons about a SIMPLE command
+ * at the head of its segment. `(cd <forge> && git commit -m x)` splits (on
+ * the top-level `&&`, which this file's splitter does not treat `(`/`)` as
+ * special for) into `(cd <forge>` and `git commit -m x)` — the leading `(`
+ * glues onto `cd`, so the `cd` is never recognised and the second segment's
+ * `git commit` is judged against the UNCHANGED starting cwd. The identical
+ * blindness hides a `git` invocation inside `sh -c '…'`, `bash -c "…"`,
+ * `eval`, `env NAME=value git …`, `xargs git …`, `command`/`exec`/`nice`/
+ * `timeout … git …` — in every one of these, `git` is a WORD somewhere in
+ * the command that is not the head of a per-segment simple command this
+ * tokenizer resolves a cwd for. Rather than special-case each wrapper (a
+ * denylist of wrapper NAMES has the identical "can only miss one nobody
+ * thought of" defect `tool-fence.ts` argues against for tool names), a
+ * single BLANKET pre-check denies the whole command outright whenever a
+ * `git` token exists somewhere other than at the head of a parsed simple
+ * command, OR the command contains any `(`/`)`/`{`/`}` grouping character —
+ * AND a mutating verb WORD appears anywhere in the command. Deny-on-doubt:
+ * this never tries to prove the wrapped form is dangerous, only that it
+ * cannot be shown safe.
  *
  * WHAT THIS IS NOT. A general Bash-write inspector — that is
  * `packages/sessions/bash-fence.ts`, which already denies EVERY git mutating
@@ -56,14 +98,15 @@
  * nested repo" to carve an exception for, since its callers are
  * interactive-session write-root fences, not a project-bound agent run).
  * This module is deliberately narrower and deliberately more permissive in
- * exactly one way `bash-fence.ts` is not: a mutating git verb run inside
- * `workdir` is fine. Kernel cannot import `packages/sessions` (layering —
- * sessions depends on kernel, never the reverse) and the two fences answer
- * different questions, so this is a second, small, purpose-built tokenizer
- * rather than a shared one — see `splitTopLevelSegments`'s own doc for how
- * much narrower it is than that file's.
+ * exactly one way `bash-fence.ts` is not: a mutating git verb run inside a
+ * genuinely different repository (identity, not lexical workdir) is fine.
+ * Kernel cannot import `packages/sessions` (layering — sessions depends on
+ * kernel, never the reverse) and the two fences answer different questions,
+ * so this is a second, small, purpose-built tokenizer rather than a shared
+ * one — see `splitTopLevelSegments`'s own doc for how much narrower it is
+ * than that file's.
  */
-import { isAbsolute, resolve as resolvePath, sep } from 'node:path';
+import { isAbsolute, resolve as resolvePath } from 'node:path';
 
 export type ForgeRepoGitFenceInput = {
   /** The raw Bash command string a tool call is about to run. */
@@ -80,10 +123,23 @@ export type ForgeRepoGitFenceInput = {
    * forge does not control.
    */
   cwd: string;
-  /** This forge install's root — the repo whose refs must not move. */
+  /** This forge install's root — used only for the DENY message's wording;
+   *  the actual decision runs on `forgeRepoId`, below. */
   forgeRoot: string;
-  /** The bound project's own nested repo — committing HERE is fine. */
-  workdir: string;
+  /**
+   * `forgeRoot`'s repo identity (its git COMMON dir), precomputed ONCE per
+   * spawn by the caller — see the module header. `null` ⇒ it could not be
+   * resolved, which denies every mutating verb unconditionally.
+   */
+  forgeRepoId: string | null;
+  /**
+   * Resolves any directory's repo identity, or `null` if it is not inside a
+   * repo this function can identify. See the module header's "why injected"
+   * note. Called once per mutating git invocation found, on that
+   * invocation's EFFECTIVE target directory (after `cd`/`-C`/
+   * `--git-dir=`/`GIT_DIR=` tracking).
+   */
+  repoOf: (dir: string) => string | null;
 };
 
 export type ForgeRepoGitDecision = { allow: true } | { allow: false; reason: string };
@@ -97,6 +153,12 @@ const MUTATING_GIT_VERBS = new Set([
   'reset', 'cherry-pick', 'revert', 'am', 'tag', 'stash', 'push', 'fetch',
   'pull', 'worktree',
 ]);
+
+/** Same vocabulary as `MUTATING_GIT_VERBS`, as a word-boundary alternation —
+ *  the blanket wrapped-form check (module header) asks "does a mutating verb
+ *  WORD appear anywhere", not "is this invocation's own verb mutating", so it
+ *  cannot reuse `isActuallyMutating`'s per-invocation refinement. */
+const MUTATING_VERB_WORD_RE = new RegExp(`\\b(?:${[...MUTATING_GIT_VERBS].join('|')})\\b`);
 
 const BRANCH_LIST_ONLY_ARGS = new Set(['--list', '-l', '-a', '-r', '--all', '-v', '-vv', '--show-current']);
 const TAG_LIST_ONLY_ARGS = new Set(['--list', '-l']);
@@ -130,6 +192,8 @@ function hasUnresolvableExpansion(word: string): boolean {
  * quote" and "strip the quote marks from the word"; it does not model
  * heredocs, redirection, fd numbers, or any of the shapes that file reasons
  * about, because this fence only ever looks at `cd` and `git` invocations.
+ * Deliberately does NOT treat `(`/`)`/`{`/`}` as boundaries either — the
+ * module header's "wrapped forms" section covers both consequences of that.
  */
 function splitTopLevelSegments(command: string): string[] {
   const segments: string[] = [];
@@ -160,13 +224,22 @@ function splitTopLevelSegments(command: string): string[] {
   return segments.map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
+/** One word from `splitWords`: its unquoted text, plus whether ANY part of
+ *  it came from inside a quote. The distinction matters exactly once (see
+ *  `gitAppearsOutsideHead`): a bare argument word happening to CONTAIN "git"
+ *  as a hyphen-delimited substring of a path (`/home/x/my-git-tool`) must
+ *  never read as a nested `git` invocation the way an actually-quoted nested
+ *  command string (`sh -c 'cd X && git commit'`) legitimately does. */
+type Word = { text: string; quoted: boolean };
+
 /** Word-split one segment, quote-aware: a quoted span is one word with its
  *  quote marks stripped (minimal backslash handling inside double quotes
  *  only — single-quoted text is fully literal, as in a real shell). */
-function splitWords(segment: string): string[] {
-  const words: string[] = [];
+function splitWords(segment: string): Word[] {
+  const words: Word[] = [];
   let cur = '';
   let has = false;
+  let quoted = false;
   let inSingle = false;
   let inDouble = false;
   for (let i = 0; i < segment.length; i += 1) {
@@ -177,13 +250,13 @@ function splitWords(segment: string): string[] {
       if (c === '"') inDouble = false; else { cur += c; has = true; }
       continue;
     }
-    if (c === "'") { inSingle = true; has = true; continue; }
-    if (c === '"') { inDouble = true; has = true; continue; }
-    if (/\s/.test(c)) { if (has) { words.push(cur); cur = ''; has = false; } continue; }
+    if (c === "'") { inSingle = true; has = true; quoted = true; continue; }
+    if (c === '"') { inDouble = true; has = true; quoted = true; continue; }
+    if (/\s/.test(c)) { if (has) { words.push({ text: cur, quoted }); cur = ''; has = false; quoted = false; } continue; }
     cur += c;
     has = true;
   }
-  if (has) words.push(cur);
+  if (has) words.push({ text: cur, quoted });
   return words;
 }
 
@@ -198,19 +271,18 @@ function resolveAgainst(base: string | null, value: string): string | null {
   return resolvePath(base, value);
 }
 
-function isUnderOrEqual(candidate: string, root: string): boolean {
-  return candidate === root || candidate.startsWith(root + sep);
-}
-
 /** Leading `NAME=value` env-assignment words before the real command word —
  *  returns them keyed by name, plus the index of the first non-assignment
  *  word. `GIT_DIR=`/`GIT_WORK_TREE=` are read out of this set below; no
- *  other assignment is interpreted. */
-function stripLeadingAssignments(words: readonly string[]): { env: Map<string, string>; rest: readonly string[] } {
+ *  other assignment is interpreted. A QUOTED word is never an assignment —
+ *  real shells only recognise the unquoted `NAME=` shape. */
+function stripLeadingAssignments(words: readonly Word[]): { env: Map<string, string>; rest: readonly Word[] } {
   const env = new Map<string, string>();
   let i = 0;
   while (i < words.length) {
-    const m = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(words[i]!);
+    const w = words[i]!;
+    if (w.quoted) break;
+    const m = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(w.text);
     if (!m) break;
     env.set(m[1]!, m[2]!);
     i += 1;
@@ -224,11 +296,10 @@ function stripLeadingAssignments(words: readonly string[]): { env: Map<string, s
  *  names a directory). Any other leading `-` option this function does not
  *  recognise stops the scan: the "subcommand" it reports from there on is
  *  that unrecognised flag itself, which matches no entry in
- *  `MUTATING_GIT_VERBS` OR any read-only shortcut, so a verb genuinely
- *  hidden behind an unmodelled global option is NOT silently passed — it
- *  simply is not reasoned about either way, same as this file's other
- *  doubt-shaped gaps (`$()`, a `cd` to an expansion). */
-function resolveGitTarget(args: readonly string[], startCwd: string | null, env: Map<string, string>): {
+ *  `MUTATING_GIT_VERBS`, so a verb genuinely hidden behind an unmodelled
+ *  global option is NOT silently passed — it simply is not reasoned about
+ *  either way, same as this file's other doubt-shaped gaps. */
+function resolveGitTarget(args: readonly Word[], startCwd: string | null, env: Map<string, string>): {
   effectiveDir: string | null;
   subcommandIndex: number;
 } {
@@ -236,15 +307,15 @@ function resolveGitTarget(args: readonly string[], startCwd: string | null, env:
   let workTreeOverride: string | undefined;
   let gitDirOverride: string | undefined;
   let i = 0;
-  while (i < args.length && args[i]!.startsWith('-')) {
-    const a = args[i]!;
-    if (a === '-C') { base = resolveAgainst(base, args[i + 1] ?? ''); i += 2; continue; }
+  while (i < args.length && args[i]!.text.startsWith('-')) {
+    const a = args[i]!.text;
+    if (a === '-C') { base = resolveAgainst(base, args[i + 1]?.text ?? ''); i += 2; continue; }
     if (a === '-c') { i += 2; continue; }
     if (a === '--no-pager' || a === '-p' || a === '--paginate') { i += 1; continue; }
     if (a.startsWith('--work-tree=')) { workTreeOverride = a.slice('--work-tree='.length); i += 1; continue; }
     if (a.startsWith('--git-dir=')) { gitDirOverride = a.slice('--git-dir='.length); i += 1; continue; }
-    if (a === '--work-tree') { workTreeOverride = args[i + 1]; i += 2; continue; }
-    if (a === '--git-dir') { gitDirOverride = args[i + 1]; i += 2; continue; }
+    if (a === '--work-tree') { workTreeOverride = args[i + 1]?.text; i += 2; continue; }
+    if (a === '--git-dir') { gitDirOverride = args[i + 1]?.text; i += 2; continue; }
     break;
   }
   const workTree = workTreeOverride ?? env.get('GIT_WORK_TREE');
@@ -253,16 +324,58 @@ function resolveGitTarget(args: readonly string[], startCwd: string | null, env:
   return { effectiveDir: override ?? base, subcommandIndex: i };
 }
 
+/** Outside-quotes scan for `(`, `)`, `{`, `}` — see the module header's
+ *  "wrapped forms" section on why their mere PRESENCE, with no attempt to
+ *  parse what they group, is the conservative signal this fence acts on. */
+function hasGroupingChars(command: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < command.length; i += 1) {
+    const c = command[i];
+    if (inSingle) { if (c === "'") inSingle = false; continue; }
+    if (inDouble) {
+      if (c === '\\' && i + 1 < command.length) { i += 1; continue; }
+      if (c === '"') inDouble = false;
+      continue;
+    }
+    if (c === "'") { inSingle = true; continue; }
+    if (c === '"') { inDouble = true; continue; }
+    if (c === '(' || c === ')' || c === '{' || c === '}') return true;
+  }
+  return false;
+}
+
+/** Does a `git` WORD appear anywhere other than the head of one of
+ *  `command`'s top-level simple commands (after leading assignments)? An
+ *  UNQUOTED non-head word must be the EXACT literal `git` (`env FOO=bar git
+ *  commit`, `xargs git commit`, `timeout 5 git commit`, …) — never a
+ *  word-boundary substring match, which would misfire on an ordinary
+ *  argument like a path containing `-git-` (`cd /home/x/my-git-tool`) that
+ *  has nothing to do with a nested invocation. A QUOTED word, by contrast,
+ *  IS checked with a word-boundary regex against its content, because that
+ *  is exactly the shape of a nested command string this fence must still
+ *  catch — `sh -c 'cd X && git commit'`'s whole quoted span is one word to
+ *  `splitWords`, containing `git` as its OWN token inside a real nested
+ *  shell command, not as a fragment of some unrelated identifier. */
+function gitAppearsOutsideHead(command: string): boolean {
+  for (const segment of splitTopLevelSegments(command)) {
+    const { rest } = stripLeadingAssignments(splitWords(segment));
+    for (let i = 1; i < rest.length; i += 1) {
+      const w = rest[i]!;
+      if (w.quoted ? /\bgit\b/.test(w.text) : w.text === 'git') return true;
+    }
+  }
+  return false;
+}
+
 /**
- * The decision. `cwd`/`forgeRoot`/`workdir` are expected already-absolute
- * (every production caller derives them from the spawn's own `options.cwd`
- * / `FORGE_ROOT` / `ctx.workdir`, all of which are asserted absolute
- * upstream — `resolve()` below is defensive, not a declaration that a
- * relative value here is meaningful).
+ * The decision. `cwd`/`forgeRoot` are expected already-absolute (every
+ * production caller derives them from the spawn's own `options.cwd` /
+ * `FORGE_ROOT`, both asserted absolute upstream — `resolve()` below is
+ * defensive, not a declaration that a relative value here is meaningful).
  */
 export function decideForgeRepoGit(input: ForgeRepoGitFenceInput): ForgeRepoGitDecision {
   const forgeRoot = resolvePath(input.forgeRoot);
-  const workdir = resolvePath(input.workdir);
 
   // Command/process substitution can run an arbitrary pipeline this
   // segment-level scan never looks inside (`$(cd <forge> && git commit …)`
@@ -270,8 +383,22 @@ export function decideForgeRepoGit(input: ForgeRepoGitFenceInput): ForgeRepoGitD
   // occurrence anywhere in the command, alongside the literal token `git`,
   // is denied outright — `bash-fence.ts` makes the identical call for the
   // identical reason: "not reasoned about" is not the same fact as "safe".
-  if (/\$\(|`|<\(|>\(/.test(input.command) && /\bgit\b/.test(input.command)) {
+  const mentionsGit = /\bgit\b/.test(input.command);
+  if (mentionsGit && /\$\(|`|<\(|>\(/.test(input.command)) {
     return { allow: false, reason: 'command/process substitution alongside a `git` invocation is not reasoned about — denied conservatively' };
+  }
+
+  // Wrapped/subshell/indirect forms (module header) — a blanket pre-check,
+  // never a per-wrapper-name denylist. Gated on `mentionsGit` for the same
+  // reason the substitution check above is: a grouped command with no `git`
+  // anywhere is not this fence's concern at all.
+  if (mentionsGit && MUTATING_VERB_WORD_RE.test(input.command) && (hasGroupingChars(input.command) || gitAppearsOutsideHead(input.command))) {
+    return {
+      allow: false,
+      reason:
+        'a wrapped, grouped or indirect git invocation ((), {}, sh -c, bash -c, eval, env, xargs, command, exec, nice, ' +
+        'timeout, …) alongside a mutating verb is not reasoned about — denied conservatively (ruling 208, forge-8vfn.8.5.44).',
+    };
   }
 
   let cwd: string | null = resolvePath(input.cwd);
@@ -281,30 +408,42 @@ export function decideForgeRepoGit(input: ForgeRepoGitFenceInput): ForgeRepoGitD
     const head = rest[0];
     if (head === undefined) continue;
 
-    if (head === 'cd') {
+    if (head.text === 'cd') {
       const target = rest[1];
-      cwd = rest.length === 2 && target !== undefined && !target.startsWith('-') ? resolveAgainst(cwd, target) : null;
+      cwd = rest.length === 2 && target !== undefined && !target.text.startsWith('-') ? resolveAgainst(cwd, target.text) : null;
       continue;
     }
 
-    if (head !== 'git') continue;
+    if (head.text !== 'git') continue;
     const gitArgs = rest.slice(1);
     const { effectiveDir, subcommandIndex } = resolveGitTarget(gitArgs, cwd, env);
-    const verb = gitArgs[subcommandIndex];
+    const verb = gitArgs[subcommandIndex]?.text;
     if (verb === undefined || !MUTATING_GIT_VERBS.has(verb)) continue;
-    if (!isActuallyMutating(verb, gitArgs.slice(subcommandIndex + 1))) continue;
+    if (!isActuallyMutating(verb, gitArgs.slice(subcommandIndex + 1).map((w) => w.text))) continue;
 
-    const outsideForge = effectiveDir !== null && !isUnderOrEqual(effectiveDir, forgeRoot);
-    const insideWorkdir = effectiveDir !== null && isUnderOrEqual(effectiveDir, workdir);
-    if (outsideForge || insideWorkdir) continue;
+    if (effectiveDir === null) {
+      return {
+        allow: false,
+        reason: `git ${verb} runs with an unresolvable target directory (an expansion, an unknown prior `
+          + `\`cd\`, or a GIT_DIR/--git-dir override this fence cannot statically follow) — denied conservatively; `
+          + `it cannot be shown to belong to a different repository than the forge repo at "${forgeRoot}" `
+          + '(ruling 208, forge-8vfn.8.5.44).',
+      };
+    }
 
-    const where = effectiveDir === null ? 'an unresolvable target directory' : `"${effectiveDir}"`;
+    // THE identity check (module header's "why repo identity" section): a
+    // mutating verb is allowed ONLY when its target is PROVABLY a different
+    // repository from forgeRoot's — never merely "lexically elsewhere".
+    const targetRepoId = input.repoOf(effectiveDir);
+    const provablyDifferentRepo = input.forgeRepoId !== null && targetRepoId !== null && targetRepoId !== input.forgeRepoId;
+    if (provablyDifferentRepo) continue;
+
     return {
       allow: false,
       reason:
-        `git ${verb} runs against ${where}, which cannot be shown to be outside the forge repo ("${forgeRoot}") or ` +
-        `inside the project's own nested repo ("${workdir}") — no agent kind may commit to or move a ref of the ` +
-        'forge repo (ruling 208, forge-8vfn.8.5.44).',
+        `git ${verb} runs against "${effectiveDir}", which cannot be shown to belong to a DIFFERENT repository than ` +
+        `the forge repo at "${forgeRoot}" (same repo id, or one side's identity could not be resolved) — no agent ` +
+        'kind may commit to or move a ref of the forge repo (ruling 208, forge-8vfn.8.5.44).',
     };
   }
   return { allow: true };
