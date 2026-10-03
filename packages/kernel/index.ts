@@ -91,6 +91,6 @@ export * from './bounded-log.ts';
 export * from './process-liveness.ts';
 /** The `reference-transaction` git hook that refuses an agent spawn's ref
  *  move against the FORGE repo itself, and the idempotent installer for it
- *  (forge-8vfn.8.5.47, row 211) — replaces the PreToolUse Bash-command
- *  analysis (`forge-repo-git-fence.ts`) that misfired on a project commit. */
+ *  (forge-8vfn.8.5.47, row 211) — it replaced row 208's PreToolUse
+ *  Bash-command analysis, which misfired on a project commit. */
 export * from './forge-ref-guard-hook.ts';
