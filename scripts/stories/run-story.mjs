@@ -475,7 +475,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // Bead `forge-8vfn.6.11.29` — the OTHER half of the trailing sweep: the
   // GitHub remotes this run minted. Unreached until now, so every run that
   // minted one leaked it.
-  const remotes = sweepStoryRemotesFromManifest({ storyId: story.id, root: ROOT });
+  // ROW 210 (`forge-8vfn.8.5.46`) — `sinceMs: startedMs`, the same run-start
+  // value `reapCensusAndSweep`'s own `sinceMs` carries a few lines above,
+  // scopes the manifest to THIS story's run: an earlier story's already-swept
+  // rows (append-only, never removed until this ruling) must not be re-judged
+  // and re-refused by name on every later story's own trailing sweep.
+  const remotes = sweepStoryRemotesFromManifest({ storyId: story.id, root: ROOT, sinceMs: startedMs });
   const remoteReport = describeRemoteSweep(remotes);
   for (const line of remoteReport.lines) console.log(line);
   for (const line of remoteReport.warnLines) console.warn(line);

@@ -11,10 +11,11 @@
  * remove and which a `delete_repo` token reaches for the WHOLE account, not
  * just this run's own fixtures — bead `forge-8vfn.6.11.2`, T1 ruling 255.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
 /**
  * The env var and the operator-root file the story sweep's DELETE token is read
@@ -62,6 +63,61 @@ function readSweepDeleteToken() {
  * a real GitHub.
  */
 /**
+ * Is a manifest ROW young enough to belong to the CURRENT run? — ROW 210,
+ * bead `forge-8vfn.8.5.46`.
+ *
+ * The manifest is APPEND-ONLY (`recordMintedRemote`, kernel) and, until this
+ * ruling, nothing ever dropped a row from it — so a row an EARLIER, separate
+ * invocation of the harness minted (S2's repos, already deleted by S2's own
+ * trailing sweep) sat there to be re-read by every later run (S3, or any run
+ * after it) forever. It can never be deleted by that later run either,
+ * because it never carries THAT run's own `story-<id>` prefix — so it was
+ * refused, by name, every single time: "3 lines in a recent gate, 36 in a
+ * full run" for rows that were never this run's to judge at all.
+ *
+ * `sinceMs` is the run's own start (`startedMs` in `run-story.mjs`/`run.mjs`,
+ * the same value `reapCensusAndSweep`'s `sinceMs` already carries past this
+ * point in the trailing sweep). `FS_CLOCK_SLACK_MS` (`beats-queue-
+ * terminal.mjs`) is reused rather than a second constant: the mint's `at` is
+ * `new Date().toISOString()`, read from the SAME host's clock as `sinceMs`
+ * was, so the same small slack this harness already budgets for everywhere
+ * else it compares a wall-clock stamp to a run's start covers it here too.
+ *
+ * `sinceMs === null` (no window supplied — every caller before this ruling,
+ * and `d12-demo-runs.mjs`'s own one-shot sweep of the single remote IT just
+ * minted) means every row is in scope, unchanged from before `8.5.46`.
+ *
+ * A MISSING OR UNPARSEABLE `at` reads as IN SCOPE, never silently skipped:
+ * this function's only job is deciding what NOT to judge, and a row it
+ * cannot date must still reach the ordinary manifest-authority/prefix gate
+ * below rather than being waved through without ever being looked at.
+ */
+function isWithinRun(entry, sinceMs) {
+  if (sinceMs === null) return true;
+  const at = typeof entry === 'string' ? undefined : entry?.at;
+  if (typeof at !== 'string') return true;
+  const atMs = Date.parse(at);
+  if (Number.isNaN(atMs)) return true;
+  return atMs >= sinceMs - FS_CLOCK_SLACK_MS;
+}
+
+/** The name a manifest row stands for, whichever of its two shapes it is. */
+function manifestEntryName(entry) {
+  return typeof entry === 'string' ? entry : (entry?.nameWithOwner ?? '(unnamed remote)');
+}
+
+/**
+ * Rewrite the manifest atomically — temp file, then rename — so a concurrent
+ * reader (another story's own trailing sweep, racing in a different tree, or
+ * a human `cat`ing the file mid-run) never observes a half-written array.
+ */
+function writeMintedRemotesManifest(manifestPath, rows) {
+  const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmpPath, `${JSON.stringify(rows, null, 2)}\n`);
+  renameSync(tmpPath, manifestPath);
+}
+
+/**
  * The RUNNER'S DOOR to the delete — bead `forge-8vfn.6.11.29`.
  *
  * `sweepStoryRemotes` was correct and unreachable: nothing called it, and
@@ -70,8 +126,13 @@ function readSweepDeleteToken() {
  * reads the manifest the MINT now writes (`recordMintedRemote`, kernel) and
  * hands it over. Tested through THIS function, not through `sweepStoryRemotes`,
  * because "a manifest on disk becomes a delete" is the step that was missing.
+ *
+ * ROW 210 (`forge-8vfn.8.5.46`) added the other half of the lifecycle: a row
+ * CONFIRMED gone (a fresh delete or an already-gone 404) is dropped from the
+ * file below, and a row from BEFORE `sinceMs` is never judged at all — see
+ * `isWithinRun`'s own header for why both are needed.
  */
-export function sweepStoryRemotesFromManifest({ storyId, root, readToken = readSweepDeleteToken, runGh = null }) {
+export function sweepStoryRemotesFromManifest({ storyId, root, sinceMs = null, readToken = readSweepDeleteToken, runGh = null }) {
   const manifestPath = join(root, '_logs', 'minted-remotes.json');
   let created = [];
   let unconfirmed = null;
@@ -86,14 +147,56 @@ export function sweepStoryRemotesFromManifest({ storyId, root, readToken = readS
     // the way every other refusal path in this file is instead named.
     if (e.code !== 'ENOENT') unconfirmed = e.message;
   }
-  const result = sweepStoryRemotes({ storyId, created, readToken, runGh });
-  if (unconfirmed === null) return result;
+  if (unconfirmed !== null) {
+    const result = sweepStoryRemotes({ storyId, created, readToken, runGh });
+    return {
+      ...result,
+      refusals: [
+        `REFUSING: ${manifestPath} could not be confirmed: ${unconfirmed} — a remote this run may have minted cannot be verified clear`,
+        ...result.refusals,
+      ],
+    };
+  }
+
+  // ROW 210 split: only a row that could plausibly belong to THIS run is
+  // handed to the manifest-authority/prefix gate at all. Everything older is
+  // set aside, named once, below — never refused by prefix, never deleted.
+  const inScope = [];
+  const outOfScope = [];
+  for (const entry of created) (isWithinRun(entry, sinceMs) ? inScope : outOfScope).push(entry);
+
+  const result = sweepStoryRemotes({ storyId, created: inScope, readToken, runGh });
+
+  // Part 1 of the same ruling: a row CONFIRMED gone has done its job and is
+  // dropped so no LATER run ever re-reads it. A refusal or a failed delete
+  // earns no such confidence and keeps its row — a human or a later sweep
+  // still needs to see it. `outOfScope` rows are untouched by definition:
+  // they were never handed to `sweepStoryRemotes` above.
+  const gone = new Set([...result.deleted, ...result.alreadyGone]);
+  const writeErrors = [];
+  if (gone.size > 0) {
+    const remaining = created.filter((entry) => !gone.has(manifestEntryName(entry)));
+    try {
+      writeMintedRemotesManifest(manifestPath, remaining);
+    } catch (e) {
+      writeErrors.push(
+        `could not rewrite ${manifestPath} after confirming ${gone.size} remote(s) gone: ${e.message} — the ` +
+          'remote(s) are gone but their manifest row(s) remain; fix the file by hand before the next run.',
+      );
+    }
+  }
+
+  const outOfScopeLines =
+    outOfScope.length === 0
+      ? []
+      : [
+          `${outOfScope.length} older manifest entr${outOfScope.length === 1 ? 'y' : 'ies'} from earlier runs left ` +
+            `untouched: ${outOfScope.map(manifestEntryName).join(', ')}`,
+        ];
+
   return {
     ...result,
-    refusals: [
-      `REFUSING: ${manifestPath} could not be confirmed: ${unconfirmed} — a remote this run may have minted cannot be verified clear`,
-      ...result.refusals,
-    ],
+    refusals: [...outOfScopeLines, ...result.refusals, ...writeErrors],
   };
 }
 
@@ -105,6 +208,10 @@ function isAlreadyGoneError(error) {
   return /HTTP 404\b/.test(msg) || /\bnot found\b/i.test(msg);
 }
 
+// `created` arrives here ALREADY SCOPED to the run by the caller (ROW 210,
+// `sweepStoryRemotesFromManifest`'s `isWithinRun` split) — this function
+// itself knows nothing about run windows, only about the manifest/prefix
+// gate, exactly as it did before `8.5.46`.
 export function sweepStoryRemotes({ storyId, created = [], readToken = readSweepDeleteToken, runGh = null }) {
   const deleted = [];
   const alreadyGone = [];

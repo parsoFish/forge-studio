@@ -25,7 +25,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -118,6 +118,256 @@ test('ROW 102b (RED) finding 17: an UNPARSEABLE manifest deletes nothing, and NA
     assert.equal(res.refusals.length, 1, `expected a named refusal for the unparseable manifest: ${JSON.stringify(res)}`);
     assert.match(res.refusals[0], /minted-remotes\.json/);
     assert.match(res.refusals[0], /REFUSING/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * ROW 210 (bead `forge-8vfn.8.5.46`) — THE APPEND-ONLY MANIFEST OUTLIVES THE
+ * RUN THAT JUDGES IT.
+ *
+ * MEASURED. Stories run one after another in one tree, sharing
+ * `_logs/minted-remotes.json` across every run that ever touched that tree —
+ * `recordMintedRemote` (kernel) only ever appends, and until now nothing ever
+ * removed a row. S2's three repos get minted, S2's own trailing sweep deletes
+ * them through real `gh`, and their rows sit in the file regardless because
+ * confirming a delete never earned a row its removal. The NEXT run's sweep —
+ * S3, or any later invocation of the harness against the same tree — reads
+ * the whole file, finds S2's rows still there, and REFUSES each one by name
+ * because `story-s2-*` does not carry `story-s3`'s own prefix: 3 lines in a
+ * small gate, 36 in a full run, and "this run's creation manifest" in the
+ * refusal text is simply false for every one of them.
+ *
+ * TWO INDEPENDENT FIXES, same as the function's own two independent gates:
+ *
+ *   (1) A row CONFIRMED gone — a fresh delete or an already-gone 404 — is
+ *       dropped from the manifest, atomically (temp file + rename), so a
+ *       LATER run never re-reads it. A refusal or a failed delete earns no
+ *       such confidence and KEEPS its row — a human or a later sweep still
+ *       needs to see it.
+ *   (2) The manifest is scoped to the RUN: only a row whose `at` falls at or
+ *       after this run's own start (`startedMs`, `run-story.mjs`/`run.mjs`,
+ *       the same value `reapCensusAndSweep`'s `sinceMs` already uses) is
+ *       judged at all. A row from an earlier, separate run is neither
+ *       refused-by-prefix nor deleted — it is reported ONCE, as a single
+ *       named line, never one `REFUSING` line per stale row. A row with a
+ *       missing or unparseable `at` is judged anyway (conservative): this
+ *       sweep's job is deciding what NOT to touch, and an undatable row must
+ *       still reach the ordinary manifest/prefix gate rather than being waved
+ *       through silently.
+ *
+ * `FS_CLOCK_SLACK_MS` (`beats-queue-terminal.mjs`) is reused for the boundary
+ * rather than a second constant — same host, same small coarse-clock lag this
+ * harness already budgets for everywhere else it compares a wall-clock stamp
+ * to a run's `sinceMs`.
+ */
+
+const RUN_STARTED_MS = Date.parse('2026-10-04T12:00:00.000Z');
+const BEFORE_RUN_AT = '2026-10-03T09:00:00.000Z'; // a full day before the run — unambiguously stale
+const WITHIN_RUN_AT = '2026-10-04T12:00:05.000Z'; // 5s after start — unambiguously this run's own
+
+function readManifestRows(root: string): unknown[] {
+  return JSON.parse(readFileSync(join(root, '_logs', 'minted-remotes.json'), 'utf8'));
+}
+
+test('ROW 210 (RED): S2\'s already-deleted repos, minted before this run, print ZERO "REFUSING … story prefix" lines for S3', () => {
+  const s2Rows = [
+    { nameWithOwner: 'parsoFish/story-s2-api', at: BEFORE_RUN_AT },
+    { nameWithOwner: 'parsoFish/story-s2-cli', at: BEFORE_RUN_AT },
+    { nameWithOwner: 'parsoFish/story-s2-webapp', at: BEFORE_RUN_AT },
+  ];
+  const root = rootWithManifest(s2Rows);
+  const calls: string[][] = [];
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: (args: string[]) => { calls.push(args); return ''; },
+    });
+    assert.deepEqual(calls, [], 'an out-of-run row is never even handed to gh');
+    assert.deepEqual(res.deleted, []);
+    assert.deepEqual(res.failed, []);
+    assert.ok(
+      !res.refusals.some((r) => /REFUSING to delete/.test(r) && /story prefix/.test(r)),
+      `measured noise must be gone: ${JSON.stringify(res.refusals)}`,
+    );
+    const summary = res.refusals.find((r) => /older manifest entr/.test(r));
+    assert.ok(summary, `expected a single named summary line: ${JSON.stringify(res.refusals)}`);
+    assert.match(summary!, /^3 older manifest entries from earlier runs left untouched:/);
+    for (const row of s2Rows) assert.ok(summary!.includes(row.nameWithOwner), summary);
+    assert.equal(res.refusals.filter((r) => /older manifest entr/.test(r)).length, 1, 'reported ONCE, not per row');
+    // Nothing judged this run, so nothing is dropped from the file either.
+    assert.deepEqual(readManifestRows(root), s2Rows);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: an in-run mint is deleted AND its row is dropped from the manifest', () => {
+  const root = rootWithManifest([{ nameWithOwner: 'parsoFish/story-s3-fresh', at: WITHIN_RUN_AT }]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: () => '',
+    });
+    assert.deepEqual(res.deleted, ['parsoFish/story-s3-fresh']);
+    assert.deepEqual(res.refusals, []);
+    assert.deepEqual(readManifestRows(root), [], 'the confirmed-gone row must not survive to the next sweep');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: an already-gone 404 also drops its row', () => {
+  const root = rootWithManifest([{ nameWithOwner: 'parsoFish/story-s3-gone', at: WITHIN_RUN_AT }]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: () => { throw new Error('Command failed: gh repo delete parsoFish/story-s3-gone --yes HTTP 404'); },
+    });
+    assert.deepEqual(res.alreadyGone, ['parsoFish/story-s3-gone']);
+    assert.deepEqual(readManifestRows(root), [], 'confirmed gone by 404 is still confirmed gone');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: a FAILED delete keeps its row — not confirmed gone', () => {
+  const row = { nameWithOwner: 'parsoFish/story-s3-fails', at: WITHIN_RUN_AT };
+  const root = rootWithManifest([row]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: () => { throw new Error('Command failed: gh repo delete parsoFish/story-s3-fails --yes HTTP 500 server error'); },
+    });
+    assert.equal(res.failed.length, 1);
+    assert.deepEqual(readManifestRows(root), [row], 'a failed delete is not confirmed gone — the row stays');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: a TOKEN-LESS refusal keeps its row', () => {
+  const row = { nameWithOwner: 'parsoFish/story-s3-notoken', at: WITHIN_RUN_AT };
+  const root = rootWithManifest([row]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: () => null,
+      runGh: () => '',
+    });
+    assert.equal(res.refusals.length, 1);
+    assert.match(res.refusals[0], /no delete/i);
+    assert.deepEqual(readManifestRows(root), [row], 'no token means no confirmation — the row stays');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: an IN-RUN row with another story\'s prefix still REFUSES by prefix, as today, and keeps its row', () => {
+  const row = { nameWithOwner: 'parsoFish/story-s2-mintedjustnow', at: WITHIN_RUN_AT };
+  const root = rootWithManifest([row]);
+  const calls: string[][] = [];
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: (args: string[]) => { calls.push(args); return ''; },
+    });
+    assert.deepEqual(calls, [], 'a prefix refusal never reaches gh');
+    assert.equal(res.refusals.length, 1);
+    assert.match(res.refusals[0], /REFUSING to delete/);
+    assert.match(res.refusals[0], /story prefix/);
+    assert.match(res.refusals[0], /story-s2-mintedjustnow/);
+    assert.deepEqual(readManifestRows(root), [row], 'refused-by-prefix is not confirmed gone — the row stays');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: a MALFORMED `at` is judged anyway (conservative in-scope default), not silently skipped', () => {
+  const root = rootWithManifest([{ nameWithOwner: 'parsoFish/story-s3-badtime', at: 'not-a-real-date' }]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: () => '',
+    });
+    assert.deepEqual(res.deleted, ['parsoFish/story-s3-badtime'], 'an undatable row must still reach the ordinary gate');
+    assert.deepEqual(readManifestRows(root), [], 'and once judged and confirmed gone, it is dropped like any other');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: a row with NO `at` field at all (bare string form) is judged anyway', () => {
+  const root = rootWithManifest(['parsoFish/story-s3-bareentry']);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: () => '',
+    });
+    assert.deepEqual(res.deleted, ['parsoFish/story-s3-bareentry']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: the ROW 102b/17 unreadable-manifest refusal still fires with a run window supplied', () => {
+  const root = rootWithManifest('{ this is not json');
+  const calls: string[][] = [];
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: (args: string[]) => { calls.push(args); return ''; },
+    });
+    assert.deepEqual(calls, []);
+    assert.equal(res.refusals.length, 1, `expected exactly the unreadable-manifest refusal: ${JSON.stringify(res)}`);
+    assert.match(res.refusals[0], /REFUSING/);
+    assert.match(res.refusals[0], /minted-remotes\.json/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: a row just inside the clock-skew slack is still in scope', () => {
+  const justInside = new Date(RUN_STARTED_MS - 100).toISOString(); // well under FS_CLOCK_SLACK_MS (250ms)
+  const root = rootWithManifest([{ nameWithOwner: 'parsoFish/story-s3-skew', at: justInside }]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: () => '',
+    });
+    assert.deepEqual(res.deleted, ['parsoFish/story-s3-skew'], 'inside the slack window — judged, not skipped');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: a row clearly before the slack window is out of scope even when its prefix matches', () => {
+  const clearlyBefore = new Date(RUN_STARTED_MS - 1000).toISOString(); // well past FS_CLOCK_SLACK_MS (250ms)
+  const root = rootWithManifest([{ nameWithOwner: 'parsoFish/story-s3-tooearly', at: clearlyBefore }]);
+  const calls: string[][] = [];
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, sinceMs: RUN_STARTED_MS, readToken: TOKEN,
+      runGh: (args: string[]) => { calls.push(args); return ''; },
+    });
+    assert.deepEqual(calls, [], 'out of scope even though the prefix would otherwise authorise it');
+    assert.deepEqual(res.deleted, []);
+    assert.ok(res.refusals.some((r) => /older manifest entr/.test(r) && r.includes('story-s3-tooearly')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 210: with NO `sinceMs` supplied, behaviour is unchanged — everything is judged (backward compatible)', () => {
+  const root = rootWithManifest([{ nameWithOwner: 'parsoFish/story-s2-old', at: BEFORE_RUN_AT }]);
+  try {
+    const res = sweepStoryRemotesFromManifest({
+      storyId: 'S3', root, readToken: TOKEN,
+      runGh: () => '',
+    });
+    assert.equal(res.refusals.length, 1);
+    assert.match(res.refusals[0], /REFUSING to delete/);
+    assert.match(res.refusals[0], /story prefix/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
