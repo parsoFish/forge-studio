@@ -147,7 +147,8 @@ export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
     const read = channelTerminalState(forgeRoot, dir);
     const chan = dir.slice(dir.lastIndexOf('/') + 1);
     // ROW 184d (forge-8vfn.8.5.24), T1 ruling 1973dz. A terminal carrying its
-    // own timestamp (`atMs` — the turn's `end` event, or an `error` row) that
+    // own timestamp (`atMs` — the turn's `end` event, a run's own `end` (row
+    // 197), or an `error` row) that
     // PREDATES this beat's press is the previous turn's word, not this one's:
     // S1 run 6's draft turn left `phase=awaiting-verdict` three seconds before
     // the approve press, and a finalize turn that died without writing must

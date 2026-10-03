@@ -1,0 +1,5 @@
+# MTIMES.txt lines for the _agent-brain-ingest channel, verbatim from the run-6 S7 red evidence
+2026-10-02T21:28:13.736Z  _logs/_agent-brain-ingest-2026-10-02T21-28-13-741-tjs6/stderr.log
+2026-10-02T21:28:13.745Z  _logs/_agent-brain-ingest-2026-10-02T21-28-13-741-tjs6/turn.pid
+2026-10-02T21:28:14.387Z  _logs/_agent-brain-ingest-2026-10-02T21-28-13-741-tjs6/agent-run.marker
+2026-10-02T21:28:23.161Z  _logs/_agent-brain-ingest-2026-10-02T21-28-13-741-tjs6/events.jsonl
