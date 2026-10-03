@@ -187,11 +187,20 @@ async function main() {
     // clears anything: a turn left running wrote into the real ground minutes
     // after this path had finished. `clear` is the post-stop sweep as before.
     const clear = () => {
+      // Row 213 (forge-8vfn.8.5.49) — the root-relative paths THIS sweep
+      // reported cleared, handed back to `runStopPath` so its own re-read can
+      // confirm a writer this path failed to reap did not rewrite one of them
+      // (`_queue/in-flight/<id>.md.heartbeat`, `_worktrees/wi/<id>`, …) after
+      // the sweep declared the tree clear. `sweepCycleArtefacts` is the ONE
+      // call whose own `artefacts.cleared` is already root-relative and is
+      // exactly the shape row 213 measured a leaked scheduler rewriting.
+      let cleared = [];
       try {
         const swept = sweepCycleArtefacts('stopped-run', ROOT, {
           sinceMs: startedMs, evidenceDir, schedulerAlive: false,
         });
         for (const line of swept.lines) console.log(`[stories] post-stop sweep: ${line}`);
+        cleared = swept.artefacts.cleared;
       } catch (err) {
         console.error(`[stories] post-stop sweep failed: ${err?.message ?? err}`);
       }
@@ -247,6 +256,7 @@ async function main() {
           console.error(`[stories] post-stop sweep (own ground) failed: ${err?.message ?? err}`);
         }
       }
+      return { cleared };
     };
     runStopPath({ root: ROOT, startedMs, bridgeProc, clear })
       .catch((err) => console.error(`[stories] post-stop path failed: ${err?.message ?? err}`))
