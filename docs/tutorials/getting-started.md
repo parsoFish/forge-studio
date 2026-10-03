@@ -73,8 +73,9 @@ forge preflight <id>
 Hard clauses (C1 quality gate, C2 scratch hygiene, C4 machine-readable context)
 must pass before forge will run a flow. DEPS is hard too: install the
 project's dependencies in `projects/<id>` (for a Node project, `npm ci`) before
-you kick off, or the scheduler refuses the claim and the initiative stays
-pending until you fix the ground and restart the scheduler
+you kick off, or `forge serve` refuses the claim and the initiative stays
+pending until you fix the ground and restart `forge studio`, which restarts
+`serve`
 ([DEPS](../reference/project-contract.md#deps--the-declared-gate-is-runnable-in-the-ground-hard-at-claim-time-and-in-forge-preflight)). Advisory clauses (C5/C6/C8, DEMO,
 ARTIFACTS) only warn. Iterate until every hard clause is green. The same verdict
 renders live in the Studio project builder (the `ContractReadiness` panel).
@@ -153,11 +154,11 @@ interview rounds. The PLAN may arrive with findings from the advisory
 completeness critic ([the example factory](../explanation/example-factory.md));
 approve the plan as it stands, or revise it with feedback that addresses them.
 
-Approving queues an initiative. Then **kick off** from the project's roadmap in
-Studio: start the scheduler, which plans the initiative into work items, and
-press **Start development** on the initiative's card. The develop run then goes
-autonomously — plan → change → verify → package — fanning work out across
-parallel work items.
+Approving queues an initiative; `forge serve` claims and plans it into work
+items the moment `forge studio` has it live. Then **kick off** from the
+project's roadmap in Studio: press **Start development** on the initiative's
+card. The develop run then goes autonomously — plan → change → verify →
+package — fanning work out across parallel work items.
 
 The **UI is the sole operator surface** ([ADR 031](../decisions/031-studio-consolidation.md))
 — author + run a cycle, review/approve, and recover stuck initiatives all from
