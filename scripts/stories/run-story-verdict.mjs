@@ -26,7 +26,7 @@
  * exit code because both come from the same branch.
  */
 export function containmentVerdict({
-  story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead,
+  story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead, hostRefs,
 }) {
   const printFinal = (status) => console.log(
     `[stories] ${story.id}: ${status} — ${row.greenBeats}/${row.beats} beats green`,
@@ -152,6 +152,24 @@ export function containmentVerdict({
   if (hostHead.red) {
     console.error(
       `[stories] ${story.id}: CONTAINMENT FAILURE — ${hostHead.summary} (named above). ` +
+      'The run is RED regardless of its beats.',
+    );
+    printFinal('red');
+    return 1;
+  }
+  // Row 208 (bead `forge-8vfn.8.5.44`) — EVERY ref of this repo, not only this
+  // tree's own checked-out one: a story run in one worktree can move a ref in
+  // ANOTHER worktree entirely, because every worktree of one repository
+  // shares its refs. The 2026-10-03 incident: a story run from a docs
+  // worktree committed on its own DETACHED HEAD — invisible to `hostHead`
+  // above, which watches only the running tree's own checked-out ref — then
+  // ran `git update-ref refs/heads/main <sha>` directly, which moved the
+  // OPERATOR's checked-out `main` in a DIFFERENT tree. Red regardless of
+  // whether `hostHead`'s own clear already restored the running tree's own
+  // ref — this judges every OTHER ref too, named above, in `host-refs.mjs`.
+  if (hostRefs.red) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${hostRefs.summary} (named above). ` +
       'The run is RED regardless of its beats.',
     );
     printFinal('red');
