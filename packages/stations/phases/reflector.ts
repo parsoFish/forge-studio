@@ -125,7 +125,26 @@ export async function runReflector(
 
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
   const cycleId = logger.cycleId;
-  const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
+  // Row 212 follow-up 3 (bead forge-8vfn.8.5.48): `cycleLogDir` is scratch
+  // (brain-gaps.jsonl, user-questions.md/json, retro.md, brain-lint.md,
+  // artifacts/, recap.md) co-located with the cycle's OWN event log, not the
+  // shared `brain/` this phase also writes to off the always-real `forgeRoot`
+  // above — the two concerns share one local variable but were never the
+  // same requirement. `input.logsRoot` is already `CycleInput`'s documented
+  // override for exactly this ("this cycle's logger/snapshot/report";
+  // forge-8vfn.8.1.10), and sibling phases already honour it
+  // (`adversarial-review.ts`'s chunk records, `release-finalize.ts`'s
+  // artifacts) — `runReflector` alone never read it, so every reflector test
+  // wrote this scratch into the REAL checkout's `_logs/<cycleId>/` even when
+  // it gave `logger` a tmp root, because this line recomputed the root
+  // itself instead of asking. Omitted ⇒ `<forgeRoot>/_logs`, byte-identical
+  // to today's only caller shape (the scheduler never sets `logsRoot`).
+  // `logsRoot` (not just `cycleLogDir`) is threaded to `writeCycleRecap`
+  // below too — `cycle-recap.ts` independently re-derives the SAME `_logs/
+  // <cycleId>/*` paths from a `forgeRoot` of its own, the second half of this
+  // same defect.
+  const logsRoot = input.logsRoot ?? resolve(forgeRoot, '_logs');
+  const cycleLogDir = resolve(logsRoot, cycleId);
 
   // Reflection runs after the reviewer merged the initiative, which moves the
   // manifest from `_queue/in-flight/` to `_queue/done/`. The cycle was kicked
@@ -331,6 +350,7 @@ export async function runReflector(
   });
   const recapResult = writeCycleRecap({
     forgeRoot,
+    logsRoot,
     cycleId,
     initiativeId: input.initiativeId,
     manifestPath,

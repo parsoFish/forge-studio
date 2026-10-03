@@ -68,6 +68,14 @@
  * so the NEXT such defect is caught by the suite the first time it happens,
  * not the second time someone goes looking.
  *
+ * WHY THIS RELIES ON "NO TEST WRITES INTO THE REAL `_logs/`, EVEN
+ * TRANSIENTLY" (row 212 follow-up 3). `node --test` runs files as PARALLEL
+ * processes diffing the SAME shared repo `_logs/`, so an entry a DIFFERENT
+ * file creates and removes entirely within THIS file's own before/after
+ * window is indistinguishable from one this file made itself — measured
+ * directly when three reflector tests' always-cleaned-up scratch still
+ * tripped four unrelated files' guards purely from running concurrently.
+ *
  * WHY NO ALLOWLIST. A legitimate per-run `_logs/` entry this module doesn't
  * already know a prefix for is, by definition, something no currently-known
  * forge code path produces during `npm test` — there is no case on record

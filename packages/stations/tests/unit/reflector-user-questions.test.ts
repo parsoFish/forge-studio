@@ -105,6 +105,7 @@ type LostQuestionsHarness = {
   cycleId: string;
   manifestPath: string;
   cycleLogDir: string;
+  logsRoot: string;
   logger: ReturnType<typeof createLogger>;
   events: () => LostQuestionsEvent[];
   cleanup: () => void;
@@ -134,12 +135,24 @@ function setupLostQuestionsHarness(suffix: string): LostQuestionsHarness {
       '',
     ].join('\n'),
   );
-  const cycleLogDir = resolve(FORGE_ROOT, '_logs', cycleId);
-  const logger = createLogger(cycleId, resolve(FORGE_ROOT, '_logs'));
+  // Row 212 follow-up 3 (bead forge-8vfn.8.5.48): a tmp `logsRoot`, threaded
+  // through `makeLostQuestionsInput` as `CycleInput.logsRoot` — which
+  // `runReflector` now honours for `cycleLogDir` (its own module doc) —
+  // instead of the real checkout's `_logs/`. `node --test` runs files in
+  // parallel, and each one's generalised residue guard diffs the SAME shared
+  // repo `_logs/` over its own lifetime: a transient real-tree write here,
+  // even one this file's own `cleanup` always removed, could be observed
+  // appearing and disappearing by a sibling file's guard and misattributed to
+  // IT. `cycleLogDir` lives inside `tmp`, so the single `rmSync(tmp, ...)`
+  // below is the only cleanup needed.
+  const logsRoot = join(tmp, '_logs');
+  const cycleLogDir = resolve(logsRoot, cycleId);
+  const logger = createLogger(cycleId, logsRoot);
   return {
     cycleId,
     manifestPath,
     cycleLogDir,
+    logsRoot,
     logger,
     events: (): LostQuestionsEvent[] => {
       if (!existsSync(logger.logFilePath)) return [];
@@ -161,11 +174,6 @@ function setupLostQuestionsHarness(suffix: string): LostQuestionsHarness {
       } catch {
         /* best-effort */
       }
-      try {
-        rmSync(cycleLogDir, { recursive: true, force: true });
-      } catch {
-        /* best-effort */
-      }
     },
   };
 }
@@ -177,6 +185,7 @@ function makeLostQuestionsInput(h: LostQuestionsHarness): CycleInput {
     projectRepoPath: FORGE_ROOT,
     worktreePath: FORGE_ROOT,
     cycleId: h.cycleId,
+    logsRoot: h.logsRoot,
   };
 }
 

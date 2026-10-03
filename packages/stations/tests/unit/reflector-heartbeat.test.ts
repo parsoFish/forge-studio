@@ -87,7 +87,17 @@ function readEvents(logFilePath: string): EventLogEntry[] {
 test('8.1.30: a reflector turn that is SLOW emits agent_heartbeat, named for the reflector', async () => {
   const cycleId = uniqueCycleId();
   const tmp = mkdtempSync(join(tmpdir(), 'reflector-hb-'));
-  const cycleLogDir = resolve(FORGE_ROOT, '_logs', cycleId);
+  // Row 212 follow-up 3 (bead forge-8vfn.8.5.48): a tmp `logsRoot`, threaded
+  // through `CycleInput.logsRoot` — which `runReflector` now honours for its
+  // own `cycleLogDir` (its own module doc) — instead of the real checkout's
+  // `_logs/`. `node --test` runs files in parallel, and each one's
+  // generalised residue guard diffs the SAME shared repo `_logs/` over its
+  // own lifetime: a transient real-tree write here, even one this test's own
+  // `finally` always removed, could be observed appearing and disappearing by
+  // a sibling file's guard and misattributed to IT. `runReflector`'s own
+  // `cycleLogDir` now lives inside `tmp` too, so no separate cleanup of it is
+  // needed beyond the single `rmSync(tmp, ...)` below.
+  const logsRoot = join(tmp, '_logs');
   try {
     const manifestPath = join(tmp, 'manifest.md');
     writeFileSync(
@@ -108,13 +118,14 @@ test('8.1.30: a reflector turn that is SLOW emits agent_heartbeat, named for the
         '',
       ].join('\n'),
     );
-    const logger = createLogger(cycleId, resolve(FORGE_ROOT, '_logs'));
+    const logger = createLogger(cycleId, logsRoot);
     const input: CycleInput = {
       initiativeId: 'INIT-2026-09-27-hb',
       manifestPath,
       projectRepoPath: FORGE_ROOT,
       worktreePath: FORGE_ROOT,
       cycleId,
+      logsRoot,
     };
     const deps: ReflectorDeps = {
       sdkQuery: stallingReflectorSdkQuery,
@@ -138,7 +149,8 @@ test('8.1.30: a reflector turn that is SLOW emits agent_heartbeat, named for the
       assert.equal(hb.skill, 'reflector', 'the reflector heartbeat must name the reflector, not a generic skill');
     }
   } finally {
+    // cycleLogDir lives inside tmp (both rooted at the same mkdtemp logsRoot
+    // above), so this one rmSync is the whole cleanup.
     rmSync(tmp, { recursive: true, force: true });
-    rmSync(cycleLogDir, { recursive: true, force: true });
   }
 });
