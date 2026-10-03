@@ -243,6 +243,7 @@ export async function runInteractiveTurn(
         // Row 193b — the same per-call cap every `runKindTurn` kind gets (`turn-budget.ts`).
         turnBudgetUsd: () => turnBudgetUsd({
           declaredCeilingUsd: (st as { costCeilingUsd?: unknown }).costCeilingUsd, env: process.env,
+          logsRoot,
           spentUsd: () => sessionSpentUsd(logsRoot, cycleId), logger,
           identity: { initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, sessionId: ctx.sessionId },
         }),

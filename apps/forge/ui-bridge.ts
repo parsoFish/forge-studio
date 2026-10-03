@@ -98,6 +98,15 @@ import {
 
 const TAIL_POLL_MS = 200;
 
+/**
+ * Row 209 (bead forge-8vfn.8.5.45) — the string `turn-budget.ts`'s own
+ * `BRIDGE_STARTED_AT_ENV` reads, declared here rather than imported (the
+ * sessions door does not export env literals; `FORGE_COST_CEILING_USD` follows
+ * the same pattern). Set once on this process's env before any spawn, so every
+ * detached runner inherits it.
+ */
+const BRIDGE_STARTED_AT_ENV = 'FORGE_BRIDGE_STARTED_AT';
+
 type WsOutbound =
   | { type: 'snapshot'; cycles: { live: Cycle[]; recent: Cycle[] } }
   | { type: 'event'; cycleId: string; event: EventLogEntry }
@@ -173,6 +182,11 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     pid: process.pid,
     startedAt: new Date().toISOString(),
   };
+  // Row 209 — set BEFORE any spawn below so every detached runner this bridge
+  // starts inherits the SAME moment `GET /api/health` reports, scoping
+  // `bridgeSpentUsd` (`turn-budget.ts`) to money spent under THIS bridge
+  // rather than everything `_logs/` has ever recorded across every restart.
+  process.env[BRIDGE_STARTED_AT_ENV] = identity.startedAt;
   const port = opts.port ?? 0; // 0 = OS-assigned
   // getPaths takes the QUEUE ROOT, not the forge root — _queue/ is a
   // child of forgeRoot.

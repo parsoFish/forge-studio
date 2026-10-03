@@ -169,9 +169,9 @@ export type ConsolidateSpend = { costUsd: number; maxCostUsd: number; ceilingHit
  * budget of its own — no request field, no config — so it takes the drain's
  * source, `DEFAULT_KB_DRAIN_MAX_COST_USD`, as the batch budget, and each turn
  * is handed what is LEFT of it (`kinds/fix-turn.ts` makes that the SDK's
- * `maxBudgetUsd`; the bridge's `FORGE_COST_CEILING_USD` is not consulted,
- * because a declared ceiling wins in `turnBudgetUsd`). The batch stops, as the
- * drain does, once the budget is reached OR a turn's spend comes back `null`
+ * `maxBudgetUsd`; row 209 (forge-8vfn.8.5.45) also MINs it against the
+ * bridge's own remaining `FORGE_COST_CEILING_USD` in `turnBudgetUsd`). The
+ * batch stops, as the drain does, once the budget is reached OR a turn's spend comes back `null`
  * — unpriced and unbounded, so UNKNOWN (1973gx): an unknown spend cannot be
  * shown to be under the budget, and is never counted as $0. A turn that
  * THROWS still does not abort the batch, as before; it returned no spend.
