@@ -17,12 +17,12 @@
  * staleness for us rather than us hand-rolling a PID file (and a holder PID is
  * not a liveness check anyway).
  */
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { METHOD_C_CMD } from './ground-hash.mjs';
 import { FIXTURE_ROOT } from './fixture-ground.mjs';
 import { storyFixtureNames } from './sweep.mjs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { join, dirname, isAbsolute } from 'node:path';
+import { homedir } from 'node:os';
 import lockfile from 'proper-lockfile';
 
 /**
@@ -148,18 +148,42 @@ export function readAvailableMb(meminfoPath = '/proc/meminfo') {
   }
 }
 
-/**
- * Take the host lock. Returns a release function.
- *
- * The lock file lives under the gitignored operator root so it is never
- * committed and never collides with a tracked path.
- */
-export function hostLockPath() {
-  return join(tmpdir(), 'forge-stories-host.lock');
+const HOST_LOCK_NAME = 'forge-stories-host.lock';
+
+function isDirectory(path) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
+/**
+ * Where the host lock lives, as a pure function of the environment.
+ *
+ * Host-global (one path for every worktree) and never under a tmp directory: a
+ * boot-time `systemd-tmpfiles --remove` sweeps /tmp and once deleted the lock
+ * under a live runner (M7-E row 203). XDG_RUNTIME_DIR is the place for a
+ * runtime lock, but WSL exports it without creating it, so it is used only
+ * when it exists; otherwise the operator's XDG state home. Relative XDG paths
+ * are ignored, as the XDG spec requires.
+ */
+export function resolveHostLockPath({ env, home, isDir }) {
+  const runtime = env.XDG_RUNTIME_DIR;
+  if (runtime && isAbsolute(runtime) && isDir(runtime)) return join(runtime, 'forge', HOST_LOCK_NAME);
+  const state = env.XDG_STATE_HOME && isAbsolute(env.XDG_STATE_HOME) ? env.XDG_STATE_HOME : join(home, '.local', 'state');
+  return join(state, 'forge', HOST_LOCK_NAME);
+}
+
+/** The host lock path for this process. Takes no argument: it cannot vary with the tree it is called from. */
+export function hostLockPath() {
+  return resolveHostLockPath({ env: process.env, home: homedir(), isDir: isDirectory });
+}
+
+/** Take the host lock. Returns a release function. */
 export async function acquireHostLock() {
   const lockPath = hostLockPath();
+  mkdirSync(dirname(lockPath), { recursive: true });
   if (!existsSync(lockPath)) writeFileSync(lockPath, 'forge story runner host lock\n');
   try {
     return await lockfile.lock(lockPath, { stale: 30 * 60 * 1000, retries: 0 });
