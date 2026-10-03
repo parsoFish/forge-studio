@@ -461,13 +461,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T13-10-03-39fa44c9"
+        "architectSessionId": "2026-10-03T22-45-47-fefcf0e6"
       },
       "data": {
         "page": "flow-monitor",
         "flow-id": "story-s4",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T13-10-03-39fa44c9"
+        "architect-session-id": "2026-10-03T22-45-47-fefcf0e6"
       },
       "expect": {
         "page": "flow-monitor",
@@ -541,9 +541,9 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 1620806,
-        "dir": "_logs/_architect-2026-10-03T13-10-03-39fa44c9",
-        "reason": "pid 1620806: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2273509,
+        "dir": "_logs/_architect-2026-10-03T22-45-47-fefcf0e6",
+        "reason": "pid 2273509: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -636,15 +636,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 2.0202968000000006,
+    "usd": 2.0726406,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "3c93dd1ceebe317666c992261b1d7648f4afa10e",
+    "dirty": false
   },
   "storyDigest": "4e5466b60a6e3490"
 }
