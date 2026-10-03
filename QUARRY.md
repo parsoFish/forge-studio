@@ -55,19 +55,19 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
-| `kernel` | 31 | 5,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 31 | 5,620 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 48 | 11,185 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,410 | **12,832** | ratified 12,832 — row 199 (forge-8vfn.8.5.39): the KB drain and consolidate hand each fix turn its remaining budget and count it (unknown spend stops them), +64 on 12,768, lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 44 | 12,482 | **12,482** | ratified 12,482 — row 198 (forge-8vfn.8.5.36): a standalone run's end is its own skill's, never a hook's, +26 on 12,456, lane-ratified under ruling 666; row 193 (8.5.37) +6 before it; see git history for prior changes. |
-| `sessions` | 64 | 20,953 | **20,915** | ratified 20,915 — row 199 (forge-8vfn.8.5.39): the session-less fix turn runs under the cost ceiling and an unbounded unpriced fix turn is unknown spend, +44 on 20,871, lane-ratified under ruling 666; row 193b (8.5.38) +185 before it; see git history for prior changes. |
+| `sessions` | 64 | 20,939 | **20,915** | ratified 20,915 — row 199 (forge-8vfn.8.5.39): the session-less fix turn runs under the cost ceiling and an unbounded unpriced fix turn is unknown spend, +44 on 20,871, lane-ratified under ruling 666; row 193b (8.5.38) +185 before it; see git history for prior changes. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 8,010 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **486** | **130,963** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **486** | **130,947** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -198,7 +198,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 62 |
-| apps/forge/dry-bridge.ts | kernel | rewritten | 329 |
+| apps/forge/dry-bridge.ts | kernel | rewritten | 327 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 800 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 306 |
@@ -237,12 +237,12 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/bridge-studio-instructions.ts | sessions | verbatim | 406 |
 | packages/sessions/session-answer-limits.ts | sessions | verbatim | 12 |
 | packages/sessions/bridge-studio-project-brain.ts | sessions | verbatim | 282 |
-| packages/sessions/bridge-studio-kickoff.ts | sessions | verbatim | 799 |
+| packages/sessions/bridge-studio-kickoff.ts | sessions | verbatim | 783 |
 | packages/sessions/bridge-studio-demo.ts | sessions | verbatim | 694 |
 | packages/sessions/bridge-studio-session-index.ts | sessions | verbatim | 439 |
 | packages/sessions/bridge-studio-architect.ts | sessions | verbatim | 435 |
 | packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 532 |
-| packages/sessions/routes.ts | sessions | verbatim | 473 |
+| packages/sessions/routes.ts | sessions | verbatim | 475 |
 | packages/sessions/session-phases.ts | sessions | verbatim | 81 |
 | packages/sessions/session-readability.ts | sessions | verbatim | 259 |
 | packages/library/skill-path.ts | library | verbatim | 146 |
