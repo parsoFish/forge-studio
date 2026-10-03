@@ -36,8 +36,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { withPreflightVerdictsFence } from '../test-fixtures/preflight-verdicts-fence.ts';
+
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const CLI = join(FORGE_ROOT, 'apps', 'forge', 'cli.ts');
+const PREFLIGHT_LOGS_DIR = join(FORGE_ROOT, '_logs', 'preflight');
 
 // ---------------------------------------------------------------------------
 // D1 — the configured projects root is the one the command uses.
@@ -53,22 +56,31 @@ test('D1: `forge preflight <name>` resolves the project under the CONFIGURED pro
     'utf8',
   );
 
-  const r = spawnSync(
-    process.execPath,
-    ['--experimental-strip-types', CLI, 'preflight', 'ownedproj'],
-    { encoding: 'utf8', env: { ...process.env, FORGE_PROJECTS_DIR: projectsRoot }, timeout: 120_000 },
-  );
-  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  // Row 212 follow-up (bead forge-8vfn.8.5.48): this spawns the real CLI
+  // against the real checkout on purpose (D2's whole point — FORGE_ROOT is
+  // never overridable), so `cmdPreflight`'s verdict-audit write lands in
+  // THIS checkout's own `_logs/preflight/verdicts.jsonl`. The fence records
+  // what was there before the spawn and restores exactly that after —
+  // see `preflight-verdicts-fence.ts`'s module doc for why a test-side fence
+  // replaces a product-side env override here.
+  withPreflightVerdictsFence(PREFLIGHT_LOGS_DIR, () => {
+    const r = spawnSync(
+      process.execPath,
+      ['--experimental-strip-types', CLI, 'preflight', 'ownedproj'],
+      { encoding: 'utf8', env: { ...process.env, FORGE_PROJECTS_DIR: projectsRoot }, timeout: 120_000 },
+    );
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
 
-  // The project exists ONLY under the configured root. A command that ignores
-  // that root cannot find it at all, and says so by naming the path it looked
-  // at — which is the exact string the defect prints.
-  assert.doesNotMatch(
-    out,
-    /project directory not found/,
-    `preflight looked in the wrong place: ${out.trim()} — the project exists at ${projectDir}, under the configured FORGE_PROJECTS_DIR root`,
-  );
-  assert.notEqual(r.status, 2, `expected preflight to RUN (exit 0 or 1 on the clause verdict), got the argument-error exit 2: ${out.trim()}`);
+    // The project exists ONLY under the configured root. A command that ignores
+    // that root cannot find it at all, and says so by naming the path it looked
+    // at — which is the exact string the defect prints.
+    assert.doesNotMatch(
+      out,
+      /project directory not found/,
+      `preflight looked in the wrong place: ${out.trim()} — the project exists at ${projectDir}, under the configured FORGE_PROJECTS_DIR root`,
+    );
+    assert.notEqual(r.status, 2, `expected preflight to RUN (exit 0 or 1 on the clause verdict), got the argument-error exit 2: ${out.trim()}`);
+  });
 });
 
 // ---------------------------------------------------------------------------

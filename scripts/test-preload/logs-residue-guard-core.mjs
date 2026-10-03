@@ -1,7 +1,9 @@
 /**
- * logs-residue-guard-core.mjs — the pure half of two `_logs/` residue guards
- * that share one before/after diff shape: `_logs/INIT-*` (forge-8vfn.8.1.10)
- * and `_logs/_bridge-*` (forge-8vfn.8.5.48, row 212).
+ * logs-residue-guard-core.mjs — the pure half of the `_logs/` residue guards,
+ * all sharing one before/after diff shape: the named-prefix guards for
+ * `_logs/INIT-*` (forge-8vfn.8.1.10) and `_logs/_bridge-*` (forge-8vfn.8.5.48,
+ * row 212), and the GENERALISED any-new-top-level-entry ratchet below (row
+ * 212 follow-up, same bead).
  *
  * THE FIRST DEFECT THIS GUARDS AGAINST. `packages/flows/tests/integration/
  * cycle-pm-hallucination.test.ts` builds its own `mkdtempSync` harness — its
@@ -40,17 +42,46 @@
  * did not exist when the test run STARTED and do exist by the time it ENDED:
  * a directory nothing but this run could have created.
  *
- * WHY `INIT-*`/`_bridge-*` AND NOT EVERYTHING UNDER `_logs/`. `_logs/<runId>/`
- * is also written for a handful of ad hoc standalone runIds (`_agent-<slug>`,
- * `TEST-*`, …) that legitimately use the repo's own `_logs/` on purpose (an
- * interactive `forge agent dispatch` with no `--logs-root`). Scoping to the
- * two prefixes each defect actually produces keeps the guard from flagging
- * normal ad hoc dispatch residue that was never either defect's shape, while
- * still catching a leaking tmp-harness test.
+ * WHY `INIT-*`/`_bridge-*` AND NOT EVERYTHING UNDER `_logs/` — FOR THOSE TWO
+ * NAMED GUARDS SPECIFICALLY. `_logs/<runId>/` is also written for a handful of
+ * ad hoc standalone runIds (`_agent-<slug>`, `TEST-*`, …) that legitimately
+ * use the repo's own `_logs/` on purpose (an interactive `forge agent
+ * dispatch` with no `--logs-root`). Scoping each NAMED guard to the one prefix
+ * its defect actually produces keeps ITS message precise and lets it stay
+ * silent about everything else.
  *
- * WHY TWO PREFIXES, ONE MODULE. Different call paths, same pure diff logic —
- * `listDirsWithPrefix` plus the shared `newInitDirs` set-diff answers both; a
- * second prefix is a second thin wrapper, not a second algorithm.
+ * THE THIRD DEFECT (row 212 follow-up) — a full `npm test` run (887dc58da,
+ * 11028/11028 green, the row-212 named guards both silent) still left TWO
+ * new top-level `_logs/` entries this module had no prefix for: a
+ * `_demo-2026-06-24T11-00-00/` directory (a demo-builder runner fixture
+ * defaulting `logsRoot` from a `forgeRoot: FORGE_ROOT` it only meant to pin a
+ * call site's CWD-independence with — `packages/sessions/kinds/kind-turn.ts`'s
+ * `const logsRoot = input.logsRoot ?? resolve(forgeRoot, '_logs')`) and a
+ * `preflight/verdicts.jsonl` (`apps/forge/cli.ts`'s `cmdPreflight` hard-codes
+ * `join(FORGE_ROOT, '_logs', 'preflight')` with no override, for a CLI that
+ * two regression tests spawn as a real subprocess against the real checkout
+ * ON PURPOSE — see `cli-own-tree.test.ts`'s D2). Two genuinely different root
+ * causes, same residue CLASS, and neither is the last one a third call path
+ * will ever invent: a per-defect prefix guard only ever catches defects
+ * someone already found. `listTopLevelEntries` below is the generalisation —
+ * ANY new top-level `_logs/` entry, file or directory, named-prefix or not —
+ * so the NEXT such defect is caught by the suite the first time it happens,
+ * not the second time someone goes looking.
+ *
+ * WHY NO ALLOWLIST. A legitimate per-run `_logs/` entry this module doesn't
+ * already know a prefix for is, by definition, something no currently-known
+ * forge code path produces during `npm test` — there is no case on record
+ * where a test run is SUPPOSED to leave a new top-level `_logs/` entry behind.
+ * An allowlist entry would be a silent, permanent exemption for whatever
+ * shape happened to exist the day someone added it; reporting instead forces
+ * each new shape through the same fix-or-justify scrutiny the first two got.
+ *
+ * WHY ADDITIVE, NOT A REPLACEMENT FOR THE NAMED GUARDS. `listInitDirs`/
+ * `listBridgeDirs` keep their own before/after snapshots and their own
+ * specific remediation text (which file, which fix) — more useful than the
+ * generic ratchet's message for the two shapes it already knows. The generic
+ * ratchet's `listTopLevelEntries` snapshot runs ALONGSIDE them and only
+ * reports the entries NEITHER named guard already explained.
  *
  * PURE ON PURPOSE. This module performs I/O (`readdirSync`) but has NO
  * import-time side effects and touches only the `logsRoot` it is handed — so
@@ -95,12 +126,30 @@ export function listBridgeDirs(logsRoot) {
 }
 
 /**
+ * Every top-level entry directly inside `logsRoot` — FILES as well as
+ * directories, no prefix filter — as a `Set` of names. The generalised
+ * ratchet (row 212 follow-up, bead forge-8vfn.8.5.48): see the module doc's
+ * third defect for why "only the prefixes we already know about" is not
+ * enough. Empty, never a throw, when `logsRoot` does not exist yet, for the
+ * same reason `listDirsWithPrefix` is: a fresh checkout (or a fresh tmp
+ * forgeRoot that never got as far as booting) is not a violation of
+ * anything. `.gitkeep` is the one entry every checkout starts with; it is
+ * present in both the before- and after-snapshot, so the diff never reports
+ * it as new.
+ */
+export function listTopLevelEntries(logsRoot) {
+  if (!existsSync(logsRoot)) return new Set();
+  return new Set(readdirSync(logsRoot, { withFileTypes: true }).map((entry) => entry.name));
+}
+
+/**
  * The names present in `after` but absent from `before`, sorted for a
  * deterministic report. Order-independent inputs (both are `Set`s) so two
  * callers snapshotting the same directory can never disagree over ordering.
  * Prefix-agnostic by design — the same function diffs an `INIT-*` snapshot
- * pair and a `_bridge-*` snapshot pair; only the `listXDirs` call that built
- * each `Set` knows which shape it watched.
+ * pair, a `_bridge-*` snapshot pair, and (row 212 follow-up) a whole
+ * `listTopLevelEntries` snapshot pair; only the `listXDirs`/`listTopLevelEntries`
+ * call that built each `Set` knows which shape it watched.
  */
 export function newInitDirs(before, after) {
   return [...after].filter((name) => !before.has(name)).sort();

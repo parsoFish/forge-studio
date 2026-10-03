@@ -23,9 +23,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCRATCH_PATHS } from '../../../../packages/projects/preflight.ts';
+import { withPreflightVerdictsFence } from '../test-fixtures/preflight-verdicts-fence.ts';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const CLI = join(FORGE_ROOT, 'apps', 'forge', 'cli.ts');
+const PREFLIGHT_LOGS_DIR = join(FORGE_ROOT, '_logs', 'preflight');
 
 test('`forge preflight` on an unprovisioned ground prints a FAILING DEPS line and exits 1', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cli-preflight-deps-'));
@@ -36,14 +38,21 @@ test('`forge preflight` on an unprovisioned ground prints a FAILING DEPS line an
     mkdirSync(join(dir, '.forge'), { recursive: true });
     writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ testProcess: { local: { cmd: ['vitest', 'run'] } } }));
 
-    const r = spawnSync(process.execPath, ['--experimental-strip-types', CLI, 'preflight', dir], {
-      encoding: 'utf8',
-      timeout: 120_000,
-    });
-    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    // Row 212 follow-up (bead forge-8vfn.8.5.48): this spawns the real CLI
+    // against the real checkout — `cmdPreflight`'s verdict-audit write lands
+    // in THIS checkout's own `_logs/preflight/verdicts.jsonl` on every run.
+    // The fence records what was there before and restores exactly that
+    // after; see `preflight-verdicts-fence.ts`'s module doc.
+    withPreflightVerdictsFence(PREFLIGHT_LOGS_DIR, () => {
+      const r = spawnSync(process.execPath, ['--experimental-strip-types', CLI, 'preflight', dir], {
+        encoding: 'utf8',
+        timeout: 120_000,
+      });
+      const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
 
-    assert.match(out, /FAIL {2}DEPS /, `the claim's DEPS verdict must be printed, and failing:\n${out}`);
-    assert.equal(r.status, 1, `a ground the claim would refuse must not exit 0:\n${out}`);
+      assert.match(out, /FAIL {2}DEPS /, `the claim's DEPS verdict must be printed, and failing:\n${out}`);
+      assert.equal(r.status, 1, `a ground the claim would refuse must not exit 0:\n${out}`);
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -172,8 +172,17 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   // door open is #558 again, so this pins the whole list rather than one entry.
   const { projectRoot, repoPath, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
+  // Row 212 follow-up (bead forge-8vfn.8.5.48): this call (and the two below
+  // it in this file) used to pass `logger: logger(logsRoot, ...)` — a
+  // correctly tmp-rooted EventLogger — but omit the separate `logsRoot`
+  // field `runKindTurn` also reads for its OWN heartbeat writer
+  // (`kind-turn.ts`'s `input.logsRoot ?? resolve(forgeRoot, '_logs')`). With
+  // `forgeRoot: FORGE_ROOT` given and `logsRoot` omitted, that default
+  // resolved to the REAL checkout, leaving `_logs/_demo-<sid>/.heartbeat` in
+  // this tree on every run. `logger` and `logsRoot` are two independent
+  // inputs; passing one does not imply the other.
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -240,7 +249,7 @@ test('forge-a9o9: the write pass denies the doors the PRODUCT NEVER DECLARED —
   const { projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -274,7 +283,7 @@ test('forge-a9o9: the write pass is TOLD what it holds, so it stops hunting for 
   const { projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
   });
 
