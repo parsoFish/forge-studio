@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { manifestQueueState, QUEUE_STATES } from './queue-state.mjs';
+import { manifestQueueState, QUEUE_STATES } from './lib/queue-state.mjs';
 
 test('QUEUE_STATES lists every getPaths() key, in queue order', () => {
   assert.deepEqual(QUEUE_STATES, ['pending', 'inFlight', 'readyForReview', 'merged', 'done', 'failed']);

@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { assertServeRunning, readCycleEventLines, waitForManifestOutcome, HEALTH_PROBE_TIMEOUT_MS, DEFAULT_POLL_MS } from './serve-wait.mjs';
+import { assertServeRunning, readCycleEventLines, waitForManifestOutcome, HEALTH_PROBE_TIMEOUT_MS, DEFAULT_POLL_MS } from './lib/serve-wait.mjs';
 
 function tmpForgeRoot() {
   return mkdtempSync(join(tmpdir(), 'serve-wait-'));
