@@ -26,6 +26,13 @@ demos/verify/**/*.webm
 _logs/*
 !_logs/.gitkeep
 !_logs/README.md
+# _logs/preflight/ always exists (row 212b, forge-8vfn.8.5.52): `forge preflight`
+# appends its verdict log there, and two CLI tests run the real CLI on its own
+# tree. Were the directory created and removed around them, a parallel test
+# file's residue guard would see a new top-level _logs entry appear.
+!_logs/preflight/
+_logs/preflight/*
+!_logs/preflight/.gitkeep
 # A workspace-scoped run (`npm test --workspace=packages/<x>`) resolves a
 # cwd-relative `_logs` root under the PACKAGE, not the repo root (bead
 # forge-8vfn.5.53), and the root rows above are anchored to this directory —
