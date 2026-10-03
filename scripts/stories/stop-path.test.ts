@@ -9,6 +9,22 @@
  * had already run. And (run 5) the bridge took ~20 s to exit after its group
  * SIGTERM, with the stop path long since "done".
  *
+ * ROW 213 (forge-8vfn.8.5.49) — a SECOND detached survivor, `forge serve`
+ * itself (`spawnServeDetached`, `packages/flows/daemon.ts`): `detached:
+ * true`, `unref()`, its OWN process group, its pid in `_logs/daemon/forge.pid`
+ * (`DAEMON_PID_FILE`). A costed run killed mid-S10 left exactly this alive,
+ * and it rewrote `_queue/in-flight/<id>.md.heartbeat` for two hours after the
+ * stop path had already declared itself done. The stand-in below is a real
+ * process for the same reason the architect turn above is one: this path's
+ * own ownership and liveness reads are `/proc`-based and cannot be exercised
+ * against a mock.
+ *
+ * ROW 215 (forge-8vfn.8.5.51) — EVERY elapsed-time measurement in this file
+ * uses `performance.now()` (monotonic), never `Date.now()` (wall clock): a
+ * WSL clock step-back during a long campaign made a `Date.now()`-measured
+ * duration go NEGATIVE, which this file's own `took >= 450`-style assertions
+ * would then fail on a run that actually behaved correctly.
+ *
  * The turn here is the real shape: a node process in its OWN session and
  * group (`setsid`), re-parented away from this test (the `sh` that launched
  * it exits at once), cwd inside the run root, recording its own pid in a
@@ -17,12 +33,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 import { runStopPath } from './stop-path.mjs';
 import { groundManifest } from './ground-hash.mjs';
+import { DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,9 +67,13 @@ function spawnDetachedTurn(root: string, sid: string, delayMs: number) {
   return { pidFile: join(logDir, 'turn.pid'), late };
 }
 
+// Row 215 (forge-8vfn.8.5.51) — `performance.now()`, never `Date.now()`: a WSL
+// clock step-back during a long campaign makes a wall-clock-measured deadline
+// go negative mid-wait, which would end this loop instantly (or never) rather
+// than actually bounding it at `ms`.
 async function waitForFile(path: string, ms = 5_000) {
-  const until = Date.now() + ms;
-  while (!existsSync(path) && Date.now() < until) await sleep(20);
+  const until = performance.now() + ms;
+  while (!existsSync(path) && performance.now() < until) await sleep(20);
   assert.ok(existsSync(path), `${path} never appeared`);
 }
 
@@ -91,16 +113,125 @@ test('row 187: the stop path waits for the bridge group to exit, escalating to S
   t.after(() => { try { process.kill(-(bridge.pid as number), 'SIGKILL'); } catch { /* gone */ } });
   await sleep(300);
   let bridgeAliveAtClear: boolean | null = null;
-  const began = Date.now();
+  // Row 215 — `performance.now()`, never `Date.now()` (see this file's header).
+  const began = performance.now();
   const report = await runStopPath({
     root, startedMs: Date.now(), bridgeProc: bridge as never,
     clear: () => { bridgeAliveAtClear = alive(bridge.pid as number); },
     log: () => {},
     bridgeExitBoundMs: 500,
   });
-  const took = Date.now() - began;
+  const took = performance.now() - began;
   assert.equal(bridgeAliveAtClear, false, 'the bridge group must be gone before the stop path declares done');
   assert.ok(took >= 450, `must actually wait out the bound before SIGKILL — took ${took} ms`);
   assert.ok(took < 5_000, `bounded — took ${took} ms`);
   assert.match(JSON.stringify(report), /SIGKILL/);
 });
+
+/**
+ * A real process standing in for `forge serve`: it writes its OWN pid to
+ * `<root>/_logs/daemon/forge.pid` (`DAEMON_PID_FILE`) — exactly where
+ * `spawnServeDetached` writes a real daemon's — and then rewrites a heartbeat
+ * file every 200 ms, forever, until SIGTERM, when it exits cleanly. `cwd:
+ * root` is load-bearing: `stopOwnScheduler`'s own ownership test is "the pid
+ * file names a pid whose cwd resolves back to `root`".
+ */
+function spawnFakeServeDaemon(root: string, heartbeat: string, opts: { onSigterm?: string } = {}) {
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const pidFile = join(root, DAEMON_PID_FILE);
+  const onSigterm = opts.onSigterm ?? "process.on('SIGTERM', () => process.exit(0));";
+  const script =
+    `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));` +
+    `${onSigterm}` +
+    `setInterval(() => { try { require('fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 200);`;
+  return spawn(process.execPath, ['-e', script], { cwd: root, stdio: 'ignore' });
+}
+
+test('row 213 (RED before the fix): a killed run stops the scheduler daemon it started, before the clear — nothing rewrites the queue heartbeat after', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'stop-path-serve-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
+  const heartbeat = join(root, '_queue', 'in-flight', 'INIT-2026-10-03-exclude-author-flag.md.heartbeat');
+  writeFileSync(heartbeat, '0');
+
+  const daemon = spawnFakeServeDaemon(root, heartbeat);
+  t.after(() => { try { process.kill(daemon.pid as number, 'SIGKILL'); } catch { /* gone */ } });
+  const pidFile = join(root, DAEMON_PID_FILE);
+  await waitForFile(pidFile);
+  const daemonPid = Number(readFileSync(pidFile, 'utf8').trim());
+  assert.ok(alive(daemonPid), 'the fake daemon must actually be running before the stop path runs');
+
+  const startedMs = Date.now() - 1_000;
+  const report = await runStopPath({
+    root, startedMs, bridgeProc: null,
+    // Stands in for `run.mjs`'s real `clear` — the post-stop sweep removing
+    // the queue manifest's heartbeat, and reporting it as cleared so
+    // `runStopPath`'s own row 213 re-read can confirm it stays gone.
+    clear: () => {
+      try { rmSync(heartbeat); } catch { /* already gone */ }
+      return { cleared: ['_queue/in-flight/INIT-2026-10-03-exclude-author-flag.md.heartbeat'] };
+    },
+    log: () => {},
+  });
+
+  assert.equal(alive(daemonPid), false, 'the scheduler daemon this run started must be dead after the stop path');
+  assert.equal(report.sched?.stopped, daemonPid, 'the pid-file daemon must have been signalled by the stop path');
+  // Past the daemon's own 200 ms heartbeat interval AND this path's own
+  // re-read settle — a live daemon would have rewritten the heartbeat by now.
+  await sleep(600);
+  assert.equal(existsSync(heartbeat), false, 'RED: the heartbeat must not reappear once its writer is actually dead');
+  assert.deepEqual(report.reappeared, [], 'the stop path\'s own re-read must not have seen it reappear either');
+});
+
+test('row 213: a daemon pid file naming an already-dead pid is read, found dead, and never signalled or errored', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'stop-path-serve-dead-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+
+  // A real pid, guaranteed exited before the stop path ever reads it.
+  const dead = spawn(process.execPath, ['-e', 'process.exit(0)']);
+  await new Promise((resolve) => dead.once('exit', resolve));
+  writeFileSync(join(root, DAEMON_PID_FILE), String(dead.pid));
+
+  const startedMs = Date.now() - 1_000;
+  const report = await runStopPath({
+    root, startedMs, bridgeProc: null, clear: () => {}, log: () => {},
+  });
+
+  assert.equal(report.sched?.stopped, null, 'a dead pid must never read as stopped — there was nothing to stop');
+  assert.equal(report.sched?.unknown, false, 'a genuinely gone pid is a known outcome, never UNKNOWN');
+  assert.match(String(report.sched?.note), /already gone/);
+});
+
+test('row 213: a daemon pid file naming a pid that runs under a DIFFERENT root is never signalled', async (t) => {
+  const ownRoot = mkdtempSync(join(tmpdir(), 'stop-path-serve-own-'));
+  const foreignRoot = mkdtempSync(join(tmpdir(), 'stop-path-serve-foreign-'));
+  t.after(() => { rmSync(ownRoot, { recursive: true, force: true }); rmSync(foreignRoot, { recursive: true, force: true }); });
+  mkdirSync(join(ownRoot, '_logs', 'daemon'), { recursive: true });
+
+  // A real, live daemon-shaped process — but its OWN cwd is the FOREIGN root,
+  // never ownRoot. ownRoot's own pid file merely NAMES its pid, exactly the
+  // shape a stale or hand-edited pid file would be.
+  const foreign = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], {
+    cwd: foreignRoot, stdio: 'ignore',
+  });
+  t.after(() => { try { process.kill(foreign.pid as number, 'SIGKILL'); } catch { /* gone */ } });
+  await waitForProcVisible(foreign.pid as number);
+  writeFileSync(join(ownRoot, DAEMON_PID_FILE), String(foreign.pid));
+
+  const startedMs = Date.now() - 1_000;
+  const report = await runStopPath({
+    root: ownRoot, startedMs, bridgeProc: null, clear: () => {}, log: () => {},
+  });
+
+  assert.equal(report.sched?.stopped, null, 'a pid that runs under another tree is never ours to stop');
+  assert.match(String(report.sched?.note), /not this tree — not ours to stop/);
+  assert.ok(alive(foreign.pid as number), 'the foreign process must be completely untouched — never signalled');
+});
+
+/** Is `pid` visible in `/proc` at all yet — the kernel accepted the fork. */
+async function waitForProcVisible(pid: number, ms = 5_000) {
+  const until = performance.now() + ms; // row 215 — monotonic, see this file's header
+  while (!existsSync(`/proc/${pid}`) && performance.now() < until) await sleep(10);
+  assert.ok(existsSync(`/proc/${pid}`), `pid ${pid} never became visible in /proc`);
+}
