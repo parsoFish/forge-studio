@@ -19,16 +19,15 @@ A **persistent process named `forge serve`** runs the scheduler. The original sc
 - **Heartbeat** — each in-flight initiative writes `_queue/in-flight/<id>.heartbeat` every 30s. The scheduler uses this for crash recovery (see ADR 012).
 - **Per-initiative budgets** — `iteration_budget` and `cost_budget_usd` in the manifest frontmatter cap runaway loops.
 
-The scheduler has exactly one operating state: running. Once `forge serve` is
-live, it claims every
-eligible manifest in `_queue/pending/` as capacity allows — nothing stands
-between a queued item and its run except available concurrency. `forge studio`
-starts and supervises `forge serve` as part of bringing the operator surface
-up, the same way it already starts the bridge and the UI, so the operator
-never manages the daemon's lifecycle as a separate step. An operator who wants
-claimable work picked up immediately gets exactly that; there is nothing to
-remember to (re)start, and no quietly-paused state that lets a run sit
-unclaimed while the operator assumes it is progressing.
+Whenever `forge serve` is live, it claims every eligible manifest in
+`_queue/pending/` as capacity allows. `forge studio` starts and supervises
+`forge serve` as part of bringing the operator surface up, the same way it
+starts the bridge and the UI, so the operator never manages the daemon's
+lifecycle as a separate step.
+
+The only operator brake is **one emergency halt**: user-triggered, it stops new
+claims, lets every active job run to completion, and loses no progress. Its
+mechanism is specified with its implementation.
 
 The scheduler exposes:
 - `forge serve` — run in the foreground (or under systemd/pm2 for process
@@ -52,12 +51,11 @@ The scheduler exposes:
 - No DB, no IPC, no daemon protocol — the filesystem is the protocol.
 - Inspectable: `ls _queue/` is the entire system state.
 - Trivially recoverable from crash (see ADR 012).
-- One operating state, not two. A start/pause control is an easy-to-forget
-  second state — an operator can pause and walk away believing work is still
-  moving, or start a second instance believing the first never launched.
-  Collapsing the daemon's lifecycle into something `forge studio` manages on
-  the operator's behalf removes that state, and the double-launch failure mode
-  it invited, entirely.
+- No lifecycle control for the operator to keep track of. A separate
+  start/pause control would be an easy-to-forget second state: an operator could
+  pause and walk away believing work was still moving, or start a second
+  instance believing the first never launched. None exists; the emergency halt
+  is a deliberate brake the operator pulls, not a mode the daemon sits in.
 
 **Negative / accepted trade-offs:**
 - `mv`-atomic-claim assumes a single filesystem (no NFS-style network mounts). For our local-first model, fine.

@@ -93,10 +93,8 @@ live Studio "Open gate →" links repoint to `/artifact?...&mode=review`).
   control surface — see decision 5), and `review --approve` (the bridge
   `POST /api/verdict 'approve'`, a strict superset that also merges).
   `architect run` is internalised (bridge-spawned, hidden from `--help`).
-- There is no bridge→CLI coupling on the daemon's lifecycle to sever, because
-  there never needs to be one: `forge studio` spawns and supervises
-  `forge serve` directly (decision 5), so no route exists whose job is to
-  start, stop, pause or resume it.
+- `forge studio` spawns and supervises `forge serve` directly (decision 5); no
+  route starts or stops it.
 - `verify-cycle.mjs` migrates off `forge review --approve` onto the bridge
   verdict POST **before** the command is removed (this closes the sole-operator-surface
   deferral folded above).
@@ -128,8 +126,8 @@ milestone.
 
 - **One product to reason about, operate, and secure.** A single run view, a
   single operator API (the CSRF-/origin-/path-guarded bridge), one launch command.
-- **~3.4k LOC of legacy UI removed** + ~6 redundant CLI commands; the bridge↔CLI
-  coupling on the daemon lifecycle is severed.
+- **~3.4k LOC of legacy UI removed** + ~6 redundant CLI commands; the daemon's
+  lifecycle belongs to `forge studio`, not to a route.
 - **One capability retired:** the cross-project roadmap pane. Accepted by the
   operator as not daily-driver; revisitable as a slim Studio-library strip if
   needed.
