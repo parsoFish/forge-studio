@@ -287,7 +287,9 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       method: 'POST',
       path: '/api/studio/onboarding/start',
       matches: (url) => pathOf(url) === '/api/studio/onboarding/start',
-      dryClassification: 'stub-actions',
+      // Row 202: mints a `briefing` session and spawns nothing — the dispatch
+      // (and its dry-bridge marker) is the brief's question-form write.
+      dryClassification: 'exempt-local',
       handler: kick,
     },
     {

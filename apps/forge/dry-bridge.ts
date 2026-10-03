@@ -188,12 +188,10 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawnPreflightFix — marker on the user-tier spawn branch (auto/agent-tier branches never spawn)' },
   { method: 'POST', route: '/api/agents/:id/run', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnAgentDispatch (R2-01-F3 generic run host) — validation + runId proceed; the agent dispatch is skipped with marker + event' },
-  { method: 'POST', route: '/api/studio/onboarding/start', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnAgentDispatch (R4-17 staged onboarding session) — the session dir, status.json and prompt.md are REAL bookkeeping and still land; only the agent dispatch is skipped with marker + event, exactly as the generic run host above' },
   { method: 'POST', route: '/api/studio/authoring/start', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnAgentTurn (R4-21 phase 2 — the authoring session, riding the generic runInteractiveTurn spine) — the session dir, status.json and prompt.md are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the onboarding-start row above' },
+    reason: 'spawnAgentTurn (R4-21 phase 2 — the authoring session, riding the generic runInteractiveTurn spine) — the session dir, status.json and prompt.md are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the generic run host above' },
   { method: 'POST', route: '/api/studio/kbs/:id/cleanup/start', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnAgentTurn (R4-19-F2 — the kb-cleanup session, riding the generic runInteractiveTurn spine) — the session dir, status.json (kb_id/kb_binding/findings) are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring/onboarding-start rows above' },
+    reason: 'spawnAgentTurn (R4-19-F2 — the kb-cleanup session, riding the generic runInteractiveTurn spine) — the session dir, status.json (kb_id/kb_binding/findings) are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring row above' },
 
   // ---- stub-actions: verdict-approve / reflect-answer special cases — no
   // RouteEntry (still if-chain arms in apps/forge/ui-bridge.ts) --------------
