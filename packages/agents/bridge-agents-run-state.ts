@@ -188,7 +188,33 @@ export function deriveStandaloneStateFromEvents(parsed: readonly Record<string, 
   // resurrect the run as 'done' — the same sticky-cancel rule W7-A2
   // established for sessions).
   const cancelled = parsed.some((e) => e['message'] === 'agent-dispatch.cancelled');
-  const endEvent = parsed.find((e) => e['event_type'] === 'end');
+  // ROW 198 (bead forge-8vfn.8.5.36), T1 ruling 1973gn — the run's OWN `end`,
+  // never the first `end` of ANY skill. `runAgent` emits exactly one
+  // start/end pair for the dispatched skill itself (`skill: def.slug`,
+  // run-agent.ts:393/507); a hook bound to this agent
+  // (`sdkHooksForAgent`/`withSessionEndHooks`, packages/agents/studio/
+  // hook-dispatch.ts; fired by `runHookScript{,Async}`,
+  // packages/library/studio/hook-runtime.ts) writes its OWN start/end pair
+  // into this SAME events.jsonl under `skill: hook:<hookId>`. A plain
+  // "first `end`" read is wrong twice over — MEASURED on a real capture
+  // (`_agent-brain-ingest-2026-10-02T21-28-13-741-tjs6/events.jsonl`): a
+  // SessionEnd hook's end lands 1ms before the run's own (harmless there
+  // only because nothing else follows), but a hook fired MID-run
+  // (PreToolUse/PostToolUse) would read `done`, with the HOOK's own
+  // metadata (no `result_subtype`, no real `output_refs`), while the agent
+  // keeps working. The run's own skill is named by its own `start` — the
+  // FIRST non-`hook:` start this log carries (mirrors `runOwnEnd`,
+  // scripts/stories/beats-queue-terminal.mjs, row 197) — and only an `end`
+  // of THAT skill is the run's word. No such start (a log with no `skill`
+  // field at all) falls back to the pre-row-198 "first end", unchanged —
+  // see packages/agents/tests/unit/standalone-cost-one-rule.test.ts's
+  // skill-less fixtures.
+  const ownSkill = parsed.find(
+    (e) => e['event_type'] === 'start' && typeof e['skill'] === 'string' && !(e['skill'] as string).startsWith('hook:'),
+  )?.['skill'] as string | undefined;
+  const endEvent = ownSkill === undefined
+    ? parsed.find((e) => e['event_type'] === 'end')
+    : parsed.find((e) => e['event_type'] === 'end' && e['skill'] === ownSkill);
   // R6-04 (WI-2): a ceiling-stop (SDK `result_subtype: 'error_max_budget_usd'`,
   // recorded into the end event's metadata by runAgent) is a DISTINCT
   // terminal state, never collapsed into an ordinary successful 'done'.

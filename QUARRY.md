@@ -59,7 +59,7 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 48 | 11,185 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,346 | **12,768** | ratified 12,768 — G1 boot-time release of a kb-cleanup apply stuck at applying (+74, forge-8vfn.8.5.1) and G3 isUntouchedBrainSeedStub crash-orphan check (+43, 8.5.3): +117 on 12,651, T1-ratified (>100). |
-| `agents` | 44 | 12,456 | **12,456** | ratified 12,456 — row 193 (forge-8vfn.8.5.37): stream-deadline's message stops promising a retry the caller may not do, +6 on 12,450, lane-ratified under ruling 666; row 189 (8.5.26) +17 before it; see git history for prior changes. |
+| `agents` | 44 | 12,482 | **12,482** | ratified 12,482 — row 198 (forge-8vfn.8.5.36): a standalone run's end is its own skill's, never a hook's, +26 on 12,456, lane-ratified under ruling 666; row 193 (8.5.37) +6 before it; see git history for prior changes. |
 | `sessions` | 64 | 20,909 | **20,871** | ratified 20,871 — row 193b (forge-8vfn.8.5.38): every session turn runs under the session's remaining cost ceiling (SDK maxBudgetUsd; bounded unpriced rows), +185 on 20,686, T1-ratified (1973gt, Q29, >100); row 193 (8.5.37) +40 before it; see git history for prior changes. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 7,996 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **486** | **130,815** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **486** | **130,841** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -283,7 +283,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/dispatch-terminal.ts | agents | verbatim | 194 |
 | packages/agents/band-agent-run.ts | agents | rewritten | 379 |
 | packages/agents/routes.ts | agents | rewritten | 134 |
-| packages/agents/bridge-agents-run-state.ts | agents | rewritten | 404 |
+| packages/agents/bridge-agents-run-state.ts | agents | rewritten | 430 |
 | packages/agents/bridge-agents-history-rows.ts | agents | rewritten | 548 |
 | packages/agents/bridge-agents-runs.ts | agents | rewritten | 240 |
 | packages/agents/bridge-agents-slug.ts | agents | rewritten | 564 |
