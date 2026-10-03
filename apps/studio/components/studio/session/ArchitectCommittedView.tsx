@@ -4,46 +4,43 @@
  * ArchitectCommittedView — the post-approve panel shared by the architect
  * session page (committed phase, SessionArchitectPanel) and the /artifact plan
  * payoff (ArchitectPlanGate) — W7-A3: sessions-kinds-08/12, artifact-plan-22/23,
- * flows-23.
+ * flows-23; M7-E row 205 (ADR 011/031).
  *
  * Replaces the hardcoded "Approved — manifests queued; the autonomous loop is
- * building it now → /flows/forge-develop" (a claim that was false whenever the
- * scheduler was stopped, and a link to the flow DEFINITION rather than the
- * initiative or its run). Everything here is derived: the initiative ids come
- * off the session's manifests dir (bridge), their queue state + run href off
- * the runs list (`deriveInitiativeLinkage`), the headline off both plus the
- * scheduler status (`describePostCommit`) — "building it now" is only ever
- * said when a run is active AND the daemon runs. When the daemon is stopped
- * the Start control is right here (SchedulerCardView strip).
+ * building it now → /flows/forge-develop" (a claim that was false whenever
+ * `forge serve` was not running, and a link to the flow DEFINITION rather
+ * than the initiative or its run). Everything here is derived: the
+ * initiative ids come off the session's manifests dir (bridge), their queue
+ * state + run href off the runs list (`deriveInitiativeLinkage`), the
+ * headline off both plus the live serve status (`describePostCommit`) —
+ * "building it now" is only ever said when a run is active AND serve is
+ * actually running. There is no Start control: `forge studio` supervises
+ * serve directly, so when it is not currently running the shared read-only
+ * `<ServeStatusNotice>` says so instead.
  *
  * DOM contract:
- *   [data-section="architect-committed"][data-commit-tone][data-needs-scheduler-start]
+ *   [data-section="architect-committed"][data-commit-tone][data-serve-not-ready]
  *     [data-initiative-link][data-initiative-id][data-queue-state]  one per initiative
  *       a[data-action="open-initiative-run"]                          when a run exists
  *     a[data-action="open-roadmap"]  a[data-action="watch-it-build"]  always
- *     [data-component="scheduler-card"] (strip)                       when a start is needed
+ *     [data-component="serve-status-notice"][data-serve-state]       when serve is not ready
  */
 
 import Link from 'next/link';
 
-import { SchedulerCardView } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
 import { describePostCommit, type InitiativeLinkage } from '@/lib/architect-plan-view';
-import type { SchedulerAction } from '@/lib/scheduler-view';
-import type { ArchitectSessionSummary, SchedulerStatus } from '@/lib/bridge-client';
+import type { ArchitectSessionSummary, ServeStatus } from '@/lib/bridge-client';
 
 const TONE_COLOR: Record<string, string> = {
   building: 'var(--green)',
   'queued-running': 'var(--green)',
   done: 'var(--green)',
   gated: 'var(--amber)',
-  'queued-stopped': 'var(--ember)',
-  'claimed-stopped': 'var(--ember)',
+  'queued-not-running': 'var(--ember)',
+  'claimed-not-running': 'var(--ember)',
   'queued-unknown': 'var(--dim)',
   'claimed-unknown': 'var(--dim)',
-  // W7-FIX-A3 (round-2 finding 4): the drain window reads like the stopped
-  // pair — nothing is being claimed — not like the running green.
-  'queued-stopping': 'var(--ember)',
-  'claimed-stopping': 'var(--ember)',
   failed: 'var(--red)',
   unknown: 'var(--dim)',
 };
@@ -51,25 +48,17 @@ const TONE_COLOR: Record<string, string> = {
 export function ArchitectCommittedView({
   session,
   linkage,
-  scheduler,
-  schedulerReady,
+  serve,
   linkageReady,
-  busy = false,
-  error = null,
-  onSchedulerAction,
 }: {
   session: Pick<ArchitectSessionSummary, 'sessionId' | 'project'>;
   linkage: InitiativeLinkage[];
-  scheduler: SchedulerStatus | null;
-  schedulerReady: boolean;
+  serve: ServeStatus | null;
   linkageReady: boolean;
-  busy?: boolean;
-  error?: string | null;
-  onSchedulerAction?: (action: SchedulerAction) => void;
 }): JSX.Element {
   const view = linkageReady
-    ? describePostCommit(linkage, scheduler)
-    : { tone: 'unknown' as const, headline: 'Reading the queue…', needsSchedulerStart: false };
+    ? describePostCommit(linkage, serve)
+    : { tone: 'unknown' as const, headline: 'Reading the queue…', serveNotReady: false };
   // W8-B3 (sessions-kinds-08) — the loop-closure CTA, in preference order:
   // a live flow monitor, else the initiative's OWN run page (which resolves
   // without a flow definition — W7-FIX-A3 — and is what the operator actually
@@ -86,7 +75,7 @@ export function ArchitectCommittedView({
     <div
       data-section="architect-committed"
       data-commit-tone={view.tone}
-      data-needs-scheduler-start={view.needsSchedulerStart ? 'true' : 'false'}
+      data-serve-not-ready={view.serveNotReady ? 'true' : 'false'}
       style={{
         border: `1px solid ${view.tone === 'building' || view.tone === 'done' ? 'rgba(74,222,128,.4)' : 'var(--line)'}`,
         borderRadius: 10,
@@ -121,17 +110,7 @@ export function ArchitectCommittedView({
         </ul>
       )}
 
-      {view.needsSchedulerStart && (
-        <SchedulerCardView
-          status={scheduler}
-          ready={schedulerReady}
-          queuedCount={linkage.filter((l) => l.queueState === 'queued').length}
-          busy={busy}
-          error={error}
-          variant="strip"
-          onAction={onSchedulerAction}
-        />
-      )}
+      {view.serveNotReady && <ServeStatusNotice status={serve} variant="strip" />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Link href={`/projects/${encodeURIComponent(session.project)}#roadmap`} data-action="open-roadmap" style={{ fontSize: 12.5, color: 'var(--accent)', textDecoration: 'none' }}>

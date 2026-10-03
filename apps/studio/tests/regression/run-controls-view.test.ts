@@ -29,7 +29,7 @@
  */
 import { test, expect } from 'vitest';
 
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsServe, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
 import type { Run, RunStatus } from '../../lib/studio-client.ts';
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
@@ -107,11 +107,11 @@ test('flows-28: a QUEUED or COMPLETE run offers no recovery control at all', () 
 });
 
 test('flows-23: a QUEUED run awaits the scheduler — that, not a run-scoped button, is its control', () => {
-  expect(runAwaitsScheduler(run('planned'))).toBe(true);
+  expect(runAwaitsServe(run('planned'))).toBe(true);
   for (const status of ['active', 'gated', 'complete', 'failed'] as RunStatus[]) {
-    expect(runAwaitsScheduler(run(status)), status).toBe(false);
+    expect(runAwaitsServe(run(status)), status).toBe(false);
   }
-  expect(runAwaitsScheduler(null)).toBe(false);
+  expect(runAwaitsServe(null)).toBe(false);
 });
 
 test('the control set is derived per read — the same run object answers by its CURRENT status only', () => {
@@ -171,7 +171,7 @@ test('flows-28 (review round 2, S3-8): the poster itself refuses an unconfirmed 
 test('flows-49 (review round 3, S2-5): a successful action keeps the section mounted so its outcome stays observable', () => {
   // KILLS: `controls.length === 0 && !awaitsScheduler → null`. A successful
   // Resume flips the run failed → planned, which empties the control set; on the
-  // flow monitor (schedulerStrip=false) that unmounted the whole section and
+  // flow monitor (serveStrip=false) that unmounted the whole section and
   // discarded the scheduler-aware outcome line — "the scheduler is stopped,
   // nothing will run, Start it here" — which is the entire point of flows-49.
   expect(runControlsShouldRender(0, false, null, null), 'nothing to say → render nothing').toBe(false);

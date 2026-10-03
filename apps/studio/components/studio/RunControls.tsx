@@ -6,8 +6,8 @@
  *
  * What it replaces: a hard-coded "Run failed. [Resume]" bar on the flow
  * monitor whose click had no else branch (a failed POST vanished), no
- * disclosure of what Resume does, no observable outcome when the scheduler is
- * stopped — and, on the run DETAIL page, nothing at all.
+ * disclosure of what Resume does, no observable outcome when `forge serve`
+ * is not currently claiming — and, on the run DETAIL page, nothing at all.
  *
  * Three things it does that the old bar did not:
  *
@@ -18,12 +18,13 @@
  *     preserved branch; Requeue re-runs from the start on a fresh worktree;
  *     Abandon deletes the worktree and branch. The copy comes from
  *     `lib/run-controls.ts`, next to the derivation.
- *  3. Makes the outcome observable. Every one of these is a QUEUE WRITE — the
- *     daemon does the running — so a success mounts the shared, scheduler-aware
- *     `EnqueueOutcomeLine`, which says "the scheduler is stopped, so nothing
- *     will run" and puts Start right there. A failure renders its error rather
- *     than being swallowed. A queued (`planned`) run, which has no run-scoped
- *     control at all, gets the scheduler strip for the same reason.
+ *  3. Makes the outcome observable. Every one of these is a QUEUE WRITE — a
+ *     success mounts the shared `EnqueueOutcomeLine`, which carries the ONE
+ *     read-only `<ServeStatusNotice>` so a restarting/draining/down serve is
+ *     still honest about "nothing will run yet" rather than silently
+ *     promising progress. A failure renders its error rather than being
+ *     swallowed. A queued (`planned`) run, which has no run-scoped control at
+ *     all, gets the same read-only serve line for the same reason.
  *
  * The recovery routes key on the INITIATIVE id (`INIT_ID_RE`), which is also
  * the stable run handle across a claim, so all three posts use `run.initiativeId`.
@@ -39,13 +40,15 @@
  *     [data-component="run-control-error"]      (verbatim failure text)
  *     [data-component="run-control-outcome"][data-outcome-control=<id>]
  *       -> EnqueueOutcomeLine's own contract ([data-component="enqueue-outcome"] …)
- *     [data-component="scheduler-card"][data-scheduler-variant="strip"]  (queued runs)
+ *     [data-component="queued-awaits-serve"]                         (queued runs, serve healthy)
+ *     [data-component="serve-status-notice"][data-serve-state]       (queued runs, serve not running)
  */
 
 import { useState } from 'react';
 
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
-import { SchedulerCard } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { useServeStatus } from '@/lib/use-serve-status';
 import { resumeRun, recoveryRequeue, recoveryAbandon, recoveryStop } from '@/lib/bridge-client';
 import {
   armedControl,
@@ -54,7 +57,7 @@ import {
   describeStopOnBudget,
   intentForControlClick,
   mayPostControl,
-  runAwaitsScheduler,
+  runAwaitsServe,
   runControlsShouldRender,
   runFailureNoteKind,
   type RunControl,
@@ -89,33 +92,22 @@ const buttonStyle: React.CSSProperties = {
 export function RunControls({
   run,
   onActed,
-  schedulerStrip = true,
-  queuedCount,
+  serveStrip = true,
 }: {
   run: Run | null;
   onActed?: (initiativeId: string) => void;
   /**
-   * The REAL number of queued runs, when the mounting surface knows it. Omitted
-   * where it does not: the run detail page reads one run and never the queue.
-   *
-   * The first cut hard-coded `1` here (review round 1, S3-6) — every run page
-   * then stated "1 queued run will not start until the scheduler runs" and
-   * `data-scheduler-queued="1"` regardless of the real queue. Round 2 caught the
-   * fix swapping that for a fabricated `0`, because `SchedulerCard` defaulted
-   * the prop and rendered the attribute unconditionally; the attribute is now
-   * OMITTED when nothing read the queue, which is a different claim from zero.
+   * Whether to mount the queued-run serve line for a QUEUED run. A
+   * rendering-context switch, not state: the run detail page has no other
+   * serve surface and needs it (`flows-23`), while the flow monitor already
+   * mounts its own notice directly above this component and would otherwise
+   * show two.
    */
-  queuedCount?: number;
-  /**
-   * Whether to mount the scheduler strip for a QUEUED run. A rendering-context
-   * switch, not state: the run detail page has no other scheduler surface and
-   * needs it (`flows-23`), while the flow monitor already mounts its own strip
-   * directly above this component and would otherwise show two.
-   */
-  schedulerStrip?: boolean;
+  serveStrip?: boolean;
 }): JSX.Element | null {
   const controls = deriveRunControls(run);
-  const awaitsScheduler = schedulerStrip && runAwaitsScheduler(run);
+  const awaitsServe = serveStrip && runAwaitsServe(run);
+  const { status: serve } = useServeStatus(undefined, awaitsServe);
   const [busy, setBusy] = useState<RunControlId | null>(null);
   const [pendingDestructive, setPendingDestructive] = useState<RunControlId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,11 +115,11 @@ export function RunControls({
 
   // W8-A3 review round 3, S2-5: `done`/`error` must keep the section mounted.
   // A successful Resume flips the run `failed → planned`, which empties
-  // `controls`; on the flow monitor (`schedulerStrip={false}`) that made this
-  // return null and threw away the scheduler-aware outcome line — the very thing
-  // `flows-49` ("make the outcome observable") exists to show. The `key` fix
-  // alone could never have covered this: the early return is the other cause.
-  if (run === null || !runControlsShouldRender(controls.length, awaitsScheduler, done, error)) return null;
+  // `controls`; on the flow monitor (`serveStrip={false}`) that made this
+  // return null and threw away the outcome line — the very thing `flows-49`
+  // ("make the outcome observable") exists to show. The `key` fix alone could
+  // never have covered this: the early return is the other cause.
+  if (run === null || !runControlsShouldRender(controls.length, awaitsServe, done, error)) return null;
 
   const initiativeId = run.initiativeId;
   // W8-A2 (ON-7 defect 2) — see the run-status-line render below.
@@ -269,10 +261,9 @@ export function RunControls({
         <span data-component="run-control-error" style={{ fontSize: 12, color: 'var(--red)' }}>{error}</span>
       )}
 
-      {/* A resume/requeue is a QUEUE WRITE — say what the scheduler will (or
-          will not) do with it, and offer Start when it is stopped. Abandon and
-          Stop are both terminal for THIS act — neither enqueues anything, so
-          neither gets the scheduler line. */}
+      {/* A resume/requeue is a QUEUE WRITE — the shared outcome line carries
+          its own honest serve notice. Abandon and Stop are both terminal for
+          THIS act — neither enqueues anything, so neither gets that line. */}
       {done !== null && done !== 'abandon' && done !== 'stop' && (
         <div data-component="run-control-outcome" data-outcome-control={done}>
           <EnqueueOutcomeLine kind="flow" runAction="open-recovered-run" runId={initiativeId} flowId={run.flowId} />
@@ -293,9 +284,17 @@ export function RunControls({
         </span>
       )}
 
-      {/* flows-23: a QUEUED run's control is the daemon, not a run-scoped button. */}
-      {awaitsScheduler && (
-        <SchedulerCard variant="strip" {...(queuedCount !== undefined ? { queuedCount } : {})} />
+      {/* flows-23: a QUEUED run's control is `forge serve` claiming it, not a
+          run-scoped button. Healthy serve → a plain line (nothing to warn
+          about); otherwise the shared read-only notice. */}
+      {awaitsServe && (
+        serve && serve.state !== 'running' && serve.state !== 'unsupervised' ? (
+          <ServeStatusNotice status={serve} variant="strip" />
+        ) : (
+          <span data-component="queued-awaits-serve" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
+            Queued — forge serve will pick it up.
+          </span>
+        )
       )}
     </section>
   );

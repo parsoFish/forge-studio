@@ -1,0 +1,288 @@
+/**
+ * serve-supervisor — `forge studio` supervises `forge serve` the same way it
+ * already supervises the bridge and the UI (ADR 011/031 as merged in #1089):
+ * whenever serve is live it claims every eligible pending manifest, and there
+ * is no operator lifecycle control over it — no start/pause/resume/stop
+ * surface. The one emergency halt is a different seam (row 207) and does not
+ * live here.
+ *
+ * `superviseServe(opts)` → `{ stop(), getStatus() }`. Every dependency
+ * (reading the pid/stop-marker files, checking liveness, spawning, signalling,
+ * scheduling, logging, the clock) is injected — production defaults to the
+ * real `@forge/flows` daemon helpers and the real clock; tests inject fakes
+ * and never touch a real process or a real timer.
+ *
+ * BOOT: the pid file names a live process that the stop marker does NOT also
+ * name → ADOPT it (supervise that pid; spawn nothing). The pid file names a
+ * live process the marker DOES name → that process is DRAINING from a stop
+ * issued by a previous `forge studio` (or a previous boot of this one) —
+ * never adopt it as healthy and never signal it again; just wait for it to
+ * actually exit, then spawn a fresh one. Otherwise (no pid, or a dead one) →
+ * spawn fresh.
+ *
+ * POLL every SERVE_POLL_MS. A supervised pid that is dead (and we are not
+ * stopped) triggers a crash-loop backoff respawn: the delay starts at
+ * SERVE_BACKOFF_INITIAL_MS and doubles (capped at SERVE_BACKOFF_CAP_MS) on
+ * each consecutive death whose uptime was under SERVE_MIN_UPTIME_MS; a death
+ * AFTER a healthy uptime resets the delay back to the initial value. A pid
+ * we are only waiting out (draining, from the boot case above) is spawned
+ * over immediately once it exits — that is an orderly handoff, not a crash.
+ *
+ * STOP: clears whatever is pending (poll or backoff timer) and, if a pid is
+ * currently supervised, marks it stopping and sends it exactly ONE SIGTERM —
+ * never a second one, and never to a pid the stop marker already names (that
+ * pid belongs to someone else's stop). The drain itself is not awaited; the
+ * detached `forge serve` finishes in-flight cycles on its own.
+ *
+ * Every boot/spawn/respawn/stop transition logs one line via the injected
+ * `log`, including the pid and, for a respawn, why (exit → backoff delay).
+ */
+
+import {
+  daemonPaths,
+  readPid as readPidFile,
+  isAlive as isAliveImpl,
+  spawnServeDetached,
+  markStopping as markStoppingFile,
+} from '@forge/flows';
+
+export const SERVE_POLL_MS = 2_000;
+export const SERVE_MIN_UPTIME_MS = 30_000;
+export const SERVE_BACKOFF_INITIAL_MS = 1_000;
+export const SERVE_BACKOFF_CAP_MS = 60_000;
+
+/** The supervisor's own read-only view of serve's liveness — what the bridge
+ *  health route and the Studio UI read (never operator-controllable). */
+export type ServeSupervisorState = 'running' | 'draining' | 'restarting' | 'down' | 'unsupervised';
+
+export type ServeSupervisorStatus = {
+  state: ServeSupervisorState;
+  pid: number | null;
+  /** Count of respawns THIS instance has performed after a detected crash
+   *  (never counts the initial boot adopt/spawn, nor a drain hand-off). */
+  restarts: number;
+  /** ISO instant the pending backoff respawn will fire, else null. */
+  nextRestartAt: string | null;
+};
+
+/** The status a caller with no supervisor at all reports (dry-bridge, or the
+ *  ATTACH path, which never supervises). Exported so callers that have no
+ *  `ServeSupervisorHandle` can still answer the same shape. */
+export const UNSUPERVISED_SERVE_STATUS: ServeSupervisorStatus = {
+  state: 'unsupervised',
+  pid: null,
+  restarts: 0,
+  nextRestartAt: null,
+};
+
+/** The injected test seam. Production defaults (see `superviseServe`) wrap
+ *  the real `@forge/flows` daemon helpers, `process.kill`, `setTimeout` and
+ *  `Date.now`. */
+export type ServeSupervisorDeps = {
+  /** The on-disk pid file's recorded pid, or null when absent/unparseable. */
+  readPid: () => number | null;
+  /** The on-disk stop marker's recorded pid, or null when absent. */
+  readStoppingPid: () => number | null;
+  /** True when `pid` is a genuinely running process. */
+  isAlive: (pid: number) => boolean;
+  /** Spawn a fresh detached `forge serve`, returning its pid. */
+  spawn: () => number;
+  /** Signal a pid. */
+  kill: (pid: number, signal: NodeJS.Signals) => void;
+  /** Record that `pid` was just signalled to stop (the drain marker other
+   *  supervisor instances must honour at boot). */
+  markStopping: (pid: number) => void;
+  /** Schedule `fn` to run after `ms`; returns an opaque handle. */
+  setTimer: (fn: () => void, ms: number) => unknown;
+  /** Cancel a handle returned by `setTimer`. */
+  clearTimer: (handle: unknown) => void;
+  /** A monotonic-enough wall clock, in ms. */
+  now: () => number;
+  /** One line per boot/spawn/respawn/stop transition. */
+  log: (line: string) => void;
+};
+
+export type SuperviseServeOptions = Partial<ServeSupervisorDeps> & {
+  /** The forge install root — resolves the real pid/stop-marker files and the
+   *  real `spawnServeDetached` target when a dep is not injected. */
+  forgeRoot: string;
+  /** Log prefix for the default `log` — `[forge studio]` (canonical) or
+   *  `[forge watch]` (deprecated alias). Defaults to `[forge studio]`. */
+  logLabel?: string;
+};
+
+export type ServeSupervisorHandle = {
+  /** Clear pending timers and, if a pid is currently supervised, mark it
+   *  stopping and send it exactly one SIGTERM. Idempotent. Does not await
+   *  the drain. */
+  stop(): void;
+  /** The current read-only status — what the bridge health route reports. */
+  getStatus(): ServeSupervisorStatus;
+};
+
+function resolveDeps(opts: SuperviseServeOptions): ServeSupervisorDeps {
+  const { forgeRoot } = opts;
+  const label = opts.logLabel ?? '[forge studio]';
+  const paths = daemonPaths(forgeRoot);
+  return {
+    readPid: opts.readPid ?? (() => readPidFile(paths.pidFile)),
+    readStoppingPid: opts.readStoppingPid ?? (() => readPidFile(paths.stoppingFile)),
+    isAlive: opts.isAlive ?? ((pid: number) => isAliveImpl(pid)),
+    spawn:
+      opts.spawn ??
+      (() => {
+        const result = spawnServeDetached(forgeRoot);
+        if (result !== null) return result.pid;
+        // A live daemon already owns the pid file (a boot-time race between
+        // two supervisors) — adopt it rather than treating this as failure.
+        const pid = readPidFile(paths.pidFile);
+        if (pid === null) {
+          throw new Error('serve-supervisor: spawnServeDetached reported a live daemon but no pid file is present');
+        }
+        return pid;
+      }),
+    kill: opts.kill ?? ((pid: number, signal: NodeJS.Signals) => { try { process.kill(pid, signal); } catch { /* already gone */ } }),
+    markStopping: opts.markStopping ?? ((pid: number) => markStoppingFile(forgeRoot, pid)),
+    setTimer: opts.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms)),
+    clearTimer: opts.clearTimer ?? ((handle: unknown) => clearTimeout(handle as NodeJS.Timeout)),
+    now: opts.now ?? (() => Date.now()),
+    log: opts.log ?? ((line: string) => console.log(`${label} serve ${line}`)),
+  };
+}
+
+export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHandle {
+  const deps = resolveDeps(opts);
+
+  let stopped = false;
+  /** The pid we currently supervise as "ours, running" — null while there is
+   *  nothing live under our care (a backoff respawn is pending, or we're
+   *  waiting out someone else's drain). */
+  let currentPid: number | null = null;
+  let startedAt = 0;
+  let backoffMs: number = SERVE_BACKOFF_INITIAL_MS;
+  let restarts = 0;
+  /** Non-null while waiting, at boot, for a pid ANOTHER stop already
+   *  signalled to finish draining — never adopted, never signalled by us. */
+  let drainingPid: number | null = null;
+  let pendingHandle: unknown = null;
+  let nextRestartAtMs: number | null = null;
+
+  function schedulePoll(): void {
+    pendingHandle = deps.setTimer(poll, SERVE_POLL_MS);
+    nextRestartAtMs = null;
+  }
+
+  function scheduleRespawn(delayMs: number): void {
+    nextRestartAtMs = deps.now() + delayMs;
+    pendingHandle = deps.setTimer(() => {
+      pendingHandle = null;
+      if (stopped) return;
+      doSpawn(true);
+      schedulePoll();
+    }, delayMs);
+  }
+
+  function clearPending(): void {
+    if (pendingHandle !== null) {
+      deps.clearTimer(pendingHandle);
+      pendingHandle = null;
+    }
+    nextRestartAtMs = null;
+  }
+
+  function doSpawn(isRestart: boolean): void {
+    const pid = deps.spawn();
+    currentPid = pid;
+    startedAt = deps.now();
+    if (isRestart) restarts += 1;
+    deps.log(`${isRestart ? 'respawned' : 'spawned'} pid ${pid}`);
+  }
+
+  function poll(): void {
+    pendingHandle = null;
+    if (stopped) return;
+
+    if (drainingPid !== null) {
+      if (deps.isAlive(drainingPid)) {
+        schedulePoll();
+        return;
+      }
+      deps.log(`drained pid ${drainingPid} has exited — spawning`);
+      drainingPid = null;
+      doSpawn(false);
+      schedulePoll();
+      return;
+    }
+
+    if (currentPid !== null && deps.isAlive(currentPid)) {
+      schedulePoll();
+      return;
+    }
+
+    // The supervised pid is gone — a crash. Measure its uptime to decide the
+    // backoff delay before respawning: a quick death doubles the delay (capped);
+    // a healthy uptime resets it.
+    const diedPid = currentPid;
+    const uptime = deps.now() - startedAt;
+    currentPid = null;
+    if (uptime >= SERVE_MIN_UPTIME_MS) backoffMs = SERVE_BACKOFF_INITIAL_MS;
+    const delay = backoffMs;
+    backoffMs = Math.min(backoffMs * 2, SERVE_BACKOFF_CAP_MS);
+    deps.log(`pid ${diedPid} exited after ${uptime}ms — respawning in ${delay}ms`);
+    scheduleRespawn(delay);
+  }
+
+  function boot(): void {
+    const pid = deps.readPid();
+    if (pid !== null) {
+      const stoppingPid = deps.readStoppingPid();
+      if (stoppingPid === pid) {
+        // Someone already signalled THIS pid to stop — it is draining, not
+        // healthy. Never adopt it, never signal it again; just wait it out.
+        drainingPid = pid;
+        deps.log(`pid ${pid} is draining (already signalled to stop) — waiting for it to exit`);
+        schedulePoll();
+        return;
+      }
+      if (deps.isAlive(pid)) {
+        currentPid = pid;
+        startedAt = deps.now();
+        deps.log(`adopted pid ${pid}`);
+        schedulePoll();
+        return;
+      }
+    }
+    doSpawn(false);
+    schedulePoll();
+  }
+
+  function stop(): void {
+    if (stopped) return;
+    stopped = true;
+    clearPending();
+    const pidToSignal = currentPid;
+    currentPid = null;
+    drainingPid = null;
+    if (pidToSignal !== null && deps.readStoppingPid() !== pidToSignal) {
+      deps.markStopping(pidToSignal);
+      deps.kill(pidToSignal, 'SIGTERM');
+      deps.log(`stopping pid ${pidToSignal} (SIGTERM)`);
+    }
+  }
+
+  function getStatus(): ServeSupervisorStatus {
+    if (stopped) return { state: 'down', pid: null, restarts, nextRestartAt: null };
+    if (drainingPid !== null) return { state: 'draining', pid: drainingPid, restarts, nextRestartAt: null };
+    if (currentPid !== null) return { state: 'running', pid: currentPid, restarts, nextRestartAt: null };
+    return {
+      state: 'restarting',
+      pid: null,
+      restarts,
+      nextRestartAt: nextRestartAtMs !== null ? new Date(nextRestartAtMs).toISOString() : null,
+    };
+  }
+
+  boot();
+
+  return { stop, getStatus };
+}

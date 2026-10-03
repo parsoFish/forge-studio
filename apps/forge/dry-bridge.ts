@@ -113,10 +113,6 @@ export type RouteClassification = {
 
 export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // ---- refuse: full route-level 409, no RouteEntry (still an if-chain arm) -
-  { method: 'POST', route: '/api/scheduler/start', classification: 'refuse', action: 'daemon', guard: 'route',
-    reason: 'spawns the detached forge serve daemon (spawnServeDetached)' },
-  { method: 'POST', route: '/api/scheduler/stop', classification: 'refuse', action: 'daemon', guard: 'route',
-    reason: 'SIGTERMs the live daemon process' },
   { method: 'POST', route: '/api/recovery/:id/abandon', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'removes the worktree/branch and pushes a remote branch delete' },
   { method: 'POST', route: '/api/recovery/:id/requeue', classification: 'refuse', action: 'git-remote', guard: 'route',
@@ -216,8 +212,6 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)', classification: 'exempt-local', reason: 'local brain lint/fix/index only' },
 
   // ---- exempt-local: no RouteEntry (still if-chain arms) -------------------
-  { method: 'POST', route: '/api/scheduler/pause', classification: 'exempt-local', reason: 'flag file only, no process action' },
-  { method: 'POST', route: '/api/scheduler/resume', classification: 'exempt-local', reason: 'flag file only, no process action' },
   { method: 'POST', route: '/api/develop/start', classification: 'exempt-local', reason: 'manifest move only' },
   { method: 'POST', route: '/api/initiatives/:id/plan', classification: 'exempt-local', reason: 'plan enqueue: manifest move only (scheduler decomposes, no in-request spawn)' },
   { method: 'POST', route: '/api/flows/:id/run', classification: 'exempt-local', reason: 'W7-A3 per-flow enqueue: manifest move only (enqueueFlowRun); the scheduler claims it later, no in-request spawn' },

@@ -4,18 +4,16 @@
  * daemon liveness check.
  *
  * GAP `forge-8vfn.8.1.6` follow-up (T1 review of the story-ceiling-env work).
- * Before this module the two readings had DRIFTED apart:
- * `scripts/stories/sweep-teardown.mjs`'s `isRunning` read `/proc/<pid>/stat`
- * and treated states `Z` (zombie) and `X` (dead) as gone, while
- * `packages/flows/daemon.ts`'s `isAlive` used `process.kill(pid, 0)`, which
- * counts a ZOMBIE as alive — the kernel still holds its pid table entry
- * until something reaps it. A zombie scheduler pid therefore PASSED the
- * story runner's own preflight (`scripts/stories/scheduler-preflight.mjs`)
- * while making `spawnServeDetached` (`daemon.ts`) return `null` and start
- * nothing new: the run's cost ceiling landed on a bridge whose
- * `scheduler-start` was a silent no-op, in an env nothing would ever read.
- * ONE rule, used by BOTH, closes that gap by construction rather than by
- * keeping two independent readings in sync by hand.
+ * `scripts/stories/sweep-teardown.mjs`'s `isRunning` reads `/proc/<pid>/stat`
+ * and treats states `Z` (zombie) and `X` (dead) as gone; a reading based on
+ * `process.kill(pid, 0)` alone disagrees — it counts a ZOMBIE as alive, since
+ * the kernel still holds its pid table entry until something reaps it. A
+ * zombie daemon pid could therefore PASS the story runner's own preflight
+ * while `spawnServeDetached` (`packages/flows/daemon.ts`) still treats it as
+ * live and starts nothing new: a daemon-start route landing on a bridge that
+ * silently no-ops, in an env nothing would ever read. ONE rule, used by
+ * BOTH, closes that gap by construction rather than by keeping two
+ * independent readings in sync by hand.
  *
  * `ENOENT` — AND ONLY `ENOENT` — MEANS GONE (T1 1372, RP's load repro). Any
  * OTHER read failure reports "still running": a transient, unexplained

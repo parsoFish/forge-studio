@@ -6,8 +6,8 @@
  *
  * Kills:
  *  - a plan gate armed by the URL (?mode=gate) instead of the session phase;
- *  - "the autonomous loop is building it now" asserted while the scheduler is
- *    stopped, or while the initiative merely sits in _queue/pending;
+ *  - "the autonomous loop is building it now" asserted while `forge serve`
+ *    is not running, or while the initiative merely sits in _queue/pending;
  *  - a committed banner that names no initiative / links to the flow
  *    DEFINITION instead of the run;
  *  - a missing session rendered as an armed gate instead of not-found.
@@ -25,7 +25,7 @@ import {
   deriveInitiativeLinkage,
   describePostCommit,
 } from '../../lib/architect-plan-view.ts';
-import type { ArchitectSessionSummary } from '../../lib/bridge-client.ts';
+import type { ArchitectSessionSummary, ServeStatus } from '../../lib/bridge-client.ts';
 import type { Run } from '../../lib/studio-client.ts';
 
 function session(phase: ArchitectSessionSummary['phase'], extra: Partial<ArchitectSessionSummary> = {}): ArchitectSessionSummary {
@@ -147,91 +147,71 @@ const ID = 'INIT-2026-08-18-add-version-flag';
 const link = (queueState: ReturnType<typeof deriveInitiativeLinkage>[number]['queueState']) =>
   ({ initiativeId: ID, runId: 'r', flowId: 'forge-develop', runStatus: null, queueState, runHref: '/flows/forge-develop/run/r', monitorHref: '/flows/forge-develop' });
 
-test('"building it now" ONLY when a run is active AND the scheduler is running (sessions-kinds-08/12)', () => {
-  const v = describePostCommit([link('building')], { running: true });
+const RUNNING: ServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null };
+const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null };
+const RESTARTING: ServeStatus = { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z' };
+const UNSUPERVISED: ServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null };
+
+test('"building it now" ONLY when a run is active AND forge serve is running (sessions-kinds-08/12)', () => {
+  const v = describePostCommit([link('building')], RUNNING);
   expect(v.tone).toBe('building');
   expect(v.headline).toBe(`The autonomous loop is building ${ID} now.`);
-  expect(v.needsSchedulerStart).toBe(false);
+  expect(v.serveNotReady).toBe(false);
 });
 
-test('active run but scheduler stopped → claimed-stopped, honest, needs a start', () => {
-  const v = describePostCommit([link('building')], { running: false });
-  expect(v.tone).toBe('claimed-stopped');
-  expect(v.headline).toBe(`${ID} is claimed but the scheduler is stopped — it will not progress until you start it.`);
-  expect(v.needsSchedulerStart).toBe(true);
+test('active run but serve not running → claimed-not-running, honest, serve not ready', () => {
+  const v = describePostCommit([link('building')], DOWN);
+  expect(v.tone).toBe('claimed-not-running');
+  expect(v.headline).toBe(`${ID} is claimed but forge serve is not currently running — it will resume once Studio brings it back.`);
+  expect(v.serveNotReady).toBe(true);
   expect(v.headline).not.toMatch(/building it now/);
 });
 
-test('queued: running scheduler → will pick it up; paused → resume it; stopped/unknown → start it (needsSchedulerStart)', () => {
-  expect(describePostCommit([link('queued')], { running: true, paused: false })).toEqual({
-    tone: 'queued-running', headline: `${ID} is queued — the scheduler will pick it up.`, needsSchedulerStart: false,
+test('queued: serve running → will pick it up; not running (restarting/down) → not ready', () => {
+  expect(describePostCommit([link('queued')], RUNNING)).toEqual({
+    tone: 'queued-running', headline: `${ID} is queued — forge serve will pick it up.`, serveNotReady: false,
   });
-  expect(describePostCommit([link('queued')], { running: true, paused: true })).toEqual({
-    tone: 'queued-running', headline: `${ID} is queued — the scheduler is paused; resume it to start.`, needsSchedulerStart: false,
+  expect(describePostCommit([link('queued')], RESTARTING)).toEqual({
+    tone: 'queued-not-running', headline: `${ID} is queued — forge serve is not currently running; it will resume once Studio brings it back.`, serveNotReady: true,
   });
-  expect(describePostCommit([link('queued')], { running: false })).toEqual({
-    tone: 'queued-stopped', headline: `${ID} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true,
+  expect(describePostCommit([link('queued')], DOWN)).toEqual({
+    tone: 'queued-not-running', headline: `${ID} is queued — forge serve is not currently running; it will resume once Studio brings it back.`, serveNotReady: true,
   });
 });
 
-// W7-FIX-A3 (A3-04): a null (unreadable) scheduler status is NOT "stopped" —
-// the headline must not assert a state that was never read (the strip
-// beneath renders "unknown" with no Start button, so "start it" would
-// contradict its own controls). Distinct tones, still mounts the strip.
-test('queued/claimed with an UNKNOWN scheduler (null) → "could not confirm" headlines, never "stopped"', () => {
-  const queued = describePostCommit([link('queued')], null);
-  expect(queued).toEqual({
-    tone: 'queued-unknown',
-    headline: `${ID} is queued — could not confirm the scheduler is running; check its status below.`,
-    needsSchedulerStart: true,
-  });
-  const claimed = describePostCommit([link('building')], null);
-  expect(claimed).toEqual({
-    tone: 'claimed-unknown',
-    headline: `${ID} is claimed — could not confirm the scheduler is running; check its status below.`,
-    needsSchedulerStart: true,
-  });
-  for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/stopped|building it now/);
+// a null (unreadable) or `unsupervised` serve status is NOT "not running" —
+// the headline must not assert a state that was never confirmed, so it gets
+// its own, distinct "unknown" tone.
+test('queued/claimed with an UNCONFIRMED serve status (null or unsupervised) → "could not confirm" headlines', () => {
+  for (const status of [null, UNSUPERVISED]) {
+    const queued = describePostCommit([link('queued')], status);
+    expect(queued).toEqual({
+      tone: 'queued-unknown',
+      headline: `${ID} is queued — could not confirm forge serve is running.`,
+      serveNotReady: true,
+    });
+    const claimed = describePostCommit([link('building')], status);
+    expect(claimed).toEqual({
+      tone: 'claimed-unknown',
+      headline: `${ID} is claimed — could not confirm forge serve is running.`,
+      serveNotReady: true,
+    });
+    for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/not currently running|building it now/);
+  }
 });
 
 test('gated wins over everything; failed / done / unknown are their own honest tones', () => {
-  expect(describePostCommit([link('gated'), link('building')], { running: true }).tone).toBe('gated');
-  expect(describePostCommit([link('gated')], { running: true }).headline).toBe(`${ID} is waiting on your verdict.`);
-  expect(describePostCommit([link('failed')], { running: true })).toEqual({ tone: 'failed', headline: `${ID} failed — see the run for the failure note.`, needsSchedulerStart: false });
-  expect(describePostCommit([link('complete')], { running: false })).toEqual({ tone: 'done', headline: `${ID} finished.`, needsSchedulerStart: false });
-  expect(describePostCommit([], { running: true })).toEqual({ tone: 'unknown', headline: 'Approved — no queue entry found for this session yet.', needsSchedulerStart: false });
+  expect(describePostCommit([link('gated'), link('building')], RUNNING).tone).toBe('gated');
+  expect(describePostCommit([link('gated')], RUNNING).headline).toBe(`${ID} is waiting on your verdict.`);
+  expect(describePostCommit([link('failed')], RUNNING)).toEqual({ tone: 'failed', headline: `${ID} failed — see the run for the failure note.`, serveNotReady: false });
+  expect(describePostCommit([link('complete')], DOWN)).toEqual({ tone: 'done', headline: `${ID} finished.`, serveNotReady: false });
+  expect(describePostCommit([], RUNNING)).toEqual({ tone: 'unknown', headline: 'Approved — no queue entry found for this session yet.', serveNotReady: false });
   expect(describePostCommit([link('unknown')], null).tone).toBe('unknown');
 });
 
 test('multiple initiatives → the headline names every matching id', () => {
   const rows = [{ ...link('queued'), initiativeId: 'INIT-2026-01-01-a' }, { ...link('queued'), initiativeId: 'INIT-2026-01-01-b' }];
-  expect(describePostCommit(rows, { running: false }).headline).toBe('INIT-2026-01-01-a, INIT-2026-01-01-b is queued — the scheduler is stopped. Start it to build.');
-});
-
-// W7-FIX-A3 (round-2 finding 4): the same drain window, on the architect's
-// committed view. `stopping` rides on `running: true`, so a commit landing
-// inside a Stop's drain used to promise "the scheduler will pick it up" for
-// an initiative that will sit in pending/ once the daemon exits.
-test('queued/claimed while the scheduler is STOPPING → drain-honest headlines, never "will pick it up"', () => {
-  const queued = describePostCommit([link('queued')], { running: true, stopping: true });
-  expect(queued).toEqual({
-    tone: 'queued-stopping',
-    headline: `${ID} is queued — the scheduler is stopping; start it again to build.`,
-    needsSchedulerStart: true,
-  });
-  const claimed = describePostCommit([link('building')], { running: true, stopping: true });
-  expect(claimed).toEqual({
-    tone: 'claimed-stopping',
-    headline: `${ID} is claimed but the scheduler is stopping — it will not progress until you start it again.`,
-    needsSchedulerStart: true,
-  });
-  for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/will pick it up|building it now/);
-});
-
-test('stopping wins over paused on the committed view (a draining daemon cannot be resumed into claiming)', () => {
-  const v = describePostCommit([link('queued')], { running: true, paused: true, stopping: true });
-  expect(v.tone).toBe('queued-stopping');
-  expect(v.headline).not.toMatch(/resume it/);
+  expect(describePostCommit(rows, DOWN).headline).toBe('INIT-2026-01-01-a, INIT-2026-01-01-b is queued — forge serve is not currently running; it will resume once Studio brings it back.');
 });
 
 

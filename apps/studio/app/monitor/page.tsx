@@ -12,7 +12,8 @@ import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistori
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
 import { MonitorSummaryStrip } from '@/components/studio/MonitorSummaryStrip';
 import { RunRail } from '@/components/studio/RunRail';
-import { SchedulerCard } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { useServeStatus } from '@/lib/use-serve-status';
 import {
   buildHomeAttention,
   buildKbAttention,
@@ -43,14 +44,15 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 //   - the counts: `buildMonitorSummary` over the SAME rows rendered below
 //   - the run rail with its real `failed` group: `RunRail`
 //   - sessions: `HomeSessionsStrip` (+ `buildHomeSessionsStrip`)
-//   - scheduler: `SchedulerCard`
+//   - serve status: `ServeStatusNotice` (M7-E row 205 — read-only; there is
+//     no operator control over `forge serve` any more)
 //   - attention: `buildHomeAttention` / `buildKbAttention` /
 //     `buildKbDraftAttention`, the same three builders Home renders
-// No new bridge route, and no route added anywhere: both endpoints this page
-// needs (`GET /api/agents/runs/recent`, `GET /api/scheduler/status`) already
-// existed, reached through their existing typed wrappers. Structurally
-// enforced by `scripts/home-no-new-polling.test.ts`, which this lane extended
-// to cover this page, the lifted hook and the pure derivation.
+// No new bridge route, and no route added anywhere: this page's own endpoint
+// (`GET /api/agents/runs/recent`) already existed, reached through its
+// existing typed wrapper; serve status rides the existing `GET /api/health`.
+// Structurally enforced by `scripts/home-no-new-polling.test.ts`, which this
+// lane extended to cover this page, the lifted hook and the pure derivation.
 //
 // Home keeps the SUMMARY (a four-tile strip, same component, same value);
 // Monitor owns the DEPTH. Two ledgers that drift is the same fail-open shape
@@ -70,6 +72,8 @@ const RUN_RAIL_HEIGHT = 420;
 export default function MonitorPage() {
   const { agents, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
+  // M7-E row 205 (ADR 011/031): the read-only serve status.
+  const { status: serveStatus } = useServeStatus();
   const ledger = useEverythingLedger({ agents, runs, sessions, ready });
 
   // The same three attention builders Home renders, over the same
@@ -131,11 +135,14 @@ export default function MonitorPage() {
           count computed from a different source. */}
       <MonitorSummaryStrip summary={summary} variant="monitor" ready={summaryReady} />
 
-      {/* The daemon that turns queued work into runs. Its own component owns
-          its read; Monitor adds no fetch and no interval. */}
-      <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 24 }}>
-        <SchedulerCard queuedCount={summary.queued} />
-      </section>
+      {/* M7-E row 205: `forge serve` is what turns queued work into runs; the
+          supervisor's own read-only status, surfaced only while there is
+          something to report (never a card when it's simply running). */}
+      {serveStatus && serveStatus.state !== 'running' && (
+        <section data-section="serve-status" aria-label="forge serve status" style={{ marginBottom: 24 }}>
+          <ServeStatusNotice status={serveStatus} />
+        </section>
+      )}
 
       {/* Everything waiting on a human: project gates, parked brain drafts and
           KB lint, in one dense list. Always mounted — an empty section that

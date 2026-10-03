@@ -28,7 +28,8 @@ import { RunControls } from '@/components/studio/RunControls';
 import { deriveKickoffCandidates } from '@/lib/kickoff-candidates';
 import { canStartFlow } from '@/lib/kickoff-surface';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
-import { SchedulerCard } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { useServeStatus } from '@/lib/use-serve-status';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import { useDocumentTitle } from '@/lib/document-title';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
@@ -78,6 +79,7 @@ type PageTab = 'monitor' | 'build';
 export default function FlowMonitorPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
+  const { status: serveStatus } = useServeStatus(); // M7-E row 205
   // A brand-new flow: start in BUILD, seed the canvas from the basic starter,
   // and on save derive a slug from the name + redirect to the real flow.
   const isNew = id === 'new';
@@ -793,12 +795,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 />
               )}
 
-              {/* W7-A3 (flows-01/23): the scheduler is what turns the QUEUED
-                  rows in the rail into running ones — its real state and
-                  Start/Pause/Stop sit right here on the monitor. */}
-              <div style={{ padding: '6px 20px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-                <SchedulerCard variant="strip" queuedCount={view.runs.filter((r) => r.status === 'planned').length} />
-              </div>
+              {/* W7-A3/M7-E row 205: no operator control over serve — the shared notice, when needed. */}
+              {serveStatus && serveStatus.state !== 'running' && (
+                <div style={{ padding: '6px 20px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}><ServeStatusNotice status={serveStatus} variant="strip" /></div>
+              )}
 
               {/* W8-A3 (flows-28/49/23): the run's recovery controls, replacing the
                   hard-coded "Run failed. [Resume]" bar. That bar offered one of the
@@ -806,7 +806,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   Resume does (it re-enters at the demo node against the preserved
                   branch), and swallowed its own failures — `handleResumeRun` had no
                   else branch, so a refused POST produced no observable change at
-                  all. `schedulerStrip={false}`: the monitor mounts its own strip
+                  all. `serveStrip={false}`: the monitor mounts its own strip
                   directly above. */}
               <div style={{ padding: '0 20px 8px', flexShrink: 0 }}>
                 {/* `key` on the INITIATIVE id (review round 1 S2-5, corrected by
@@ -820,7 +820,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                     on every requeue, so a successful resume remounted the
                     component and threw away the very outcome line flows-49 exists
                     to show. The initiative id is the stable handle. */}
-                <RunControls key={view.activeRun?.initiativeId ?? 'none'} run={view.activeRun} onActed={handleEnqueued} schedulerStrip={false} />
+                <RunControls key={view.activeRun?.initiativeId ?? 'none'} run={view.activeRun} onActed={handleEnqueued} serveStrip={false} />
               </div>
 
               {/* Summary strip */}

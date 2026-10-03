@@ -11,8 +11,8 @@
  * (`CostTracker`, flow-budgets.ts); an operator stop reuses exactly that
  * shape as a SECOND trigger on the same halt, via a flag FILE instead of an
  * in-memory counter — consistent with ADR 011's "the filesystem is the
- * protocol" and the SAME presence-based convention `daemon.ts`'s `.paused`
- * flag already uses ("presence, not contents, is the signal").
+ * protocol": presence, not contents, is the signal, same as every other
+ * flag file in this package.
  *
  * WHO WRITES IT. The bridge's `POST /api/recovery/:id/stop` route, for an
  * ACTIVE (in-flight) run only — `bridge-recovery.ts`. A GATED (ready-for-review)
@@ -67,8 +67,9 @@ export type OperatorStopRequest = {
 };
 
 /**
- * Non-destructive, existence-based check — mirrors `daemon.ts`'s `isPaused`.
- * A malformed file still halts the run (only the bridge's own stop route ever
+ * Non-destructive, existence-based check — presence is the signal, same as
+ * every other flag file this package reads. A malformed file still halts the
+ * run (only the bridge's own stop route ever
  * writes one); `null` means no stop was requested.
  */
 export function readOperatorStopRequest(

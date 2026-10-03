@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
-import { SchedulerCard } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { useServeStatus } from '@/lib/use-serve-status';
 import { RecentRuns } from '@/components/RecentRuns';
 import { recentRunRowToLedgerRow, RECENT_AGENT_RUNS_LIMIT } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
@@ -49,6 +50,8 @@ import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 // ---------------------------------------------------------------------------
 
 export default function FlowsIndexPage() {
+  // M7-E row 205 (ADR 011/031): the read-only serve status.
+  const { status: serveStatus } = useServeStatus();
   const [flows, setFlows] = useState<Flow[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -193,11 +196,15 @@ export default function FlowsIndexPage() {
           </Link>
         </div>
 
-        {/* W7-A3 (flows-01/23): the scheduler is what turns a queued run into
-            a running one — surface it where the runs are. */}
-        <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 20 }}>
-          <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
-        </section>
+        {/* W7-A3 (flows-01/23); M7-E row 205: `forge serve` is what turns a
+            queued run into a running one. There is no operator control over
+            it any more — only this honest read-only notice, and only while
+            there is something to report. */}
+        {serveStatus && serveStatus.state !== 'running' && (
+          <section data-section="serve-status" aria-label="forge serve status" style={{ marginBottom: 20 }}>
+            <ServeStatusNotice status={serveStatus} />
+          </section>
+        )}
 
         {error ? (
           <div style={{ marginBottom: flows.length > 0 ? 18 : 0 }}>

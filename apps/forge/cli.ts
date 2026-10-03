@@ -227,10 +227,12 @@ async function cmdServe(rest: string[]): Promise<void> {
   }
 }
 
-// M7-5 (ADR-031): `forge start` / `stop` / `pause` / `resume` / `status` were
-// removed — the Studio UI bridge is the operator API now. Daemon spawn is
-// `spawnServeDetached` in packages/flows/daemon.ts (POST /api/scheduler/start);
-// pause/resume/stop/status are bridge routes onto the same helpers.
+// M7-5/M7-E (ADR-031): the Studio UI bridge is the operator API; there is no
+// standalone `forge start`/`stop`/`pause`/`resume`/`status` command. `forge
+// studio` supervises `forge serve` directly (apps/forge/serve-supervisor.ts,
+// built on `spawnServeDetached` in packages/flows/daemon.ts) — it adopts a
+// live one or spawns one, and keeps it alive for as long as Studio owns the
+// port. There is no operator lifecycle control over it.
 
 function printLatestReportHint(): void {
   const logsRoot = resolve('_logs');

@@ -96,7 +96,7 @@ function SelectableMonitor({ runs }: { runs: Run[] }): JSX.Element {
     React.createElement(RunRail, {
       runs, activeRunId: activeRun?.id ?? null, onSelect: handleSelectRun, flowId: FLOW_ID,
     }),
-    React.createElement(RunControls, { run: activeRun, schedulerStrip: false }),
+    React.createElement(RunControls, { run: activeRun, serveStrip: false }),
   );
 }
 

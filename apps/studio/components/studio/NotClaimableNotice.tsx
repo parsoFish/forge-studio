@@ -2,7 +2,7 @@
  * Row 174 (forge-8vfn.8.5.9) — "not claimable" beside Start development.
  *
  * A project is born contract-green before anything is installed, so the
- * birth verdict can read ready while the scheduler's claim refuses the
+ * birth verdict can read ready while `forge serve`'s claim refuses the
  * ground on DEPS (its declared gate needs node_modules it does not have).
  * The bridge's preflight read returns that claim verdict as `runnableGate`;
  * this says so where the operator is about to press Start development,
@@ -26,8 +26,8 @@ export function NotClaimableNotice({
         Not claimable: DEPS — run <code>npm ci</code> in <code>projects/{projectId}</code>
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-        The scheduler refuses to claim this project&apos;s initiatives until its declared gate can run.
-        After installing, stop and start the scheduler so it claims again. {runnableGate.detail}
+        forge serve refuses to claim this project&apos;s initiatives until its declared gate can run.
+        After installing, restart <code>forge studio</code> so the next serve re-checks it. {runnableGate.detail}
       </div>
     </div>
   );

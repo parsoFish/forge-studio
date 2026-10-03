@@ -28,7 +28,14 @@ import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { existsSync, writeFileSync, renameSync, readdirSync, statSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { isDryBridge } from '@forge/kernel';
 import { startBridge } from './ui-bridge.ts';
+import {
+  superviseServe,
+  UNSUPERVISED_SERVE_STATUS,
+  type ServeSupervisorHandle,
+  type ServeSupervisorStatus,
+} from './serve-supervisor.ts';
 
 /** The deterministic ready signal forge studio emits on stdout once both the
  *  bridge and the UI have answered a health probe. Consumers grep for this
@@ -427,6 +434,10 @@ export type WatchOptions = {
   /** Log prefix — `[forge studio]` (canonical) or `[forge watch]`
    *  (deprecated alias). Defaults to `[forge studio]`. */
   logLabel?: string;
+  /** Test seam (M7-E row 205): overrides the real `superviseServe` so this
+   *  file's own tests never spawn a real detached `forge serve`. Defaults to
+   *  the real implementation from `./serve-supervisor.ts`. */
+  superviseServeImpl?: typeof superviseServe;
 };
 
 export async function runWatch(opts: WatchOptions): Promise<void> {
@@ -484,8 +495,27 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   //     browser tab pinned at http://localhost:4124 across re-runs and
   //     have it auto-reconnect via the bridge-client backoff.
   takeoverPort(bridgePort, 'bridge', label);
-  const bridge = await startBridge({ forgeRoot, port: bridgePort });
+  // M7-E row 205: the bridge's own GET /api/health reports serve's live
+  // status (ADR 011/031) via a GETTER, not a snapshot — the supervisor is
+  // created a few lines below, AFTER the bridge is already listening, so the
+  // indirection lets the health route always read whatever the supervisor's
+  // current status is, including before it exists (unsupervised).
+  let currentServeStatus: () => ServeSupervisorStatus = () => UNSUPERVISED_SERVE_STATUS;
+  const bridge = await startBridge({ forgeRoot, port: bridgePort, getServeStatus: () => currentServeStatus() });
   console.log(`${label} bridge at ${bridge.url}`);
+
+  // M7-E row 205: Studio supervises `forge serve` exactly the way it
+  // supervises the bridge and the UI — adopt a live one or spawn fresh, then
+  // keep it alive for as long as this TAKEOVER owns the port. Only on the
+  // TAKEOVER path (a second studio that ATTACHed above already returned, and
+  // never reaches here) and never under the dry bridge, which refuses every
+  // real process action.
+  let serveSupervisor: ServeSupervisorHandle | null = null;
+  if (!isDryBridge()) {
+    const superviseServeFn = opts.superviseServeImpl ?? superviseServe;
+    serveSupervisor = superviseServeFn({ forgeRoot, logLabel: label });
+    currentServeStatus = serveSupervisor.getStatus;
+  }
 
   // 2. Bring up the UI (unless --bridge-only or forge-ui not installed).
   let uiProc: ChildProcess | null = null;
@@ -512,6 +542,9 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
     // Operating on a local capture instead is immune to that race.
     const proc = uiProc;
     if (proc) await terminateChild(proc);
+    // M7-E row 205: stop supervising BEFORE the bridge closes, so the health
+    // route never answers mid-shutdown with a supervisor that outlived it.
+    serveSupervisor?.stop();
     try { await bridge.close(); } catch { /* ignore */ }
     process.exit(0);
   };

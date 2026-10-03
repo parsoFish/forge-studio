@@ -627,9 +627,9 @@ function ArtifactPageInner() {
   // control set (W7-A3, artifact-plan-01/09, sessions-kinds-14).
   const showGateBar = isGateMode && !isArchitect && (type === 'plan' || type === 'demo');
 
-  // W7-A3 linkage + scheduler for the architect post-approve payoff: reads the
-  // runs list + scheduler status on a slow visible-only poll (no page-level
-  // fetch when this is not an architect plan).
+  // W7-A3 linkage + the live serve status for the architect post-approve
+  // payoff: reads the runs list + serve status on a slow visible-only poll
+  // (no page-level fetch when this is not an architect plan).
   const loop = useLoopClosureState(archSession?.initiativeIds, isArchitect);
   const gateId = type === 'plan' ? 'plan' : 'verdict';
 
@@ -1268,9 +1268,9 @@ function ArtifactPageInner() {
               {/* The architect PLAN surface (runId='_architect-<sid>', W7-A3):
                   session-resolved, per-phase honest, one control set (PlanGate
                   at awaiting-verdict), payoff with initiative → run linkage +
-                  scheduler state; not-found when the session does not exist.
-                  Preserves data-section="plan-gate" + data-decisions-resolved
-                  + the beat-9 watch-it-build payoff. */}
+                  the live serve state; not-found when the session does not
+                  exist. Preserves data-section="plan-gate" +
+                  data-decisions-resolved + the beat-9 watch-it-build payoff. */}
               {isArchitect && (
                 <ArchitectPlanGate
                   session={archSession}
@@ -1280,11 +1280,7 @@ function ArtifactPageInner() {
                   onGateState={(s) => setGateState(s)}
                   linkage={loop.linkage}
                   linkageReady={loop.linkageReady}
-                  scheduler={loop.status}
-                  schedulerReady={loop.ready}
-                  schedulerBusy={loop.busy}
-                  schedulerError={loop.error}
-                  onSchedulerAction={(a) => void loop.act(a)}
+                  serve={loop.status}
                 />
               )}
 

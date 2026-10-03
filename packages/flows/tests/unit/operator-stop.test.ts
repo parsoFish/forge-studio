@@ -1,7 +1,8 @@
 /**
  * M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — the shared
- * primitives `operator-stop.ts` exports: the flag file's path/read (presence-
- * based, mirroring `daemon.ts`'s `.paused`), `OperatorStopError`'s message
+ * primitives `operator-stop.ts` exports: the flag file's path/read
+ * (presence-based, the same convention every flag file in this package
+ * uses), `OperatorStopError`'s message
  * signature (`failure-classifier.ts` scans for the literal `operator-stop:`
  * prefix), `describeNodeAbort` (the wedge-kill/operator-stop message
  * disambiguator `developer-loop.ts` uses at both its abort sites), and
@@ -50,8 +51,7 @@ test('readOperatorStopRequest: presence is the signal — a well-formed flag is 
 });
 
 test(
-  'readOperatorStopRequest: a malformed flag still halts — presence, not contents, is ' +
-    'authoritative (mirrors daemon.ts .paused)',
+  'readOperatorStopRequest: a malformed flag still halts — presence, not contents, is authoritative',
   () => {
   withTmpDir((dir) => {
     writeFileSync(operatorStopPath(dir, 'INIT-x'), 'not json at all');

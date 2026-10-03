@@ -1,12 +1,7 @@
 /**
- * Daemon + poll-toggle control for `forge serve`.
- *
- * Why this exists: `forge serve` is a long-lived foreground process. An
- * operator who closes the terminal (or doesn't realise it must stay open)
- * kills it mid-cycle and strands the in-flight initiative. The daemon
- * commands run `forge serve` detached so the shell can come and go, plus a
- * file-flag poll toggle so the operator can stop/resume *claiming new work*
- * without tearing the process down.
+ * Daemon control for `forge serve`: `forge studio` adopts a live one or
+ * spawns one detached (apps/forge/serve-supervisor.ts), so the operator's
+ * shell can come and go without stranding an in-flight initiative.
  *
  * State lives on disk (consistent with the file-based queue, ADR 011):
  *   _logs/daemon/forge.pid   — pid of the detached `forge serve`
@@ -14,12 +9,11 @@
  *   _logs/daemon/stopping    — the pid a stop was SIGNALLED to (W7-FIX-A3):
  *                              `stopping` while THAT pid is still alive
  *                              (draining in-flight cycles); a different or
- *                              dead pid never inherits it
- *   <queueRoot>/.paused      — presence = scheduler won't claim new work
+ *                              dead pid never inherits it, and a supervisor
+ *                              booting onto a pid this names waits for its
+ *                              exit rather than adopting or re-signalling it
  *
- * This module is pure helpers + flag I/O only. It must NOT import the
- * scheduler (the scheduler imports `isPaused` from here — keep that edge
- * one-way to avoid a cycle).
+ * This module is pure helpers + pid-file I/O only.
  */
 
 import {
@@ -28,11 +22,10 @@ import {
   openSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { isProcessRunning } from '@forge/kernel';
 
 export type DaemonPaths = {
@@ -69,41 +62,12 @@ export function isAlive(pid: number, procRoot?: string): boolean {
   return isProcessRunning(pid, procRoot);
 }
 
-export type DaemonState = {
-  running: boolean;
-  pid: number | null;
-  /** Wall-clock ISO the pid file was written (≈ daemon start), if running. */
-  startedAt: string | null;
-  paused: boolean;
-  /**
-   * W7-FIX-A3 (A3-07): a stop was signalled to THIS live pid and it is still
-   * draining in-flight cycles (the SIGTERM handler sets `stop=true` and the
-   * loop exits only after `Promise.allSettled(inFlight)`). Always false when
-   * not running — a dead pid is plainly stopped, never "stopping".
-   */
-  stopping: boolean;
-};
-
-export function daemonState(forgeRoot: string, queueRoot: string): DaemonState {
-  const { pidFile, stoppingFile } = daemonPaths(forgeRoot);
-  const pid = readPid(pidFile);
-  const running = pid !== null && isAlive(pid);
-  let startedAt: string | null = null;
-  if (running && existsSync(pidFile)) {
-    try {
-      startedAt = new Date(statSync(pidFile).mtimeMs).toISOString();
-    } catch {
-      /* best-effort */
-    }
-  }
-  const stopping = running && readPid(stoppingFile) === pid;
-  return { running, pid: running ? pid : null, startedAt, paused: isPaused(queueRoot), stopping };
-}
-
 /**
  * W7-FIX-A3: record the pid a stop was signalled to. Presence alone means
- * nothing — `daemonState` reports `stopping` only while THAT pid is alive, so
- * a marker left behind by a finished drain never sticks to the next daemon.
+ * nothing: a caller compares it against a LIVE pid (`apps/forge/serve-
+ * supervisor.ts`'s boot check, and `isStopping` below) — a marker left behind
+ * by a finished drain never sticks to the next daemon, because the pid it
+ * names is no longer alive.
  */
 export function markStopping(forgeRoot: string, pid: number): void {
   const { dir, stoppingFile } = daemonPaths(forgeRoot);
@@ -114,11 +78,10 @@ export function markStopping(forgeRoot: string, pid: number): void {
 /**
  * W7-FIX-A3 (round-2 finding 9): drop the stop marker. It records a
  * TRANSITION (this pid was signalled and is draining), so it must not outlive
- * the pid file it describes — `daemonState` distinguishes daemons by pid
- * alone, and pids are reused, so a leftover marker would make a brand-new
- * daemon report `stopping: true` with NO actions offered (deriveSchedulerView
- * gives that state an empty action set) until someone deleted the file by
- * hand. Both pid-file writes below clear it; absent is a no-op.
+ * the pid file it describes — pids are reused, so a leftover marker would
+ * make a brand-new daemon that happens to draw the same pid read as
+ * draining forever, until someone deleted the file by hand. Both pid-file
+ * writes below clear it; absent is a no-op.
  */
 function clearStoppingMarker(forgeRoot: string): void {
   const { stoppingFile } = daemonPaths(forgeRoot);
@@ -169,17 +132,14 @@ export function clearPidFile(forgeRoot: string): void {
 
 /**
  * Spawn `forge serve` (forever) as a detached process and record its pid.
- *
- * M7-5 (ADR-031): extracted from the (now-deleted) `cmdStart` in
- * orchestrator/cli.ts so the UI bridge's POST /api/scheduler/start can start
- * the daemon DIRECTLY — the bridge is the operator API now, and no longer
- * shells out to a `forge start` CLI command. Behaviour is identical to the
- * old cmdStart spawn: stdout/stderr land in `_logs/daemon/serve.log`, the
- * child is detached + unref'd so it outlives the caller, and its pid is
- * persisted to `_logs/daemon/forge.pid`.
+ * `apps/forge/serve-supervisor.ts` calls this directly — `forge studio` is
+ * the operator surface; it never shells out to a `forge start` CLI command.
+ * stdout/stderr land in `_logs/daemon/serve.log`, the child is detached +
+ * unref'd so it outlives the caller, and its pid is persisted to
+ * `_logs/daemon/forge.pid`.
  *
  * Returns `{ pid, logFile }` on a fresh spawn, or `null` if a live daemon is
- * already running (caller reports `alreadyRunning`). Throws if the spawn
+ * already running (the caller adopts that pid instead). Throws if the spawn
  * itself fails to produce a pid.
  *
  * Keep this dependency-free of the scheduler/queue: daemon.ts is imported BY
@@ -187,8 +147,6 @@ export function clearPidFile(forgeRoot: string): void {
  */
 export function spawnServeDetached(forgeRoot: string): { pid: number; logFile: string } | null {
   reapStalePidFile(forgeRoot);
-  // Liveness check is pid-file based (queueRoot only feeds the `paused`
-  // flag, which is irrelevant to "is a daemon process running").
   const pid = readPid(daemonPaths(forgeRoot).pidFile);
   if (pid !== null && isAlive(pid)) return null;
 
@@ -211,35 +169,4 @@ export function spawnServeDetached(forgeRoot: string): { pid: number; logFile: s
   }
   writePidFile(forgeRoot, child.pid);
   return { pid: child.pid, logFile };
-}
-
-// ---------- poll toggle (pause/resume) ----------
-
-/**
- * The pause flag lives at `<queueRoot>/.paused`. Presence (not contents)
- * is the signal; we still write a timestamp + reason for the operator.
- */
-export function pausedFlagPath(queueRoot = '_queue'): string {
-  return join(resolve(queueRoot), '.paused');
-}
-
-export function isPaused(queueRoot = '_queue'): boolean {
-  return existsSync(pausedFlagPath(queueRoot));
-}
-
-export function setPaused(paused: boolean, queueRoot = '_queue', reason = ''): void {
-  const flag = pausedFlagPath(queueRoot);
-  if (paused) {
-    mkdirSync(dirname(flag), { recursive: true });
-    writeFileSync(
-      flag,
-      `paused_at: ${new Date().toISOString()}\nreason: ${reason || '(none)'}\n`,
-    );
-  } else if (existsSync(flag)) {
-    try {
-      rmSync(flag);
-    } catch {
-      /* best-effort */
-    }
-  }
 }

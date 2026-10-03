@@ -20,9 +20,10 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
-import type { ArchitectSessionSummary } from '../../lib/bridge-client.ts';
+import type { ArchitectSessionSummary, ServeStatus } from '../../lib/bridge-client.ts';
 
 const SID = '2026-08-18T13-27-13-8ee491f5';
+const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null };
 
 function session(phase: ArchitectSessionSummary['phase'], extra: Partial<ArchitectSessionSummary> = {}): ArchitectSessionSummary {
   return {
@@ -52,8 +53,7 @@ function render(props: Partial<React.ComponentProps<typeof ArchitectPlanGate>>):
     mode: 'gate',
     linkage: [],
     linkageReady: true,
-    scheduler: { running: false },
-    schedulerReady: true,
+    serve: DOWN,
     ...props,
   }));
 }
@@ -151,16 +151,16 @@ test('rejected → says rejected, plan readable, no gate, no "building" claim', 
   expect(html).not.toContain('the autonomous loop is building');
 });
 
-test('committed → the shared committed panel (linkage + scheduler), the plan still readable (artifact-plan-22)', () => {
+test('committed → the shared committed panel (linkage + the live serve status), the plan still readable (artifact-plan-22)', () => {
   const html = render({
     session: session('committed'),
     linkage: [{ initiativeId: 'INIT-2026-08-18-add-version-flag', runId: 'INIT-2026-08-18-add-version-flag', flowId: 'forge-architect', runStatus: 'planned', queueState: 'queued', runHref: '/flows/forge-architect/run/INIT-2026-08-18-add-version-flag', monitorHref: '/flows/forge-architect' }],
-    scheduler: { running: false },
+    serve: DOWN,
   });
   expect(html).toContain('data-architect-phase="committed"');
   expect(html).toContain('data-section="architect-committed"');
   expect(html).toContain('data-initiative-id="INIT-2026-08-18-add-version-flag"');
-  expect(html).toContain('data-action="scheduler-start"');
+  expect(html).toContain('data-component="serve-status-notice"');
   expect(html).toContain('data-action="watch-it-build"');
   expect(html).toContain('data-plan-readonly="true"');
   expect(html).not.toContain('data-action="approve-plan"');
