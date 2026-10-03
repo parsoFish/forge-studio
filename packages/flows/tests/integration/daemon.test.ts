@@ -21,6 +21,8 @@ import {
   reapStalePidFile,
   spawnServeDetached,
   markStopping,
+  startServeLock,
+  clearOwnPidFile,
 } from '../../daemon.ts';
 
 function tmpForge(): string {
@@ -196,5 +198,60 @@ test('clearing an ABSENT marker is a no-op (both writes are safe on a never-stop
   assert.doesNotThrow(() => { writePidFile(root, process.pid); });
   assert.doesNotThrow(() => { clearPidFile(root); });
   assert.equal(existsSync(daemonPaths(root).stoppingFile), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// startServeLock / clearOwnPidFile (M7-E HIGH, row 205 follow-up) — one
+// forge serve per root, refused by the LOCK, never by the pid file alone.
+// ---------------------------------------------------------------------------
+
+test('startServeLock: acquires the lock, writes this process\'s own pid, and release() frees it for a later acquire', async () => {
+  const root = tmpForge();
+  const release = await startServeLock(root);
+  assert.notEqual(release, null, 'nothing else holds the lock yet');
+  assert.equal(readPid(daemonPaths(root).pidFile), process.pid, 'the lock holder writes its OWN pid');
+
+  await release!();
+  assert.equal(readPid(daemonPaths(root).pidFile), process.pid, 'release() frees the LOCK only — the pid file is a separate, explicit clear');
+
+  const release2 = await startServeLock(root);
+  assert.notEqual(release2, null, 'the lock is genuinely free again after release()');
+  await release2!();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('startServeLock: a SECOND serve for the same root refuses (contention) — null, one clear stderr line naming the holder and root', async () => {
+  const root = tmpForge();
+  const release = await startServeLock(root);
+  assert.notEqual(release, null);
+
+  const originalError = console.error;
+  const lines: string[] = [];
+  console.error = (line: string) => { lines.push(String(line)); };
+  let second: (() => Promise<void>) | null;
+  try {
+    second = await startServeLock(root);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(second, null, 'a second serve for the same root refuses rather than running alongside the first');
+  assert.equal(lines.length, 1, 'exactly one clear stderr line');
+  assert.match(lines[0], new RegExp(`pid ${process.pid}`), 'names the holding pid');
+  assert.ok(lines[0].includes(root), 'names the root');
+
+  await release!();
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('clearOwnPidFile: clears forge.pid only while it still names the given pid', () => {
+  const root = tmpForge();
+  writePidFile(root, process.pid);
+  clearOwnPidFile(root, 2_147_483_640); // a DIFFERENT (foreign) pid
+  assert.equal(readPid(daemonPaths(root).pidFile), process.pid, 'never clears a pid file that names someone else');
+
+  clearOwnPidFile(root, process.pid);
+  assert.equal(readPid(daemonPaths(root).pidFile), null, 'clears its own');
   rmSync(root, { recursive: true, force: true });
 });

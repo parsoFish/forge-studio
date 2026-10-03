@@ -12,6 +12,16 @@ lifecycle as a separate step — `forge studio` is the one thing that does. A
 second, attach-only `forge studio` never supervises `serve`; it only reads its
 state.
 
+**Exactly one `forge serve` runs for a given forge root, enforced by `serve`
+itself.** Before `serve()` runs, `forge serve` (forever or `--once`) takes an
+exclusive per-root lock and writes its own pid to `_logs/daemon/forge.pid` —
+never only the pid file, which any starter can write, but the LOCK, which
+only one process can hold. A second `forge serve` or `forge serve --once` for
+the same root refuses immediately: a non-zero exit and one clear stderr line
+naming the pid already holding the root. `forge studio` adopts whichever
+`serve` already holds that lock — started by hand, by `forge studio` itself,
+or by systemd/pm2 (below) — rather than spawning a second one beside it.
+
 ## What forge does and does NOT do
 
 `forge serve` is the long-running daemon that claims every eligible pending
@@ -68,7 +78,9 @@ pm2 save
 ```
 
 Either config restarts the process on exit, standing in for what `forge
-studio` already does whenever it is the one running `serve`.
+studio` already does whenever it is the one running `serve`. If `forge
+studio` is started on this same root afterwards, it adopts this `serve`
+(the lock + pid file above name it) rather than spawning a second one.
 
 ## The liveness surface
 

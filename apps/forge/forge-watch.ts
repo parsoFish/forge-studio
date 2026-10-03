@@ -547,7 +547,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   //    the build, or a slow `next dev` warm-up, still tears the bridge (and
   //    whichever UI child is currently active) down instead of orphaning it.
   let shuttingDown = false;
-  const shutdown = async (): Promise<void> => {
+  const shutdown = async (code = 0): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n${label} shutting down...`);
@@ -564,7 +564,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
     const proc = uiProc;
     if (proc) await terminateChild(proc);
     // runExitSequence stops supervising before the bridge closes (M7-E row 205).
-    await runExitSequence(0, {
+    await runExitSequence(code, {
       stopServe: () => serveSupervisor?.stop(),
       closeBridge: () => bridge.close(),
       exit: (code) => process.exit(code),
@@ -644,8 +644,8 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
       const launchedProc = uiProc as ChildProcess;
       launchedProc.on('error', (err) => {
         console.error(`${label} forge-ui ${mode} server failed to start: ${err.message}`);
-        // A failed spawn is an exit path too — shutdown() stops serve.
-        if (!shuttingDown) void shutdown();
+        // A failed spawn is a real failure, not a clean exit — code 1.
+        if (!shuttingDown) void shutdown(1);
       });
       // If Next.js dies after startup (OOM, crash, port conflict) we must
       // surface it and tear the bridge down — otherwise the launcher blocks

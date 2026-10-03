@@ -144,6 +144,7 @@ function makeDeps(
     setTimer: overrides.setTimer ?? clock.setTimer,
     clearTimer: overrides.clearTimer ?? clock.clearTimer,
     now: overrides.now ?? clock.now,
+    wallNow: overrides.wallNow ?? clock.now,
     log: overrides.log ?? ((line: string) => logs.push(line)),
   };
   return Object.assign(deps, { killed, spawnCalls, logs, clearStaleCalls });
@@ -216,6 +217,39 @@ test('respawns after the supervised pid dies', () => {
   assert.equal(deps.spawnCalls.length, 2, 'respawned after the initial backoff delay');
   assert.equal(handle.getStatus().state, 'running');
   assert.equal(handle.getStatus().pid, deps.spawnCalls[1]);
+  handle.stop();
+});
+
+// ---------------------------------------------------------------------------
+// M7-E HIGH: a spawned pid that lost the per-root serve LOCK race refuses and
+// exits immediately — that is not a crash, and respawning into it would
+// crash-loop against the winner forever. The supervisor must adopt the
+// winner instead.
+// ---------------------------------------------------------------------------
+
+test('a spawned serve that exits because another serve already won the per-root lock is ADOPTED, never crash-looped', () => {
+  const clock = makeFakeClock();
+  const disk = makeFakeDisk();
+  const deps = makeDeps(clock, disk);
+  const handle = superviseServe({ forgeRoot: '/irrelevant', ...deps });
+  const losingPid = deps.spawnCalls[0];
+
+  // The real lock's winner writes ITS pid to the same forge.pid — a
+  // DIFFERENT, live, genuinely-ours serve — right as our spawned pid dies
+  // having lost the race (refused + exited, not a crash).
+  const winnerPid = 9999;
+  disk.alive.delete(losingPid);
+  disk.pid = winnerPid;
+  disk.alive.add(winnerPid);
+
+  clock.advance(SERVE_POLL_MS); // poll detects the death
+  assert.equal(deps.spawnCalls.length, 1, 'never respawns against the winner');
+  assert.equal(handle.getStatus().state, 'running');
+  assert.equal(handle.getStatus().pid, winnerPid);
+
+  // No backoff timer is left pending either.
+  clock.advance(SERVE_BACKOFF_CAP_MS * 2);
+  assert.equal(deps.spawnCalls.length, 1, 'still never respawns');
   handle.stop();
 });
 

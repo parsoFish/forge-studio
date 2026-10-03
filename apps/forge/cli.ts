@@ -18,7 +18,7 @@
 
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { serve } from '@forge/flows';
+import { clearOwnPidFile, serve, startServeLock } from '@forge/flows';
 import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wiring.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge';
 import { cmdBrainLint } from './cli-brain-lint.ts';
@@ -204,13 +204,20 @@ function cmdInit(): void {
 async function cmdServe(rest: string[]): Promise<void> {
   const once = rest.includes('--once');
   console.log(once ? 'forge serve --once: claiming one initiative…' : 'forge serve: starting…');
+  const release = await startServeLock(FORGE_ROOT);
+  if (!release) process.exit(1);
   // Row 211 (forge-8vfn.8.5.47) — `forge serve` is the OTHER process (besides
   // the Studio bridge) that spawns agents against this forge install; it must
   // install the same ref guard before `serve()` can dispatch anything. See
   // `ui-bridge.ts`'s `startBridge`: no catch — a serve that cannot guard the
   // forge repo's refs does not start.
   installForgeRefGuardHook(FORGE_ROOT, createLogger(bridgeCycleId(), join(FORGE_ROOT, '_logs')));
-  await serve({ mode: once ? 'once' : 'forever', phaseWiring: (await requireInstalledFactory('forge serve')).phaseWiring });
+  try {
+    await serve({ mode: once ? 'once' : 'forever', phaseWiring: (await requireInstalledFactory('forge serve')).phaseWiring });
+  } finally {
+    clearOwnPidFile(FORGE_ROOT, process.pid);
+    await release();
+  }
   if (once) {
     // Once-mode is the showcase / debug entry point — surface the most
     // recent cycle's report path as a breadcrumb. The forever-mode
@@ -227,12 +234,12 @@ async function cmdServe(rest: string[]): Promise<void> {
   }
 }
 
-// M7-5/M7-E (ADR-031): the Studio UI bridge is the operator API; there is no
-// standalone `forge start`/`stop`/`pause`/`resume`/`status` command. `forge
-// studio` supervises `forge serve` directly (apps/forge/serve-supervisor.ts,
-// built on `spawnServeDetached` in packages/flows/daemon.ts) — it adopts a
-// live one or spawns one, and keeps it alive for as long as Studio owns the
-// port. There is no operator lifecycle control over it.
+// ADR 011/031: `forge studio` supervises `forge serve`
+// (apps/forge/serve-supervisor.ts, built on `spawnServeDetached` in
+// packages/flows/daemon.ts) — it adopts a live serve or spawns one and keeps
+// it alive while Studio owns the port; the Studio UI bridge is the operator
+// API, and GET /api/health reports serve's state. `forge serve` itself is the
+// one command that runs the scheduler, one per forge root (its own lock).
 
 function printLatestReportHint(): void {
   const logsRoot = resolve('_logs');

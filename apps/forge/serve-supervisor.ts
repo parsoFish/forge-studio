@@ -120,8 +120,12 @@ export type ServeSupervisorDeps = {
   setTimer: (fn: () => void, ms: number) => unknown;
   /** Cancel a handle returned by `setTimer`. */
   clearTimer: (handle: unknown) => void;
-  /** A monotonic-enough wall clock, in ms. */
+  /** A MONOTONIC clock, in ms (default `performance.now()`) — durations only
+   *  (uptime, backoff); immune to a system wall-clock jump. */
   now: () => number;
+  /** Wall-clock ms (default `Date.now()`) — used ONLY to render
+   *  `nextRestartAt` as a real ISO instant for the operator. */
+  wallNow: () => number;
   /** One line per boot/spawn/respawn/stop transition. */
   log: (line: string) => void;
 };
@@ -182,7 +186,8 @@ function resolveDeps(opts: SuperviseServeOptions): ServeSupervisorDeps {
     clearStaleRecord: opts.clearStaleRecord ?? (() => clearPidFileImpl(forgeRoot)),
     setTimer: opts.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms)),
     clearTimer: opts.clearTimer ?? ((handle: unknown) => clearTimeout(handle as NodeJS.Timeout)),
-    now: opts.now ?? (() => Date.now()),
+    now: opts.now ?? (() => performance.now()),
+    wallNow: opts.wallNow ?? (() => Date.now()),
     log: opts.log ?? ((line: string) => console.log(`${label} serve ${line}`)),
   };
 }
@@ -210,7 +215,7 @@ export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHand
   }
 
   function scheduleRespawn(delayMs: number): void {
-    nextRestartAtMs = deps.now() + delayMs;
+    nextRestartAtMs = deps.wallNow() + delayMs;
     pendingHandle = deps.setTimer(() => {
       pendingHandle = null;
       if (stopped) return;
@@ -273,12 +278,28 @@ export function superviseServe(opts: SuperviseServeOptions): ServeSupervisorHand
       return;
     }
 
-    // The supervised pid is gone — a crash. Measure its uptime to decide the
-    // backoff delay before respawning: a quick death doubles the delay (capped);
-    // a healthy uptime resets it.
     const diedPid = currentPid;
-    const uptime = deps.now() - startedAt;
     currentPid = null;
+
+    // M7-E HIGH: a pid we SPAWNED can die at uptime ~0 because it lost the
+    // per-root serve lock race — refusing and exiting, never a crash. Re-read
+    // the pid file BEFORE taking the backoff path: a DIFFERENT, live,
+    // genuinely-ours pid there is that race's winner — adopt it rather than
+    // respawning into the same lock it would also lose.
+    const winnerPid = deps.readPid();
+    if (winnerPid !== null && winnerPid !== diedPid && deps.isAlive(winnerPid) && deps.isForgeServe(winnerPid)) {
+      currentPid = winnerPid;
+      startedAt = deps.now();
+      backoffMs = SERVE_BACKOFF_INITIAL_MS;
+      deps.log(`pid ${diedPid} exited — pid ${winnerPid} already holds the lock; adopting it`);
+      schedulePoll();
+      return;
+    }
+
+    // Otherwise a genuine crash. Measure its uptime to decide the backoff
+    // delay before respawning: a quick death doubles the delay (capped); a
+    // healthy uptime resets it.
+    const uptime = deps.now() - startedAt;
     if (uptime >= SERVE_MIN_UPTIME_MS) backoffMs = SERVE_BACKOFF_INITIAL_MS;
     const delay = backoffMs;
     backoffMs = Math.min(backoffMs * 2, SERVE_BACKOFF_CAP_MS);

@@ -13,7 +13,7 @@
  *                              booting onto a pid this names waits for its
  *                              exit rather than adopting or re-signalling it
  *
- * This module is pure helpers + pid-file I/O only.
+ * This module is pure helpers + pid-file I/O + the per-root serve lock.
  */
 
 import {
@@ -27,6 +27,7 @@ import {
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { isProcessRunning } from '@forge/kernel';
+import lockfile from 'proper-lockfile';
 
 export type DaemonPaths = {
   dir: string;
@@ -167,6 +168,90 @@ export function spawnServeDetached(forgeRoot: string): { pid: number; logFile: s
   if (typeof child.pid !== 'number') {
     throw new Error('spawnServeDetached: failed to spawn the scheduler process');
   }
+  // The LOCK (below), not this pre-write, decides if the child may run.
   writePidFile(forgeRoot, child.pid);
   return { pid: child.pid, logFile };
+}
+
+// ---- serve lock (M7-E HIGH: one forge serve per root, refused in code) ----
+
+/** How old the lock's mtime must be before a contender may take it over.
+ *  `forge serve` runs synchronous git push/fetch, so its refresh timer can
+ *  stall for many seconds; the window is wide enough for that, and a crashed
+ *  serve's lock frees within it, so the supervisor's backoff respawn wins. */
+const SERVE_LOCK_STALE_MS = 60_000;
+
+/** Contention, and ONLY contention; a real I/O fault re-throws unchanged. */
+export class ServeLockContentionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServeLockContentionError';
+    Object.setPrototypeOf(this, ServeLockContentionError.prototype);
+  }
+}
+
+/**
+ * The ONE lock deciding whether a `forge serve` may run for `forgeRoot` —
+ * never `forge.pid`, which is advisory. Default `retries` (0): a second
+ * serve for the root refuses at once.
+ * Returns the release fn; throws `ServeLockContentionError` naming the
+ * holder (`forge.pid`, written right after it won) and the root.
+ */
+async function acquireServeLock(forgeRoot: string): Promise<() => Promise<void>> {
+  const { dir, pidFile } = daemonPaths(forgeRoot);
+  mkdirSync(dir, { recursive: true });
+  const lockfilePath = join(dir, 'serve.lock');
+  // A refresh that lands late (a long synchronous step) reports the lock
+  // compromised. Killing serve there would abort a cycle mid-push, so the
+  // serve keeps running, says so, and takes the lock back once it is free.
+  let release: (() => Promise<void>) | null = null;
+  const opts = {
+    lockfilePath,
+    stale: SERVE_LOCK_STALE_MS,
+    onCompromised: (err: Error): void => {
+      release = null;
+      console.error(`forge serve: lock ${lockfilePath} compromised (${err.message}) — re-taking it`);
+      lockfile.lock(dir, { ...opts, retries: { retries: 10, minTimeout: SERVE_LOCK_STALE_MS / 4 } })
+        .then((r) => { release = r; })
+        .catch((e: Error) => console.error(`forge serve: could not re-take ${lockfilePath}: ${e.message}`));
+    },
+  };
+  try {
+    release = await lockfile.lock(dir, opts);
+    // Releases whichever lock this serve holds at exit (the original, or the
+    // one re-taken after a compromise); holding none is a no-op.
+    return async () => { const r = release; release = null; if (r) await r(); };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ELOCKED') {
+      const holderPid = readPid(pidFile);
+      throw new ServeLockContentionError(
+        `forge serve: pid ${holderPid ?? 'unknown'} already holds ${forgeRoot} — refusing a second serve for the same root.`,
+      );
+    }
+    throw err;
+  }
+}
+
+/** Clears `forge.pid` only while it still names `pid` (the lock is the real
+ *  authority; this keeps the advisory file from outliving its serve). */
+export function clearOwnPidFile(forgeRoot: string, pid: number): void {
+  if (readPid(daemonPaths(forgeRoot).pidFile) === pid) clearPidFile(forgeRoot);
+}
+
+/** `cmdServe`'s one call before `serve()` runs: lock, write this pid, arm a
+ *  best-effort exit clear (covers the forced double-SIGTERM crash path,
+ *  which skips `cmdServe`'s own finally). Null + one stderr line on
+ *  contention; anything else re-throws. */
+export async function startServeLock(forgeRoot: string): Promise<(() => Promise<void>) | null> {
+  let release: () => Promise<void>;
+  try {
+    release = await acquireServeLock(forgeRoot);
+  } catch (err) {
+    if (!(err instanceof ServeLockContentionError)) throw err;
+    console.error(err.message);
+    return null;
+  }
+  writePidFile(forgeRoot, process.pid);
+  process.once('exit', () => clearOwnPidFile(forgeRoot, process.pid));
+  return release;
 }
