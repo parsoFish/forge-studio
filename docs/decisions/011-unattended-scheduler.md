@@ -27,7 +27,28 @@ lifecycle as a separate step.
 
 The only operator brake is **one emergency halt**: user-triggered, it stops new
 claims, lets every active job run to completion, and loses no progress. Its
-mechanism is specified with its implementation.
+mechanism:
+
+- **One record.** `_queue/halt.json` (`{ since, actor }`) — present means
+  halted, absent means not. Every check reads the file, so the halt survives a
+  Studio restart, a `forge serve` respawn and a reboot. An unreadable record
+  reads as halted.
+- **Every claim seam refuses.** The queue claim (`tick()` and `claim()`,
+  including `forge serve --once`) takes nothing; the drain sweep does not
+  re-enter ready-for-review cycles for fix work items; the dispatch claim every
+  bridge-spawned agent turn passes refuses with `409 { error: 'halted' }` and
+  writes nothing.
+- **Active work finishes whole.** Every in-flight run continues through all its
+  remaining work items to its own terminal state, and every live agent turn
+  runs to its end. The halt sends no signal: `forge serve` stays up and keeps
+  polling, so its supervisor never sees a crash.
+- **Nothing queued is lost.** Enqueues, requeues, recovery and scheduled
+  triggers still write to `_queue/pending/`; that work waits.
+- **Shown while on.** One Studio control, on every page, pulls the halt and
+  releases it. While it is on, Studio shows how many runs are still finishing
+  and how many are queued, and every queued surface says the halt is why
+  nothing starts. `GET /api/health` reports it as `serve.halt`.
+- **Release** removes the record; the next poll claims as capacity allows.
 
 The scheduler exposes:
 - `forge serve` — run in the foreground (or under systemd/pm2 for process
@@ -54,8 +75,12 @@ The scheduler exposes:
 - No lifecycle control for the operator to keep track of. A separate
   start/pause control would be an easy-to-forget second state: an operator could
   pause and walk away believing work was still moving, or start a second
-  instance believing the first never launched. None exists; the emergency halt
-  is a deliberate brake the operator pulls, not a mode the daemon sits in.
+  instance believing the first never launched. None exists. The emergency halt
+  is a deliberate brake the operator pulls, and its queue half is a persisted
+  claim-nothing state the system sits in until it is released — the same
+  class of mechanism as a pause. What keeps it from that failure is that it is
+  never unannounced: one control, user-triggered only, shown on every Studio
+  page while it is on, and it stops agent dispatches as well as claims.
 
 **Negative / accepted trade-offs:**
 - `mv`-atomic-claim assumes a single filesystem (no NFS-style network mounts). For our local-first model, fine.
