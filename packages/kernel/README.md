@@ -47,7 +47,7 @@ directly.
 | bounded per-key JSON log | `readBoundedLog` · `appendBoundedLog` · `boundedLogSegments` · `truncateTail` |
 | process liveness (`/proc` pid check) | `isForgeServePid` · `isProcessRunning` |
 | the forge-repo ref guard (git's own `reference-transaction` hook, row 211) | `FORGE_REF_GUARD_HOOK_NAME` · `FORGE_REF_GUARD_MARKER_PREFIX` · `FORGE_REF_GUARD_MARKER` · `FORGE_AGENT_SPAWN_ENV` · `FORGE_AGENT_RUN_MARKER_ENV` · `forgeRefGuardHookScript` · `installForgeRefGuardHook` |
-| the one emergency halt record (ADR 011) | `haltPath` · `readHalt` · `writeHalt` · `releaseHalt` · `forgeQueueRoot` · `HaltRecord` |
+| the one emergency halt record (ADR 011) | `haltPath` · `readHalt` · `writeHalt` · `releaseHalt` · `forgeQueueRoot` |
 | the dispatch claim every detached-agent spawn seam shares (row 206) | `claimDispatchSlot` · `releaseDispatchSlot` · `CLAIM_PLACEHOLDER_STALE_MS` · `newRunStamp` · `randomRunSuffix` |
 
 ### Types (45)

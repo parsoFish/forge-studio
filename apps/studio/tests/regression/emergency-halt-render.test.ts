@@ -1,6 +1,7 @@
 /**
  * The one emergency halt — Studio half (ADR 011): nav control, global banner,
- * notice, queued tone, wire parsing, and the 409 `halted` message.
+ * notice, queued tone, wire parsing, and the 409 `halted` message. Row 207
+ * (forge-8vfn.8.5.57).
  */
 import { test, expect, vi, afterEach } from 'vitest';
 import React from 'react';

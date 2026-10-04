@@ -1,4 +1,4 @@
-/** StudioNav mounts the one halt control and, only while halted, the global banner. */
+/** StudioNav mounts the one halt control and, only while halted, the global banner (row 207, forge-8vfn.8.5.57). */
 import { test, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
