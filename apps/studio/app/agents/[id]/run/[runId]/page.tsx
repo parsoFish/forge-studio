@@ -34,6 +34,8 @@ import { cancelAgentRun } from '@/lib/studio-client';
 import { useDocumentTitle } from '@/lib/document-title';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
+const SHELL_STYLE = { display: 'flex', flexDirection: 'column', flex: 1 } as const;
+
 export default function AgentRunPage() {
   const params = useParams();
   const runId = decodeURIComponent((params?.runId as string) ?? '');
@@ -101,8 +103,8 @@ export default function AgentRunPage() {
     return <NotFound kind="run" id={runId} backHref="/agents" backLabel="Agents" />;
   }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }} data-agent-slug={agentSlug}>
+  const chrome = (
+    <>
       <StudioNav />
       {/* W7-A3 (agents-12 / agents-37 / crosscut-23): the run page is no
           longer a terminus — a breadcrumb back to the agent that ran it. */}
@@ -145,24 +147,34 @@ export default function AgentRunPage() {
       {cancelError && (
         <p data-component="cancel-error" className="save-hint save-hint-dirty" style={{ margin: '8px 20px 0', fontSize: 12 }}>{cancelError}</p>
       )}
+    </>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }} data-agent-slug={agentSlug}>
       {/* W7-C3 (agents-35): <main> in every state, matching RunView's own
           root — a route's [data-page] must sit on the same element type in
           every state (FlowRunDetail's convention). */}
       {!loaded ? (
-        <main id={MAIN_CONTENT_ID} data-page="agent-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
-          Loading run…
+        <main id={MAIN_CONTENT_ID} data-page="agent-run" data-run-id={runId} data-page-ready="false" className="muted" style={SHELL_STYLE}>
+          {chrome}
+          <div style={{ padding: 20, fontSize: 13 }}>Loading run…</div>
         </main>
       ) : detail!.resolution === 'unresolved' ? (
-        <main id={MAIN_CONTENT_ID} data-page="agent-run" data-run-id={runId} data-page-ready="true" data-fetch-status="error" style={{ padding: 20 }}>
-          <FetchErrorState
-            what="this agent run"
-            error={detail!.readError?.message ?? 'the run could not be read'}
-            status={detail!.readError?.status}
-            onRetry={refresh}
-          />
+        <main id={MAIN_CONTENT_ID} data-page="agent-run" data-run-id={runId} data-page-ready="true" data-fetch-status="error" style={SHELL_STYLE}>
+          {chrome}
+          <div style={{ padding: 20 }}>
+            <FetchErrorState
+              what="this agent run"
+              error={detail!.readError?.message ?? 'the run could not be read'}
+              status={detail!.readError?.status}
+              onRetry={refresh}
+            />
+          </div>
         </main>
       ) : (
         <RunView
+          nav={chrome}
           runId={runId}
           found={true}
           state={detail!.state}

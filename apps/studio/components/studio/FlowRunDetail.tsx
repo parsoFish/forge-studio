@@ -57,7 +57,7 @@
  * through the EXISTING `ReviewFindingsPanel`, never a forked renderer.
  */
 
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 
 import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
@@ -98,6 +98,9 @@ export type FlowRunDetailProps = {
    *  shell's loading branch renders "false"; this resolved surface renders
    *  "true" (default) so the route honours the DOM-as-metrics contract. */
   ready?: boolean;
+  /** The Studio nav (with the halt control and banner), rendered as the first
+   *  child of the `main[data-page]` so it sits inside the page root. */
+  nav?: ReactNode;
 };
 
 export function FlowRunDetail({
@@ -111,6 +114,7 @@ export function FlowRunDetail({
   nodeLogLines = {},
   onNodeClick,
   ready = true,
+  nav = null,
 }: FlowRunDetailProps) {
   const flowId = flow?.id ?? run?.flowId ?? '';
   const monitorHref = flowId ? `/flows/${encodeURIComponent(flowId)}` : '/flows';
@@ -138,115 +142,118 @@ export function FlowRunDetail({
       // `findReviewRound` (`@forge/flows`) for the derivation.
       data-review-round={String(run?.reviewRound ?? 0)}
       data-page-ready={ready ? 'true' : 'false'}
-      style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
+      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
-      {/* W7-A3 (crosscut-23): the run page is no longer a dead end — back to
-          the flow monitor, into the run's artifacts, and to its project. */}
-      <nav data-section="run-breadcrumb" aria-label="Run breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
-        <Link href="/flows" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Flows</Link>
-        <span style={{ color: 'var(--line-2)' }}>/</span>
-        <Link href={monitorHref} data-action="back-to-monitor" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
-          {flowId || 'flow'}
-        </Link>
-        <span style={{ color: 'var(--line-2)' }}>/</span>
-        <span>run</span>
-        <span style={{ flex: 1 }} />
-        {/* W7-FIX-A3 (A3-03): keyed on the RESOLVED run id (`run.id`, the
-            cycle id once claimed) — the URL segment is the initiative id since
-            W7-A3, and /artifact keys its reads on the id it is given. */}
-        {found && (
-          <Link
-            href={`/artifact?run=${encodeURIComponent(run?.id ?? runId)}&type=plan&mode=view`}
-            data-action="open-artifacts"
-            style={{ color: 'var(--c-artifact, var(--amber))', textDecoration: 'none' }}
-          >
-            artifacts →
+      {nav}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
+        {/* W7-A3 (crosscut-23): the run page is no longer a dead end — back to
+            the flow monitor, into the run's artifacts, and to its project. */}
+        <nav data-section="run-breadcrumb" aria-label="Run breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
+          <Link href="/flows" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Flows</Link>
+          <span style={{ color: 'var(--line-2)' }}>/</span>
+          <Link href={monitorHref} data-action="back-to-monitor" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+            {flowId || 'flow'}
           </Link>
-        )}
-        {found && run?.project && (
-          <Link href={`/projects/${encodeURIComponent(run.project)}`} data-action="open-project" style={{ color: 'var(--c-project, var(--accent))', textDecoration: 'none' }}>
-            project {run.project} →
-          </Link>
-        )}
-        {/* W8-A3 (flows-23): back to the conversation that planned this. Rendered
-            only when the manifest actually names a session — never fabricated. */}
-        {found && run?.architectSessionId && (
-          <Link
-            href={`/sessions/architect/${encodeURIComponent(run.architectSessionId)}`}
-            data-action="open-architect-session"
-            style={{ color: 'var(--c-session, var(--violet))', textDecoration: 'none' }}
-          >
-            architect session →
-          </Link>
-        )}
-      </nav>
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {/* W7-C3 (crosscut-18/agents-35): the page's ONE h1 — was an h2. */}
-        <h1 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
-          {/* W8-A3 (flows-23): the run's status was only ever a data-* attribute
-              on the page landmark. A human reading the page could not see it. */}
-          {found && run && (
-            <span
-              data-component="run-status-chip"
-              data-run-status={run.status}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '1px 8px', border: '1px solid var(--line)', borderRadius: 999 }}
+          <span style={{ color: 'var(--line-2)' }}>/</span>
+          <span>run</span>
+          <span style={{ flex: 1 }} />
+          {/* W7-FIX-A3 (A3-03): keyed on the RESOLVED run id (`run.id`, the
+              cycle id once claimed) — the URL segment is the initiative id since
+              W7-A3, and /artifact keys its reads on the id it is given. */}
+          {found && (
+            <Link
+              href={`/artifact?run=${encodeURIComponent(run?.id ?? runId)}&type=plan&mode=view`}
+              data-action="open-artifacts"
+              style={{ color: 'var(--c-artifact, var(--amber))', textDecoration: 'none' }}
             >
-              <span className="status-dot" data-status={run.status} />
-              {run.status}
-            </span>
+              artifacts →
+            </Link>
           )}
-          <span>{run?.id ?? runId} · flow {flowId || '—'}</span>
-        </div>
-      </header>
+          {found && run?.project && (
+            <Link href={`/projects/${encodeURIComponent(run.project)}`} data-action="open-project" style={{ color: 'var(--c-project, var(--accent))', textDecoration: 'none' }}>
+              project {run.project} →
+            </Link>
+          )}
+          {/* W8-A3 (flows-23): back to the conversation that planned this. Rendered
+              only when the manifest actually names a session — never fabricated. */}
+          {found && run?.architectSessionId && (
+            <Link
+              href={`/sessions/architect/${encodeURIComponent(run.architectSessionId)}`}
+              data-action="open-architect-session"
+              style={{ color: 'var(--c-session, var(--violet))', textDecoration: 'none' }}
+            >
+              architect session →
+            </Link>
+          )}
+        </nav>
+        <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* W7-C3 (crosscut-18/agents-35): the page's ONE h1 — was an h2. */}
+          <h1 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+            {/* W8-A3 (flows-23): the run's status was only ever a data-* attribute
+                on the page landmark. A human reading the page could not see it. */}
+            {found && run && (
+              <span
+                data-component="run-status-chip"
+                data-run-status={run.status}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '1px 8px', border: '1px solid var(--line)', borderRadius: 999 }}
+              >
+                <span className="status-dot" data-status={run.status} />
+                {run.status}
+              </span>
+            )}
+            <span>{run?.id ?? runId} · flow {flowId || '—'}</span>
+          </div>
+        </header>
 
-      {/* W7-A4 (flows-05 / crosscut-04): a found run whose flow DEFINITION is
-          gone (retired id, or the pre-flow_id `unknown` sentinel) says so —
-          and still renders its own recorded phases below (see
-          deriveFlowRunTimeline's null-flow arm), never an empty timeline. */}
-      {found && !flow && (
-        <div
-          data-component="flow-unregistered"
-          style={{ fontSize: 12.5, color: 'var(--dim)', padding: '8px 12px', border: '1px dashed var(--line-2)', borderRadius: 'var(--radius-sm, 6px)' }}
-        >
-          Flow &ldquo;{flowId || 'unknown'}&rdquo; is no longer registered (retired, or this run predates flow ids) — showing the run&apos;s own recorded phases.
-        </div>
-      )}
+        {/* W7-A4 (flows-05 / crosscut-04): a found run whose flow DEFINITION is
+            gone (retired id, or the pre-flow_id `unknown` sentinel) says so —
+            and still renders its own recorded phases below (see
+            deriveFlowRunTimeline's null-flow arm), never an empty timeline. */}
+        {found && !flow && (
+          <div
+            data-component="flow-unregistered"
+            style={{ fontSize: 12.5, color: 'var(--dim)', padding: '8px 12px', border: '1px dashed var(--line-2)', borderRadius: 'var(--radius-sm, 6px)' }}
+          >
+            Flow &ldquo;{flowId || 'unknown'}&rdquo; is no longer registered (retired, or this run predates flow ids) — showing the run&apos;s own recorded phases.
+          </div>
+        )}
 
-      {!found ? (
-        <RunNotFound runId={runId} />
-      ) : (
-        <>
-          <RunTrigger run={run} />
-          {/* 7.6.62 — the run page had NO link to its own pending gate. The two
-              surfaces that did (RunRail, PhaseDrawer) live on the flow monitor,
-              so an operator standing on the run they are being asked to decide
-              had no way to reach the decision. Rendered only when the run is
-              gated and the kind is derivable, so its PRESENCE is an assertion:
-              no element means no gate is pending here. */}
-          <GateLink run={run} flow={flow} />
-          {/* W8-A3 (flows-28/49/23): the run's own recovery controls, from the
-              SAME derivation the flow monitor renders — a failed run offers
-              resume/requeue/abandon with what each does spelled out, a queued
-              run offers the scheduler that is the only thing able to start it,
-              and anything else renders nothing. */}
-          {/* Keyed on the INITIATIVE id, not `run.id` — see the flow monitor's
-              call site: `run.id` flips on every claim and requeue, which would
-              remount this and discard the outcome line on success. */}
-          <RunControls key={run?.initiativeId ?? runId} run={run} />
-          <RunTimeline
-            rows={rows}
-            expandedNodeId={expandedNodeId}
-            nodeLogLines={nodeLogLines}
-            onNodeClick={onNodeClick}
-          />
-          <ReviewFindingsPanel
-            doc={findings.doc}
-            absentNote={findings.doc === null && !findings.failed}
-            errorNote={findings.doc === null && findings.failed}
-          />
-        </>
-      )}
+        {!found ? (
+          <RunNotFound runId={runId} />
+        ) : (
+          <>
+            <RunTrigger run={run} />
+            {/* 7.6.62 — the run page had NO link to its own pending gate. The two
+                surfaces that did (RunRail, PhaseDrawer) live on the flow monitor,
+                so an operator standing on the run they are being asked to decide
+                had no way to reach the decision. Rendered only when the run is
+                gated and the kind is derivable, so its PRESENCE is an assertion:
+                no element means no gate is pending here. */}
+            <GateLink run={run} flow={flow} />
+            {/* W8-A3 (flows-28/49/23): the run's own recovery controls, from the
+                SAME derivation the flow monitor renders — a failed run offers
+                resume/requeue/abandon with what each does spelled out, a queued
+                run offers the scheduler that is the only thing able to start it,
+                and anything else renders nothing. */}
+            {/* Keyed on the INITIATIVE id, not `run.id` — see the flow monitor's
+                call site: `run.id` flips on every claim and requeue, which would
+                remount this and discard the outcome line on success. */}
+            <RunControls key={run?.initiativeId ?? runId} run={run} />
+            <RunTimeline
+              rows={rows}
+              expandedNodeId={expandedNodeId}
+              nodeLogLines={nodeLogLines}
+              onNodeClick={onNodeClick}
+            />
+            <ReviewFindingsPanel
+              doc={findings.doc}
+              absentNote={findings.doc === null && !findings.failed}
+              errorNote={findings.doc === null && findings.failed}
+            />
+          </>
+        )}
+      </div>
     </main>
   );
 }
