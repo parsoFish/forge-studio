@@ -49,7 +49,7 @@ import { sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
 import { captureAndClearBornLogDirs, describeBornLogDirsClear } from './sweep-post-stop-logs.mjs';
 import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
-import { restoreSweptCommitted, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopStudioThenScheduler, teardownExitCode } from './sweep-teardown.mjs';
 import { preexistingSchedulerVerdict } from './scheduler-preflight.mjs';
 import {
   decideStoryBridge,
@@ -57,7 +57,6 @@ import {
   refusalError,
   bootOwnBridge,
   bridgeSpawnOptions,
-  killBridgeProcessGroup,
 } from './bridge.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
 import { recordReapedCancellations } from './reap-cancel.mjs';
@@ -641,13 +640,21 @@ async function main() {
       }
     }
   } finally {
-    // THE SWEEP'S PAIRED RESTORE. `demos/stories/<id>/` was deleted before the
-    // bridge booted; anything the run never regenerated is still missing, and
-    // `git status` shows it as a deliberate deletion. The motivating case is not
-    // a crash — a run that REFUSED at preflight against a foreign bridge, the
-    // runner doing exactly the right thing, still left three committed files
-    // deleted. Only paths git tracks AND that are absent right now are touched,
-    // so a finished run's own output is never destroyed by its own teardown.
+    // STUDIO ENDS FIRST, ALWAYS — never signal the scheduler daemon while
+    // THIS run's own `forge studio` is still alive and supervising it.
+    // `forge studio`'s own exit sequence (`apps/forge/forge-watch.ts`'s
+    // `shutdown` → `runExitSequence`) stops its serve supervisor
+    // SYNCHRONOUSLY — marking the daemon stopping and sending it ONE
+    // SIGTERM — before the studio process itself ever exits; a second,
+    // unrelated SIGTERM landing on that pid while the supervisor is also
+    // polling it reads, from the supervisor's own side, as the daemon
+    // CRASHING, and it respawns a fresh one within its own ~2 s poll tick.
+    // `stopStudioThenScheduler` (`sweep-teardown.mjs`) kills `bridgeProc`'s
+    // whole process group and waits it fully gone — escalating to SIGKILL
+    // past its bound — BEFORE it ever calls `stopSchedulerCensusAndRelease`,
+    // so that call's own `stopOwnScheduler` always finds the marker already
+    // there and only waits for the drain, never signals again.
+    //
     // T1 ruling 657(ii). A leftover `forge serve` from this run breaks the
     // NEXT one, not just this one's own cleanup: `forge studio` ADOPTS a pid
     // that is already alive rather than spawning fresh
@@ -657,27 +664,28 @@ async function main() {
     // on the costed side. Clearing it here, every run, is what keeps the next
     // one honest.
     //
-    // Finding row 75 (T1 rulings 1258, 1332) — stopping the daemon and releasing
-    // its claim used to be two calls in a row with nothing between them
-    // confirming a dispatch the daemon started (detached, per `spawnAgentTurn`)
-    // was actually dead: measured as a heartbeat written back 13s after this
-    // runner printed CLEARED. `stopSchedulerCensusAndRelease` snapshots the
-    // daemon's descendants BEFORE it is signalled, kills them directly, censuses,
-    // and only then releases — with a re-read after, because the census cannot
-    // see a writer outside the daemon's own tree. See its header in
-    // `sweep-teardown.mjs` and the three doors in `sweep-teardown.test.ts`.
+    // Finding row 75 (T1 rulings 1258, 1332) — stopping the daemon and
+    // releasing its claim is never two calls in a row with nothing between
+    // them confirming a dispatch the daemon started (detached, per
+    // `spawnAgentTurn`) was actually dead: measured as a heartbeat written
+    // back 13s after this runner printed CLEARED. `stopSchedulerCensusAndRelease`
+    // snapshots the daemon's descendants BEFORE it is signalled, kills them
+    // directly, censuses, and only then releases — with a re-read after,
+    // because the census cannot see a writer outside the daemon's own tree.
+    // See its header in `sweep-teardown.mjs` and the three doors in
+    // `sweep-teardown.test.ts`.
     //
     // ROW 166 follow-up (bead `forge-8vfn.8.1.60`) — `sinceMs: startedMs` is
     // this run's own window, so a DEFERRED initiative (still in flight when
     // its story ended, because the scheduler that owned it was still alive)
     // is captured and cleared here too, once that daemon is confirmed dead.
     // REQUIRED, not optional — see the function's own header for why.
-    const stop = await stopSchedulerCensusAndRelease(ROOT, { sinceMs: startedMs });
+    const stop = await stopStudioThenScheduler(ROOT, bridgeProc, { sinceMs: startedMs });
     for (const line of stop.lines) console.log(line);
     // MUST 1 (D's review of #906) — the teardown's own outcome must reach the
     // process's exit code, not only the log: a surviving daemon grandchild
-    // used to print "REFUSING to release…" or "RELEASE DID NOT HOLD…" right
-    // here and the process still exited 0 on an otherwise-green run.
+    // printing "REFUSING to release…" or "RELEASE DID NOT HOLD…" must not let
+    // the process still exit 0 on an otherwise-green run.
     const teardown = teardownExitCode(exitCode, stop);
     exitCode = teardown.exitCode;
     for (const line of teardown.lines) console.error(line);
@@ -690,8 +698,9 @@ async function main() {
     // record; this catches the paths that never reach one — a throw, a
     // refusal after the bridge booted, a Ctrl-C between stories. Idempotent:
     // a pid already reaped is simply not alive, and is reported as skipped.
-    // It runs BEFORE the bridge is taken down, so no agent is orphaned by the
-    // very teardown that is supposed to be ending it.
+    // It runs once studio and the scheduler daemon it supervises are BOTH
+    // confirmed gone (the stop above), so every turn still alive here is a
+    // genuine orphan — never one either of them is still actively managing.
     try {
       const report = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
       // 6.11.12: a kill writes nothing for itself, so the terminal phase is
@@ -747,10 +756,11 @@ async function main() {
     } catch (err) {
       console.warn(`[stories] fixture-ground backstop failed: ${err?.message ?? err}`);
     }
-    // Shared with the boot-timeout path (`bridge.mjs`) and `onStopSignal`
-    // above — ONE mechanism for killing a bridge this run booted, row 184b
-    // (forge-8vfn.8.5.21).
-    killBridgeProcessGroup(bridgeProc, 'SIGTERM');
+    // Studio (and the scheduler daemon it supervises) is already fully
+    // stopped above, by `stopStudioThenScheduler` — which reuses the SAME
+    // bridge-group kill `onStopSignal` above and the boot-timeout path in
+    // `bridge.mjs` both call, row 184b (forge-8vfn.8.5.21). The host lock
+    // releases last, once nothing this run started still holds the ports.
     await release();
   }
   return exitCode;

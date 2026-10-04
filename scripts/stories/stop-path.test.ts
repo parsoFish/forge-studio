@@ -40,7 +40,7 @@ import { performance } from 'node:perf_hooks';
 
 import { runStopPath } from './stop-path.mjs';
 import { groundManifest } from './ground-hash.mjs';
-import { DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
+import { DAEMON_PID_FILE, STOPPING_FILE } from './sweep-teardown-scheduler.mjs';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -235,3 +235,101 @@ async function waitForProcVisible(pid: number, ms = 5_000) {
   while (!existsSync(`/proc/${pid}`) && performance.now() < until) await sleep(10);
   assert.ok(existsSync(`/proc/${pid}`), `pid ${pid} never became visible in /proc`);
 }
+
+/**
+ * THE DOUBLE-SIGTERM DEFECT, END TO END. `forge studio`'s own supervisor
+ * (`apps/forge/serve-supervisor.ts`) marks the scheduler daemon stopping and
+ * sends it ONE SIGTERM, synchronously, as part of its own exit sequence
+ * (`apps/forge/forge-watch.ts`'s `runExitSequence`) — BEFORE studio itself
+ * exits. `scheduler.ts` treats a second SIGTERM as an operator's force-quit
+ * (`process.exit(130)`, no drain). The fake studio below runs that SAME
+ * sequence for real, against a real stand-in serve that COUNTS the SIGTERMs
+ * it actually receives — proving `runStopPath`'s own `stopScheduler` step
+ * never sends one of its own once studio's group is confirmed gone.
+ */
+test('studio-then-serve: the daemon receives studio\'s ONE SIGTERM and none from the stop path itself', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'stop-path-studio-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const log = join(root, '_logs', 'daemon', 'serve.log');
+  writeFileSync(log, '[serve] forever-mode\n');
+  const sigCountFile = join(root, 'sigterm-count');
+  writeFileSync(sigCountFile, '0');
+
+  // Readiness is a MARKER EACH SCRIPT WRITES ITSELF, as its own last
+  // statement, never `/proc/<pid>` visibility alone — T1 1372
+  // (`sweep-teardown-plant.mjs`'s own header): a pid is visible in `/proc`
+  // the instant the kernel accepts the fork, well before node has loaded and
+  // registered a `process.on('SIGTERM', ...)` line. This file's own helper
+  // tests already use that shape for `spawnFakeServeDaemon`'s single
+  // top-of-script line; this test chains TWO such processes, so the gap a
+  // `/proc`-only wait leaves is wider, not narrower.
+  const serveReady = join(root, 'serve.ready');
+  const studioReady = join(root, 'studio.ready');
+
+  // The stand-in `forge serve`: counts every SIGTERM it actually receives.
+  // It only drains on the FIRST one — a second is the real daemon's
+  // force-quit shape, which this script deliberately does not implement, so
+  // a regression here would kill it uncleanly rather than let the test pass
+  // by coincidence.
+  const serve = spawn(process.execPath, ['-e', `
+    const fs = require('node:fs');
+    let count = 0;
+    process.on('SIGTERM', () => {
+      count += 1;
+      fs.writeFileSync(${JSON.stringify(sigCountFile)}, String(count));
+      if (count > 1) return;
+      setTimeout(() => {
+        fs.appendFileSync(${JSON.stringify(log)}, '[serve] exited cleanly\\n');
+        process.exit(0);
+      }, 300);
+    });
+    fs.writeFileSync(${JSON.stringify(serveReady)}, '1');
+    setInterval(() => {}, 1000);
+  `], { cwd: root, stdio: 'ignore' });
+  t.after(() => { try { process.kill(serve.pid as number, 'SIGKILL'); } catch { /* gone */ } });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(serve.pid));
+  await waitForFile(serveReady);
+
+  // The fake studio: on the group SIGTERM `runStopPath` sends, it waits —
+  // standing in for `apps/forge/forge-watch.ts`'s real `shutdown()`, which
+  // awaits the UI child's own termination BEFORE `runExitSequence` ever
+  // stops the serve supervisor — and only THEN runs the real supervisor's
+  // mark-then-signal sequence and exits. The delay is what makes the
+  // ordering fix load-bearing rather than an accident of how fast a bare
+  // signal handler happens to run: a `stopScheduler` called too early (the
+  // OLD position, right after the reap, with no wait for this group to be
+  // gone) would run WHILE studio is still mid-shutdown, see no marker yet,
+  // and send its own SIGTERM — exactly the double-signal row 213 exists to
+  // stop. `runStopPath`'s `bridgeExitBoundMs` below is generous enough to
+  // outlast it without widening any OTHER test's own bound.
+  const studio = spawn(process.execPath, ['-e', `
+    const fs = require('node:fs');
+    process.on('SIGTERM', () => {
+      setTimeout(() => {
+        fs.writeFileSync(${JSON.stringify(join(root, STOPPING_FILE))}, String(${serve.pid}));
+        try { process.kill(${serve.pid}, 'SIGTERM'); } catch {}
+        process.exit(0);
+      }, 200);
+    });
+    fs.writeFileSync(${JSON.stringify(studioReady)}, '1');
+    setInterval(() => {}, 1000);
+  `], { detached: true, stdio: 'ignore' });
+  studio.unref();
+  t.after(() => { try { process.kill(-(studio.pid as number), 'SIGKILL'); } catch { /* gone */ } });
+  await waitForFile(studioReady);
+
+  const startedMs = Date.now() - 1_000;
+  const report = await runStopPath({
+    root, startedMs, bridgeProc: studio as never,
+    clear: () => {}, log: () => {},
+  });
+
+  assert.equal(
+    Number(readFileSync(sigCountFile, 'utf8')), 1,
+    'the daemon must receive exactly ONE SIGTERM — studio\'s own, never a second one from the stop path',
+  );
+  assert.equal(report.sched?.stopped, serve.pid);
+  assert.equal(report.sched?.drained, true, 'the daemon must be reported as drained, never force-killed by a second signal');
+  assert.match(readFileSync(log, 'utf8'), /exited cleanly/);
+});

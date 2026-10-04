@@ -144,12 +144,13 @@ const BOOT_TIMEOUT_MS = 120_000;
  * surviving as an orphan still holding 4123/4124.
  *
  * ONE MECHANISM, THREE CALL SITES — forge-8vfn.8.5.21 (Defect B fold, row
- * 184b). The boot-timeout path below already had this exactly once; `run.mjs`
- * carried a SECOND, duplicate copy of it in its own `finally` block, and its
- * SIGINT/SIGTERM handler (`onStopSignal`) had neither — a story killed mid-run
- * left the bridge it booted, and `next-server` with it, bound to 4123/4124
- * for as long as ten minutes until an operator stopped it by hand. All three
- * now call this.
+ * 184b). The boot-timeout path below calls this directly; `stop-path.mjs`'s
+ * mid-run `runStopPath` and `sweep-teardown.mjs`'s run-end
+ * `stopStudioThenScheduler` both call it too, rather than either inlining its
+ * own copy of the same group kill — a story killed mid-run, or a run simply
+ * ending, must end the SAME bridge group the SAME way, or `next-server`
+ * outlives it, bound to 4123/4124 for as long as ten minutes until an
+ * operator stops it by hand.
  *
  * Falls back to signalling the ONE pid directly when the group kill itself
  * fails (ESRCH on a session leader already gone, or a platform with no

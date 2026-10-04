@@ -19,14 +19,20 @@
  * defect (a surviving daemon grandchild printed a REFUSING/DID NOT HOLD line
  * and the process still exited 0).
  *
- * ROW 166 FOLLOW-UP (bead `forge-8vfn.8.1.60`) — the anchor below now carries
- * `{ sinceMs: startedMs }`: `stopSchedulerCensusAndRelease` REQUIRES it
- * (fail-fast, its own header explains why a second, optional code path would
- * be the back-compat shim CLAUDE.md refuses), so a call without it throws
- * rather than silently skipping the deferred-initiative clear a DEFERRED
- * initiative — one still in flight when its story ended, by design — needs
- * at batch end. This flips a previously pinned exact-call-text anchor; the
- * shape it now pins is CALLED WITH the run's own window, never bare.
+ * ROW 166 FOLLOW-UP (bead `forge-8vfn.8.1.60`) — the anchor below carries
+ * `{ sinceMs: startedMs }`: `stopSchedulerCensusAndRelease`, reached through
+ * `stopStudioThenScheduler`, REQUIRES it (fail-fast, its own header explains
+ * why a second, optional code path would be the back-compat shim CLAUDE.md
+ * refuses), so a call without it throws rather than silently skipping the
+ * deferred-initiative clear a DEFERRED initiative — one still in flight when
+ * its story ended, by design — needs at batch end. The anchor pins the shape
+ * CALLED WITH the run's own window, never bare.
+ *
+ * STUDIO-THEN-SCHEDULER — the teardown call ALSO carries `bridgeProc` now:
+ * `stopStudioThenScheduler` (`sweep-teardown.mjs`) ends this run's own
+ * studio and waits it fully gone BEFORE it ever reaches
+ * `stopSchedulerCensusAndRelease`, so the scheduler daemon studio supervises
+ * is never signalled twice (`scheduler.ts` force-quits on a second SIGTERM).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,13 +42,14 @@ import { join } from 'node:path';
 const SRC_PATH = join(import.meta.dirname, 'run.mjs');
 const src = () => readFileSync(SRC_PATH, 'utf8');
 const stopSrc = () => readFileSync(join(import.meta.dirname, 'stop-path.mjs'), 'utf8');
-const STOP_CALL = 'const stop = await stopSchedulerCensusAndRelease(ROOT, { sinceMs: startedMs });';
+const teardownSrc = () => readFileSync(join(import.meta.dirname, 'sweep-teardown.mjs'), 'utf8');
+const STOP_CALL = 'const stop = await stopStudioThenScheduler(ROOT, bridgeProc, { sinceMs: startedMs });';
 
 test('MUST 1: teardownExitCode is imported from sweep-teardown.mjs', () => {
   assert.match(
     src(),
     /import\s*\{[^}]*\bteardownExitCode\b[^}]*\}\s*from\s*'\.\/sweep-teardown\.mjs';/,
-    'teardownExitCode must be imported alongside stopSchedulerCensusAndRelease',
+    'teardownExitCode must be imported alongside stopStudioThenScheduler',
   );
 });
 
@@ -182,16 +189,23 @@ test('row 184b: the handler kills THIS run\'s own bridge process group, not only
   assert.match(stopSrc(), /killBridgeProcessGroup\(bridgeProc, 'SIGTERM'\)/, 'stop-path.mjs must signal the bridge group');
 });
 
-test('row 184b: the finally block\'s OWN bridge teardown reuses the SAME helper, never a second copy of the kill', () => {
+test('row 184b: the ordinary finally block ends studio through stopStudioThenScheduler, never its own inline kill', () => {
   const s = src();
   const finallyAt = s.indexOf('} finally {');
-  const killCalls = [...s.matchAll(/killBridgeProcessGroup\(/g)].map((m) => m.index);
-  assert.ok(killCalls.some((i) => i > finallyAt), 'one call must be inside the ordinary finally block');
-  assert.match(stopSrc(), /import \{ killBridgeProcessGroup \} from '\.\/bridge\.mjs';/, 'the stop path reuses the SAME helper');
-  // The raw `process.kill(-bridgeProc.pid` this used to be, inline, must be
-  // gone — a second copy of the same kill is exactly how the two drift.
-  assert.doesNotMatch(s, /process\.kill\(-bridgeProc\.pid/, 'the finally block must no longer inline its own process-group kill');
+  const stopCallAt = s.indexOf('stopStudioThenScheduler(', finallyAt);
+  assert.ok(finallyAt !== -1 && stopCallAt > finallyAt, 'the ordinary finally block must end studio (and the scheduler it supervises) through stopStudioThenScheduler');
+  // The ONE bridge-group-kill mechanism (`bridge.mjs`'s `killBridgeProcessGroup`)
+  // is called from exactly three places: its own boot-timeout path, the
+  // mid-run stop path (`stop-path.mjs`), and the run-end teardown
+  // (`sweep-teardown.mjs`'s `stopStudioThenScheduler`) — never a second,
+  // inline copy of the same kill at any of them.
+  assert.match(teardownSrc(), /import \{ killBridgeProcessGroup \} from '\.\/bridge\.mjs';/, 'stopStudioThenScheduler must reuse the SAME helper');
+  assert.match(teardownSrc(), /\?\?\s*killBridgeProcessGroup\b/, 'and must actually wire it in as the default dependency');
+  assert.match(stopSrc(), /import \{ killBridgeProcessGroup \} from '\.\/bridge\.mjs';/, 'the mid-run stop path reuses the SAME helper');
+  assert.doesNotMatch(s, /killBridgeProcessGroup\(/, 'run.mjs itself must never call the kill directly — only through stopStudioThenScheduler');
+  assert.doesNotMatch(s, /process\.kill\(-bridgeProc\.pid/, 'nor inline its own process-group kill');
   assert.doesNotMatch(stopSrc(), /process\.kill\(-/, 'nor may the stop path');
+  assert.doesNotMatch(teardownSrc(), /process\.kill\(-/, 'nor may the run-end teardown');
 });
 
 test('row 184b: the handler captures + clears the IN-PROGRESS story\'s own minted ground sessions', () => {
