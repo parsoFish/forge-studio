@@ -146,24 +146,30 @@ test('row 196 (A)+(B) RED-FIRST: the settle wait sits through the pre-dispatch v
 
 test('row 196 (A) CONTROL: once the transient was seen, a WRONG settled value is still not waited out', async () => {
   // 621(ii)'s sharpness, unregressed: `running` → `needs-you` ends the wait on sight.
-  const startedAt = Date.now();
-  const state = () => {
-    const t = Date.now() - startedAt;
-    return t < 150 ? 'idle' : t < 400 ? 'running' : 'needs-you';
-  };
+  // The page's value is a function of how many times it has been read, never
+  // of the wall clock: WSL steps its clock, and a wall-clock schedule read
+  // after the wait could land back in `idle` (row 216).
+  const SEQUENCE = ['idle', 'idle', 'running', 'running'];
+  let reads = 0;
+  let firstWrongRead: number | null = null;
+  const state = (n: number) => (n < SEQUENCE.length ? SEQUENCE[n] : 'needs-you');
   const page = {
     url: () => 'http://localhost:4124/knowledge',
     locator: () => ({ count: async () => 0, evaluateAll: async (fn: any, arg: any) => fn([], arg) }),
-    evaluate: async () => ({
-      data: { page: 'knowledge', 'page-ready': 'true', 'drain-state': state(), 'drain-run-id': RUN_ID },
-      nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
-    }),
+    evaluate: async () => {
+      const value = state(reads);
+      if (value === 'needs-you' && firstWrongRead === null) firstWrongRead = reads;
+      reads += 1;
+      return {
+        data: { page: 'knowledge', 'page-ready': 'true', 'drain-state': value, 'drain-run-id': RUN_ID },
+        nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+      };
+    },
   };
   const stall = await waitForConsequence(page as never, BEAT as never, 20_000, null, null, BEAT.wait);
-  const took = Date.now() - startedAt;
   assert.equal(stall, null);
-  assert.equal(state(), 'needs-you');
-  assert.ok(took >= 380 && took < 2_000, `stopped as soon as the value left the transient — took ${took} ms`);
+  assert.notEqual(firstWrongRead, null, 'the wait read the settled wrong value');
+  assert.equal(reads - 1, firstWrongRead, `stopped on the first read of the settled value — ${reads} reads, first needs-you at read ${firstWrongRead}`);
 });
 
 // ───────────── (B) — no turn.pid is UNKNOWN, never dead ─────────────
