@@ -60,6 +60,7 @@ import {
   bridgeSpawnOptions,
 } from './bridge.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
+import { judgeDeferredCycleChannels } from './agent-parity-serve-stop.mjs';
 import { recordReapedCancellations } from './reap-cancel.mjs';
 // Defect B fold, row 184b (forge-8vfn.8.5.21) — the SIGINT/SIGTERM path's own
 // version of the own-ground clear `run-story.mjs` already runs at the end of
@@ -498,6 +499,10 @@ async function main() {
   // that used to throw out of `runStory` and abort every story still queued
   // in the loop below.
   const writtenThisRun = [];
+  // Row 207 (C2) — every cycle channel a story deferred because its final
+  // attempt was still open under this run's own live serve; judged below,
+  // after the batch teardown's serve stop, with that stop as the evidence.
+  const deferredCycleParity = [];
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
@@ -643,7 +648,7 @@ async function main() {
         // `runStory` actually starting, so a crash inside it can never leave
         // a gap where the story still reads as unstarted.
         startedStoryIds.add(story.id);
-        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd, writtenThisRun)) || exitCode;
+        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd, writtenThisRun, deferredCycleParity)) || exitCode;
         // `runStory` already cleared its OWN minted sessions on every path it
         // reached (every return, every throw past its own try/finally) — so
         // by the time control returns here, `onStopSignal` must stop treating
@@ -701,6 +706,25 @@ async function main() {
     const teardown = teardownExitCode(exitCode, stop);
     exitCode = teardown.exitCode;
     for (const line of teardown.lines) console.error(line);
+    // Row 207 (C2) — a cycle still in flight when its story ended was killed
+    // (or drained) by the stop above, never by `reapAgentRuns`: its deferred
+    // final attempt is judged NOW, with that stop's own result as evidence.
+    // Judged before anything else here moves `_logs`; the deferred clear
+    // inside the stop has already captured the channel, and is read from there.
+    // A throw here must not skip `await release()` below, and is never a pass.
+    try {
+      const cycleParity = judgeDeferredCycleChannels({
+        deferred: deferredCycleParity, stop, registeredSessionKindIds: loadRegisteredSessionKindIds(ROOT),
+      });
+      for (const line of cycleParity.lines) console.log(line);
+      if (cycleParity.violations.length > 0) {
+        console.error(`[stories] RED — ${cycleParity.violations.length} cycle parity violation(s) judged after the serve stop. The run is RED regardless of its beats.`);
+        exitCode = exitCode || 1;
+      }
+    } catch (err) {
+      console.error(`[stories] RED — deferred cycle parity could not be judged after the serve stop: ${err?.message ?? err}`);
+      exitCode = exitCode || 1;
+    }
     // Studio and serve are stopped above, so clearing a halt this run pulled
     // cannot let a claim in; a halt left behind would wedge the next run.
     const haltClear = clearRunHalt(ROOT);
