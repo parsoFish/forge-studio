@@ -142,6 +142,7 @@
  * These beats are spread into `beats` at the point they already occupied.
  */
 import { SECOND_IDEA, SECOND_CEILING, CYCLE_BOUND } from './S10.constants.mjs';
+import { HALT_BEFORE_RESUME, HALT_WHILE_QUEUED } from './S10.halt.mjs';
 
 export const ACT_2 = [
     {
@@ -344,7 +345,7 @@ export const ACT_2 = [
     },
     {
       // VERIFIED — same handle as the story's own "hand the plan to the
-      // build flow" beat. DELIBERATELY NO WAIT here: ACT 1's own beat sits
+      // build flow" beat. DELIBERATELY NO WAIT here: ACT 1's own terminal wait sits
       // through the WHOLE develop cycle before moving on, which is exactly
       // wrong for ACT 2 — the story needs to catch this run MID-FLIGHT, not
       // after it finishes. `enqueue-kind` flips synchronously on the press,
@@ -630,6 +631,7 @@ export const ACT_2 = [
         'The product says plainly why this run stopped — not a crash, an operator decision — ' +
         'and that it is still here to resume.',
     },
+    ...HALT_BEFORE_RESUME,
     {
       // ROW 150 addendum (ruling 1794) — `resume-run`
       // (`run-controls.ts`'s `FAILED_CONTROLS`, `RunControls.tsx`'s
@@ -658,6 +660,7 @@ export const ACT_2 = [
         'Resume is not a fresh start. It picks up from what the stop preserved — the worktree, ' +
         'the branch, the work items already done.',
     },
+    ...HALT_WHILE_QUEUED,
     {
       // Back to the live monitor for the per-work-item evidence — the
       // run-detail page still cannot show it, and still would not refresh

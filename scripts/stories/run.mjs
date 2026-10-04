@@ -51,6 +51,7 @@ import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopStudioThenScheduler, teardownExitCode } from './sweep-teardown.mjs';
 import { preexistingSchedulerVerdict } from './scheduler-preflight.mjs';
+import { clearRunHalt, preexistingHaltVerdict } from './halt-record.mjs';
 import {
   decideStoryBridge,
   readProcCwd,
@@ -203,6 +204,9 @@ async function main() {
       } catch (err) {
         console.error(`[stories] post-stop sweep failed: ${err?.message ?? err}`);
       }
+      // The emergency halt this run may have pulled (halt-record.mjs): studio
+      // and serve are already gone here, so clearing it cannot let a claim in.
+      for (const line of clearRunHalt(ROOT).lines) console.log(`[stories] post-stop sweep: ${line}`);
       try {
         const bornLogs = captureAndClearBornLogDirs(ROOT, {
           prefixes: ['_agent-', '_authoring-'], sinceMs: startedMs, evidenceDir,
@@ -581,6 +585,14 @@ async function main() {
       return 1;
     }
     console.log(`[stories] serve ok — ${sched.reason}`);
+    // A ground already carrying the emergency halt claims nothing and refuses
+    // every dispatch — every claim-waiting beat would time out unexplained.
+    const halt = preexistingHaltVerdict(ROOT);
+    if (!halt.ok) {
+      console.error(`[stories] REFUSING: ${halt.reason}`);
+      return 1;
+    }
+    console.log(`[stories] halt ok — ${halt.reason}`);
 
     if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.
@@ -689,6 +701,11 @@ async function main() {
     const teardown = teardownExitCode(exitCode, stop);
     exitCode = teardown.exitCode;
     for (const line of teardown.lines) console.error(line);
+    // Studio and serve are stopped above, so clearing a halt this run pulled
+    // cannot let a claim in; a halt left behind would wedge the next run.
+    const haltClear = clearRunHalt(ROOT);
+    for (const line of haltClear.lines) console.log(line);
+    if (!haltClear.ok) exitCode = exitCode || 1;
 
     const put = restoreSweptCommitted(ROOT, sweptPaths);
     for (const p of put.restored) console.log(`[stories] restored ${p} — swept before the run and never regenerated`);

@@ -8,7 +8,7 @@
     {
       "path": "docs/decisions/011-unattended-scheduler.md",
       "digest": "1a17841855727f41",
-      "why": "Beats 7-9: _queue/pending|in-flight|ready-for-review state machine and forge serve's always-on claim, supervised by forge studio; beat 8 anchors its wait on the architect's own approve-plan commit; the one emergency halt: ACT 1 pulls it while the run builds and the run still finishes, ACT 2 pulls it before resume and the resumed run waits queued until release"
+      "why": "Beats 7-9: _queue state machine and forge serve's always-on claim; the one emergency halt: ACT 1 pulls it mid-build and the run finishes, ACT 2 pulls it before resume and the run waits queued"
     },
     {
       "path": "docs/decisions/019-cycle-resume-from-unifier.md",

@@ -93,6 +93,7 @@
 import { ACT_2 } from './S10.act2.mjs';
 import { REVIEW_LOOP } from './S10.review.mjs';
 import { CLOSE } from './S10.close.mjs';
+import { HALT_BUILD } from './S10.halt.mjs';
 import { IDEA, CEILING, GROUND, CYCLE_BOUND } from './S10.constants.mjs';
 
 export default {
@@ -584,24 +585,19 @@ export default {
       // reds without a second assertion needed to notice.
       act: 'Hand the plan to the build flow',
       do: [{ press: 'start-development' }],
-      // 7.6.143 (T1 1147). `cycleOf`, NOT the anchor form, because THE DEVELOP
-      // STATION CONTINUES THE ARCHITECT'S CYCLE — DEC-2 threads one `cycle_id`
-      // through the kickoff. The anchor form asks "which dispatch dir was born
-      // since the press", right when a press MINTS a cycle and wrong here.
-      // Run 20: dir born 20:21:58.902, press anchored 20:26:22.301, nothing
-      // born since, so a THIRTY-MINUTE wait completed in 231 ms and this beat
-      // reported GREEN while the developer ran four minutes unwatched. Beat 11's
-      // old comment argued that was impossible, on the premise that the develop
-      // cycle mints its own dir. It does not. I wrote that premise; it was false.
-      // `<runId>` is the initiative bound at beat 9, and the cycle dir is
-      // `<timestamp>_<initiative>`, so identity resolves it at any birth time.
-      wait: {
-        for: 'agent', anchor: 'start-development',
-        terminal: 'ready-for-review',
-        cycleOf: '<runId>',
-        upTo: CYCLE_BOUND.ms,
-        boundBasis: CYCLE_BOUND.label,
-      },
+      // THIS BEAT ENDS AT THE PRESS. The develop cycle's terminal wait is the beat
+      // "The active run finishes under the halt" (`S10.halt.mjs`), because the
+      // emergency halt is pulled while the run builds and the run must still
+      // reach `ready-for-review` under it. That wait uses `cycleOf`, NOT the
+      // anchor form, because THE DEVELOP STATION CONTINUES THE ARCHITECT'S
+      // CYCLE — DEC-2 threads one `cycle_id` through the kickoff. The anchor
+      // form asks "which dispatch dir was born since the press", right when a
+      // press MINTS a cycle and wrong here (7.6.143, T1 1147). Run 20: dir born
+      // 20:21:58.902, press anchored 20:26:22.301, nothing born since, so a
+      // THIRTY-MINUTE wait completed in 231 ms and the beat reported GREEN while
+      // the developer ran four minutes unwatched. `<runId>` is the initiative
+      // bound at beat 9, and the cycle dir is `<timestamp>_<initiative>`, so
+      // identity resolves it at any birth time.
       expect: {
         route: '/projects/gitpulse',
         data: {
@@ -615,6 +611,7 @@ export default {
       },
       say: 'The architect has planned and stopped, which is where it is meant to stop — the plan is the first thing a human is asked to approve. Starting development is a separate act, and this is the operator making it: the same initiative, repointed from the flow that decomposed it to the flow that builds it.',
     },
+    ...HALT_BUILD,
     {
       // SOURCE-DERIVED. `FlowRunDetail.tsx:121-127` (page/run-id/run-found/
       // run-status/flow-id/page-ready), corroborated by
