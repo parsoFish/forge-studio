@@ -134,7 +134,8 @@ export type FixTurnVariant<I extends FixTurnInput, R extends FixTurnResult, P = 
    * The verification gate and the result. Called on BOTH exits — `crashed`
    * says which — because brain-fix audits a crashed turn's writes (they are
    * still on disk) while preflight-fix does not commit or re-verify one.
-   * `endMetadata` is ignored on the crash path, which emits no `end` event.
+   * `endMetadata` reaches the `end` event on BOTH exits too — the crash
+   * path's own `end` carries it alongside `metadata.status: 'error'`.
    */
   finish: (args: {
     input: I;
@@ -327,10 +328,31 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       metadata: { error: err instanceof Error ? err.message : String(err), ...unpriced(unpricedReason(err)) },
     });
     sink.flushIteration(1);
-    // No `end` event on this path — both runners returned from the catch, and
-    // a crashed turn must not appear to have completed. `finish` still runs:
-    // a crashed turn's writes are on disk and brain-fix audits them.
-    return variant.finish({ input, pre, costUsd: costUsd ?? 0, crashed: true }).result;
+    // `finish` still runs: a crashed turn's writes are on disk and
+    // brain-fix audits them.
+    const { result, endMetadata } = variant.finish({ input, pre, costUsd: costUsd ?? 0, crashed: true });
+    // Row 206 (forge-8vfn.8.5.56) — every run-level start gets exactly one
+    // end. This end's `metadata.status` is `'error'`: it records that the
+    // turn crashed, never that it completed — a reader checks THAT field,
+    // not the mere presence of `event_type: 'end'`, to tell a crash from a
+    // finish.
+    logger.emit({
+      initiative_id: cycleId,
+      parent_event_id: startEv.event_id,
+      phase: variant.eventPhase,
+      skill: variant.eventSkill,
+      event_type: 'end',
+      input_refs: inputRefs,
+      output_refs: [],
+      message: `${variant.eventSkill}.end (error)`,
+      metadata: {
+        ...endMetadata,
+        ...unpriced(unpricedReason(err)),
+        status: 'error',
+        error: err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err),
+      },
+    });
+    return result;
   } finally {
     // Row 164 — the call is no longer in flight, however it ended.
     stopHeartbeatTicker();

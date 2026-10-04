@@ -53,7 +53,8 @@ Copied line for line between `brain-fix-runner.ts` and `preflight-fix-runner.ts`
 9. `queryFn` defaulting to the pinned SDK query, and the `AbortController`
 10. the `withIdleDeadline` stream loop — tool details and `toolSeq`, the `text` / `thinking` /
     `redacted_thinking` blocks, `total_cost_usd`
-11. the crash path: the `error` event, `flushIteration(1)`, an early return with **no** `end` event
+11. the crash path: the `error` event, `flushIteration(1)`, and an `end` event whose
+    `metadata.status` is `'error'` — naming the thrown class + message, never claiming completion
 12. `flushIteration(1)` and the `end` event carrying `cost_usd`
 
 ### Why `fix-turn.ts` does not call `runAgentTurn` — a fail-closed branch

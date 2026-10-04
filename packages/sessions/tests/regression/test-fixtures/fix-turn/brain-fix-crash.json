@@ -66,6 +66,33 @@
       "phase": "reflection",
       "skill": "brain-fix",
       "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-crash",
+      "event_id": "<event_id>",
+      "event_type": "end",
+      "initiative_id": "_brainfix-capture-brainfix-crash",
+      "input_refs": [
+        "<THEME>"
+      ],
+      "message": "brain-fix.end (error)",
+      "metadata": {
+        "runId": "capture-brainfix-crash",
+        "kind": "frontmatter.missing-field",
+        "file": "<THEME>",
+        "cleared": false,
+        "refused": 0,
+        "unsound": [],
+        "priced": false,
+        "unpriced_reason": "died",
+        "status": "error",
+        "error": "Error: pinned stream failure"
+      },
+      "output_refs": [],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
     }
   ]
 }

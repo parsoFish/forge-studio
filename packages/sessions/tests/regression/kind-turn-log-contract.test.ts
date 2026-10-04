@@ -191,6 +191,57 @@ test('the driver refuses a status advance over a cancelled phase, naming the rea
 });
 
 /**
+ * Row 206 follow-on (T1, mid-session addition) — a step that THROWS leaves
+ * the turn's event log with a `start` and nothing else: `runKindTurn`'s own
+ * `step()` call (the line right after the `start` event) sits with no
+ * try/catch around it, so a throwing step propagates straight past the
+ * `end` emission a few lines below. Measured live: the architect cost-
+ * ceiling refusal inside `runDraftStep` (`architect-steps.ts`, via
+ * `plumbing.turnBudgetUsd()`) does exactly this — the S4 architect channel
+ * ends with a start and no end. Every start must get exactly one end.
+ */
+test('runKindTurn: a THROWING step still terminates the log with exactly one end, naming the error, then rethrows (no double end)', async () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'kind-turn-throw-'));
+  try {
+    const projectRoot = join(forgeRoot, 'projects', 'testproj');
+    const sessionDir = join(projectRoot, '_probe', SESSION_ID);
+    mkdirSync(sessionDir, { recursive: true });
+    writeSessionStatus(sessionDir, { session_id: SESSION_ID, phase: 'working' });
+
+    const variant: SessionKindVariant<{ phase: string }, { phase: string; wrote: string[] }> = {
+      id: 'probe-throw', kindDir: '_probe', label: 'probe runner', eventLabel: 'probe turn',
+      eventPhase: 'orchestrator', eventSkill: 'probe',
+      initiativeId: (sid) => `probe-throw-${sid}`,
+      steps: {
+        working: async () => {
+          throw new Error('pinned step failure');
+        },
+      },
+      otherwise: (st) => ({ phase: st.phase, wrote: [] }),
+    };
+
+    await assert.rejects(
+      runKindTurn(variant, { sessionId: SESSION_ID, projectRoot, forgeRoot }),
+      /pinned step failure/,
+      'the throw must still propagate — this fix changes event logging, not control flow',
+    );
+
+    const events = eventsUnder(join(forgeRoot, '_logs'));
+    const types = events.map((e) => e.event_type);
+    assert.equal(types.filter((t) => t === 'start').length, 1, `exactly one start, got ${JSON.stringify(types)}`);
+    assert.equal(types.filter((t) => t === 'end').length, 1, `a throwing step must still get exactly one end — no end at all misreads as perpetually in flight; two ends is a double-count. Got ${JSON.stringify(types)}`);
+
+    const end = events.find((e) => e.event_type === 'end');
+    const meta = (end?.metadata ?? {}) as Record<string, unknown>;
+    assert.equal(meta.session_id, SESSION_ID);
+    assert.equal(meta.phase, 'working', 'the error end reports the phase the turn was IN, not a fabricated terminal one');
+    assert.match(String(meta.error), /Error: pinned step failure/, 'the end must carry the thrown class + message');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+/**
  * LOCK THE PROPERTY, NOT THE IDENTIFIER (COMMON §15.141).
  *
  * This test used to assert that the string `function writeArchitectStatus(`
