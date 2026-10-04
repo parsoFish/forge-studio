@@ -34,7 +34,7 @@ import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
 import { costlessGuardFor } from './costless-beat.mjs';
-import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard, agentParitySoFar } from './run-observe.mjs';
+import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard, storyEndParity } from './run-observe.mjs';
 import {
   applyFence,
   describeFence,
@@ -351,7 +351,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   });
   for (const line of describeReap(reap)) console.log(line);
   // Row 207 (C2): a final cycle attempt still open under our live serve is deferred to the batch.
-  const parity = agentParitySoFar({ root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)), deferInto: deferredCycleParity });
+  const parity = storyEndParity({ root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)), deferInto: deferredCycleParity });
 
   // Bead `forge-8vfn.6.11.8` — the spend COLUMN. Read from the dispatched
   // runs' OWN event logs, collected before the reap removed them from the

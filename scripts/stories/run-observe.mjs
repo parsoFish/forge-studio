@@ -516,3 +516,16 @@ export function agentParitySoFar({ root, startedMs, reapedDirs, deferInto = null
   }
   return { verdict, lines: describeAgentParity(verdict) };
 }
+
+/**
+ * Story-end parity (`run-story.mjs`): `agentParitySoFar` plus its
+ * per-channel trail — ok, satisfied-by-reap, PRODUCT RED, DEFERRED — printed
+ * to the run log, so a verdict never gates on lines nobody can read.
+ *
+ * @param {Parameters<typeof agentParitySoFar>[0]} args
+ */
+export function storyEndParity(args) {
+  const parity = agentParitySoFar(args);
+  for (const line of parity.lines) console.log(line);
+  return parity;
+}
