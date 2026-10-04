@@ -162,6 +162,7 @@ export type PostCommitTone =
   | 'claimed-not-running'
   | 'claimed-unknown'
   | 'queued-running'
+  | 'queued-halted'
   | 'queued-not-running'
   | 'queued-unknown'
   | 'gated'
@@ -201,6 +202,7 @@ export function describePostCommit(linkage: InitiativeLinkage[], serve: ServeSta
   }
   if (has('queued')) {
     const ids = idsIn(linkage, 'queued');
+    if (serve?.halt != null) return { tone: 'queued-halted', headline: `${ids} is queued — the emergency halt is on; it starts when the halt is released.`, serveNotReady: true };
     if (unknown) return { tone: 'queued-unknown', headline: `${ids} is queued — ${unconfirmed}`, serveNotReady: true };
     if (running) return { tone: 'queued-running', headline: `${ids} is queued — forge serve will pick it up.`, serveNotReady: false };
     return { tone: 'queued-not-running', headline: `${ids} is queued — forge serve is not currently running; it will resume once Studio brings it back.`, serveNotReady: true };

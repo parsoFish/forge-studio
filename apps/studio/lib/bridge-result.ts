@@ -46,9 +46,13 @@ export type BridgeReadResult<T> = { ok: true; status: number; data: T } | Bridge
 
 /** Pull the bridge's own message out of a non-2xx JSON body: `error` first,
  *  then `message` (string, non-empty), else `HTTP <status>`. */
+export const HALTED_MESSAGE = 'The emergency halt is on — release it to start new work.';
+
 export function bridgeErrorMessage(status: number, body: unknown): string {
   if (body && typeof body === 'object') {
     const rec = body as Record<string, unknown>;
+    // The ONE mapper for a dispatch refused by the emergency halt (409 { error: 'halted' }).
+    if (status === 409 && rec.error === 'halted') return HALTED_MESSAGE;
     for (const key of ['error', 'message'] as const) {
       const v = rec[key];
       if (typeof v === 'string' && v.trim().length > 0) return v;

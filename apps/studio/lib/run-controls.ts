@@ -107,7 +107,7 @@ export function runAwaitsServe(run: Run | null): boolean {
   return run !== null && run.status === 'planned';
 }
 
-export type QueuedServeTone = 'running' | 'not-running' | 'unknown';
+export type QueuedServeTone = 'halted' | 'running' | 'not-running' | 'unknown';
 
 /**
  * MEDIUM-2: the queued-run serve line's three tones. ONLY `running` may
@@ -121,6 +121,7 @@ export type QueuedServeTone = 'running' | 'not-running' | 'unknown';
  * serve.state === 'unsupervised'` rule (lib/architect-plan-view.ts).
  */
 export function queuedServeTone(serve: ServeStatus | null): QueuedServeTone {
+  if (serve !== null && serve.halt !== null) return 'halted';
   if (serve === null || serve.state === 'unsupervised') return 'unknown';
   if (serve.state === 'running') return 'running';
   return 'not-running';

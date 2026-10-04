@@ -534,6 +534,27 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-component="queued-serve-unconfirmed"]` instead, never the pickup
   promise; `restarting`/`draining`/`down` still render the shared
   `serve-status-notice` as above.
+  **The one emergency halt** (ADR 011) is the single operator brake — it
+  starts, pauses, resumes and stops nothing; it only refuses new claims while
+  every active run finishes. `GET /api/health`'s `serve.halt`
+  (`{since, actor, active, queued}`, or `null`) drives it. The global
+  `StudioNav` renders `[data-component="emergency-halt"][data-halt-state="off|on"]`
+  with one button and no confirm step: `data-halt-state="off"` carries
+  `[data-action="emergency-halt"]` "Emergency halt"; `data-halt-state="on"`
+  carries `[data-action="release-halt"]` "Release halt" — the page's only
+  release control. A refused press shows `[data-halt-error]` inline. While
+  halted, a full-width `[role="alert"][data-component="emergency-halt-banner"][data-halt-active][data-halt-queued]`
+  renders under the nav on every page with the drain line ("Emergency halt on
+  since HH:MM — N run(s) finishing, nothing new starts. M queued, waiting for
+  release."; once `active` is 0, "every active run finished"). The
+  `serve-status-notice` renders for a halt even while `state` is `running`,
+  carrying `[data-serve-halt="on"][data-halt-active][data-halt-queued]` and the
+  same line. A QUEUED run's line in the run controls is
+  `[data-component="queued-halted"]` ("Queued — the emergency halt is on; it
+  starts when the halt is released.") whenever a halt is on, ahead of every
+  other tone. A dispatch the halt refuses (`409 { error: "halted" }`) reads
+  "The emergency halt is on — release it to start new work." wherever a
+  session or agent start shows its bridge error.
   A second, attach-only `forge studio` never supervises `serve` and reads the
   same `serve` object off the owning studio's bridge. Three sections:
   - `section[data-section="attention-strip"]` — **W7-B1 (home-sessions-01/02):

@@ -23,7 +23,7 @@ import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGat
 import type { ArchitectSessionSummary, ServeStatus } from '../../lib/bridge-client.ts';
 
 const SID = '2026-08-18T13-27-13-8ee491f5';
-const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null };
+const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null, halt: null };
 
 function session(phase: ArchitectSessionSummary['phase'], extra: Partial<ArchitectSessionSummary> = {}): ArchitectSessionSummary {
   return {

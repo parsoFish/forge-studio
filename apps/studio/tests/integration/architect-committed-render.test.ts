@@ -23,8 +23,8 @@ import type { ServeStatus } from '../../lib/bridge-client.ts';
 
 const SESSION = { sessionId: '2026-08-18T13-27-13-8ee491f5', project: 'demo-project' };
 const INIT = 'INIT-2026-08-18-add-version-flag';
-const RUNNING: ServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null };
-const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null };
+const RUNNING: ServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null, halt: null };
+const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null, halt: null };
 
 function link(queueState: InitiativeLinkage['queueState'], over: Partial<InitiativeLinkage> = {}): InitiativeLinkage {
   const has = queueState !== 'unknown';

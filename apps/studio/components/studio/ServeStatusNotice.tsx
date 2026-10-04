@@ -11,13 +11,15 @@
  *   - `down`         — nothing is currently supervised as live
  *   - `unsupervised` — this bridge has no supervisor at all (the dry bridge,
  *                      or a second studio that attached read-only)
- * `running`, and `null` (not yet read, or the read failed — the global
+ * An emergency halt renders its drain line (`data-serve-halt="on"`) in every state,
+ * `running` included. `running` without a halt, and `null` (not yet read, or the read failed — the global
  * BridgeStatus banner owns that outage message), render nothing: there is
  * nothing new for THIS notice to tell the operator.
  *
  * DOM contract: [data-component="serve-status-notice"][data-serve-state][data-serve-restarts]
  */
 import type { ServeStatus } from '@/lib/bridge-client';
+import { describeHalt } from '@/lib/halt-view';
 
 export type ServeStatusNoticeProps = {
   status: ServeStatus | null;
@@ -35,19 +37,23 @@ const MESSAGE: Record<'draining' | 'restarting' | 'down' | 'unsupervised', strin
 
 export function ServeStatusNotice({ status, variant = 'card' }: ServeStatusNoticeProps): JSX.Element | null {
   if (status === null) return null;
-  if (status.state === 'running') return null;
+  const halt = status.halt;
+  if (status.state === 'running' && halt === null) return null;
   return (
     <div
       data-component="serve-status-notice"
       data-serve-state={status.state}
       data-serve-restarts={status.restarts}
+      data-serve-halt={halt !== null ? 'on' : undefined}
+      data-halt-active={halt?.active ?? undefined}
+      data-halt-queued={halt?.queued ?? undefined}
       style={
         variant === 'strip'
           ? { fontSize: 11.5, color: 'var(--ember)', padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-2)' }
           : { fontSize: 12, color: 'var(--ember)', padding: '10px 12px', border: '1px solid var(--yellow)', borderRadius: 'var(--radius)', background: 'var(--bg-2)' }
       }
     >
-      {MESSAGE[status.state]}
+      {halt !== null ? describeHalt(halt) : status.state === 'running' ? null : MESSAGE[status.state]}
     </div>
   );
 }

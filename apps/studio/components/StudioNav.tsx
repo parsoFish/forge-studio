@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { EmergencyHaltBanner, EmergencyHaltControl } from '@/components/studio/EmergencyHalt';
+import { useServeStatus } from '@/lib/use-serve-status';
+
 /**
  * Sticky top nav — the seven-pillar Studio IA.
  *
@@ -76,9 +79,12 @@ export function isNavItemActive(pathname: string, id: string): boolean {
 
 export function StudioNav() {
   const pathname = usePathname();
+  const { status, refresh } = useServeStatus();
+  const halt = status?.halt ?? null;
 
   return (
-    // W7-C3 (crosscut-18): aria-label so AT can name the landmark.
+    <>
+    {/* W7-C3 (crosscut-18): aria-label so AT can name the landmark. */}
     <nav className="afb-nav" aria-label="Primary" data-component="studio-nav">
       <Link className="afb-brand" href="/">
         <span className="hex-mark" />
@@ -97,6 +103,10 @@ export function StudioNav() {
           </Link>
         ))}
       </div>
+
+      <EmergencyHaltControl halt={halt} refresh={refresh} />
     </nav>
+    <EmergencyHaltBanner halt={halt} />
+    </>
   );
 }

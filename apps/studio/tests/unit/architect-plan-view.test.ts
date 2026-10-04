@@ -147,10 +147,10 @@ const ID = 'INIT-2026-08-18-add-version-flag';
 const link = (queueState: ReturnType<typeof deriveInitiativeLinkage>[number]['queueState']) =>
   ({ initiativeId: ID, runId: 'r', flowId: 'forge-develop', runStatus: null, queueState, runHref: '/flows/forge-develop/run/r', monitorHref: '/flows/forge-develop' });
 
-const RUNNING: ServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null };
-const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null };
-const RESTARTING: ServeStatus = { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z' };
-const UNSUPERVISED: ServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null };
+const RUNNING: ServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null, halt: null };
+const DOWN: ServeStatus = { state: 'down', pid: null, restarts: 0, nextRestartAt: null, halt: null };
+const RESTARTING: ServeStatus = { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z', halt: null };
+const UNSUPERVISED: ServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null, halt: null };
 
 test('"building it now" ONLY when a run is active AND forge serve is running (sessions-kinds-08/12)', () => {
   const v = describePostCommit([link('building')], RUNNING);

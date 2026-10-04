@@ -40,6 +40,7 @@
  *     [data-component="run-control-error"]      (verbatim failure text)
  *     [data-component="run-control-outcome"][data-outcome-control=<id>]
  *       -> EnqueueOutcomeLine's own contract ([data-component="enqueue-outcome"] …)
+ *     [data-component="queued-halted"]                              (queued runs, emergency halt on)
  *     [data-component="queued-awaits-serve"]                         (queued runs, serve CONFIRMED running)
  *     [data-component="serve-status-notice"][data-serve-state]       (queued runs, serve CONFIRMED not running)
  *     [data-component="queued-serve-unconfirmed"]                    (queued runs, serve status unknown — null or unsupervised)
@@ -293,6 +294,13 @@ export function RunControls({
           line rather than the same promise `running` gets. */}
       {awaitsServe && (() => {
         const tone = queuedServeTone(serve);
+        if (tone === 'halted') {
+          return (
+            <span data-component="queued-halted" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
+              Queued — the emergency halt is on; it starts when the halt is released.
+            </span>
+          );
+        }
         if (tone === 'running') {
           return (
             <span data-component="queued-awaits-serve" style={{ fontSize: 11.5, color: 'var(--dim)' }}>

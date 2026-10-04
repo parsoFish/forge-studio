@@ -18,7 +18,7 @@ import { EnqueueOutcomeLineView } from '@/components/studio/EnqueueOutcomeLine';
 import type { ServeStatus } from '@/lib/bridge-client';
 
 const INIT = 'INIT-2026-08-18-add-version-flag';
-const RUNNING: ServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null };
+const RUNNING: ServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null, halt: null };
 
 function render(props: Partial<React.ComponentProps<typeof EnqueueOutcomeLineView>>): string {
   return renderToStaticMarkup(React.createElement(EnqueueOutcomeLineView, {
@@ -45,7 +45,7 @@ test('plan enqueue, serve restarting → the shared notice mounts + the run link
     runAction: 'open-plan-run',
     runId: 'c1',
     flowId: 'forge-architect',
-    serve: { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z' },
+    serve: { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z', halt: null },
   });
   expect(html).toContain('Planning enqueued — forge serve will decompose it into work items.');
   expect(html).toContain('data-component="serve-status-notice"');
