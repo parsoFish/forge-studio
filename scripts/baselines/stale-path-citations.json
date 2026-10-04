@@ -492,12 +492,6 @@
     "count": 1
   },
   {
-    "file": "apps/forge/tests/regression/ui-bridge-instructions.test.ts",
-    "kind": "path",
-    "cited": "cli/bridge-studio-affordances.ts",
-    "count": 1
-  },
-  {
     "file": "apps/forge/tests/regression/ui-bridge-onboarding-spawn-pid.test.ts",
     "kind": "path",
     "cited": "orchestrator/cli.ts",
@@ -5415,12 +5409,6 @@
     "file": "packages/sessions/bridge-studio-architect.ts",
     "kind": "stem",
     "cited": "instructions-runner",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/bridge-studio-instructions.ts",
-    "kind": "path",
-    "cited": "cli/bridge-studio-affordances.ts",
     "count": 1
   },
   {

@@ -34,7 +34,7 @@
  *   - the architect session runs sub-turns INSIDE one `runKindTurn` call:
  *     `architect.explore.start` / `.draft.start` / `.revise.start` /
  *     `.finalize.start` (packages/sessions/kinds/architect-stage-events.ts)
- *     under the SAME `skill: 'architect-runner'` `runKindTurn` itself uses,
+ *     under the SAME skill value `runKindTurn` itself writes for the architect,
  *     and the completeness critic's own start/end pair
  *     (packages/sessions/kinds/architect-critic.ts) under
  *     `skill: 'architect-completeness-critic'`. MEASURED on a real S1

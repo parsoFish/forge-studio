@@ -16,7 +16,7 @@ package above kernel — `library`, `knowledge`, `projects`, `agents`,
 `sessions`, `flows`, `stations`, `factory`, and both apps — imports it
 directly.
 
-## API (156 values)
+## API (160 values)
 
 | the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` |
 | the SDK tool-use fence | `toolFenceOptions` |
@@ -26,7 +26,7 @@ directly.
 | git commit identity (author, not the GitHub host identity below) | `ralphGitIdentity` · `UNIFIER_GIT_IDENTITY` · `ORCHESTRATOR_GIT_IDENTITY` · `gitIdentityEnvOverlay` · `gitIdentityConfigArgs` |
 | GitHub host identity for outward gh actions | `ghTokenFor` · `assertGhOwner` · `ghRunnerFor` |
 | first-run scaffolding (`forge init`) | `QUEUE_SUBDIRS` · `layoutDirs` · `defaultConfigJson` · `ghAuthed` · `ensureLayoutDirs` · `ensureDefaultConfig` · `runInit` |
-| the path-containment guard + guarded fs primitives | `PathGuardContainmentError` · `isSafeSegment` · `isSafeSubPath` · `resolveGuardedPath` · `guardedFile` · `guardedReadFile` · `guardedWriteFile` · `guardedReadDir` · `guardedRename` |
+| the path-containment guard + guarded fs primitives | `PathGuardContainmentError` · `isSafeSegment` · `isSafeSubPath` · `resolveGuardedPath` · `guardedFile` · `guardedReadFile` · `guardedWriteFile` · `guardedWriteFileExclusive` · `guardedUnlink` · `guardedReadDir` · `guardedRename` |
 | the session/project-dir realpath-guarded single-file read | `safeReadFileInSession` |
 | case-folding probe (duplicate-target detection) | `CaseFoldingProbeError` · `detectVolumeCaseFolding` |
 | guarded scan (bounded mtime + tail reads) | `guardedMtime` · `selectRecentEntries` · `guardedReadFileTail` |
@@ -37,7 +37,7 @@ directly.
 | project-layout SSOT (id normalisation, discovery, brain dirs) | `normalizeProjectId` · `discoverProjects` · `projectBrainDir` · `projectThemesDir` · `mintedRemotesManifestPath` · `recordMintedRemote` · `rootManagesProject` · `rootMismatchReason` |
 | spawn-env allowlist (child-process env seam) | `AGENT_ENV_ALLOWLIST` · `MAX_ENV_OVERRIDE_KEYS` · `HOOK_ENV_CREDENTIAL_EXCLUSIONS` · `HOOK_ENV_BASE_ALLOWLIST` · `buildChildEnv` · `forgeBinOnPath` · `forwardChildStderr` · `sdkStderrSink` · `RESOURCE_PREFIX_ENV` · `RESOURCE_PREFIX_MAX_LENGTH` · `RESOURCE_PREFIX_RE` · `deriveResourcePrefix` |
 | route-table shape + dispatcher | `dispatchRoute` |
-| HTTP response envelope | `allowedOrigin` · `sendJson` · `sanitizeError` · `pathOnly` · `parseQuery` |
+| HTTP response envelope | `allowedOrigin` · `sendJson` · `DispatchInFlight` · `sendIfDispatchInFlight` · `sanitizeError` · `pathOnly` · `parseQuery` |
 | dry-bridge gate + typed refusal | `DRY_BRIDGE_ENV` · `DRY_BRIDGE_LOG_BUCKET` · `isDryBridge` · `DRY_BRIDGE_ACTIONS` · `emitDryBridgeRefusal` · `refuseDryBridge` · `emitDryBridgeSkip` · `dryBridgeAgentTurnMarker` |
 | log-cycle discovery + run-id charset gate | `listCycles` · `isSafeRunId` · `composeSafeRunId` · `refuseBareInitiativeRunId` |
 | package-owned discovery roots (flows/skills) | `flowRoots` · `skillRoots` · `resolveIdAcrossRoots` · `listIdsAcrossRoots` |

@@ -168,8 +168,8 @@ describe('channelParityVerdict — session', () => {
   });
 
   // Measured: _architect-2026-10-02T02-06-56-9f510c77/events.jsonl (S1 run 1)
-  // — 9 `architect-runner`-skill `start` rows and 12 `end` rows across three
-  // skills (architect-runner, architect, architect-completeness-critic); only
+  // — 9 `start` rows under the architect turn's own skill and 12 `end` rows across three
+  // skills (the turn's, architect, architect-completeness-critic); only
   // the 6 rows carrying `metadata.phase` are this rule's concern, and they
   // alternate perfectly across three real turns.
   test('the real architect-session shape — stage pings, critic sub-turns and turn-cost rows — is ok', () => {
