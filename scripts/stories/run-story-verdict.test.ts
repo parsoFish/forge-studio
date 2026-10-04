@@ -53,6 +53,7 @@ const quiet = {
   row: { status: 'green', greenBeats: 11, beats: 11 },
   spendHalt: null,
   galleryRegenFailure: null,
+  parityViolations: [],
 };
 
 test('row 191 (the measured bug): green beats + a containment failure — the LAST verdict line says red and matches the exit code', () => {
@@ -92,6 +93,30 @@ test('row 191: a spend halt with green beats still ends on a red restated line, 
   assert.equal(lines[lines.length - 1], '[stories] S1: red — 11/11 beats green');
 });
 
+// Row 206 (bead `forge-8vfn.8.5.56`) — a parity violation names the channel
+// and both event ids in the printed reason, not only in the final restated
+// line, so a reader does not have to re-derive which dispatch double-started.
+test('row 206: a parity violation prints the channel and event ids and reds the run regardless of green beats', () => {
+  const { result, lines } = withCapturedLines(() => containmentVerdict({
+    ...quiet,
+    parityViolations: [
+      { kind: 'double-start', channel: '_agent-onboarding-agent-x', key: 'onboarding-agent', eventIds: ['EV_1', 'EV_2'] },
+    ],
+  }));
+  assert.equal(result, 1);
+  assert.ok(
+    lines.some((l) => l.includes('double-start') && l.includes('_agent-onboarding-agent-x') && l.includes('EV_1') && l.includes('EV_2')),
+    `expected a line naming the channel and both event ids; got: ${JSON.stringify(lines)}`,
+  );
+  assert.equal(lines[lines.length - 1], '[stories] S1: red — 11/11 beats green');
+});
+
+test('row 206: no parity violations — the baseline still reads green', () => {
+  const { result, lines } = withCapturedLines(() => containmentVerdict({ ...quiet }));
+  assert.equal(result, 0);
+  assert.equal(lines[lines.length - 1], '[stories] S1: green — 11/11 beats green');
+});
+
 test('row 191: EVERY containment gate ends with the SAME restated line as its own return 1, never only the detailed reason', () => {
   // Each case flips ONE containment input red, read from the SAME `quiet`
   // baseline — a gate that forgot to call `printFinal` before its own
@@ -111,6 +136,7 @@ test('row 191: EVERY containment gate ends with the SAME restated line as its ow
     ['fence.escapes', { fence: { ...quiet.fence, escapes: [{ owner: 'this-run', paths: ['a'] }] } }],
     ['forkGrounds', { forkGrounds: { redReason: 'CONTAINMENT FAILURE — fork case ground' } }],
     ['galleryRegenFailure', { galleryRegenFailure: 'foreign untracked target' }],
+    ['parityViolations', { parityViolations: [{ kind: 'double-start', channel: '_agent-onboarding-agent-x', key: 'onboarding-agent', eventIds: ['EV_1', 'EV_2'] }] }],
   ];
   for (const [name, patch] of cases) {
     const { result, lines } = withCapturedLines(() => containmentVerdict({ ...quiet, ...patch }));

@@ -34,7 +34,7 @@ import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
 import { costlessGuardFor } from './costless-beat.mjs';
-import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard } from './run-observe.mjs';
+import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard, agentParitySoFar } from './run-observe.mjs';
 import {
   applyFence,
   describeFence,
@@ -350,6 +350,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     reason: reapReasonFor(story, beats),
   });
   for (const line of describeReap(reap)) console.log(line);
+  const parity = agentParitySoFar({ root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)) });
+  for (const line of parity.lines) console.log(line);
 
   // Bead `forge-8vfn.6.11.8` — the spend COLUMN. Read from the dispatched
   // runs' OWN event logs, collected before the reap removed them from the
@@ -792,7 +794,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // LAST line on every path out, so the one line shaped like a verdict a
   // reader finds last is always the one that matches the exit code.
   return containmentVerdict({
-    story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead, hostRefs,
+    story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead, hostRefs, parityViolations: parity.verdict.violations,
   });
 }
 

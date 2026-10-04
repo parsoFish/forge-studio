@@ -27,6 +27,7 @@
  */
 export function containmentVerdict({
   story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead, hostRefs,
+  parityViolations = [],
 }) {
   const printFinal = (status) => console.log(
     `[stories] ${story.id}: ${status} — ${row.greenBeats}/${row.beats} beats green`,
@@ -225,6 +226,23 @@ export function containmentVerdict({
     console.error(
       `[stories] ${story.id}: GALLERY REGEN FAILED — ${galleryRegenFailure}. The run is RED regardless of its beats.`,
     );
+    printFinal('red');
+    return 1;
+  }
+
+  // Row 206 (bead `forge-8vfn.8.5.56`) — one run-level start closed by one
+  // run-level end, per agent channel this run launched (`agent-parity.mjs`).
+  // A channel the harness itself reaped is already excused before this ever
+  // sees it (`agentParitySoFar`'s own `reapedDirs`), so anything named here
+  // is a double dispatch, an orphaned end, or a turn whose own closing event
+  // never landed for a reason nothing recorded — never "still running".
+  if (parityViolations.length > 0) {
+    for (const v of parityViolations) {
+      console.error(
+        `[stories] ${story.id}: PRODUCT RED — ${v.kind} on channel ${v.channel} (${v.key}), ` +
+        `event id(s) ${v.eventIds.join(', ')}. The run is RED regardless of its beats.`,
+      );
+    }
     printFinal('red');
     return 1;
   }
