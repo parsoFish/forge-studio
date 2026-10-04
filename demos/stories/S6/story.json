@@ -341,14 +341,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "seedSessionId": "2026-10-03T13-18-10-305b4b75",
+        "seedSessionId": "2026-10-04T08-05-39-20a01e49",
         "seedSessionPhase": "briefing",
         "seedSessionRunning": "false"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
-        "seed-session-id": "2026-10-03T13-18-10-305b4b75",
+        "seed-session-id": "2026-10-04T08-05-39-20a01e49",
         "fetch-status": "ok",
         "kb-id": "story-s6",
         "node-count": "1",
@@ -428,13 +428,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "seedTheme": "live-evidence-gate-must-be-id-bound"
+        "seedTheme": "evidence-freshness-not-label-match"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
         "fetch-status": "ok",
-        "theme-node": "live-evidence-gate-must-be-id-bound",
+        "theme-node": "evidence-freshness-not-label-match",
         "theme-active": "false",
         "kb-id": "story-s6"
       },
@@ -508,10 +508,10 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T13-19-21-f5737784"
+        "architectSessionId": "2026-10-04T08-06-45-1b718482"
       },
       "data": {
-        "architect-session-id": "2026-10-03T13-19-21-f5737784"
+        "architect-session-id": "2026-10-04T08-06-45-1b718482"
       },
       "expect": {
         "architect-session-id": "<architectSessionId>"
@@ -563,14 +563,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "drainRunId": "story-s6-drain-musf51mx"
+        "drainRunId": "story-s6-drain-mutjewhl"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
         "fetch-status": "ok",
         "drain-state": "green",
-        "drain-run-id": "story-s6-drain-musf51mx"
+        "drain-run-id": "story-s6-drain-mutjewhl"
       },
       "expect": {
         "page": "knowledge",
@@ -607,32 +607,32 @@
   "reap": {
     "reaped": [
       {
-        "pid": 1679725,
-        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
+        "pid": 3681464,
+        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1679724,
-        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
+        "pid": 3681463,
+        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1679625,
-        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
+        "pid": 3681340,
+        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1679574,
-        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
+        "pid": 3681306,
+        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1679509,
-        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
+        "pid": 3681272,
+        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
         "signal": "SIGTERM",
         "via": "cwd",
         "terminatedBeforeFirstPricedEvent": 30000
@@ -640,16 +640,16 @@
     ],
     "skipped": [
       {
-        "pid": 1679142,
-        "dir": "_logs/_project-brain-2026-10-03T13-18-10-305b4b75",
-        "reason": "pid 1679142: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 3680891,
+        "dir": "_logs/_project-brain-2026-10-04T08-05-39-20a01e49",
+        "reason": "pid 3680891: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_architect-2026-10-03T13-19-21-f5737784",
+        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
         "kind": "architect",
-        "sessionId": "2026-10-03T13-19-21-f5737784",
+        "sessionId": "2026-10-04T08-06-45-1b718482",
         "project": "story-s6",
         "cancelledFrom": "interviewing",
         "written": true,
@@ -660,7 +660,7 @@
   "sweep": {
     "removed": [
       "projects/.kb-story-s6",
-      "_logs/_kb-drain-story-s6-drain-musf51mx"
+      "_logs/_kb-drain-story-s6-drain-mutjewhl"
     ],
     "failed": [],
     "claim": {
@@ -687,7 +687,7 @@
     },
     "lines": [
       "[stories] trailing sweep removed projects/.kb-story-s6",
-      "[stories] trailing sweep removed _logs/_kb-drain-story-s6-drain-musf51mx",
+      "[stories] trailing sweep removed _logs/_kb-drain-story-s6-drain-mutjewhl",
       "[stories] trailing sweep KEPT projects/story-s6 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
@@ -708,7 +708,7 @@
         "entries": [
           {
             "path": "antipatterns.md",
-            "bytes": 428
+            "bytes": 630
           },
           {
             "path": "kb.yaml",
@@ -716,23 +716,23 @@
           },
           {
             "path": "patterns.md",
-            "bytes": 715
+            "bytes": 383
           },
           {
             "path": "profile.md",
-            "bytes": 1558
+            "bytes": 1367
           },
           {
-            "path": "themes/live-evidence-gate-must-be-id-bound.md",
-            "bytes": 1199
+            "path": "themes/evidence-freshness-not-label-match.md",
+            "bytes": 1126
           },
           {
-            "path": "themes/unifier-cost-ratio-signals-ac-gaps.md",
-            "bytes": 1220
+            "path": "themes/review-gate-vacuous-pass.md",
+            "bytes": 1464
           },
           {
-            "path": "themes/verifier-refute-rate-is-the-signal.md",
-            "bytes": 1112
+            "path": "themes/verifier-repro-is-the-gate.md",
+            "bytes": 1187
           }
         ],
         "truncated": false,
@@ -752,8 +752,8 @@
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "918a631068a580453e0945501c221af0716a7b03",
+    "dirty": false
   },
   "storyDigest": "ac3225f6f16e3c19"
 }
