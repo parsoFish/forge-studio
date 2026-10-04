@@ -388,9 +388,10 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   for (const filename of [IDEA_FILENAME, PROMPT_FILENAME] as const) {
     const body = readCandidate(filename);
     if (body === null) continue;
-    // W8-B3 (ON-5) — a BLANK opener is not a turn. Three real brief routes
-    // (`/api/project-brain/brief`, `/api/instructions/brief`,
-    // `/api/demo-builder/brief`, apps/forge/ui-bridge.ts) write `body.brief ?? ''`,
+    // W8-B3 (ON-5) — a BLANK opener is not a turn. Every real brief write
+    // (`/api/project-brain/brief`; the generic question-form affordance,
+    // instructions/demo-builder's one write path for `brief` since row
+    // 206's sweep, forge-8vfn.8.5.56) writes `body.brief ?? ''`,
     // so an operator who skips the optional brief gets a zero-byte
     // `prompt.md` — which rendered as an EMPTY operator bubble in the
     // transcript. The file is still reported in `sourcesFound` (it really is

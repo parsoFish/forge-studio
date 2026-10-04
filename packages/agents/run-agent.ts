@@ -48,7 +48,7 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
-import { createLogger, emitGroundFileChanges, refuseBareInitiativeRunId, type EventLogger } from '@forge/kernel';
+import { createLogger, emitGroundFileChanges, refuseBareInitiativeRunId, errorEndMetadata, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { resolveRunQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent, withSessionEndHooks } from './studio/hook-dispatch.ts';
@@ -390,6 +390,19 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   const inputRefs = ctx.artifactRefs ?? [];
 
   const inForceCeilingUsd = effectiveCeilingUsd(def, ctx);
+  // W7-B5 (agents-31) / review round 1 — shared base metadata every event
+  // below carries (start, and both end shapes row 206 adds): the ceilings
+  // are known at START time (recording them only on a terminal event lied
+  // about failed/still-running runs), `kickoff_ceiling_usd` is the
+  // OPERATOR's and `effective_ceiling_usd` the one actually in force (its
+  // own key — an agent's declared `budgets.maxBudgetUsd` with no operator
+  // ceiling still runs capped).
+  const baseEventMeta = (): Record<string, unknown> => ({
+    agent_phase: def.phase,
+    agent_slug: def.slug,
+    ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
+    ...(inForceCeilingUsd !== undefined ? { effective_ceiling_usd: inForceCeilingUsd } : {}),
+  });
   const startEvent = logger.emit({
     initiative_id: initiativeId,
     phase: 'orchestrator',
@@ -397,27 +410,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     event_type: 'start',
     input_refs: inputRefs,
     output_refs: [],
-    metadata: {
-      agent_phase: def.phase,
-      agent_slug: def.slug,
-      // W7-B5 (agents-31): the ceiling in force is a fact known at START
-      // time — recording it only on the terminal `end` event left every
-      // failed/still-running run claiming "no ceiling was recorded" about a
-      // ceiling that was submitted and enforced. The end event keeps its
-      // copy (terminal provenance, unchanged).
-      ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
-      // Review round 1 — the OPERATOR ceiling is not the only ceiling. Both
-      // spawn paths resolve `kickoffCeilingUsd ?? resolveOneShotBudgetUsd(
-      // def.budgets, …)`, so an agent with a declared `budgets.maxBudgetUsd`
-      // and NO operator ceiling still runs under a real cap. Recorded under
-      // its own key rather than folded into `kickoff_ceiling_usd`, which
-      // would lie about where it came from: the onboarding route dispatches
-      // with no operator ceiling, yet onboarding-agent declares $5 — and
-      // every honesty surface read "no ceiling was recorded" for it. Same
-      // `effectiveCeilingUsd()` derivation the spawn functions apply, so
-      // what is recorded is what is enforced, by construction.
-      ...(inForceCeilingUsd !== undefined ? { effective_ceiling_usd: inForceCeilingUsd } : {}),
-    },
+    metadata: baseEventMeta(),
   });
 
   const startedAt = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
@@ -475,29 +468,45 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     skill: def.slug,
   });
 
+  // Row 206 follow-on — every `start` gets exactly one `end`: the try/catch
+  // below guarantees the `end` emission runs even when a spawn call throws,
+  // naming the error, before the throw propagates to this function's caller.
   let spawned: RunAgentResult;
-  if (loopStrategy === 'one-shot') {
-    let toolSeq = 0;
-    const callerOnMessage = ctx.onMessage;
-    const observedCtx: RunContext = {
-      ...ctx,
-      onMessage: (msg) => {
-        callerOnMessage?.(msg);
-        const m = msg as { type?: string; message?: unknown };
-        if (m?.type !== 'assistant') return;
-        const details = extractLiveToolDetails(m.message, toolSeq);
-        for (const detail of details) turnSink.onToolUse(detail);
-        toolSeq += details.length;
-      },
-    };
-    spawned = await runOneShotSpawn(def, observedCtx, spec, runMarker, turnSink);
+  try {
+    if (loopStrategy === 'one-shot') {
+      let toolSeq = 0;
+      const callerOnMessage = ctx.onMessage;
+      const observedCtx: RunContext = {
+        ...ctx,
+        onMessage: (msg) => {
+          callerOnMessage?.(msg);
+          const m = msg as { type?: string; message?: unknown };
+          if (m?.type !== 'assistant') return;
+          const details = extractLiveToolDetails(m.message, toolSeq);
+          for (const detail of details) turnSink.onToolUse(detail);
+          toolSeq += details.length;
+        },
+      };
+      spawned = await runOneShotSpawn(def, observedCtx, spec, runMarker, turnSink);
+    } else {
+      spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, runMarker, turnSink);
+    }
+  } catch (err) {
     turnSink.flushIteration(1);
-  } else {
-    spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, runMarker, turnSink);
-    turnSink.flushIteration(1);
+    logger.emit({
+      initiative_id: initiativeId, phase: 'orchestrator', skill: def.slug, event_type: 'end',
+      input_refs: inputRefs, output_refs: [],
+      metadata: { ...baseEventMeta(), ...errorEndMetadata(err) },
+    });
+    throw err;
   }
+  turnSink.flushIteration(1);
 
-  // Report + log the end event.
+  // Report + log the end event. R6-04 (WI-2): the SDK's reported result
+  // subtype ('success' | 'error_max_budget_usd' | …) is a DISTINCT,
+  // honestly-recorded terminal fact beyond the shared base metadata, so a
+  // downstream reader (GET /api/agents/runs/:runId) can tell a ceiling-stop
+  // apart from an ordinary success without re-deriving anything from cost.
   const durationMs = spawned.durationMs ?? Math.round(performance.now() - startedAt);
 
   logger.emit({
@@ -512,16 +521,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     tokens_out: spawned.tokensOut,
     duration_ms: durationMs,
     metadata: {
-      agent_phase: def.phase,
-      agent_slug: def.slug,
-      // R6-04 (WI-2): a ceiling-stop must be a DISTINCT, honestly-recorded
-      // terminal fact, never collapsed into an ordinary success log — record
-      // BOTH the operator ceiling that was in force (when one was given) and
-      // the SDK's reported result subtype ('success' | 'error_max_budget_usd'
-      // | …) so a downstream reader (GET /api/agents/runs/:runId) can tell
-      // the two apart without re-deriving anything from cost alone.
-      ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
-      ...(inForceCeilingUsd !== undefined ? { effective_ceiling_usd: inForceCeilingUsd } : {}),
+      ...baseEventMeta(),
       ...(spawned.resultSubtype !== undefined ? { result_subtype: spawned.resultSubtype } : {}),
     },
   });

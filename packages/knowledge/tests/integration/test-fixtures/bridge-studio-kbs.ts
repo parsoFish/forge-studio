@@ -50,6 +50,9 @@ const routes = knowledgeRoutes({
   sessionIsReadable: () => {
     throw new Error('unexpected session-readability probe call in this test');
   },
+  // HIGH-1 (row 206 follow-up): REQUIRED, same rank problem as `runFixTurn`.
+  // No fixture pid is ever "ours" in this file's tests.
+  isTurnAlive: () => false,
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;

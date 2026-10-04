@@ -16,7 +16,8 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdirSync, readFileSync, openSync, closeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedFile, guardedReadFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { claimDispatchSlot, releaseDispatchSlot, randomRunSuffix, sendIfDispatchInFlight } from '@forge/kernel';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { type KbDescriptor } from '@forge/contracts';
@@ -55,8 +56,14 @@ import { subDirs } from './kb-sites.ts';
 export function spawnBrainFix(
   forgeRoot: string,
   p: { kbId: string; file: string; check: string; kind: string; fixHint?: string; message: string; runId: string },
+  isAlive: (pid: number, ownershipMark: string) => boolean,
 ): void {
-  const logDir = join(forgeRoot, '_logs', `_brainfix-${p.runId}`);
+  const logDirName = `_brainfix-${p.runId}`;
+  // HIGH-1 — the SAME claim the agent-dispatch seam uses, before anything
+  // spawns; throws DispatchInFlight, uncaught here so the route's own catch
+  // (mapped via `sendIfDispatchInFlight`) sees it.
+  claimDispatchSlot(forgeRoot, logDirName, p.runId, isAlive);
+  const logDir = join(forgeRoot, '_logs', logDirName);
   mkdirSync(logDir, { recursive: true });
   const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
   const argv = [
@@ -65,9 +72,20 @@ export function spawnBrainFix(
     '--run-id', p.runId, '--message', p.message,
   ];
   if (p.fixHint) argv.push('--hint', p.fixHint);
-  const proc = spawn(process.execPath, argv, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
-  closeSync(stderrFd);
-  proc.unref();
+  try {
+    const proc = spawn(process.execPath, argv, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
+    closeSync(stderrFd);
+    if (typeof proc.pid !== 'number') {
+      throw new Error(`spawnBrainFix: spawn returned no pid for run ${p.runId}`);
+    }
+    guardedWriteFile(join(forgeRoot, '_logs'), [logDirName, 'turn.pid'], `${proc.pid}\n`);
+    proc.unref();
+  } catch (err) {
+    // MEDIUM-2 — release on a routine spawn failure too: a kept stale claim
+    // would permanently brick every future dispatch for this runId.
+    releaseDispatchSlot(forgeRoot, logDirName);
+    throw err;
+  }
 }
 
 /** Read a brain-fix run's terminal state from its event log. `total`/
@@ -100,9 +118,14 @@ export function readBrainFixState(
   try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
   for (const line of raw.split('\n').reverse()) {
     if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean; total?: number; clearedCount?: number; ceilingHit?: unknown; spendUnknown?: unknown } };
+    let ev: { event_type?: string; message?: string; metadata?: { status?: string; cleared?: boolean; total?: number; clearedCount?: number; ceilingHit?: unknown; spendUnknown?: unknown } };
     try { ev = JSON.parse(line); } catch { continue; }
     if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
+      // HIGH-7 — the crash path's `end` (after its `error` event) now
+      // arrives FIRST in this reversed scan; read its `status: 'failed'`
+      // marker before the cleared/not-cleared shape below, or a crash
+      // misreads as completed-but-unresolved.
+      if (ev.metadata?.status === 'failed') return { state: 'failed', cleared: false };
       const cleared = ev.metadata?.cleared === true;
       const total = ev.metadata?.total;
       const clearedCount = ev.metadata?.clearedCount;
@@ -333,9 +356,14 @@ import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
  * supplies (`apps/forge/routes.ts` via `knowledgeRoutes(deps)`) rather than
  * this package importing it. Same shape and reason as `createKbCreateHandler`.
  */
-export function createKbMaintenanceHandler(deps: { runFixTurn: KbDrainRunFixTurnFn }) {
+export function createKbMaintenanceHandler(deps: {
+  runFixTurn: KbDrainRunFixTurnFn;
+  /** HIGH-1 — threaded to `spawnBrainFix`'s claim; required, so no caller
+   *  can dispatch without the liveness check. */
+  isTurnAlive: (pid: number, ownershipMark: string) => boolean;
+}) {
   return (req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string) =>
-    handleKbMaintenance(req, res, ctx, rawUrl, method, deps.runFixTurn);
+    handleKbMaintenance(req, res, ctx, rawUrl, method, deps.isTurnAlive, deps.runFixTurn);
 }
 
 export async function handleKbMaintenance(
@@ -344,6 +372,7 @@ export async function handleKbMaintenance(
   ctx: RouteContext,
   rawUrl: string,
   method: string,
+  isTurnAlive: (pid: number, ownershipMark: string) => boolean,
   runFixTurn?: KbDrainRunFixTurnFn,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
@@ -436,16 +465,30 @@ export async function handleKbMaintenance(
         if (!guardedTarget.ok || !guardedTarget.exists) {
           sendJson(res, 400, { error: 'file must be an absolute path under brain/' }, origin); return true;
         }
-        const runId = `${kbId}-${Date.now().toString(36)}`;
+        // HIGH-1 — same active-kb-job gate op=index/drain/consolidate use:
+        // a per-finding agent fix must not race a live drain/consolidate.
+        const fixAgentActiveJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+        if (fixAgentActiveJob) {
+          sendJson(res, 409, { error: activeJobReason(fixAgentActiveJob), runId: fixAgentActiveJob.runId }, origin);
+          return true;
+        }
+        // `randomRunSuffix` (@forge/kernel) — two mints in one ms never collide.
+        const runId = `${kbId}-${Date.now().toString(36)}-${randomRunSuffix()}`;
         try {
           // Pass the guard's OWN realPath, never the caller's original `abs`
           // string — reusing the caller's string after validating it leaves
           // a TOCTOU window open for no reason; resolveGuardedPath already
           // paid for the realpath walk, so its output is what gets forwarded
           // to the spawned process.
-          spawnBrainFix(ctx.forgeRoot, { kbId, file: guardedTarget.realPath, check, kind, fixHint, message, runId });
+          spawnBrainFix(ctx.forgeRoot, { kbId, file: guardedTarget.realPath, check, kind, fixHint, message, runId }, isTurnAlive);
         } catch (err) {
-          sendJson(res, 500, { error: `failed to dispatch agent fix: ${sanitizeError(err)}` }, origin); return true;
+          // HIGH-1 — spawnBrainFix now claims a dispatch slot before it
+          // spawns and can throw DispatchInFlight; map it to 409 like every
+          // other caller of the seam, falling back to the existing 500.
+          if (!sendIfDispatchInFlight(res, err, origin)) {
+            sendJson(res, 500, { error: `failed to dispatch agent fix: ${sanitizeError(err)}` }, origin);
+          }
+          return true;
         }
         sendJson(res, 200, { op: 'fix-agent', ok: true, runId }, origin);
         return true;
@@ -542,7 +585,9 @@ export async function handleKbMaintenance(
           return true;
         }
 
-        const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
+        // `randomRunSuffix` — two mints in one ms never collide; it sits
+        // AFTER the timestamp, so W6-B14's lexical sort below is unaffected.
+        const runId = `${kbId}-consolidate-${Date.now().toString(36)}-${randomRunSuffix()}`;
         // W6-B14: stake out this run's log dir SYNCHRONOUSLY, before the
         // fire-and-forget work below ever runs — `runBrainConsolidateNow`
         // only creates `_logs/_brainfix-<runId>/` itself once it reaches its

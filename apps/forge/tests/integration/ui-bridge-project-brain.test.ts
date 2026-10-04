@@ -5,7 +5,7 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -75,6 +75,70 @@ test('abandon transitions the session to abandoned', async () => {
   assert.equal(r.status, 200);
   const sessions = (await getJson('/api/project-brain/sessions')).sessions as Array<{ session_id: string; phase: string }>;
   assert.equal(sessions.find((s) => s.session_id === sessionId)?.phase, 'abandoned');
+});
+
+// ---------------------------------------------------------------------------
+// Row 206 (forge-8vfn.8.5.56) — the dispatch-site sweep's phase gate: brief
+// and approve each transition/spawn only from their own awaited phase.
+// abandon never spawns and keeps its wider contract — callable from any
+// non-terminal phase (the test above pins abandon succeeding from `briefing`).
+// ---------------------------------------------------------------------------
+
+test('row 206: a SECOND /api/project-brain/brief after the first already advanced to analyzing -> 409, no re-spawn, status untouched', async () => {
+  const started = await post('/api/project-brain/start', { project: PROJECT });
+  const sessionId = started.json.sessionId as string;
+  const first = await post('/api/project-brain/brief', { project: PROJECT, sessionId, brief: 'first' });
+  assert.equal(first.status, 200);
+
+  const second = await post('/api/project-brain/brief', { project: PROJECT, sessionId, brief: 'second' });
+  assert.equal(second.status, 409, JSON.stringify(second.json));
+  assert.match(String(second.json.error), /analyzing/);
+
+  const sessions = (await getJson('/api/project-brain/sessions')).sessions as Array<{ session_id: string; phase: string; prompt: string }>;
+  const mine = sessions.find((s) => s.session_id === sessionId);
+  assert.equal(mine?.phase, 'analyzing', 'the refused second brief must not disturb the phase the first brief already set');
+  assert.equal(mine?.prompt, 'first', 'the refused second brief must not overwrite the first brief\'s prompt');
+});
+
+test('row 206: /api/project-brain/brief while still "briefing" (no prior brief) is UNCHANGED — still 200', async () => {
+  const started = await post('/api/project-brain/start', { project: PROJECT });
+  const sessionId = started.json.sessionId as string;
+  const r = await post('/api/project-brain/brief', { project: PROJECT, sessionId, brief: 'x' });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+});
+
+test('row 206: /api/project-brain/approve while still "briefing" (never reached awaiting-review) -> 409, no transition, no spawn', async () => {
+  const started = await post('/api/project-brain/start', { project: PROJECT });
+  const sessionId = started.json.sessionId as string;
+  const r = await post('/api/project-brain/approve', { project: PROJECT, sessionId });
+  assert.equal(r.status, 409, JSON.stringify(r.json));
+  const sessions = (await getJson('/api/project-brain/sessions')).sessions as Array<{ session_id: string; phase: string }>;
+  assert.equal(sessions.find((s) => s.session_id === sessionId)?.phase, 'briefing', 'a refused approve must not transition the session');
+});
+
+test('row 206: a SECOND /api/project-brain/approve after the first already advanced to committing -> 409, no re-spawn', async () => {
+  const started = await post('/api/project-brain/start', { project: PROJECT });
+  const sessionId = started.json.sessionId as string;
+  // Drive the session to awaiting-review by hand (no real agent runs in this
+  // NO_SPAWN suite) — mirrors how the demo/instructions fixtures seed a
+  // mid-flight phase directly rather than running a real turn.
+  const dir = join(forgeRoot, 'projects', PROJECT, '_project-brain', sessionId);
+  const status = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ ...status, phase: 'awaiting-review' }));
+
+  const first = await post('/api/project-brain/approve', { project: PROJECT, sessionId });
+  assert.equal(first.status, 200, JSON.stringify(first.json));
+
+  const second = await post('/api/project-brain/approve', { project: PROJECT, sessionId });
+  assert.equal(second.status, 409, JSON.stringify(second.json));
+  assert.match(String(second.json.error), /committing/);
+});
+
+test('row 206: /api/project-brain/abandon from "briefing" is STILL allowed (unchanged, abandon never spawns so carries no row-206 exposure)', async () => {
+  const started = await post('/api/project-brain/start', { project: PROJECT });
+  const sessionId = started.json.sessionId as string;
+  const r = await post('/api/project-brain/abandon', { project: PROJECT, sessionId });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
 });
 
 test('start without project → 400', async () => {

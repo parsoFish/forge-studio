@@ -278,17 +278,22 @@ test('runAgent (one-shot, thrown error mid-stream): the SessionEnd hook still fi
     assert.equal(fires.length, 1, `expected exactly one hook.fire event even on error, got ${JSON.stringify(fires)}`);
     assert.equal((fires[0]!.metadata as Record<string, unknown>)['outcome'], 'ran');
 
-    // Documented, pre-existing asymmetry (unchanged by this fix): the RUN's
-    // own `end` event (skill: the agent's slug) is never reached on a thrown
-    // spawn error — only a `start` was emitted before the throw. The hook
-    // dispatch itself still logs its own start/end bookkeeping (skill:
-    // `hook:<id>`, `runHookScriptAsync`'s pre/post-spawn logging) — that is
-    // unrelated and expected. This fix's guarantee is scoped to the
-    // hook.fire dispatch, not to inventing a new `end`-on-error event for the
-    // run itself.
+    // Row 206 follow-on (T1, mid-session addition) — every start gets
+    // exactly one end: the RUN's own `end` event fires naming the thrown
+    // error, before the throw propagates. The hook dispatch's own start/end
+    // bookkeeping (skill: `hook:<id>`) is unrelated and unaffected.
     const runEvents = events.filter((e) => e.skill === 'session-end-agent');
     assert.ok(runEvents.some((e) => e.event_type === 'start'), "expected the run's own start event");
-    assert.ok(!runEvents.some((e) => e.event_type === 'end'), "the run's own end event must never be emitted on a thrown spawn error");
+    assert.equal(
+      runEvents.filter((e) => e.event_type === 'end').length, 1,
+      "the run's own end event must fire EXACTLY once, even on a thrown spawn error — no end at all misreads as perpetually in flight, two ends is a double-count",
+    );
+    const runEnd = runEvents.find((e) => e.event_type === 'end');
+    assert.match(
+      String((runEnd?.metadata as Record<string, unknown> | undefined)?.error),
+      /simulated spawn failure mid-stream/,
+      'the end event must carry the thrown error',
+    );
   } finally {
     restoreEnv();
     cleanupAll();

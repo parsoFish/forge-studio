@@ -56,6 +56,8 @@ import {
   loadConfig,
   resolveProjectsDir,
   PROJECT_ID_RE,
+  sendIfDispatchInFlight,
+  randomRunSuffix,
   type StudioContext,
   type RouteContext,
 } from '@forge/kernel';
@@ -268,12 +270,17 @@ export function makePreflightWriteHandlers(deps: PreflightWriteDeps): {
         sendJson(res, 200, { ok: true, resolution: 'agent', route: cls.route, fixHint: cls.fixHint }, origin);
         return true;
       }
-      // USER-tier — spawn the generic preflight-fix agent with the operator's decision.
-      const runId = `${id}-${clauseId}-${Date.now().toString(36)}`;
+      // USER-tier — spawn the generic preflight-fix agent with the operator's
+      // decision. `randomRunSuffix` — two mints in one ms never collide.
+      const runId = `${id}-${clauseId}-${Date.now().toString(36)}-${randomRunSuffix()}`;
       try {
         deps.spawnPreflightFix(ctx.forgeRoot, { project: id, clause: clauseId, instruction, detail: cls.detail, runId });
       } catch (err) {
-        sendJson(res, 500, { error: `failed to dispatch preflight-fix: ${sanitizeError(err)}` }, origin);
+        // HIGH-1 — spawnPreflightFix claims before it spawns and can throw
+        // DispatchInFlight; map to 409 like every other caller of the seam.
+        if (!sendIfDispatchInFlight(res, err, origin)) {
+          sendJson(res, 500, { error: `failed to dispatch preflight-fix: ${sanitizeError(err)}` }, origin);
+        }
         return true;
       }
       sendJson(res, 200, {

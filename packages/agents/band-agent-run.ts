@@ -12,43 +12,36 @@
  * isolation surface that keeps PARITY: it runs the SAME pipeline function the
  * flow's band executor runs, against an EXISTING initiative's worktree, so a
  * standalone run produces the same artifacts a flow run does (the diagram's
- * ship-both principle). developer-ralph's standalone unit is `runDeveloperLoop`
- * (the dev node); this module covers the two one-shot band pipelines.
+ * ship-both principle).
  *
  * ISOLATION (R4-10-F3 review, 2026-08-03). A standalone run must NOT corrupt the
  * initiative's real cycle:
  *   - It runs under the dispatch `runId`, not the initiative's `cycle_id`: the
- *     pipeline's events + `_logs/<runId>/artifacts/` (demo-fix-spec /
- *     review-findings) land under the runId — so the bridge's run-status endpoint
- *     (which keys on runId) resolves the run, and the real cycle's authoritative
- *     event log + artifacts are never appended to / overwritten.
+ *     pipeline's events + `_logs/<runId>/artifacts/` land under the runId —
+ *     so the bridge's runId-keyed run-status endpoint resolves the run, and
+ *     the real cycle's authoritative event log + artifacts stay untouched.
  *   - It REFUSES an in-flight (or pending) initiative — a live scheduler cycle
  *     owns that worktree; a second writer on the same `.git` index would race /
- *     clobber it. Only terminal-ish states with a settled worktree
- *     (ready-for-review / failed / done / merged) are runnable.
+ *     clobber it. Only terminal-ish, settled states (ready-for-review /
+ *     failed / done / merged) are runnable.
  *   - `initiativeId` is validated (it is joined into a manifest path) and
- *     `worktree_path` is bounds-checked (a tampered manifest can't redirect the
- *     spawn cwd / git target outside the forge roots).
- * The initiative's demo bundle (demo.json/DEMO.md at `demo/<initiativeId>/`) is
- * still authored on its own branch — a standalone demo re-run legitimately
- * refreshes the initiative's demo; only the cross-cycle `_logs` record is isolated.
- * NO gate/CI runs here (ADR-036 posture, same as `dispatchAgentRun`).
+ *     `worktree_path` is bounds-checked (a tampered manifest can't redirect
+ *     the spawn cwd / git target outside the forge roots).
+ * The initiative's demo bundle still authors on its own branch — a standalone
+ * demo re-run legitimately refreshes it; only the cross-cycle `_logs` record
+ * is isolated. NO gate/CI runs here (ADR-036 posture, same as `dispatchAgentRun`).
  *
  * THE PORT, AND WHY IT IS NOT `PhaseExecutor` (measured 2026-09-03, M4-agents).
  * This package is rank 3; the two pipelines are `@forge/factory` (rank 7) and the
- * queue/manifest readers are `@forge/flows` (rank 6). None of the three may be
- * imported here, so all three arrive as `BandAgentDeps`, bound at
- * `apps/forge/cli.ts`. The plan named `packages/kernel/ports.ts`'s
- * `PhaseExecutor` for the pipelines; it does not fit and was not forced.
- * `PhaseExecutor.run` returns `CycleOutcome`, which is
- * `'merged' | 'pr-open' | 'ready-for-review'` (`packages/contracts/index.ts:138`)
- * — a whole-cycle verdict. What crosses this seam is a PIPELINE status
- * (`complete` / `complete-with-misses` / `failed`), which the run's terminal
- * `end` event, the CLI's summary line and three tests all read. Routing it
- * through `PhaseExecutor` would either discard that status or require a cast
- * that lies about the value (COMMON §15.66). So the port is declared here, at
- * the package that owns the seam (ruling 59's shape: the deps type belongs to
- * the package whose surface needs it), and it is narrow: one call, one status.
+ * queue/manifest readers are `@forge/flows` (rank 6) — none importable here, so
+ * all three arrive as `BandAgentDeps`, bound at `apps/forge/cli.ts`.
+ * `PhaseExecutor.run` returns a whole-cycle `CycleOutcome`
+ * (`'merged' | 'pr-open' | 'ready-for-review'`); what crosses THIS seam is a
+ * PIPELINE status (`complete` / `complete-with-misses` / `failed`), which the
+ * run's terminal `end` event, the CLI summary and three tests all read.
+ * Routing it through `PhaseExecutor` would discard that status or need a
+ * lying cast (COMMON §15.66) — so the port is declared here, at the package
+ * that owns the seam (ruling 59), narrow: one call, one status.
  *
  * What did NOT leave: every guard. The initiative-id charset check, the
  * in-flight refusal and the worktree bounds check stay in this module — a carve
@@ -59,7 +52,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 
-import { createLogger, guardedFile, type EventLogger } from '@forge/kernel';
+import { createLogger, guardedFile, errorEndMetadata, type EventLogger } from '@forge/kernel';
 import { loadAgentDefinition } from './studio/agent-registry.ts';
 import { skillPath } from './skill-path.ts';
 import { resolveBandGuard } from './agent-bands.ts';
@@ -77,13 +70,10 @@ const SAFE_INITIATIVE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export type BandPipelineKind = 'review';
 
-/**
- * The six queue state directories this surface reads. Declared with every field
- * REQUIRED and by name, so the real `getPaths` from `@forge/flows`
- * satisfies it structurally at the assembly site and a rename there breaks the
- * repo-wide typecheck rather than passing a fake in this package's own tests
- * (COMMON §15.71).
- */
+/** The six queue state directories this surface reads. Declared with every
+ *  field REQUIRED and by name, so the real `getPaths` from `@forge/flows`
+ *  satisfies it structurally at the assembly site and a rename there breaks
+ *  the repo-wide typecheck rather than passing a fake here (COMMON §15.71). */
 export type BandQueuePaths = {
   pending: string;
   inFlight: string;
@@ -186,12 +176,10 @@ function assertWorktreeInBounds(worktreePath: string, forgeRoot: string): void {
   }
 }
 
-/**
- * Locate an initiative's manifest across the queue and parse the fields the band
- * pipelines need. Throws a clear boundary error when the initiative isn't in the
- * queue, is owned by a LIVE cycle (in-flight / pending), or its worktree is gone
- * / out of bounds.
- */
+/** Locate an initiative's manifest across the queue and parse the fields the
+ *  band pipelines need. Throws a clear boundary error when the initiative
+ *  isn't in the queue, is owned by a LIVE cycle, or its worktree is gone /
+ *  out of bounds. */
 function resolveInitiativeContext(
   initiativeId: string,
   queueRoot: string,
@@ -249,10 +237,9 @@ function resolveInitiativeContext(
   };
 }
 
-/**
- * Run one band-guard node agent standalone through its FLOW pipeline (parity),
- * against an existing initiative's settled worktree. Isolated under `runId`.
- */
+/** Run one band-guard node agent standalone through its FLOW pipeline
+ *  (parity), against an existing initiative's settled worktree, isolated
+ *  under `runId`. */
 export async function runBandAgentStandalone(
   opts: RunBandAgentStandaloneOpts,
   deps: BandAgentDeps,
@@ -304,22 +291,34 @@ export async function runBandAgentStandalone(
     metadata: { agent_slug: opts.slug, standalone: true, initiative_id: opts.initiativeId },
   });
 
-  const result = await deps.runPipeline({
-    kind,
-    input: {
-      initiativeId: opts.initiativeId,
-      worktreePath: ctx.worktreePath,
-      cycleId: opts.runId,
-      logsRoot,
-      ...(ctx.costBudgetUsd === undefined ? {} : { costBudgetUsd: ctx.costBudgetUsd }),
-      ...(ctx.projectRepoPath ? { projectName: basename(ctx.projectRepoPath) } : {}),
-      changeClass: ctx.changeClass,
-      forgeRoot,
-    },
-    logger,
-    queryFn: opts.queryFn,
-    agentDef,
-  });
+  // Row 206 (MEDIUM-4) — every `start` gets exactly one `end`; a throwing
+  // `deps.runPipeline` must not skip past the `end` below unanswered.
+  let result: BandPipelineOutcome;
+  try {
+    result = await deps.runPipeline({
+      kind,
+      input: {
+        initiativeId: opts.initiativeId,
+        worktreePath: ctx.worktreePath,
+        cycleId: opts.runId,
+        logsRoot,
+        ...(ctx.costBudgetUsd === undefined ? {} : { costBudgetUsd: ctx.costBudgetUsd }),
+        ...(ctx.projectRepoPath ? { projectName: basename(ctx.projectRepoPath) } : {}),
+        changeClass: ctx.changeClass,
+        forgeRoot,
+      },
+      logger,
+      queryFn: opts.queryFn,
+      agentDef,
+    });
+  } catch (err) {
+    base.emit({
+      initiative_id: opts.initiativeId, phase: 'orchestrator', skill: opts.slug, event_type: 'end',
+      input_refs: [], output_refs: [], cost_usd: costUsd,
+      metadata: { agent_slug: opts.slug, standalone: true, kind, ...errorEndMetadata(err) },
+    });
+    throw err;
+  }
 
   base.emit({
     initiative_id: opts.initiativeId,
@@ -344,15 +343,14 @@ export type StandaloneBandDispatch =
  * The `forge agent dispatch <band-slug>` branch, in one place: the usage
  * refusal, the missing-binding refusal, the run, and the summary line.
  *
- * Two refusals with deliberately different shapes. A missing
+ * Two refusals, deliberately different shapes. A missing
  * `--input initiative=<id>` is an OPERATOR mistake — `{ ok: false }`, so the
- * caller prints usage and exits 2 like every other argument failure, before the
- * run exists. An absent `band` binding is a BUILD mistake — it throws, so the
- * caller's catch records the run's terminal failure marker (bead 5.38: a
- * requested run that cannot proceed still owes the bridge a terminus) and exits
- * 1. Neither ever falls through to the generic dispatch: that would spawn the
- * bare SKILL.md with none of the pipeline's bands and report success, which is
- * the weaker-artifacts failure this whole module exists to prevent.
+ * caller prints usage and exits 2, before the run exists. An absent `band`
+ * binding is a BUILD mistake — it throws, so the caller's catch records the
+ * run's terminal failure marker (bead 5.38) and exits 1. Neither falls
+ * through to the generic dispatch: that would spawn the bare SKILL.md with
+ * none of the pipeline's bands and report success — the weaker-artifacts
+ * failure this module exists to prevent.
  */
 export async function dispatchStandaloneBand(
   args: { slug: string; initiativeId: string | undefined; runId: string; forgeRoot: string },

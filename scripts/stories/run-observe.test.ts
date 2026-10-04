@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { collectSpendDirs, spendSoFar, readDispatchSnapshot } from './run-observe.mjs';
+import { collectSpendDirs, spendSoFar, readDispatchSnapshot, agentParitySoFar } from './run-observe.mjs';
 import { collectAgentRuns } from './reap.mjs';
 
 function root() {
@@ -273,5 +273,79 @@ describe('spendSoFar prints the UNMEASURED classifier’s arm, threaded across c
     spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 1', unmeasuredSnapshots: new Map(), snapshotSeams: seams });
     const second = spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 2', unmeasuredSnapshots: new Map(), snapshotSeams: seams });
     assert.match(second.lines.join('\n'), /IN FLIGHT/, 'a fresh Map has no memory of call 1, so call 2 reads as growth from zero again');
+  });
+});
+
+// Row 206 (bead `forge-8vfn.8.5.56`) — the run-end parity judgement.
+// `loadRegisteredSessionKindIds` (session-kind-registry.mjs) reads
+// `<root>/studio/session-kinds.yaml` directly, so every case here seeds an
+// empty registry rather than stub the loader: none of these fixtures is a
+// session channel, and a real empty-sequence YAML is cheap to write.
+function rootWithEmptyRegistry() {
+  const r = root();
+  mkdirSync(join(r, 'studio'), { recursive: true });
+  writeFileSync(join(r, 'studio', 'session-kinds.yaml'), '[]\n');
+  return r;
+}
+
+describe('agentParitySoFar — row 206 (bead forge-8vfn.8.5.56)', () => {
+  test('a healthy standalone dispatch (one start, one end) is ok, nothing reaped', () => {
+    const r = rootWithEmptyRegistry();
+    const dir = dispatch(r, '_agent-onboarding-agent-x');
+    writeFileSync(join(dir, 'events.jsonl'), [
+      JSON.stringify({ event_id: 'EV_1', event_type: 'start', skill: 'onboarding-agent' }),
+      JSON.stringify({ event_id: 'EV_2', event_type: 'end', skill: 'onboarding-agent' }),
+    ].join('\n') + '\n');
+    const { verdict } = agentParitySoFar({ root: r, startedMs: 0, reapedDirs: new Set() });
+    assert.equal(verdict.ok, true);
+  });
+
+  test('two starts with no end between — the row-202 shape — is a double-start violation naming both event ids', () => {
+    const r = rootWithEmptyRegistry();
+    const dir = dispatch(r, '_agent-onboarding-agent-y');
+    writeFileSync(join(dir, 'events.jsonl'), [
+      JSON.stringify({ event_id: 'EV_a', event_type: 'start', skill: 'onboarding-agent' }),
+      JSON.stringify({ event_id: 'EV_b', event_type: 'start', skill: 'onboarding-agent' }),
+      JSON.stringify({ event_id: 'EV_c', event_type: 'end', skill: 'onboarding-agent' }),
+      JSON.stringify({ event_id: 'EV_d', event_type: 'end', skill: 'onboarding-agent' }),
+    ].join('\n') + '\n');
+    const { verdict, lines } = agentParitySoFar({ root: r, startedMs: 0, reapedDirs: new Set() });
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.violations.length, 1);
+    assert.equal(verdict.violations[0].kind, 'double-start');
+    assert.deepEqual(verdict.violations[0].eventIds, ['EV_a', 'EV_b']);
+    assert.ok(lines.some((l) => l.includes('PRODUCT RED') && l.includes('EV_a') && l.includes('EV_b')));
+  });
+
+  // MEDIUM-11 (row 206 follow-on) — `agentParitySoFar` reads `.unknown`, so a
+  // channel whose `events.jsonl` carries a torn line (or cannot be read at
+  // all) never judges `ok` on whatever partial rows DID
+  // parse — an unmeasured channel is never a clean pass.
+  test('a torn/unparseable events.jsonl line is a product-red `unmeasured` violation, end to end through agentParitySoFar', () => {
+    const r = rootWithEmptyRegistry();
+    const dir = dispatch(r, '_agent-onboarding-agent-torn');
+    writeFileSync(join(dir, 'events.jsonl'), [
+      JSON.stringify({ event_id: 'EV_1', event_type: 'start', skill: 'onboarding-agent' }),
+      'this is not valid json at all',
+      JSON.stringify({ event_id: 'EV_2', event_type: 'end', skill: 'onboarding-agent' }),
+    ].join('\n') + '\n');
+    const { verdict, lines } = agentParitySoFar({ root: r, startedMs: 0, reapedDirs: new Set() });
+    assert.equal(verdict.ok, false);
+    const unmeasured = verdict.violations.find((v) => v.kind === 'unmeasured');
+    assert.ok(unmeasured, JSON.stringify(verdict.violations));
+    assert.equal(unmeasured.channel, dir);
+    assert.ok(lines.some((l) => l.includes('UNMEASURED') && l.includes(dir)));
+  });
+
+  test('a trailing unmatched start IS satisfied, never a product red, when the dir is in `reapedDirs` — T1 point 2', () => {
+    const r = rootWithEmptyRegistry();
+    const dir = dispatch(r, '_agent-onboarding-agent-z');
+    writeFileSync(join(dir, 'events.jsonl'), JSON.stringify({ event_id: 'EV_only', event_type: 'start', skill: 'onboarding-agent' }) + '\n');
+    const unreaped = agentParitySoFar({ root: r, startedMs: 0, reapedDirs: new Set() });
+    assert.equal(unreaped.verdict.ok, false, 'with no reap evidence, a trailing start is a plain violation');
+
+    const reaped = agentParitySoFar({ root: r, startedMs: 0, reapedDirs: new Set([dir]) });
+    assert.equal(reaped.verdict.ok, true, 'reapAgentRuns having signalled this exact dir excuses the trailing start');
+    assert.ok(reaped.lines.some((l) => l.includes(dir) && l.includes('harness')));
   });
 });

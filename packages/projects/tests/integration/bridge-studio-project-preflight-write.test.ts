@@ -22,6 +22,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { makePreflightWriteHandlers, classifyPreflightFixAgentClause, type PreflightWriteDeps } from '../../bridge-studio-project-preflight-write.ts';
 import type { RouteContext } from '@forge/kernel';
+import { DispatchInFlight } from '@forge/kernel';
 
 type Captured = { status: number | null; body: string };
 
@@ -301,6 +302,51 @@ test('fix-agent: a USER-tier clause (C1) spawns via the injected dep with the ru
     assert.equal(deps.calls[0]!.p.runId, body.runId);
     assert.equal(deps.calls[0]!.forgeRoot, forgeRoot);
   } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('HIGH-1 (row 206 follow-up): a DispatchInFlight thrown by spawnPreflightFix maps to 409, not the generic 500', async () => {
+  const { forgeRoot } = setup();
+  try {
+    const deps: PreflightWriteDeps = {
+      spawnPreflightFix: () => {
+        throw new DispatchInFlight(4242, 'demoproj-C1-fixed');
+      },
+    };
+    const { handleProjectPreflightFixAgent } = makePreflightWriteHandlers(deps);
+    const { res, captured } = mockRes();
+    const answered = await handleProjectPreflightFixAgent(
+      mockReq(), res, ctx(forgeRoot, { clauseId: 'C1', instruction: 'use npm test' }),
+      '/api/studio/projects/demoproj/preflight/fix-agent', 'POST',
+    );
+    assert.equal(answered, true);
+    assert.equal(captured.status, 409, `expected 409 (DispatchInFlight), got ${captured.status}: ${captured.body}`);
+    const body = JSON.parse(captured.body);
+    assert.equal(body.holderPid, 4242);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('HIGH-1: two fix-agent dispatches minted within the same millisecond (stubbed Date.now) get distinct runIds', async () => {
+  const { forgeRoot } = setup();
+  const realNow = Date.now;
+  try {
+    Date.now = () => 1_700_000_000_000;
+    const deps = fakeDeps();
+    const { handleProjectPreflightFixAgent } = makePreflightWriteHandlers(deps);
+    for (let i = 0; i < 2; i++) {
+      const { res } = mockRes();
+      await handleProjectPreflightFixAgent(
+        mockReq(), res, ctx(forgeRoot, { clauseId: 'C1', instruction: 'use npm test' }),
+        '/api/studio/projects/demoproj/preflight/fix-agent', 'POST',
+      );
+    }
+    assert.equal(deps.calls.length, 2);
+    assert.notEqual(deps.calls[0]!.p.runId, deps.calls[1]!.p.runId, 'two mints in the same millisecond must not collide');
+  } finally {
+    Date.now = realNow;
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });

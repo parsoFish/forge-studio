@@ -35,6 +35,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     broadcastInstructionsChanged: () => {},
     broadcastProjectBrainChanged: () => {},
     spawnAgentDispatch: () => {},
+    claimAgentDispatchSlot: () => {},
+    spawnClaimedAgentDispatch: () => {},
     newRunStamp: () => 'stamp',
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
     broadcastDemoChanged: () => {},
@@ -45,6 +47,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     // dispatch one unnoticed.
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     spawnAgentTurn: () => ({ ok: true, spawned: false }),
+    claimAgentTurnSlot: () => {},
+    spawnClaimedAgentTurn: () => ({ ok: true, spawned: false }),
     spawnAgentSpecs: {},
     safeParseJson: () => null,
     servedFileHeaders: () => ({}),
@@ -70,9 +74,22 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  // 36 since forge-mfv5.2.8 retired GET /api/demo-builder/fragment/…
-  assert.equal(table.length, 36, 'a route added or removed without updating this pin');
+  // 30: 36 since forge-mfv5.2.8 closed GET /api/demo-builder/fragment/…,
+  // minus 6 for the row 206 sweep (forge-8vfn.8.5.56): no forge-ui caller
+  // reaches a bespoke /api/instructions/{brief,answer,verdict} or
+  // /api/demo-builder/{brief,feedback,abandon} table entry.
+  assert.equal(table.length, 30, 'a route added or removed without updating this pin');
   assert.equal(claimant('GET', '/api/demo-builder/fragment/p/s/e'), null, 'the retired fragment route claims nothing');
+  for (const [method, deadUrl] of [
+    ['POST', '/api/instructions/brief'],
+    ['POST', '/api/instructions/answer'],
+    ['POST', '/api/instructions/verdict'],
+    ['POST', '/api/demo-builder/brief'],
+    ['POST', '/api/demo-builder/feedback'],
+    ['POST', '/api/demo-builder/abandon'],
+  ] as const) {
+    assert.equal(claimant(method, deadUrl), null, `${deadUrl}: no route claims this URL`);
+  }
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');
@@ -117,13 +134,12 @@ for (const [method, url, path] of ARCHITECT_ROUTES) {
   });
 }
 
+// Row 206 sweep (forge-8vfn.8.5.56): instructions has no bespoke /brief,
+// /answer or /verdict route (no forge-ui caller); only these three arms are pinned.
 const INSTRUCTIONS_ROUTES = [
   ['GET', '/api/instructions/sessions', '/api/instructions/sessions'],
   ['GET', '/api/instructions/file/mdtoc/s1/AGENTS.md', '/api/instructions/file/:project/:sessionId/*name'],
   ['POST', '/api/instructions/start', '/api/instructions/start'],
-  ['POST', '/api/instructions/brief', '/api/instructions/brief'],
-  ['POST', '/api/instructions/answer', '/api/instructions/answer'],
-  ['POST', '/api/instructions/verdict', '/api/instructions/verdict'],
 ] as const;
 
 for (const [method, url, path] of INSTRUCTIONS_ROUTES) {

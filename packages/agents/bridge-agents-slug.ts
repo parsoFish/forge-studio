@@ -35,7 +35,7 @@ import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
-  allowedOrigin, createLogger, guardedFile, sanitizeError, sendJson,
+  allowedOrigin, createLogger, guardedFile, sanitizeError, sendJson, sendIfDispatchInFlight,
   MAX_KICKOFF_COST_CEILING_USD, PROJECT_ID_RE, type RouteContext,
 } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
@@ -558,7 +558,9 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
     if (err instanceof MaterialsStagingError) {
       console.error(`POST /api/agents/:slug/run: materials staging failed: ${err.message}`);
     }
-    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    // LOW-5 — runId is freshly minted per call, so this is unreachable in
+    // practice; mapped anyway, as /api/architect/start already is.
+    if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }
   return true;
 };

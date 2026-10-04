@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
-import { allowedOrigin, sendJson, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
+import { allowedOrigin, sendJson, sendIfDispatchInFlight, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import {
@@ -319,7 +319,9 @@ export async function handleArchitectRoutes(
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, sessionId, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/start', sessionId) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      // Row 206 — a freshly-minted sessionId makes DispatchInFlight
+      // unreachable here in practice, mapped the same way anyway.
+      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -376,6 +378,11 @@ export async function handleArchitectRoutes(
         const priorRaw = guardedReadFile(ctx.projectsRoot, [...dirSegs, 'answers.json']);
         const prior = (priorRaw !== null ? ctx.safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
         round = prior.length + 1;
+        // Row 206 part (a) — claim BEFORE this write: the m7-e-r206-fixgate-s1
+        // capture is exactly this route writing `phase: 'interviewing'` and
+        // THEN finding the prior turn's exit window still live — a refused
+        // claim must leave answers.json/status.json untouched.
+        ctx.claimAgentTurnSlot(ctx.forgeRoot, 'architect', body.sessionId);
         if (
           guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
           guardedWriteStatus(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
@@ -386,11 +393,15 @@ export async function handleArchitectRoutes(
       } finally {
         if (release) await release().catch(() => {});
       }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
+      ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, round, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      // Row 206 — the lockfile mutex + awaiting-answers phase gate above
+      // already make DispatchInFlight unreachable here in practice (a second
+      // concurrent answer 409s on phase before it ever reaches the seam),
+      // mapped the same way anyway.
+      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -399,8 +410,19 @@ export async function handleArchitectRoutes(
   // re-run affordance (R4-11-T5). Re-invokes the EXISTING session's turn
   // as-is: unlike /api/architect/answer, no round is appended and no
   // answers.json write happens — the runner re-reads status.json fresh at
-  // turn start and resumes wherever it left off, so there's nothing to
-  // rewrite here beyond confirming the session exists before spawning.
+  // turn start and resumes wherever it left off.
+  //
+  // Row 206 (forge-8vfn.8.5.56) — this arm spawns only through two gates,
+  // mirroring /answer's own precedent exactly: (1) the SAME `proper-lockfile`
+  // mutex on `status.json`, so a concurrent rerun press is serialized
+  // against this read rather than racing it; (2) a phase gate — a session
+  // already at a TERMINAL phase (`LEGACY_SESSION_TERMINAL_PHASES['architect']`,
+  // the one shared table this kind's lifecycle derivation already reads) has
+  // nothing left to re-run, refused 409 rather than spawning a turn into a
+  // finished session. A LIVE turn is additionally refused by the seam itself
+  // (`DispatchInFlight`, mapped below) — this gate closes the OTHER gap: a
+  // stale rerun press landing after the session has already moved past
+  // where a re-run makes sense.
   if (method === 'POST' && url === '/api/architect/rerun') {
     try {
       const body = (await ctx.readBody()) as { project?: string; sessionId?: string };
@@ -418,16 +440,44 @@ export async function handleArchitectRoutes(
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      const status = guardedReadStatus(ctx.projectsRoot, dirSegs);
-      if (!status) {
+      // `guardedSessionDir` only proves CONTAINMENT, not existence (its
+      // create-mode is deliberate for a route that mints a new session dir —
+      // this one does not). An unknown-but-well-formed sessionId must still
+      // 404 here, BEFORE the lock attempt below: `proper-lockfile` requires
+      // its target to exist and throws otherwise, which the lock's own catch
+      // would otherwise misreport as "session is busy" rather than "not found".
+      if (!guardedReadStatus(ctx.projectsRoot, dirSegs)) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
+      }
+      const statusPath = join(dir, 'status.json');
+      let release: (() => Promise<void>) | null = null;
+      try {
+        release = await lockfile.lock(statusPath, { retries: { retries: 5, minTimeout: 50 } });
+      } catch {
+        sendJson(res, 409, { error: 'session is busy — try again' }, origin);
+        return true;
+      }
+      try {
+        const status = guardedReadStatus(ctx.projectsRoot, dirSegs);
+        if (!status) {
+          sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+          return true;
+        }
+        if (LEGACY_SESSION_TERMINAL_PHASES['architect'].has(status.phase)) {
+          sendJson(res, 409, { error: `session has already finished (phase: ${status.phase}) — nothing to re-run`, sessionId: body.sessionId }, origin);
+          return true;
+        }
+      } finally {
+        if (release) await release().catch(() => {});
       }
       ctx.spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/rerun', body.sessionId) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      // Row 206 — a LIVE turn is refused by the seam as DispatchInFlight,
+      // mapped to 409 here rather than the generic 500 below.
+      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }

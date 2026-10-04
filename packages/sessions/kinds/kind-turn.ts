@@ -53,7 +53,7 @@ import { resolve, join } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
-import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
+import { createLogger, guardedReadFile, resolveGuardedPath, errorEndMetadata, type EventLogger, type Phase } from '@forge/kernel';
 
 import { makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
 import { makeHeartbeatWriter } from '../heartbeat.ts';
@@ -398,28 +398,46 @@ export async function runKindTurn<
     writeKindStatus(variant, input.projectRoot, dirSegments, next);
   };
 
+  // Row 206 follow-on — every `start` gets exactly one `end`, including when
+  // a step throws (e.g. architect's cost-ceiling refusal inside
+  // `runDraftStep`). `result`/`stepError` are set by exactly one of the two
+  // branches; the `finally` below emits the ONE `end` either way, naming the
+  // thrown error when there is one. The throw (if any) is re-raised AFTER
+  // the finally has run, not from inside it — a throw inside a `finally`
+  // swaps out the original error for a new one rather than pairing the two.
   const step = variant.steps[status.phase];
-  const result = step
-    ? await step({ input, status, plumbing, writeStatus })
-    : variant.otherwise(status);
-
-  sink.flushIteration(1);
-  logger.emit({
-    initiative_id: initiativeId,
-    parent_event_id: startEv.event_id,
-    phase: variant.eventPhase,
-    skill: variant.eventSkill,
-    event_type: 'end',
-    input_refs: [],
-    output_refs: result.wrote,
-    message: `${variant.eventLabel} end (phase=${result.phase})`,
-    metadata: {
-      session_id: input.sessionId,
-      phase: result.phase,
-      ...(variant.endMetadata?.(result) ?? {}),
-    },
-  });
-  return result;
+  let result: R | undefined;
+  let stepError: unknown;
+  try {
+    result = step
+      ? await step({ input, status, plumbing, writeStatus })
+      : variant.otherwise(status);
+  } catch (err) {
+    stepError = err;
+  } finally {
+    sink.flushIteration(1);
+    logger.emit({
+      initiative_id: initiativeId,
+      parent_event_id: startEv.event_id,
+      phase: variant.eventPhase,
+      skill: variant.eventSkill,
+      event_type: 'end',
+      input_refs: [],
+      output_refs: result?.wrote ?? [],
+      message: stepError !== undefined
+        ? `${variant.eventLabel} end (error)`
+        : `${variant.eventLabel} end (phase=${result!.phase})`,
+      metadata: {
+        session_id: input.sessionId,
+        phase: stepError !== undefined ? status.phase : result!.phase,
+        ...(stepError !== undefined
+          ? errorEndMetadata(stepError)
+          : (variant.endMetadata?.(result!) ?? {})),
+      },
+    });
+  }
+  if (stepError !== undefined) throw stepError;
+  return result!;
 }
 
 /**

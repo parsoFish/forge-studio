@@ -422,9 +422,11 @@ describe('deriveSessionTranscript — W8-B3 sourcesFound + blank-opener rule (ON
   });
 
     it('W8-B3: a BLANK prompt.md produces NO turn (never an empty operator bubble), while still being reported as a source that exists', () => {
-    // Live shape, not invented: `/api/project-brain/brief`, `/api/instructions/
-    // brief` and `/api/demo-builder/brief` all write `body.brief ?? ''`, so an
-    // operator who skips the optional brief lands a zero-byte prompt.md.
+    // Live shape, not invented: `/api/project-brain/brief` and the generic
+    // question-form affordance (instructions/demo-builder's one write path
+    // for `brief`, since row 206's sweep) both write
+    // `body.brief ?? ''`, so an operator who skips the optional brief lands
+    // a zero-byte prompt.md.
     for (const body of ['', '   \n\t  \n']) {
       const dir = makeTmpDir('b3-blank-prompt');
       writeFileSync(join(dir, 'prompt.md'), body);

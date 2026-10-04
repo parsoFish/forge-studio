@@ -38,11 +38,14 @@ const SRC = readFileSync(
   'utf8',
 );
 
-/** Extract the POST /api/instructions/start handler block: from its route match
- *  to the next handler (POST /api/instructions/brief). */
+/** Extract the POST /api/instructions/start handler block: from its route
+ *  match to the end of the function. `/start` is the LAST arm in this
+ *  file — `/api/instructions/{brief,answer,verdict}` have no forge-ui
+ *  caller (row 206 sweep, forge-8vfn.8.5.56), so there is no next handler
+ *  to bound against. */
 function instructionsStartBlock(src: string): string {
   const startMarker = "url === '/api/instructions/start'";
-  const endMarker = "url === '/api/instructions/brief'";
+  const endMarker = 'return false;';
   const start = src.indexOf(startMarker);
   assert.ok(start >= 0, 'could not locate the /api/instructions/start handler');
   const end = src.indexOf(endMarker, start);

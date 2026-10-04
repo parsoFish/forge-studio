@@ -129,20 +129,17 @@ test('KB maintenance op=fix-agent is refuse/spawn-agent; op=lint|fix-auto|index 
 });
 
 test('the NO_SPAWN-guarded spawn routes are stub-actions via the spawn-helper mechanism (never a 409)', () => {
+  // Row 206 sweep (forge-8vfn.8.5.56): /api/instructions/{brief,answer,
+  // verdict} and /api/demo-builder/{brief,feedback,abandon} have no
+  // forge-ui caller; /api/demo-builder/lock is the one listed below.
   const spawnRoutes: Array<[string, string]> = [
     ['POST', '/api/architect/start'],
     ['POST', '/api/architect/answer'],
     ['POST', '/api/plan-verdict'],
     ['POST', '/api/runs/:id/gates/plan'],
-    ['POST', '/api/instructions/brief'],
-    ['POST', '/api/instructions/answer'],
-    ['POST', '/api/instructions/verdict'],
     ['POST', '/api/project-brain/brief'],
     ['POST', '/api/project-brain/approve'],
-    ['POST', '/api/demo-builder/brief'],
-    ['POST', '/api/demo-builder/feedback'],
     ['POST', '/api/demo-builder/lock'],
-    ['POST', '/api/demo-builder/abandon'],
     ['POST', '/api/studio/projects/:id/preflight/fix-agent'],
   ];
   for (const [method, route] of spawnRoutes) {

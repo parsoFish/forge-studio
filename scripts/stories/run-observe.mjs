@@ -11,6 +11,8 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { EMIT_FAILED_SIDECAR } from '@forge/sessions';
 import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict, classifyUnmeasuredDispatch, chargeBoundedTurns } from './spend.mjs';
 import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
+import { agentParityVerdict, describeAgentParity } from './agent-parity.mjs';
+import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs';
 import { join, basename } from 'node:path';
 
 /**
@@ -468,4 +470,37 @@ export function makeWaitSpendGuard({ root, startedMs, realSpawn, ceilingUsd, pol
       : Object.freeze({ breached: false, reason: null });
     return cached;
   };
+}
+
+/**
+ * Row 206 (bead `forge-8vfn.8.5.56`) — one run-level start closed by one
+ * run-level end, per agent channel this run launched.
+ *
+ * RUN-END ONLY, DELIBERATELY NEVER PER-BEAT. `spendSoFar` above is called at
+ * every beat boundary because a BREACH is a fact true the instant it happens.
+ * A `missing-end` is not: a channel still mid-turn at beat 4 is exactly what
+ * a healthy architect dispatch looks like at beat 4, and calling this at
+ * every beat would red every story with a still-running agent. The fact that
+ * decides a `missing-end` — was this channel's last open start closed by the
+ * harness's own reap, or did it simply never close — exists only once the
+ * run's own `reapAgentRuns` (scripts/stories/reap.mjs) has actually run, so
+ * this is called exactly once, after that reap, the same "read once, after
+ * the thing that would change the answer" rule `finalSpendHalt` already
+ * follows for the spend ledger.
+ *
+ * `reapedDirs` is `reap.reaped.map((r) => r.dir)` — the harness's OWN record
+ * of which channels it signalled, taken as data rather than re-derived (see
+ * `agent-parity.mjs`'s own header). A channel the reap SKIPPED (a provenance
+ * refusal, never a confirmed kill) is not in this set and is not excused.
+ *
+ * @param {{root: string, startedMs: number, reapedDirs: Set<string>}} args
+ * @returns {{verdict: ReturnType<typeof agentParityVerdict>, lines: string[]}}
+ */
+export function agentParitySoFar({ root, startedMs, reapedDirs }) {
+  const channels = collectSpendDirs(root, startedMs).map((dir) => ({ dir, rows: readRunEvents(dir) }));
+  const verdict = agentParityVerdict(channels, {
+    registeredSessionKindIds: loadRegisteredSessionKindIds(root),
+    reapedDirs,
+  });
+  return { verdict, lines: describeAgentParity(verdict) };
 }

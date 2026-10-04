@@ -446,25 +446,11 @@ test("TBL-instructions-brief-4: question-form (brief) with an over-8KB answer ->
   assert.equal(readPhase(sessionDir), 'briefing');
 });
 
-test("PARITY-instructions-brief: generic question-form at 'briefing' and the bespoke /api/instructions/brief route reach the SAME phase + prompt.md content", async () => {
-  const project = 'parityinstrbrief';
-  const bespokeId = freshSessionId();
-  const genericId = freshSessionId();
-  const bespokeDir = seedSession(project, '_instructions', bespokeId, { session_id: bespokeId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
-  const genericDir = seedSession(project, '_instructions', genericId, { session_id: genericId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
-
-  const bespokeRes = await postJson(`${bridgeUrl}/api/instructions/brief`, { project, sessionId: bespokeId, brief: 'Keep commits conventional.' });
-  assert.equal(bespokeRes.status, 200);
-  const genericRes = await postJson(affordanceUrl('instructions', genericId, 'briefing-question-form'), {
-    project,
-    answers: [{ question: 'Operator response', answer: 'Keep commits conventional.' }],
-  });
-  assert.equal(genericRes.status, 200);
-
-  assert.equal(readPhase(bespokeDir), readPhase(genericDir));
-  assert.equal(readPhase(genericDir), 'interviewing');
-  assert.equal(readFileSync(join(bespokeDir, 'prompt.md'), 'utf8'), readFileSync(join(genericDir, 'prompt.md'), 'utf8'));
-});
+// There is no `PARITY-instructions-brief` test: instructions has no
+// bespoke `/brief` route to compare the generic affordance against (row
+// 206 sweep, forge-8vfn.8.5.56 — no forge-ui caller). The TABLE TESTS
+// `TBL-instructions-brief-1..4` above pin the generic route's own
+// behaviour directly.
 
 // ===========================================================================
 // TABLE TEST — demo (question-form: brief; verdict: lock/abandon)
@@ -824,41 +810,13 @@ test('UNHANDLED-2: a valid, currently-derived next-turn affordance -> 501 Unhand
 // per-kind route reaches, for an equivalent sibling session
 // ===========================================================================
 
-test('PARITY-instructions: generic verdict-approve and the bespoke /api/instructions/verdict route reach the SAME phase', async () => {
-  const project = 'parityinstr';
-  const bespokeId = freshSessionId();
-  const genericId = freshSessionId();
-  const bespokeDir = seedSession(project, '_instructions', bespokeId, { session_id: bespokeId, project, phase: 'awaiting-verdict', round: 1, prompt: '' });
-  const genericDir = seedSession(project, '_instructions', genericId, { session_id: genericId, project, phase: 'awaiting-verdict', round: 1, prompt: '' });
-
-  const bespokeRes = await postJson(`${bridgeUrl}/api/instructions/verdict`, { project, sessionId: bespokeId, kind: 'approve' });
-  assert.equal(bespokeRes.status, 200);
-  const genericRes = await postJson(affordanceUrl('instructions', genericId, 'awaiting-verdict-verdict'), { project, verdict: 'approve' });
-  assert.equal(genericRes.status, 200);
-
-  assert.equal(readPhase(bespokeDir), readPhase(genericDir));
-  assert.equal(readPhase(genericDir), 'finalizing');
-});
-
-test('PARITY-demo-brief: generic question-form (brief) and the bespoke /api/demo-builder/brief route reach the SAME phase', async () => {
-  const project = 'paritydemobrief';
-  const bespokeId = freshSessionId();
-  const genericId = freshSessionId();
-  const bespokeDir = seedSession(project, '_demo', bespokeId, { session_id: bespokeId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
-  const genericDir = seedSession(project, '_demo', genericId, { session_id: genericId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
-
-  const bespokeRes = await postJson(`${bridgeUrl}/api/demo-builder/brief`, { project, sessionId: bespokeId, brief: 'match the bespoke route' });
-  assert.equal(bespokeRes.status, 200);
-  const genericRes = await postJson(affordanceUrl('demo', genericId, 'briefing-question-form'), {
-    project,
-    answers: [{ question: 'Operator response', answer: 'match the bespoke route' }],
-  });
-  assert.equal(genericRes.status, 200, `generic question-form expected 200, got ${genericRes.status}: ${await genericRes.text()}`);
-
-  assert.equal(readPhase(bespokeDir), readPhase(genericDir));
-  assert.equal(readPhase(genericDir), 'generating');
-  assert.equal(readStatus(bespokeDir).prompt, readStatus(genericDir).prompt);
-});
+// There is no `PARITY-instructions` or `PARITY-demo-brief` test: neither
+// `/api/instructions/verdict` nor `/api/demo-builder/brief` has a bespoke
+// route to compare the generic twin against (row 206 sweep,
+// forge-8vfn.8.5.56 — neither has a forge-ui caller). The TABLE TESTS above
+// pin each generic route's own behaviour directly. `PARITY-demo` below
+// covers the one case with a bespoke route still called from forge-ui:
+// `/api/demo-builder/lock`.
 
 test('PARITY-demo: generic verdict-approve and the bespoke /api/demo-builder/lock route reach the SAME phase', async () => {
   const project = 'paritydemo';

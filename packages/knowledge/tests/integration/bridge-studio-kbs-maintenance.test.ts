@@ -19,6 +19,7 @@ import { dispatchRoute } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 
 import { enqueueConsolidate } from '../../bridge-studio-kb-consolidate.ts';
+import { writeKbDrainStatus } from '../../kb-drain-store.ts';
 
 import {
   CONSOLIDATE_KB_ID,
@@ -63,6 +64,7 @@ const routes = knowledgeRoutes({
   sessionIsReadable: () => {
     throw new Error('unexpected session-readability probe call in this test');
   },
+  isTurnAlive: () => false,
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
@@ -184,6 +186,28 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses op=fix-agent with the typed 409, no r
   } finally {
     if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
     else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});
+
+test('HIGH-1 (row 206 follow-up): op=fix-agent refuses with 409 while a drain job is active for this kb, exactly as op=index/consolidate do, no run dispatched', async () => {
+  // `kbDrainRunIdsFor` requires the runId itself to start with `<kbId>-drain-`
+  // (bridge-studio-kb-drain-store.ts's own convention).
+  const runId = `cycles-drain-${Date.now()}`;
+  writeKbDrainStatus(forgeRoot, runId, {
+    kbId: 'cycles', state: 'running', round: 1, counts: { auto: 0, agent: 0, user: 0 },
+    perFinding: [], costUsd: 0, updatedAt: new Date().toISOString(), startedAt: new Date().toISOString(),
+    maxRounds: 5, maxCostUsd: 2,
+  });
+  try {
+    const { status, json } = await post('/api/studio/kbs/cycles/maintenance', {
+      op: 'fix-agent', file: join(forgeRoot, 'brain', 'cycles', 'themes', 'test-theme.md'),
+      check: 'checkSourceLinks', kind: 'links.broken',
+    });
+    assert.equal(status, 409, JSON.stringify(json));
+    assert.match(String(json['error']), /drain-to-green run is active/);
+    assert.equal(json['runId'], runId);
+  } finally {
+    rmSync(join(forgeRoot, '_logs', `_kb-drain-${runId}`), { recursive: true, force: true });
   }
 });
 

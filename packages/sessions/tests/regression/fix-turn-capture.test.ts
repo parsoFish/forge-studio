@@ -398,7 +398,7 @@ describe('ports 5-6 before/after evidence (no spawn-capture golden exists)', () 
    * that reached the `end` event anyway, or that skipped the gate, would change
    * all three; none of it is visible from the success arms.
    */
-  test('brain-fix, a throwing stream: error event, the gate still runs, no end event', async () => {
+  test('brain-fix, a throwing stream: error event, the gate still runs, exactly one end carrying the error', async () => {
     const { forgeRoot, themePath } = buildBrainFixture();
     try {
       const runId = 'capture-brainfix-crash';
@@ -420,9 +420,16 @@ describe('ports 5-6 before/after evidence (no spawn-capture golden exists)', () 
       });
 
       const scrub = makeScrubber([[themePath, '<THEME>'], [forgeRoot, '<ROOT>']]);
-      const events = readEvents(join(forgeRoot, '_logs'), `_brainfix-${runId}`, scrub) as Array<{ event_type?: string }>;
+      const events = readEvents(join(forgeRoot, '_logs'), `_brainfix-${runId}`, scrub) as Array<{ event_type?: string; metadata?: Record<string, unknown> }>;
       assert.ok(events.some((e) => e.event_type === 'error'), 'the crash must be recorded');
-      assert.equal(events.some((e) => e.event_type === 'end'), false, 'a crashed turn emits no end event');
+      // Row 206 (forge-8vfn.8.5.56) — every run-level start gets exactly one
+      // end. This end's metadata.status is 'failed' (MEDIUM-4's shared
+      // `errorEndMetadata` marker, @forge/kernel), naming the crash — it
+      // never claims completion.
+      const ends = events.filter((e) => e.event_type === 'end');
+      assert.equal(ends.length, 1, `a crashed turn emits exactly one end event, got ${JSON.stringify(ends)}`);
+      assert.equal(ends[0]!.metadata?.status, 'failed', "the end event's metadata.status must be 'failed', never claiming completion");
+      assert.match(String(ends[0]!.metadata?.error), /Error: pinned stream failure/, 'the end event must carry the thrown class + message');
       assert.equal(result.cleared, false);
       assert.ok(result.editAudit, 'a crashed turn is still audited — omitting the audit is not refusing the edit');
 

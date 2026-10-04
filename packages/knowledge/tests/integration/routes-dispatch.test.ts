@@ -62,6 +62,7 @@ const routes = knowledgeRoutes({
   sessionIsReadable: () => {
     throw new Error('unexpected session-readability probe call in this test');
   },
+  isTurnAlive: () => false,
 });
 
 type Captured = { status: number | null; body: string };

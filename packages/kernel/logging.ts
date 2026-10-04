@@ -283,3 +283,20 @@ export function writeProjectGroundFile(args: {
     projectRoot: args.projectRoot, relPaths: [args.segments.join('/')],
   });
 }
+
+/**
+ * Row 206 follow-on (MEDIUM-4, forge-8vfn.8.5.56) — the ONE error-end
+ * metadata shape every runner that terminates on a thrown error emits
+ * (`runAgent`/`runBandAgentStandalone` in @forge/agents, `runKindTurn`/
+ * `runFixTurn` in @forge/sessions): `status: 'failed'` is the marker a
+ * reader checks — `endMetaIndicatesFailure` (@forge/flows) already reads
+ * it — never the mere presence of an `end` event. `error` names the thrown
+ * value's class and message, falling back to `String(err)` for a non-Error
+ * throw.
+ */
+export function errorEndMetadata(err: unknown): { status: 'failed'; error: string } {
+  return {
+    status: 'failed',
+    error: err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err),
+  };
+}

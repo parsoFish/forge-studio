@@ -94,3 +94,7 @@ export * from './process-liveness.ts';
  *  (forge-8vfn.8.5.47, row 211) — it replaced row 208's PreToolUse
  *  Bash-command analysis, which misfired on a project commit. */
 export * from './forge-ref-guard-hook.ts';
+/** The ONE dispatch claim every detached-agent spawn seam shares
+ *  (`claimDispatchSlot`/`releaseDispatchSlot`), plus the run-id stamp
+ *  helpers (`newRunStamp`/`randomRunSuffix`) — row 206 (forge-8vfn.8.5.56). */
+export * from './dispatch-claim.ts';

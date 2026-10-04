@@ -643,6 +643,8 @@ export async function handleInstructionsAnswer(
   // own status read above — an await here reopens the double-spawn race; see
   // kb-cleanup's now-fixed `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) for
   // the shape a genuinely-awaited claim needs.
+  // Row 206 part (a) — claim BEFORE either write below.
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, 'instructions', sessionId);
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: recordedAnswers }], null, 2)) === null ||
     guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
@@ -651,7 +653,7 @@ export async function handleInstructionsAnswer(
     return;
   }
 
-  ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
+  ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastKindChanged('instructions');
   sendJson(res, 200, { ok: true, round, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
@@ -660,8 +662,10 @@ export async function handleInstructionsAnswer(
 // question-form — instructions' PRE-interview briefing checkpoint
 // (`briefing-question-form`, the phase `POST /api/instructions/start` lands
 // EVERY new session in — apps/forge/ui-bridge.ts:3193-3197 — without spawning the
-// agent). Mirrors `POST /api/instructions/brief` (apps/forge/ui-bridge.ts:3275):
-// writes `prompt.md` (NOT `answers.json` — a different on-disk target from
+// agent). This is the one write path for this phase (row 206 sweep,
+// forge-8vfn.8.5.56 — instructions has no bespoke `/brief` route; no
+// forge-ui caller): writes `prompt.md` (NOT `answers.json`
+// — a different on-disk target from
 // `handleInstructionsAnswer` above) and sets `status.prompt`/`round: 1`/
 // `phase: 'interviewing'`, then spawns the same turn.
 // ---------------------------------------------------------------------------
@@ -697,8 +701,10 @@ export async function handleInstructionsBrief(
     return;
   }
 
-  // SYNC INVARIANT: no await between this function's writes and the
-  // caller's own status read above — see this file's header note.
+  // Row 206 part (a) — claim BEFORE either write. SYNC INVARIANT: no await
+  // between this function's writes and the caller's own status read above —
+  // see this file's header note.
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, 'instructions', sessionId);
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
     guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
@@ -707,7 +713,7 @@ export async function handleInstructionsBrief(
     return;
   }
 
-  ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
+  ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastKindChanged('instructions');
   sendJson(res, 200, { ok: true, phase: 'interviewing', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
@@ -732,13 +738,15 @@ export async function handleInstructionsVerdict(
   verdict: 'approve' | 'reject',
 ): Promise<void> {
   const nextPhase = verdict === 'approve' ? 'finalizing' : 'rejected';
-  // SYNC INVARIANT: no await between the caller's status read and this
-  // write — see this file's header note.
+  // Row 206 part (a) — claim BEFORE this write. SYNC INVARIANT: no await
+  // between the caller's status read and this write — see this file's
+  // header note.
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, 'instructions', sessionId);
   if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: nextPhase }) === null) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
   }
-  ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
+  ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastKindChanged('instructions');
   sendJson(res, 200, { ok: true, phase: nextPhase, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }

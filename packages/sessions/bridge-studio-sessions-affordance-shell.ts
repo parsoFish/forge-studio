@@ -79,6 +79,17 @@ export type AffordanceRouteContext = StudioContext & {
    *  SAME `spawnAgentTurn` every bespoke per-kind route already calls, not a
    *  reimplementation. */
   spawnAgentTurn: (forgeRoot: string, agentId: LegacySpawnableAgentId, project: string, sessionId: string) => SpawnTurnOutcome;
+  /** Row 206 part (a) — the CLAIM half of `spawnAgentTurn` (`@forge/kernel`'s
+   *  `claimDispatchSlot` under it): call this BEFORE writing any session
+   *  state (status.json, answers.json, a revise's feedback.md, …), so a
+   *  refused claim (`DispatchInFlight`, thrown uncaught) leaves the write
+   *  un-made and the session dir retryable. Pair with `spawnClaimedAgentTurn`
+   *  below — never call `spawnAgentTurn` itself once a route has written
+   *  state this way, since that would claim a second time. */
+  claimAgentTurnSlot: (forgeRoot: string, agentId: LegacySpawnableAgentId, sessionId: string) => void;
+  /** The SPAWN half: assumes `claimAgentTurnSlot` already secured the slot
+   *  (or made the claim moot under dry-bridge/no-spawn) — NEVER claims again. */
+  spawnClaimedAgentTurn: (forgeRoot: string, agentId: LegacySpawnableAgentId, project: string, sessionId: string) => SpawnTurnOutcome;
   /** M4 ruling 86 — the real brain-fix turn, injected like `spawnAgentTurn`:
    *  knowledge declares the port (rank 2), sessions implements it (rank 4),
    *  the binding is at the assembly. DERIVED from `approveKbCleanup`'s own
@@ -103,6 +114,16 @@ export type AffordanceRouteContext = StudioContext & {
    *  field the context does not declare compiles and then reads `undefined` at
    *  runtime, which is §15.66's defect. */
   spawnAgentDispatch: (
+    forgeRoot: string, agentId: string, runId: string, project: string,
+    inputs: Record<string, string>, sessionDir: string, unused: undefined, projectsRoot: string,
+  ) => void;
+  /** Row 206 part (a) — the CLAIM half of `spawnAgentDispatch`, mirroring
+   *  `claimAgentTurnSlot` above for onboarding's brief (the one write path
+   *  that starts an agent RUN rather than a session turn). */
+  claimAgentDispatchSlot: (forgeRoot: string, agentId: string, runId: string) => void;
+  /** The SPAWN half: assumes `claimAgentDispatchSlot` already secured the
+   *  slot — NEVER claims again. */
+  spawnClaimedAgentDispatch: (
     forgeRoot: string, agentId: string, runId: string, project: string,
     inputs: Record<string, string>, sessionDir: string, unused: undefined, projectsRoot: string,
   ) => void;
@@ -282,6 +303,11 @@ export function handleGenericRevise(
   }
 
   const iterationBump = typeof status.iteration === 'number' ? { iteration: (status.iteration as number) + 1 } : {};
+  // Row 206 part (a) — claim BEFORE either write below: a refused claim
+  // (DispatchInFlight, thrown uncaught — the generic dispatcher's own outer
+  // catch maps it to 409) must leave feedback.md/status.json exactly as the
+  // operator last saw them, not half-applied to a turn that never spawned.
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, agentId, sessionId);
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'feedback.md'], feedback) === null ||
     guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: producer.phase, ...iterationBump }) === null
@@ -296,8 +322,9 @@ export function handleGenericRevise(
   // of sitting in a working phase that no turn will ever leave (the
   // `lastActivityMs === null` -> never-`stalled` hole in
   // packages/sessions/bridge-studio-lifecycle.ts). feedback.md deliberately stays: it is
-  // the operator's pending note, and the retry should carry it.
-  const spawn = ctx.spawnAgentTurn(ctx.forgeRoot, agentId, project, sessionId);
+  // the operator's pending note, and the retry should carry it. The claim
+  // above is already held, so this spawns UNDER it rather than re-claiming.
+  const spawn = ctx.spawnClaimedAgentTurn(ctx.forgeRoot, agentId, project, sessionId);
   if (!spawn.ok) {
     guardedWriteSessionStatus(projectsRoot, dirSegs, status);
     ctx.broadcastKindChanged(descriptor.id);

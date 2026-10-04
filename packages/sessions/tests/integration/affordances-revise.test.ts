@@ -161,26 +161,16 @@ test('C2-REV-3: revise with an over-cap feedback -> 400 naming the byte cap', as
   assert.equal(readPhase(sessionDir), 'awaiting-verdict');
 });
 
-test('C2-REV-4: PARITY — generic revise reaches the SAME phase + feedback.md the bespoke /api/instructions/verdict revise arm reaches', async () => {
-  const project = 'c2rev4';
-  const bespokeId = freshSessionId();
-  const genericId = freshSessionId();
-  const bespokeDir = seedSession(project, '_instructions', bespokeId, { session_id: bespokeId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
-  const genericDir = seedSession(project, '_instructions', genericId, { session_id: genericId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
-
-  const bespokeRes = await postJson('/api/instructions/verdict', { project, sessionId: bespokeId, kind: 'revise', feedback: 'Use pnpm.' });
-  assert.equal(bespokeRes.status, 200);
-  const genericRes = await postJson(affordanceUrl('instructions', genericId, 'awaiting-verdict-verdict'), { project, verdict: 'revise', feedback: 'Use pnpm.' });
-  assert.equal(genericRes.status, 200);
-
-  assert.equal(readPhase(genericDir), readPhase(bespokeDir));
-  assert.equal(readPhase(genericDir), 'drafting');
-  assert.equal(readFileSync(join(genericDir, 'feedback.md'), 'utf8'), readFileSync(join(bespokeDir, 'feedback.md'), 'utf8'));
-});
+// Row 206 (forge-8vfn.8.5.56) — no forge-ui caller reaches a bespoke
+// `/api/instructions/verdict` revise arm, so there is no bespoke side for a
+// PARITY test to compare against; `C2-REV-1..3` above pin the generic
+// route's own behaviour directly.
 
 // ---------------------------------------------------------------------------
-// revise — demo (parity with the bespoke /api/demo-builder/feedback route:
-// feedback.md + phase generating + iteration + 1)
+// revise — demo. No forge-ui caller reaches a bespoke
+// `/api/demo-builder/feedback` route (row 206, forge-8vfn.8.5.56); this
+// test pins the generic route's own behaviour directly: feedback.md +
+// phase generating + iteration + 1.
 // ---------------------------------------------------------------------------
 
 test('C2-REV-5: demo revise at awaiting-review -> 200, feedback.md written, phase -> generating, iteration incremented', async () => {

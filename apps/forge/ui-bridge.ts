@@ -64,11 +64,9 @@ import { handleRunTriggerRoutes } from './bridge-run-triggers.ts';
 import { handleReviewCommentRoutes } from './bridge-review-comments.ts';
 import {
   handleArchitect,
-  spawnAgentTurn,
-  spawnAgentDispatch,
-  SPAWN_AGENT_SPECS,
-  SAFE_INPUT_KEY_RE,
-  newRunStamp,
+  spawnAgentTurn, claimAgentTurnSlot, spawnClaimedAgentTurn,
+  spawnAgentDispatch, claimAgentDispatchSlot, spawnClaimedAgentDispatch,
+  SPAWN_AGENT_SPECS, SAFE_INPUT_KEY_RE, newRunStamp,
 } from './bridge-agent-dispatch.ts';
 import { handleReflect, safeParseJson } from './bridge-reflect.ts';
 import { readJson } from './bridge-http.ts';
@@ -418,7 +416,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     broadcastArchitectChanged: () => broadcast({ type: 'architect-list-changed' }),
     broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
     broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
-    spawnAgentDispatch,
+    spawnAgentDispatch, claimAgentDispatchSlot, spawnClaimedAgentDispatch,
     newRunStamp,
     safeInputKeyRe: SAFE_INPUT_KEY_RE,
     broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
@@ -427,7 +425,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     // These stay host-owned deliberately: `safeParseJson` is still called by
     // `handleReflect` and `servedFileHeaders` by `handleHttp`, so moving them
     // into the package would mint boundary rows in the wrong direction.
-    spawnAgentTurn,
+    spawnAgentTurn, claimAgentTurnSlot, spawnClaimedAgentTurn,
     spawnAgentSpecs: SPAWN_AGENT_SPECS,
     safeParseJson,
     servedFileHeaders,

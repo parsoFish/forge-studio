@@ -440,6 +440,33 @@ test('deriveNodeStatuses: a generic execAgent/runAgent node (start+end, phase:or
   assert.equal(statuses['orchestrator'], undefined, 'the orchestrator pseudo-node itself never materialises as a hex');
 });
 
+// ---------------------------------------------------------------------------
+// HIGH-6 (row 206 follow-up, forge-8vfn.8.5.56) — MEDIUM-4's shared
+// `errorEndMetadata` (@forge/kernel) gives every runner's crash `end` a
+// `status: 'failed'` marker. `endMetaIndicatesFailure` already checks for
+// it (line ~79); these pin that a crash END reads 'failed', never
+// 'complete', for each shape a runner actually emits.
+// ---------------------------------------------------------------------------
+
+test('deriveNodeStatuses: a generic agent node (runAgent / runBandAgentStandalone shape: phase orchestrator + agent_slug) that crashed reads failed, never complete', () => {
+  const events = [
+    ev('orchestrator', 'start', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' } }),
+    ev('orchestrator', 'end', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review', status: 'failed', error: 'Error: boom' } }),
+  ];
+  const statuses = deriveNodeStatuses(events, 'failed', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP);
+  assert.equal(statuses['audit'], 'failed', 'a crashed generic-agent node must never read as complete');
+});
+
+test('deriveNodeStatuses: a cycle-phase node (runAgent shape run directly under its own phase, e.g. developer-loop) that crashed reads failed, never complete', () => {
+  const nodeMapping = new Map<string, string | null>([['developer-loop', 'dev']]);
+  const events = [
+    ev('developer-loop', 'start', {}),
+    ev('developer-loop', 'end', { metadata: { status: 'failed', error: 'Error: boom' } }),
+  ];
+  const statuses = deriveNodeStatuses(events, 'failed', nodeMapping, new Map());
+  assert.equal(statuses['dev'], 'failed', 'a crashed phase node must never read as complete');
+});
+
 test('buildNodeMeta: a generic execAgent/runAgent node carries its real cost once bucketed onto its flow node id', () => {
   const events = [
     ev('orchestrator', 'start', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' } }),

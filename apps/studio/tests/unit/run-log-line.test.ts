@@ -92,6 +92,32 @@ test('an event_type OUTSIDE the real 11-member EventType union does not crash th
   expect(line.text).toContain('made_up_future_event_type');
 });
 
+test('end with metadata.status "failed" renders FAILED and the real error detail — kills a mapper that renders a crash end identically to a clean one', () => {
+  const line = deriveLogLine(ev({
+    event_type: 'end',
+    skill: 'developer',
+    cost_usd: 0.12,
+    metadata: { status: 'failed', error: 'TypeError: cannot read properties of undefined' },
+  }));
+  expect(line.kind).toBe('out');
+  expect(line.text).toContain('FAILED');
+  expect(line.text).toContain('TypeError: cannot read properties of undefined');
+  // The cost is real spend even on a crashed run — never dropped alongside
+  // the failure marker.
+  expect(line.text).toContain('0.1200');
+});
+
+test('end with metadata.status "failed" but no metadata.error still renders FAILED — the status marker is never silently dropped for want of a detail string', () => {
+  const line = deriveLogLine(ev({ event_type: 'end', skill: 'developer', metadata: { status: 'failed' } }));
+  expect(line.text).toContain('FAILED');
+});
+
+test('end with no metadata.status renders the ordinary clean-end line, unchanged — kills a fix that renders FAILED for every end regardless of status', () => {
+  const line = deriveLogLine(ev({ event_type: 'end', skill: 'developer', cost_usd: 0.34 }));
+  expect(line.text).not.toContain('FAILED');
+  expect(line.text).toContain('developer');
+});
+
 test('a materials-staged `log` event is NOT filtered out of the mapped stream — kills "the renderer special-cases materials elsewhere and drops this event_type from the scrolling log entirely"', () => {
   const line = deriveLogLine(
     ev({

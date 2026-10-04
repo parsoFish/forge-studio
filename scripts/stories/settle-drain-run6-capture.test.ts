@@ -97,10 +97,14 @@ function stageReplay() {
   const lines = readFileSync(join(src, 'events.jsonl'), 'utf8').trim().split('\n')
     .map((line) => ({ offset: at(JSON.parse(line).started_at) - PRESS, line }));
   const dir = join(root, '_logs', CHANNEL);
+  // pressedAt is a wall-clock anchor (the stall door compares it with file
+  // birth times); the replay schedule runs on the monotonic clock, which WSL
+  // never steps backwards (row 216).
   const pressedAt = Date.now();
+  const monoAt = performance.now();
   let written = 0;
   const tick = () => {
-    const t = Date.now() - pressedAt;
+    const t = performance.now() - monoAt;
     while (written < lines.length && lines[written].offset <= t) {
       if (written === 0) mkdirSync(dir, { recursive: true });
       appendFileSync(join(dir, 'events.jsonl'), lines[written].line + '\n');
@@ -125,18 +129,18 @@ function stageReplay() {
     }),
     evaluate: async () => ({ data: read(), nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null }),
   };
-  return { root, page, pressedAt, read };
+  return { root, page, pressedAt, monoAt, read };
 }
 
 test('row 196 (A)+(B) RED-FIRST: the settle wait sits through the pre-dispatch value and goes GREEN when the page does, ~1.1 s after the press', async () => {
-  const { root, page, pressedAt, read } = stageReplay();
+  const { root, page, pressedAt, monoAt, read } = stageReplay();
   const stallDoor = makeAgentChannelDoor(root);
   assert.notEqual(stallDoor, null);
   const stall = await waitForConsequence(
     page as never, BEAT as never, BEAT.wait.upTo, null, null, BEAT.wait, stallDoor as never,
     pressedAt, null, null, null, null, pressedAt,
   );
-  const took = Date.now() - pressedAt;
+  const took = performance.now() - monoAt;
   const after = read();
   assert.equal(stall, null, `the drain went green; nothing may stop this wait first. Got: ${JSON.stringify(stall)}`);
   assert.equal(after['drain-state'], 'green', `the wait ended at ${took} ms on a page that does not hold the beat's expectation`);

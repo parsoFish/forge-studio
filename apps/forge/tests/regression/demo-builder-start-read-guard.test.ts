@@ -71,10 +71,13 @@ const SRC = readFileSync(
 );
 
 /** Extract the POST /api/demo-builder/start handler block: from its route
- *  match to the next handler (POST /api/demo-builder/brief). */
+ *  match to the next handler, POST /api/demo-builder/lock (row 206,
+ *  forge-8vfn.8.5.56: `/start` and `/lock` are adjacent — the generic
+ *  question-form/verdict affordance route is the write surface for
+ *  demo-builder's brief and feedback phases). */
 function demoBuilderStartBlock(src: string): string {
   const startMarker = "url === '/api/demo-builder/start'";
-  const endMarker = "url === '/api/demo-builder/brief'";
+  const endMarker = "url === '/api/demo-builder/lock'";
   const start = src.indexOf(startMarker);
   assert.ok(start >= 0, 'could not locate the /api/demo-builder/start handler');
   const end = src.indexOf(endMarker, start);

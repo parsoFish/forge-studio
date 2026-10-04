@@ -79,16 +79,20 @@ function extractSpineCycleIdTemplate(source: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Extracts `apps/forge/ui-bridge.ts`'s `spawnAgentTurn`'s `logDir` template
- *  literal, RAW — anchored on the `const logDir = join(forgeRoot, '_logs',
- *  \`...\`)` call shape unique to `spawnAgentTurn`. A SECOND, unrelated
- *  `const logDir = join(...)` exists elsewhere in this file (the dispatch-
- *  agent path), but it passes a bare `runId` identifier with no backtick
- *  template at all — this regex requires the backtick form and the literal
- *  `forgeRoot`/`'_logs'` arguments, so it cannot match that declaration.
- *  Verified (`grep -c`) to match exactly once against the real file. */
+/** Extracts `apps/forge/bridge-agent-dispatch.ts`'s `spawnAgentTurn`'s log-dir
+ *  name template literal, RAW — anchored on the `const logDirName =
+ *  \`...\`;` declaration shape unique to `spawnAgentTurn` (row 206,
+ *  forge-8vfn.8.5.56: named as its own variable, byte-identical to the
+ *  template literal the `join()` call itself takes, so
+ *  `claimDispatchSlot`/`releaseDispatchSlot` share the same computed name
+ *  the spawn uses). A SECOND, unrelated `const logDir =
+ *  join(...)` exists elsewhere in this file (the dispatch-agent path), but
+ *  it passes a bare `runId` identifier with no backtick template at all —
+ *  this regex requires the backtick form, so it cannot match that
+ *  declaration. Verified (`grep -c`) to match exactly once against the
+ *  real file. */
 function extractBridgeLogDirTemplate(source: string): string | null {
-  const m = source.match(/const\s+logDir\s*=\s*join\(\s*forgeRoot\s*,\s*'_logs'\s*,\s*`([^`]*)`\s*\)/);
+  const m = source.match(/const\s+logDirName\s*=\s*`([^`]*)`;/);
   return m ? m[1] : null;
 }
 
@@ -123,7 +127,7 @@ test(
     assert.ok(
       bridgeTemplate !== null,
       'NON-VACUOUS CHECK FAILED: could not find spawnAgentTurn\'s ' +
-        `"const logDir = join(forgeRoot, '_logs', \`...\`)" in ${UI_BRIDGE_PATH} — see the sibling check's comment ` +
+        `"const logDirName = \`...\`;" in ${UI_BRIDGE_PATH} — see the sibling check's comment ` +
         'for why a silent non-match is exactly the failure mode this ratchet guards against.',
     );
 
