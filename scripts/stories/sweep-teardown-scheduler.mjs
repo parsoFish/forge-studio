@@ -11,7 +11,7 @@
  * `sweep-teardown.mjs` today, which re-exports them from here unchanged —
  * this split moves no import.
  */
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 // The ONE `/proc`-based liveness rule (`forge-8vfn.8.1.6` follow-up) — a
 // relative .ts import, proven to work under the plain `node` this runner is
@@ -36,6 +36,24 @@ export const DAEMON_PID_FILE = join('_logs', 'daemon', 'forge.pid');
 
 /** The daemon's own log, the only place it says whether it finished draining. */
 export const DAEMON_LOG_FILE = join('_logs', 'daemon', 'serve.log');
+
+/**
+ * The stop marker, as the product names it — `daemonPaths().stoppingFile`
+ * (`packages/flows/daemon.ts:47`): the pid a SIGTERM was sent to. Written
+ * once here and BOUND BY TEST to the product's own function, the SAME shape
+ * `DAEMON_PID_FILE` above already uses, and for the same reason: this file
+ * reads and writes it directly rather than importing `daemon.ts`'s own
+ * `markStopping`, so the path the two sides agree on is checked, never
+ * assumed.
+ *
+ * `forge studio`'s own supervisor (`apps/forge/serve-supervisor.ts`) writes
+ * this BEFORE it ever signals serve, and `scheduler.ts` treats a SECOND
+ * SIGTERM as an operator's force-quit (`process.exit(130)`, no drain). So a
+ * pid this file already names has ALREADY been asked to stop by the one
+ * process entitled to ask — `stopOwnScheduler` below honours that marker by
+ * sending it no signal of its own, ever.
+ */
+export const STOPPING_FILE = join('_logs', 'daemon', 'stopping');
 
 /**
  * The line `scheduler.ts:301` prints after `await Promise.allSettled(inFlight)`
@@ -138,13 +156,13 @@ export function ownSchedulerPid(root) {
 /**
  * Stop the scheduler daemon THIS RUN started — T1 ruling 657(ii).
  *
- * S10 run 9's beat 7 pressed Start and a real daemon came up
- * (`{"running":true,"pid":1868172}`, the same second the beat pressed). The
+ * S10 run 9's own daemon came up (`{"running":true,"pid":1868172}`) and the
  * sweep then ran and the daemon was still alive afterwards. A scheduler left
- * running is not cosmetic residue: `scheduler-start` renders ONLY at
- * `status: stopped` (`lib/scheduler-view.ts:44`), so the NEXT run's beat 7
- * reds at t+0 on a missing handle while the state it wants already holds —
- * and the run after this one would have inherited exactly that.
+ * running is not cosmetic residue: `forge studio` ADOPTS a pid that is
+ * already alive rather than spawning fresh (`apps/forge/serve-supervisor.ts`,
+ * ADR 011), so the NEXT run inherits this one's queue state and env wholesale
+ * — `scheduler-preflight.mjs`'s own refusal exists for exactly that reason,
+ * on the costed side.
  *
  * BY PID, FROM THE PID FILE, AND ONLY IF IT IS OURS. The cwd is checked
  * against the run's own tree before signalling: another lane's daemon is
@@ -156,6 +174,19 @@ export function ownSchedulerPid(root) {
  * `unknown: true` (ROW 102b/18-19) — a read/signal failed for a reason OTHER
  * than genuinely gone (ENOENT/ESRCH); never folded into "no daemon"/"already
  * gone"/"exited". `stopSchedulerCensusAndRelease` refuses the step on it.
+ *
+ * NEVER A SECOND SIGTERM. `forge studio`'s own supervisor
+ * (`apps/forge/serve-supervisor.ts`) sends serve exactly one SIGTERM and
+ * writes `STOPPING_FILE` = pid BEFORE it does, as part of its own exit
+ * sequence (`apps/forge/forge-watch.ts`'s `runExitSequence`) — a studio a run
+ * ends through its OWN bridge-group kill has therefore already signalled
+ * serve by the time anything here is reached. `scheduler.ts` treats a SECOND
+ * SIGTERM as an operator's force-quit (`process.exit(130)`, no drain, no
+ * release of whatever it held) — so a pid `STOPPING_FILE` already names gets
+ * NO signal from this function, only the SAME wait-then-SIGKILL grace every
+ * other pid here gets. Only a pid the marker does NOT already name is one
+ * THIS CALL is the first to ask to stop — it marks it, then sends the one
+ * SIGTERM, exactly as the supervisor itself would.
  *
  * @param {string} root the run's own worktree
  * @returns {{stopped: number|null, how: string|null, drained: boolean, unknown: boolean, note: string|null}}
@@ -194,21 +225,45 @@ export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS) {
     try { return readFileSync(log, 'utf8').includes(DRAIN_DONE_LINE); } catch { return false; }
   };
 
+  // Honour a marker someone else already wrote — the supervisor's own stop,
+  // ahead of this call (see this function's own header). A read failure here
+  // (absent, unparseable, or naming a DIFFERENT pid) means THIS call is the
+  // first to ask, never "assume it is already handled".
+  const markerFile = join(root, STOPPING_FILE);
+  let alreadyMarked = false;
   try {
-    process.kill(pid, 'SIGTERM');
-  } catch (e) {
-    if (e.code === 'ESRCH') return { stopped: pid, how: 'SIGTERM', drained: drainedNow(), unknown: false, note: 'exited before the signal landed' };
-    // EPERM means the pid EXISTS and is alive, not that it exited — never marked stopped.
-    return { stopped: null, how: null, drained: false, unknown: true, note: `SIGTERM failed: ${e.message} — state UNKNOWN, never marked stopped` };
+    const marked = Number(readFileSync(markerFile, 'utf8').trim());
+    alreadyMarked = Number.isInteger(marked) && marked === pid;
+  } catch {
+    alreadyMarked = false;
   }
+
+  if (!alreadyMarked) {
+    try {
+      writeFileSync(markerFile, String(pid));
+    } catch {
+      /* best-effort — a failed write still lets the SIGTERM below land */
+    }
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch (e) {
+      if (e.code === 'ESRCH') return { stopped: pid, how: 'SIGTERM', drained: drainedNow(), unknown: false, note: 'exited before the signal landed' };
+      // EPERM means the pid EXISTS and is alive, not that it exited — never marked stopped.
+      return { stopped: null, how: null, drained: false, unknown: true, note: `SIGTERM failed: ${e.message} — state UNKNOWN, never marked stopped` };
+    }
+  }
+
+  const how = alreadyMarked ? 'already signalled' : 'SIGTERM';
   if (waitForExit(pid, graceMs)) {
     const drained = drainedNow();
     return {
       stopped: pid,
-      how: 'SIGTERM',
+      how,
       drained,
       unknown: false,
-      note: drained ? null : `exited on SIGTERM without printing ${JSON.stringify(DRAIN_DONE_LINE)} — it did not drain, so its claim may still be in _queue/in-flight/`,
+      note: drained
+        ? null
+        : `exited ${alreadyMarked ? 'on its own stop signal' : 'on SIGTERM'} without printing ${JSON.stringify(DRAIN_DONE_LINE)} — it did not drain, so its claim may still be in _queue/in-flight/`,
     };
   }
 

@@ -508,35 +508,34 @@ is what this contract reads — but it cannot be the only distinguisher.
   otherwise it renders as a plain secondary
   `[data-action="browse-flows"][data-live="false"]` "Browse flows"
   (`href="/flows"`) — the same destination the old fallback silently used,
-  now labelled as what it is, never a "live" promise the click cannot keep. **W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment):**
-  `section[data-section="scheduler"]` mounts the shared **SchedulerCard**
-  (`components/SchedulerCard.tsx`, its own `useSchedulerStatus()` read on a
-  slow visible-only poll — Home itself adds no fetch/interval/endpoint):
-  `[data-component="scheduler-card"][data-scheduler-status="running|paused|
-  stopping|stopped|unknown"][data-scheduler-variant="card|strip"][data-scheduler-ready]
-  [data-scheduler-queued]` (+ `[data-scheduler-pid]` only while running,
-  `[data-scheduler-busy="true"]` while an action POST is in flight,
-  `[data-scheduler-error]` carrying the bridge error verbatim); its buttons
-  are exactly the actions the state admits —
-  `button[data-action="scheduler-start"|"scheduler-pause"|"scheduler-resume"|
-  "scheduler-stop"]` (running → pause+stop, paused → resume+stop, stopped →
-  start, stopping/unknown/unread → none) — derived by `lib/scheduler-view.ts`,
-  never a fixed row. **W7-FIX-A3 (A3-04/05/07):** `stopping` = a Stop was
-  signalled and the daemon pid is still draining in-flight runs — the bridge
-  marks the signalled pid (`_logs/daemon/stopping`) and `daemonState` folds it
-  into `GET /api/scheduler/status` as `stopping:true` for as long as THAT pid
-  is alive (every poller and every tab sees it; a dead pid is plainly
-  `stopped`, never `stopping`); a repeat Stop on an already-marked live pid is
-  a no-op (`{alreadyStopping:true}`, no second SIGTERM — the scheduler treats
-  that as force-quit); `POST /api/scheduler/start` clears the `.paused` flag
-  on a FRESH spawn only, so "Start it" always unblocks claiming while an
-  already-running daemon's deliberate pause survives (Start is not Resume);
-  and a NULL status (the read failed) is a third branch in the enqueue /
-  post-commit copy ("could not confirm the scheduler is running") — as is
-  `stopping` ("the scheduler is stopping, so nothing will be claimed until you
-  start it again") — never reported as "stopped". The same component is mounted on `/flows` (index + monitor), the
-  project roadmap tab, and inline as a `strip` wherever an enqueue outcome
-  needs "start it?". Three sections:
+  now labelled as what it is, never a "live" promise the click cannot keep. **M7-E (row 205, ADR 011 as amended):**
+  there is no operator-facing scheduler control anywhere in Studio — no card,
+  no start/pause/resume/stop button, no `scheduler` section. `forge studio`
+  spawns and supervises `forge serve` itself (boot spawn, adopt a live pid,
+  crash-loop-backed-off respawn, one `SIGTERM` on studio exit), and whenever
+  `serve` is live it claims every eligible pending manifest immediately, so
+  there is nothing left for the operator to start. Studio surfaces `serve`'s
+  liveness as one READ-ONLY line, never a control: `GET /api/health`'s `serve`
+  object (`state: "running"|"draining"|"restarting"|"down"|"unsupervised"`,
+  `pid`, `restarts`, `nextRestartAt`) renders
+  `[data-component="serve-status-notice"][data-serve-state][data-serve-restarts]`
+  (`components/studio/ServeStatusNotice.tsx`) with **no button**, inside
+  `section[data-section="serve-status"]` on Home, Flows and Monitor, and
+  inline on the flow monitor, the roadmap tab, the kickoff outcome line, the
+  run controls and the architect-committed panel. While `state` is `running`
+  (or the status is not yet read) nothing renders and the page shows the
+  ordinary claim/run-in-progress copy; while it is `restarting`, `draining`,
+  `down` or `unsupervised` the read-only line says so, without anything to
+  click. **The one exception is a QUEUED run's line in the run controls**
+  (`lib/run-controls.ts`'s `queuedServeTone`): only a CONFIRMED `running`
+  serve renders the plain `[data-component="queued-awaits-serve"]` pickup
+  line — `serve === null` (unread/failed) and `unsupervised` (no supervisor
+  on this bridge) are both UNKNOWN there and render
+  `[data-component="queued-serve-unconfirmed"]` instead, never the pickup
+  promise; `restarting`/`draining`/`down` still render the shared
+  `serve-status-notice` as above.
+  A second, attach-only `forge studio` never supervises `serve` and reads the
+  same `serve` object off the owning studio's bridge. Three sections:
   - `section[data-section="attention-strip"]` — **W7-B1 (home-sessions-01/02):
     the project-gate strip, NAMED on screen** (visible `h2` "Projects needing
     attention" — it used to carry only an aria-label, invisible to a sighted
@@ -757,9 +756,9 @@ is what this contract reads — but it cannot be the only distinguisher.
   `lib/use-everything-ledger.ts` so Home and Monitor read the SAME list),
   the headline counts (`buildMonitorSummary`, `lib/monitor-view.ts`, over
   the SAME rows the ledger below renders), the run rail (`RunRail`),
-  sessions (`HomeSessionsStrip` + `buildHomeSessionsStrip`), and the
-  scheduler (`SchedulerCard`). No new bridge route: both endpoints this
-  page needs (`GET /api/agents/runs/recent`, `GET /api/scheduler/status`)
+  sessions (`HomeSessionsStrip` + `buildHomeSessionsStrip`), and the same
+  read-only `serve`-liveness line Home renders. No new bridge route: both
+  endpoints this page needs (`GET /api/agents/runs/recent`, `GET /api/health`)
   already existed, reached through their existing typed wrappers.
   Structurally enforced by `scripts/home-no-new-polling.test.ts`, extended
   by this lane to cover this page, the lifted hook and the pure
@@ -796,9 +795,10 @@ is what this contract reads — but it cannot be the only distinguisher.
     live/total counts were still missing the agent half — a declared
     readiness flag that did not cover one of the two reads its own headline
     is derived from.
-  - `section[data-section="scheduler"]` — the shared `SchedulerCard` (full
-    contract under the Home entry above); its own component owns its read,
-    so Monitor adds no extra fetch or interval here.
+  - The same `serve`-liveness line Home renders (full contract under the Home
+    entry above) — no dedicated `scheduler` section, no card, no button; it
+    reads the owning studio's `GET /api/health`, so Monitor adds no extra
+    fetch or interval here.
   - `section[data-section="monitor-attention"][data-attention-count]` —
     "Waiting on you": the SAME three attention builders Home renders
     (`buildHomeAttention`/`buildKbAttention`/`buildKbDraftAttention`, over
@@ -1116,11 +1116,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   outcome renders
   `[data-kickoff-result="enqueued"|"error"]` — an error verbatim, a success
   through the shared `[data-component="enqueue-outcome"][data-enqueue-kind]
-  [data-needs-scheduler-start]` line (`a[data-action="open-kickoff-run"]` to
-  the run, and a `strip` SchedulerCard with `[data-action="scheduler-start"]`
-  when the daemon is stopped). Clicking Start with nothing picked renders
+  [data-run-id]` line (`a[data-action="open-kickoff-run"]` to the run) — since
+  `forge serve` claims an eligible pending manifest the moment it is enqueued,
+  there is nothing to start; the line carries the same read-only
+  `[data-serve-state][data-serve-restarts]` pair, with no button, only while
+  `serve` is not `running`. Clicking Start with nothing picked renders
   `[data-kickoff-result="error"]` and sends nothing. The monitor column also
-  mounts a `strip` SchedulerCard (see Home) above the summary, and — **W8-A3
+  renders that same read-only line (see Home) above the summary, and — **W8-A3
   (`flows-28`/`flows-49`/`flows-23`)** — the shared `RunControls`
   (`components/studio/RunControls.tsx`, derived by `lib/run-controls.ts` from
   the run's status alone, so nothing stores which controls a run offers):
@@ -1159,11 +1161,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   different run. A failure renders
   `[data-component="run-control-error"]` verbatim; a success renders
   `[data-component="run-control-outcome"][data-outcome-control=<id>]` wrapping
-  the shared scheduler-aware `[data-component="enqueue-outcome"]` line, so
-  "the scheduler is stopped, nothing will run" is stated with Start right
-  there. A **queued** (`planned`) run has no run-scoped control and instead
-  mounts the `strip` SchedulerCard, which is the only thing that can start it
-  (`schedulerStrip={false}` on the monitor, which mounts its own strip already).
+  the shared `[data-component="enqueue-outcome"]` line, carrying the same
+  read-only `[data-serve-state][data-serve-restarts]` pair the kickoff outcome
+  does. A **queued** (`planned`) run has no run-scoped control at all —
+  `serve` claims it the moment it is live, so there is nothing for the
+  operator to press.
 
   **M7 row 150 (bead `forge-8vfn.8.1.39`, rulings 1771 + 1774):** an **active**
   or **gated** run offers exactly one control,
@@ -1175,7 +1177,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   boundary the cost-ceiling stop already halts at, ADR 028's amendment);
   gated has no live agent, so it moves the manifest to `failed/` directly. A
   successful post renders `[data-component="run-control-outcome"]
-  [data-outcome-control="stop"]` (plain text, not the scheduler-aware
+  [data-outcome-control="stop"]` (plain text, not the
   `enqueue-outcome` line — a stop enqueues nothing). Once the halt lands the
   run is `failed`, and the status line/RunRail note that already prefer
   `stopOnBudget` over `failNote` (above) prefer this THIRD, same-priority-band
@@ -1536,10 +1538,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-component="run-not-found"][data-run-kind="architect-session"]` +
   `a[data-action="back-to-sessions"]` (never an armed gate). After approve
   the payoff persists through `finalizing` → `committed` as the shared
-  `[data-section="architect-committed"][data-commit-tone][data-needs-
-  scheduler-start]` panel (see the sessions/architect entry) — initiative rows
-  linking the RUN, `a[data-action="open-roadmap"]`, `a[data-action="watch-it-
-  build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
+  `[data-section="architect-committed"][data-commit-tone]` panel (see the
+  sessions/architect entry) — initiative rows linking the RUN,
+  `a[data-action="open-roadmap"]`, `a[data-action="watch-it-build"]`, and the
+  same read-only `[data-serve-state][data-serve-restarts]` line, with no
+  button, while `serve` is not `running`: the commit already queued the
+  manifest, so there is nothing left to start. The
   breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
   / planning session (`a[data-crumb="session"]`) / PLAN with
   `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor` — EXCEPT
@@ -3059,7 +3063,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-skill-id][data-resolved="ok|missing"][data-skill-source="forge|project|missing"]`
   and a missing one renders the word MISSING plus a `title` saying why.
 - **`/projects/[id]` roadmap — not claimable (row 174, bead `forge-8vfn.8.5.9`).**
-  Under the roadmap's `strip` SchedulerCard,
+  On the roadmap,
   `[data-section="not-claimable"][data-clause="DEPS"]`
   (`components/studio/NotClaimableNotice.tsx`) renders when the bridge's
   preflight read (`GET /api/studio/projects/:id/preflight`) returns
@@ -3372,14 +3376,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   (§15.504). The verb is unchanged — pressing it IS the operator's act after the
   plan gate. Measured on S10 run 19, where the control was absent for a
   `flow_id: forge-architect` manifest the server would have claimed;
-  dispatching a plan run surfaces `[data-action="open-plan-run"]` — **W7-A3
-  (projects-16/17/32):** inside the shared `[data-component="enqueue-outcome"]
-  [data-enqueue-kind="plan"|"develop"][data-needs-scheduler-start][data-run-id]` line
-  (`components/studio/EnqueueOutcomeLine.tsx`): its claim is derived from the
-  REAL scheduler status (`lib/scheduler-view.ts`'s `describeEnqueueOutcome` —
-  "Enqueued — the scheduler is stopped, so nothing will run until you start
-  it." with a `strip` SchedulerCard + `[data-action="scheduler-start"]` when
-  the daemon is down; the develop copy names the develop flow), and
+  dispatching a plan run surfaces `[data-action="open-plan-run"]` — **M7-E
+  (row 205, projects-16/17/32):** inside the shared `[data-component="enqueue-outcome"]
+  [data-enqueue-kind="plan"|"develop"][data-run-id]` line
+  (`components/studio/EnqueueOutcomeLine.tsx`): the copy is a plain "Enqueued
+  — <flow> will pick it up" confirmation, because `forge serve` claims an
+  eligible pending manifest the moment `forge studio` has it live; the line
+  carries the same read-only `[data-serve-state][data-serve-restarts]` pair,
+  no button, only while `serve` is not `running` (the develop copy names the
+  develop flow), and
   `open-plan-run` / `[data-action="open-develop-run"]`
   link the RUN the enqueue returned (`/flows/<flowId>/run/<initiativeId>` — the
   initiative id is the STABLE run handle: a planned run's own id IS its
@@ -3397,8 +3402,9 @@ is what this contract reads — but it cannot be the only distinguisher.
   `open-*-run` href are derived from ONE prop and are pinned to agree
   (`apps/studio/tests/regression/enqueue-outcome-render.test.ts`). `recovery-requeue`
   mounts this same component, so act 2's requeued run is named by the same
-  attribute rather than a second one. The roadmap tab also mounts a `strip`
-  SchedulerCard above the canvas, and `/projects/<id>#roadmap` lands on the
+  attribute rather than a second one. The roadmap tab mounts no scheduler
+  control of any kind — only the same read-only serve-liveness line, and only
+  while `serve` is not `running` — and `/projects/<id>#roadmap` lands on the
   Roadmap tab. The roadmap toolbar carries an optional
   per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`
   accepts `costCeilingUsd` **only** for a single-initiative Start and stamps it onto
@@ -4010,21 +4016,21 @@ is what this contract reads — but it cannot be the only distinguisher.
   just another gate — M7-4, ADR-031) and "View the plan →" otherwise; the committed
   phase renders the shared **ArchitectCommittedView** inside
   `[data-section="architect-status"]`: `[data-section="architect-committed"]
-  [data-commit-tone="building|claimed-stopped|claimed-stopping|claimed-unknown|
-  queued-running|queued-stopped|queued-stopping|queued-unknown|
-  gated|done|failed|unknown"][data-needs-scheduler-start]` whose headline is
+  [data-commit-tone="building|claimed-not-running|claimed-unknown|
+  queued-running|queued-not-running|queued-unknown|
+  gated|done|failed|unknown"][data-serve-not-ready="true|false"]` whose headline is
   derived (`lib/architect-plan-view.ts`'s `describePostCommit`) from the
   session's `initiativeIds` (bridge-derived from its manifests dir, never
   stored) joined to the runs list — one `[data-initiative-link]
   [data-initiative-id][data-queue-state="queued|building|gated|complete|failed|
   unknown"]` row per initiative with `a[data-action="open-initiative-run"]` to
-  its `/flows/<flowId>/run/<runId>` when a run exists — plus the scheduler
-  status; "the autonomous loop is building it now" is rendered ONLY for
-  `building` (an active run AND a running daemon). It always carries
-  `a[data-action="open-roadmap"]` (`/projects/<p>#roadmap`) and
+  its `/flows/<flowId>/run/<runId>` when a run exists — plus `serve`'s own
+  liveness; "the autonomous loop is building it now" is rendered ONLY for
+  `building` (an active run and `serve.state === "running"`). It always
+  carries `a[data-action="open-roadmap"]` (`/projects/<p>#roadmap`) and
   `[data-action="watch-it-build"]` (the run's own flow monitor, `/flows`
-  when none), and a `strip` SchedulerCard with `[data-action="scheduler-
-  start"]` when the daemon is stopped. The activity drawer
+  when none), and the same read-only `[data-serve-state][data-serve-restarts]`
+  line, no button, while `serve` is not `running`. The activity drawer
   (`[data-component="activity-drawer"]`) renders in EVERY phase once events
   exist (open while working, collapsed otherwise — sessions-kinds-13).
   **forge-8vfn.8.1.14:** the architect hex's `data-architect-phase` above (and

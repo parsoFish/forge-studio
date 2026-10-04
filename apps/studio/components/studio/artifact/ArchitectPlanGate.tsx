@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 import { PlanGate } from '@/components/PlanGate';
 import { ArchitectCommittedView } from '@/components/studio/session/ArchitectCommittedView';
-import { architectFileUrl, type ArchitectSessionSummary, type SchedulerStatus } from '@/lib/bridge-client';
+import { architectFileUrl, type ArchitectSessionSummary, type ServeStatus } from '@/lib/bridge-client';
 import { isCriticBlocked, shouldResetApproval, planGateKey } from '@/lib/plan-gate-state';
 import {
   architectGateArmed,
@@ -15,7 +15,6 @@ import {
   deriveArchitectPlanPhase,
   type InitiativeLinkage,
 } from '@/lib/architect-plan-view';
-import type { SchedulerAction } from '@/lib/scheduler-view';
 
 /**
  * The native Studio PLAN surface for an architect session (M7-4, ADR-031;
@@ -31,9 +30,9 @@ import type { SchedulerAction } from '@/lib/scheduler-view';
  * empty body. A session that does not exist renders not-found, never a gate.
  *
  * On approve the optimistic payoff (`ArchitectCommittedView`: initiative ids
- * → queue state → run link, scheduler-aware headline + Start control) persists
- * through `finalizing` → `committed`; the poll's phase is the source of truth
- * that keeps it once it lands.
+ * → queue state → run link, a headline driven by the live serve status)
+ * persists through `finalizing` → `committed`; the poll's phase is the
+ * source of truth that keeps it once it lands.
  *
  * DOM contract:
  *   [data-section="architect-plan"][data-architect-phase][data-gate-armed]
@@ -51,11 +50,7 @@ export function ArchitectPlanGate({
   onGateState,
   linkage,
   linkageReady,
-  scheduler,
-  schedulerReady,
-  schedulerBusy = false,
-  schedulerError = null,
-  onSchedulerAction,
+  serve,
 }: {
   session: ArchitectSessionSummary | null;
   /** The `_architect-` id from the URL, shown when the session cannot be resolved. */
@@ -75,11 +70,7 @@ export function ArchitectPlanGate({
   onGateState?: (state: 'approved' | 'idle') => void;
   linkage: InitiativeLinkage[];
   linkageReady: boolean;
-  scheduler: SchedulerStatus | null;
-  schedulerReady: boolean;
-  schedulerBusy?: boolean;
-  schedulerError?: string | null;
-  onSchedulerAction?: (action: SchedulerAction) => void;
+  serve: ServeStatus | null;
 }): JSX.Element {
   // Optimistic local approval for instant payoff before the session poll catches
   // up; `finalizing`/`committed` are the bridge source of truth that keep it.
@@ -147,11 +138,7 @@ export function ArchitectPlanGate({
               session={session}
               linkage={linkage}
               linkageReady={linkageReady}
-              scheduler={scheduler}
-              schedulerReady={schedulerReady}
-              busy={schedulerBusy}
-              error={schedulerError}
-              onSchedulerAction={onSchedulerAction}
+              serve={serve}
             />
           ) : (
             <StatusLine session={session} kind={kind} />

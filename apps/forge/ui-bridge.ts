@@ -60,7 +60,6 @@ import {
 import { isDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { bindReleaseFinalize } from './example-hooks.ts';
 import { handleCycleDataRoutes, servedFileHeaders } from './bridge-cycle-data.ts';
-import { handleSchedulerRoutes } from './bridge-scheduler.ts';
 import { handleRunTriggerRoutes } from './bridge-run-triggers.ts';
 import { handleReviewCommentRoutes } from './bridge-review-comments.ts';
 import {
@@ -83,6 +82,7 @@ import {
 } from './bridge-cycle-scan.ts';
 import { mergePullRequest } from '@forge/flows';
 import type { BridgeIdentity } from './forge-watch.ts';
+import { UNSUPERVISED_SERVE_STATUS, type ServeSupervisorStatus } from './serve-supervisor.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
@@ -151,6 +151,9 @@ export type BridgeOptions = {
    * feedback out-dates its last reflector.end.
    */
   rerunReflector?: RerunReflectorFn;
+  /** M7-E row 205 — read-only getter for the live serve supervisor's status,
+   *  folded into `GET /api/health` as `serve`. Defaults to unsupervised. */
+  getServeStatus?: () => ServeSupervisorStatus;
 };
 
 type TailState = {
@@ -210,6 +213,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // silently fall back to `{}` even with a real `forge.config.json` sitting
   // in `forgeRoot`. `defaultConfigPath(forgeRoot)` removes that dependence.
   const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
+  // M7-E row 205: a getter, not a snapshot — `runWatch` swaps it in once the
+  // supervisor exists (after this bridge is already listening).
+  const getServeStatus = opts.getServeStatus ?? (() => UNSUPERVISED_SERVE_STATUS);
   const mergePrFn = opts.mergePr ?? mergePullRequest;
   // ADR 048: flows declares the reflector port; the assembly binds it, here and in `factory-wiring.ts`.
   const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? ((deps: { queueRoot: string; logsRoot: string }) =>
@@ -465,6 +471,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
       rerunReflector: rerunReflectorFn,
+      getServeStatus,
     });
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -534,6 +541,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 type HttpContext = {
   /** F1 — this bridge process's identity, served from GET /api/health. */
   identity: BridgeIdentity;
+  /** M7-E row 205 — serve's read-only status, folded into GET /api/health. */
+  getServeStatus: () => ServeSupervisorStatus;
   scanCycles: () => { live: Cycle[]; recent: Cycle[] };
   /** Feature #8 — daemon-stall liveness across in-flight cycles. */
   liveness: () => LivenessReport;
@@ -649,7 +658,8 @@ async function handleHttp(
     // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
     // healthy forge bridge from a stale/foreign listener and attach instead of
     // killing it. Probes still treat any 200 as "up", so readiness is unchanged.
-    sendJson(res, 200, ctx.identity, origin);
+    // M7-E row 205: `serve` rides along — the supervisor's own read-only status.
+    sendJson(res, 200, { ...ctx.identity, serve: ctx.getServeStatus() }, origin);
     return;
   }
   if (method === 'GET' && url === '/api/cycles') {
@@ -739,10 +749,6 @@ async function handleHttp(
     broadcastArchitectChanged: ctx.broadcastArchitectChanged,
   };
   if (await handleStudioPostRoutes(req, res, studioPostCtx, url, method)) return;
-
-  // forge-4zk: the scheduler-lifecycle family carved to `./bridge-scheduler.ts`
-  // (feature move, no behaviour change).
-  if (await handleSchedulerRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
   // forge-4zk: the develop/plan/flow run-trigger family carved to
   // `./bridge-run-triggers.ts` (feature move, no behaviour change).

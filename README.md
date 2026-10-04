@@ -61,11 +61,11 @@ forge init               # creates forge.config.json and the working dirs, and c
 export FORGE_CLAUDE_CLI="$(readlink -f "$(command -v claude)")"   # required: agents spawn through this binary (see .env.example)
 
 # Launch Forge Studio — the operator UI is the whole product
-forge studio             # health-probes the bridge + UI, then opens the browser
+forge studio             # health-probes the bridge + UI, spawns/adopts + supervises forge serve, then opens the browser
                          # (--bridge-only, --no-open, --bridge-port, --ui-port, --ready-file)
 
 # Runtime spine (the bridge/UI is the operator API; the CLI is recovery + CI)
-forge serve [--once]     # run the unattended scheduler in the foreground
+forge serve [--once]     # the daemon forge studio already supervises; run standalone for CI/headless use
 forge preflight <project>        # check the forge↔project contract
 forge studio lint        # validate studio definitions (agents/flows/catalog/kb)
 forge brain lint         # structural integrity checks on the brain
@@ -100,7 +100,7 @@ The platform prescribes no fixed human moments: a factory declares its own gates
 | Act | What you do in Studio | The factory produces |
 |---|---|---|
 | **Plan gate** | drop an idea → interview → approve the PLAN | a queued initiative on the project's roadmap |
-| **Kickoff** | on the project's roadmap, start the scheduler (it plans the initiative into work items), then press **Start development** on the initiative's card | the build → integrate → review run |
+| **Kickoff** | on the project's roadmap, press **Start development** on the initiative's card — `forge serve` already claimed and planned it the moment the plan was approved | the build → integrate → review run |
 | **Verdict gate** | inspect the demo-embedded PR → approve (merge) or send back | a self-contained PR; merge fires reflection |
 | **Reflection** | answer the reflector's questions | brain themes + retro + cycle archive |
 

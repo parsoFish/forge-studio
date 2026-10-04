@@ -28,7 +28,14 @@ import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { existsSync, writeFileSync, renameSync, readdirSync, statSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { isDryBridge } from '@forge/kernel';
 import { startBridge } from './ui-bridge.ts';
+import {
+  superviseServe,
+  UNSUPERVISED_SERVE_STATUS,
+  type ServeSupervisorHandle,
+  type ServeSupervisorStatus,
+} from './serve-supervisor.ts';
 
 /** The deterministic ready signal forge studio emits on stdout once both the
  *  bridge and the UI have answered a health probe. Consumers grep for this
@@ -262,6 +269,27 @@ export async function terminateChild(proc: ChildProcess, opts: { graceMs?: numbe
   }
 }
 
+/**
+ * The exit sequence every non-SIGINT exit path in `runWatch` runs: stop the
+ * serve supervisor (a no-op `stopServe` when none exists), close the
+ * bridge, then exit with `code` — `closeBridge` rejecting still exits.
+ * Pulled out as a pure/injectable function since `runWatch` spawns real
+ * children and cannot be unit-tested; `shutdown()` and the build-failure
+ * branch below share it so neither orphans a live `forge serve`.
+ */
+export async function runExitSequence(
+  code: number,
+  deps: { stopServe: () => void; closeBridge: () => Promise<void>; exit: (code: number) => void },
+): Promise<void> {
+  deps.stopServe();
+  try {
+    await deps.closeBridge();
+  } catch {
+    /* ignore — exiting regardless */
+  }
+  deps.exit(code);
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** A fetch-like probe: returns true when the URL answers (status considered
@@ -427,6 +455,10 @@ export type WatchOptions = {
   /** Log prefix — `[forge studio]` (canonical) or `[forge watch]`
    *  (deprecated alias). Defaults to `[forge studio]`. */
   logLabel?: string;
+  /** Test seam (M7-E row 205): overrides the real `superviseServe` so this
+   *  file's own tests never spawn a real detached `forge serve`. Defaults to
+   *  the real implementation from `./serve-supervisor.ts`. */
+  superviseServeImpl?: typeof superviseServe;
 };
 
 export async function runWatch(opts: WatchOptions): Promise<void> {
@@ -484,8 +516,27 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   //     browser tab pinned at http://localhost:4124 across re-runs and
   //     have it auto-reconnect via the bridge-client backoff.
   takeoverPort(bridgePort, 'bridge', label);
-  const bridge = await startBridge({ forgeRoot, port: bridgePort });
+  // M7-E row 205: the bridge's own GET /api/health reports serve's live
+  // status (ADR 011/031) via a GETTER, not a snapshot — the supervisor is
+  // created a few lines below, AFTER the bridge is already listening, so the
+  // indirection lets the health route always read whatever the supervisor's
+  // current status is, including before it exists (unsupervised).
+  let currentServeStatus: () => ServeSupervisorStatus = () => UNSUPERVISED_SERVE_STATUS;
+  const bridge = await startBridge({ forgeRoot, port: bridgePort, getServeStatus: () => currentServeStatus() });
   console.log(`${label} bridge at ${bridge.url}`);
+
+  // M7-E row 205: Studio supervises `forge serve` exactly the way it
+  // supervises the bridge and the UI — adopt a live one or spawn fresh, then
+  // keep it alive for as long as this TAKEOVER owns the port. Only on the
+  // TAKEOVER path (a second studio that ATTACHed above already returned, and
+  // never reaches here) and never under the dry bridge, which refuses every
+  // real process action.
+  let serveSupervisor: ServeSupervisorHandle | null = null;
+  if (!isDryBridge()) {
+    const superviseServeFn = opts.superviseServeImpl ?? superviseServe;
+    serveSupervisor = superviseServeFn({ forgeRoot, logLabel: label });
+    currentServeStatus = serveSupervisor.getStatus;
+  }
 
   // 2. Bring up the UI (unless --bridge-only or forge-ui not installed).
   let uiProc: ChildProcess | null = null;
@@ -496,7 +547,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   //    the build, or a slow `next dev` warm-up, still tears the bridge (and
   //    whichever UI child is currently active) down instead of orphaning it.
   let shuttingDown = false;
-  const shutdown = async (): Promise<void> => {
+  const shutdown = async (code = 0): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n${label} shutting down...`);
@@ -512,8 +563,12 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
     // Operating on a local capture instead is immune to that race.
     const proc = uiProc;
     if (proc) await terminateChild(proc);
-    try { await bridge.close(); } catch { /* ignore */ }
-    process.exit(0);
+    // runExitSequence stops supervising before the bridge closes (M7-E row 205).
+    await runExitSequence(code, {
+      stopServe: () => serveSupervisor?.stop(),
+      closeBridge: () => bridge.close(),
+      exit: (code) => process.exit(code),
+    });
   };
   process.on('SIGINT', () => { void shutdown(); });
   process.on('SIGTERM', () => { void shutdown(); });
@@ -566,8 +621,12 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
             console.error(
               `${label} forge-ui production build failed (exit code ${buildExitCode ?? 'signal'}) — aborting.`,
             );
-            try { await bridge.close(); } catch { /* ignore */ }
-            process.exit(1);
+            // A build failure is a real exit path too — stop serve, not just the bridge.
+            await runExitSequence(1, {
+              stopServe: () => serveSupervisor?.stop(),
+              closeBridge: () => bridge.close(),
+              exit: (code) => process.exit(code),
+            });
           }
           // Stamp ONLY on proven success (exit 0, just confirmed above) — the
           // other half of the "stamp only on proven success" property.
@@ -585,6 +644,8 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
       const launchedProc = uiProc as ChildProcess;
       launchedProc.on('error', (err) => {
         console.error(`${label} forge-ui ${mode} server failed to start: ${err.message}`);
+        // A failed spawn is a real failure, not a clean exit — code 1.
+        if (!shuttingDown) void shutdown(1);
       });
       // If Next.js dies after startup (OOM, crash, port conflict) we must
       // surface it and tear the bridge down — otherwise the launcher blocks

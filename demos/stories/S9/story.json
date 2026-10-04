@@ -429,13 +429,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-10-03T13-21-31-3b50c152"
+        "authoringSessionId": "2026-10-03T22-52-57-b923e7af"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "authoring",
-        "minted-session-id": "2026-10-03T13-21-31-3b50c152"
+        "minted-session-id": "2026-10-03T22-52-57-b923e7af"
       },
       "expect": {
         "page": "session-kickoff",
@@ -475,13 +475,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.49"
+        "authoringCostUsd": "0.60"
       },
       "data": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "authoring",
-        "ledger-cost-usd": "0.49"
+        "ledger-cost-usd": "0.60"
       },
       "expect": {
         "page": "session",
@@ -565,13 +565,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardingSessionId": "2026-10-03T13-22-22-1f499de8"
+        "onboardingSessionId": "2026-10-03T22-54-24-41800227"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "onboarding",
-        "minted-session-id": "2026-10-03T13-22-22-1f499de8"
+        "minted-session-id": "2026-10-03T22-54-24-41800227"
       },
       "expect": {
         "page": "session-kickoff",
@@ -651,14 +651,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.49"
+        "authoringCostUsd": "0.60"
       },
       "data": {
         "page": "monitor",
         "page-ready": "true",
         "fetch-status": "ok",
         "ledger-agent": "creation-agent",
-        "ledger-cost-usd": "0.49"
+        "ledger-cost-usd": "0.60"
       },
       "expect": {
         "page": "monitor",
@@ -672,32 +672,20 @@
   "reap": {
     "reaped": [
       {
-        "pid": 1697408,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
+        "pid": 2331678,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1697407,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
+        "pid": 2331606,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1697290,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 1697232,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 1697196,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
+        "pid": 2331478,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
         "signal": "SIGTERM",
         "via": "cwd",
         "terminatedBeforeFirstPricedEvent": 30000
@@ -705,14 +693,14 @@
     ],
     "skipped": [
       {
-        "pid": 1693951,
-        "dir": "_logs/_authoring-2026-10-03T13-21-31-3b50c152",
-        "reason": "pid 1693951: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2325668,
+        "dir": "_logs/_authoring-2026-10-03T22-52-57-b923e7af",
+        "reason": "pid 2325668: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-22-22-403-pg2w",
+        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
         "kind": null,
         "sessionId": null,
         "project": null,
@@ -767,15 +755,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 0.4941355,
+    "usd": 0.6005244999999999,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "3c93dd1ceebe317666c992261b1d7648f4afa10e",
+    "dirty": false
   },
   "storyDigest": "284fc3a6569816c8"
 }

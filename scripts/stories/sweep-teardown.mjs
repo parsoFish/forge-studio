@@ -31,6 +31,11 @@ import { describeRunArtefactsClear } from './ground-clear.mjs';
 // Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492); importers use
 // the sibling module directly — no re-export (CLAUDE.md: no backwards-compat paths).
 import { DAEMON_PID_FILE, DRAIN_GRACE_MS, ownSchedulerPidState, ownSchedulerPid, stopOwnScheduler } from './sweep-teardown-scheduler.mjs';
+import { killBridgeProcessGroup } from './bridge.mjs';
+// Reused rather than reinvented: `stop-path.mjs` already owns the ONE
+// `/proc`-based process-group liveness read and this file's own pair of
+// bounds for a bridge group's own exit — see `stopStudioThenScheduler` below.
+import { liveGroupMembers, BRIDGE_EXIT_BOUND_MS, BRIDGE_KILL_GRACE_MS } from './stop-path.mjs';
 
 
 /**
@@ -411,6 +416,93 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   }
 
   return { sched, census, release: { ...rel, reappeared }, deferred, lines };
+}
+
+/** Poll until `pid`'s process GROUP has no live member or `boundMs` passes —
+ *  the async sibling of `stop-path.mjs`'s own `waitGroupGone`. That one is
+ *  deliberately `Atomics.wait`-synchronous (a signal handler must not yield
+ *  to the event loop); a run's own `finally` block has no such constraint,
+ *  so this yields with a plain `setTimeout` instead, reusing the SAME
+ *  `/proc` read (`liveGroupMembers`) rather than a second one. */
+async function waitBridgeGroupGoneAsync(pid, boundMs, membersOf = liveGroupMembers, pollMs = 100) {
+  const steps = Math.max(1, Math.ceil(boundMs / pollMs));
+  for (let i = 0; i <= steps; i += 1) {
+    const live = membersOf(pid);
+    if (live !== null && live.length === 0) return { gone: true, waitedMs: i * pollMs };
+    if (i < steps) await new Promise((r) => setTimeout(r, pollMs));
+  }
+  return { gone: false, waitedMs: steps * pollMs };
+}
+
+/**
+ * End this run's own Studio FIRST, THEN stop the scheduler daemon it
+ * supervises — the studio-then-serve half of a run's own teardown.
+ *
+ * Calling `stopSchedulerCensusAndRelease` (through it, `stopOwnScheduler`)
+ * WHILE this run's own `forge studio` — `bridgeProc` — is still alive and
+ * still supervising `forge serve` sends a second, unrelated SIGTERM to a pid
+ * the SUPERVISOR owns. The supervisor's own poll reads that as the daemon
+ * CRASHING — so it respawns a fresh `forge serve`, within its own ~2 s poll
+ * tick, after the census has already run. An unaccounted serve, claiming
+ * whatever sits in `_queue/pending/`, is exactly what a batch's own teardown
+ * exists to leave behind never.
+ *
+ * NEVER SIGNAL SERVE WHILE ITS SUPERVISOR IS ALIVE. `forge studio`'s own
+ * exit sequence (`apps/forge/forge-watch.ts`'s `shutdown` → `runExitSequence`)
+ * stops its serve supervisor SYNCHRONOUSLY — marking the daemon stopping and
+ * sending it ONE SIGTERM — before the studio process itself ever exits. So
+ * this function kills `bridgeProc`'s WHOLE process group first and waits,
+ * bounded, for it to be fully gone (escalating to SIGKILL past that bound)
+ * BEFORE `stopSchedulerCensusAndRelease` is ever called: by the time that
+ * call runs, studio is gone and has nothing left to signal, and
+ * `stopOwnScheduler` sees the marker already there and only waits for the
+ * drain, never signals again (`scheduler.ts` treats a second SIGTERM as an
+ * operator's force-quit).
+ *
+ * Returns `stopSchedulerCensusAndRelease`'s own result shape, plus `bridge`
+ * — so `teardownExitCode` (which reads only `.census` and `.release`) and
+ * every other caller of the scheduler half work against this wrapper
+ * exactly as they would against the bare call.
+ *
+ * @param {string} root this run's own worktree
+ * @param {{pid: number}|null} bridgeProc this run's own bridge, or null when it reused one
+ * @param {object} schedulerOpts passed straight through to `stopSchedulerCensusAndRelease` ({sinceMs} required)
+ * @param {{killBridgeGroup?: typeof killBridgeProcessGroup, waitBridgeGroupGone?: typeof waitBridgeGroupGoneAsync,
+ *          stopScheduler?: typeof stopSchedulerCensusAndRelease, bridgeExitBoundMs?: number,
+ *          bridgeKillGraceMs?: number}} [deps]
+ * @returns {Promise<{bridge: {gone: boolean, waitedMs: number, signal: string}|null, lines: string[]} & object>}
+ */
+export async function stopStudioThenScheduler(root, bridgeProc, schedulerOpts, deps = {}) {
+  const killGroup = deps.killBridgeGroup ?? killBridgeProcessGroup;
+  const waitGone = deps.waitBridgeGroupGone ?? waitBridgeGroupGoneAsync;
+  const stopScheduler = deps.stopScheduler ?? stopSchedulerCensusAndRelease;
+  const bridgeExitBoundMs = deps.bridgeExitBoundMs ?? BRIDGE_EXIT_BOUND_MS;
+  const bridgeKillGraceMs = deps.bridgeKillGraceMs ?? BRIDGE_KILL_GRACE_MS;
+
+  const bridgeLines = [];
+  let bridge = null;
+  if (bridgeProc !== null) {
+    bridgeLines.push(
+      `[stories] ending this run's own studio (pid ${bridgeProc.pid}) — its own exit sequence stops the ` +
+      'scheduler daemon it supervises before this teardown ever looks at it',
+    );
+    killGroup(bridgeProc, 'SIGTERM');
+    bridge = { ...(await waitGone(bridgeProc.pid, bridgeExitBoundMs)), signal: 'SIGTERM' };
+    if (!bridge.gone) {
+      killGroup(bridgeProc, 'SIGKILL');
+      const after = await waitGone(bridgeProc.pid, bridgeKillGraceMs);
+      bridge = { gone: after.gone, waitedMs: bridge.waitedMs + after.waitedMs, signal: 'SIGKILL' };
+    }
+    bridgeLines.push(
+      `[stories] studio ${bridgeProc.pid} ` +
+      (bridge.gone
+        ? `exited after ${bridge.waitedMs} ms (${bridge.signal})`
+        : `STILL ALIVE after ${bridge.waitedMs} ms and a SIGKILL`),
+    );
+  }
+
+  const stop = await stopScheduler(root, schedulerOpts);
+  return { ...stop, bridge, lines: [...bridgeLines, ...stop.lines] };
 }
 
 /**

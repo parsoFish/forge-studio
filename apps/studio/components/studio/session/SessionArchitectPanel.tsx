@@ -34,8 +34,8 @@ import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 //     the session has a PLAN.html (gate mode at awaiting-verdict, view mode
 //     otherwise) — a committed session's plan is no longer unreachable;
 //   - the committed branch is the shared `ArchitectCommittedView`: initiative
-//     ids → queue state → run link, and a scheduler-aware headline with a
-//     Start control (the hardcoded "the autonomous loop is building it now →
+//     ids → queue state → run link, and a headline driven by the live serve
+//     status (the hardcoded "the autonomous loop is building it now →
 //     /flows/forge-develop" is gone);
 //   - the activity drawer stays available in EVERY phase (collapsed once the
 //     architect is no longer working) so the reasoning trail is there exactly
@@ -61,8 +61,8 @@ export function SessionArchitectPanel({
   const active = isArchitectWorking(session.phase);
   const stale = isSessionStale(session);
   const committed = session.phase === 'committed';
-  // Linkage + scheduler only matter once the plan is approved — the hook is
-  // inert (no fetch) for every other phase.
+  // Linkage + the live serve status only matter once the plan is approved —
+  // the hook is inert (no fetch) for every other phase.
   const loop = useLoopClosureState(session.initiativeIds, committed);
 
   return (
@@ -139,11 +139,7 @@ export function SessionArchitectPanel({
               session={session}
               linkage={loop.linkage}
               linkageReady={loop.linkageReady}
-              scheduler={loop.status}
-              schedulerReady={loop.ready}
-              busy={loop.busy}
-              error={loop.error}
-              onSchedulerAction={(a) => void loop.act(a)}
+              serve={loop.status}
             />
           </div>
         )}

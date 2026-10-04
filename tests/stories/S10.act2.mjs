@@ -279,21 +279,19 @@ export const ACT_2 = [
       say: 'Back to the project to start the second initiative, exactly as the first one was started.',
     },
     {
-      // SOURCE-DERIVED. NO `scheduler-start` press — the story's own beat 7
-      // already started the scheduler for ACT 1 and nothing since has
-      // stopped it (`scheduler-start` exists only while the scheduler is
-      // STOPPED, `lib/scheduler-view.ts`, cited in the story's own beat 7
-      // comment; pressing it here would be pressing a handle a running
-      // scheduler does not render). Only the roadmap tab needs pressing — a
-      // fresh navigation to `/projects/gitpulse` defaults to the `editor` tab
-      // (`app/projects/[id]/page.tsx:104`).
-      act: 'ACT 2 — return to the roadmap; the scheduler is still running from ACT 1',
+      // SOURCE-DERIVED. Only the roadmap tab needs pressing — a fresh
+      // navigation to `/projects/gitpulse` defaults to the `editor` tab
+      // (`app/projects/[id]/page.tsx:104`). `forge serve` has been live and
+      // claiming since before ACT 1's own first initiative, the same way it
+      // is for every initiative this story enqueues, so there is nothing
+      // else to press.
+      act: 'ACT 2 — return to the roadmap, where the second plan is already being worked',
       do: [{ press: 'project-tab-roadmap' }],
       expect: {
         route: '/projects/gitpulse',
-        data: { page: 'projects', 'project-id': 'gitpulse', 'scheduler-status': 'running' },
+        data: { page: 'projects', 'project-id': 'gitpulse', section: 'project-roadmap' },
       },
-      say: 'The scheduler never stopped between the two initiatives — there is nothing to start again.',
+      say: 'The factory claims queued work the same way for every initiative — there is nothing to start again.',
     },
     {
       // SOURCE-DERIVED — same shape as the story's own "watch the factory

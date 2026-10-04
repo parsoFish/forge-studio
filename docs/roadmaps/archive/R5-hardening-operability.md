@@ -150,7 +150,7 @@ was needed.
   + the real `gh pr merge` beside it in the verdict-approve branch
   (`packages/flows/bridge-studio-runs.ts`; wiring `apps/forge/ui-bridge.ts`), (2)
   `spawnBrainFix` (`packages/knowledge/bridge-studio-kbs.ts`, KB lint-resolution route), (3)
-  `POST /api/scheduler/start` (boots the real daemon). Incident 2026-07-16
+  the daemon-boot route (boots the real daemon). Incident 2026-07-16
   (see header). Fix direction per known-gaps: extend the guard contract to
   ALL real-agent/real-git paths, or a first-class `FORGE_DRY_BRIDGE=1`.
 - **Features:**
@@ -160,8 +160,8 @@ was needed.
     real git/gh, or boot the daemon — the three known surfaces plus an
     audited enumeration of the rest. Dry mode returns typed stub results
     (never silent success). ACs: with the seam set, verdict-approve performs
-    no finalize/merge, brain-fix does not spawn, scheduler/start refuses; each
-    refusal is an explicit typed response + event.
+    no finalize/merge, brain-fix does not spawn, the daemon-boot route
+    refuses; each refusal is an explicit typed response + event.
   - **R5-01-F2 Route-coverage drift guard.** A test enumerating bridge routes
     against the guard's coverage table so a new real-acting route cannot ship
     unguarded (same pattern as the M0 derive no-drift lock). ACs: adding an

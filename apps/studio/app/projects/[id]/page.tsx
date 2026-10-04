@@ -58,7 +58,8 @@ import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { ProjectTabs, type ProjectTab } from '@/components/studio/project-builder/ProjectTabs';
-import { SchedulerCard } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { useServeStatus } from '@/lib/use-serve-status';
 import { NotClaimableNotice } from '@/components/studio/NotClaimableNotice';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
@@ -958,6 +959,7 @@ function RoadmapView({
    *  per initiative rather than a fixed target. */
   onOpenDemo?: (initiativeId: string) => void | Promise<void>;
 }) {
+  const { status: serveStatus } = useServeStatus(); // M7-E row 205
   const [developByInitiative, setDevelopByInitiative] = useState<Record<string, DevelopCardState>>({});
   const [planByInitiative, setPlanByInitiative] = useState<Record<string, PlanCardState>>({});
   const [batchStarting, setBatchStarting] = useState(false);
@@ -1128,10 +1130,8 @@ function RoadmapView({
       style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
       <UnparseableNotice items={roadmap.unparseable} />
-      {/* W7-A3 (projects-16 / flows-23): every Plan / Start development
-          control below is a queue write — the scheduler daemon does the
-          running. Its real state + Start/Pause/Stop sit right above them. */}
-      <SchedulerCard variant="strip" queuedCount={initiatives.filter((i) => i.status === 'pending').length} />
+      {/* W7-A3/M7-E row 205: every Plan/Start-development control below is a queue write — the shared notice, when needed. */}
+      {serveStatus && serveStatus.state !== 'running' && <ServeStatusNotice status={serveStatus} variant="strip" />}
       <NotClaimableNotice projectId={projectId} runnableGate={runnableGate} />
 
       {/* W7-B6 (projects-18): "what needs me now" — the actionable buckets as

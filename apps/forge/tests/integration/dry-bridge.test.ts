@@ -98,18 +98,6 @@ function classify(method: string, route: string): (typeof BRIDGE_ROUTE_CLASSIFIC
   return BRIDGE_ROUTE_CLASSIFICATION.find((r) => r.method === method && r.route === route);
 }
 
-test('scheduler start/stop are refuse/daemon', () => {
-  assert.equal(classify('POST', '/api/scheduler/start')?.classification, 'refuse');
-  assert.equal(classify('POST', '/api/scheduler/start')?.action, 'daemon');
-  assert.equal(classify('POST', '/api/scheduler/stop')?.classification, 'refuse');
-  assert.equal(classify('POST', '/api/scheduler/stop')?.action, 'daemon');
-});
-
-test('scheduler pause/resume are exempt-local (flag file only)', () => {
-  assert.equal(classify('POST', '/api/scheduler/pause')?.classification, 'exempt-local');
-  assert.equal(classify('POST', '/api/scheduler/resume')?.classification, 'exempt-local');
-});
-
 test('verdict routes are stub-actions, not full refuse', () => {
   assert.equal(classify('POST', '/api/verdict')?.classification, 'stub-actions');
   assert.equal(classify('POST', '/api/runs/:id/gates/verdict')?.classification, 'stub-actions');
@@ -229,9 +217,9 @@ test('refuseDryBridge() writes the typed 409 body and emits a JSONL refusal even
   await withTmp(async (logsRoot) => {
     const server = createServer((_req, res) => {
       refuseDryBridge(res, 'null', {
-        route: '/api/scheduler/start',
+        route: '/api/recovery/:id/abandon',
         method: 'POST',
-        action: 'daemon',
+        action: 'git-remote',
         logsRoot,
       });
     });
@@ -243,9 +231,9 @@ test('refuseDryBridge() writes the typed 409 body and emits a JSONL refusal even
       const body = (await res.json()) as Record<string, unknown>;
       assert.deepEqual(body, {
         error: 'dry-bridge',
-        route: '/api/scheduler/start',
+        route: '/api/recovery/:id/abandon',
         method: 'POST',
-        action: 'daemon',
+        action: 'git-remote',
       });
 
       const eventsPath = join(logsRoot, DRY_BRIDGE_LOG_BUCKET, 'events.jsonl');
@@ -253,7 +241,7 @@ test('refuseDryBridge() writes the typed 409 body and emits a JSONL refusal even
       assert.equal(lines.length, 1);
       const entry = JSON.parse(lines[0]) as Record<string, unknown>;
       assert.equal(entry.message, 'dry-bridge.refuse');
-      assert.deepEqual(entry.metadata, { route: '/api/scheduler/start', method: 'POST', action: 'daemon' });
+      assert.deepEqual(entry.metadata, { route: '/api/recovery/:id/abandon', method: 'POST', action: 'git-remote' });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -265,9 +253,9 @@ test('refuseDryBridge() never throws even if the event emit fails (never break t
     const server = createServer((_req, res) => {
       // An unwritable logsRoot must not prevent the 409 from being sent.
       refuseDryBridge(res, 'null', {
-        route: '/api/scheduler/stop',
+        route: '/api/recovery/:id/requeue',
         method: 'POST',
-        action: 'daemon',
+        action: 'git-remote',
         logsRoot: join(logsRoot, 'does', 'not', 'exist', '\0bad'),
       });
     });

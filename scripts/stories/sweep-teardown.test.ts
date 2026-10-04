@@ -22,8 +22,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, releaseOwnInFlight, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
-import { stopOwnScheduler, isRunning, DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
+import {
+  restoreSweptCommitted, releaseOwnInFlight, stopSchedulerCensusAndRelease, stopStudioThenScheduler,
+  teardownExitCode,
+} from './sweep-teardown.mjs';
+import { stopOwnScheduler, isRunning, DAEMON_PID_FILE, STOPPING_FILE } from './sweep-teardown-scheduler.mjs';
 import {
   killIfAlive, plantDaemonWithGrandchild, plantInFlightClaim, waitForFileToExist,
   waitForProcVisible, withReady,
@@ -122,12 +125,13 @@ test('594(2): an untracked artifact is not resurrected, and nothing outside the 
 
 /**
  * Stopping the scheduler the run started — T1 ruling 657(ii), bought by S10
- * run 9, where beat 7 pressed Start, a real daemon came up, and it was still
- * alive after the sweep.
+ * run 9, where a real daemon came up and it was still alive after the sweep.
  *
- * A scheduler left running is not cosmetic: `scheduler-start` renders ONLY at
- * `status: stopped` (`lib/scheduler-view.ts:44`), so the next run's beat 7 reds
- * at t+0 on a missing handle while the state it wants already holds.
+ * A scheduler left running is not cosmetic: `forge studio` ADOPTS a pid that
+ * is already alive rather than spawning fresh
+ * (`apps/forge/serve-supervisor.ts`, ADR 011), so the next run inherits this
+ * one's queue state and env wholesale — `scheduler-preflight.mjs`'s own
+ * refusal exists for exactly that reason, on the costed side.
  */
 test('657(ii): the pid file path is the PRODUCT\'s, bound by this test', async () => {
   // `run.mjs` is plain node and cannot import the TypeScript, so the path is
@@ -189,6 +193,100 @@ test('657(ii): a dead pid is reported as gone, never as a kill', () => {
   const r = stopOwnScheduler(root);
   assert.equal(r.stopped, null);
   assert.match(r.note ?? '', /already gone/, r.note ?? '');
+});
+
+test('STOPPING_FILE: the marker path is the PRODUCT\'s, bound by this test', async () => {
+  // Same shape as the 657(ii) `DAEMON_PID_FILE` binding above, and for the
+  // same reason: this module writes and reads the stop marker directly
+  // rather than importing `daemon.ts`'s own `markStopping`, so the path the
+  // two sides agree on is checked by test, never assumed from memory.
+  const { daemonPaths } = await import('../../packages/flows/daemon.ts');
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
+  assert.equal(join(root, STOPPING_FILE), daemonPaths(root).stoppingFile);
+});
+
+/**
+ * NEVER A SECOND SIGTERM. `forge studio`'s own supervisor
+ * (`apps/forge/serve-supervisor.ts`) marks a pid stopping and sends it ONE
+ * SIGTERM as part of its own exit sequence; `scheduler.ts` treats a SECOND
+ * SIGTERM as an operator's force-quit (`process.exit(130)`, no drain). A
+ * stop path that signals the SAME pid again — because it does not know the
+ * supervisor already did — strands whatever that daemon was draining.
+ *
+ * Both stand-ins below are REAL processes that COUNT the SIGTERMs they
+ * actually receive into a file, rather than asserting on an outcome a single
+ * extra signal could still produce by coincidence (a daemon that drains in
+ * 300ms either way does not, by itself, prove nothing extra was sent).
+ */
+function spawnSignalCountingServe(root, { log, sigCountFile, readyFile, drainMs = 300 }) {
+  return spawn(process.execPath, ['-e', withReady(`
+    const fs = require('node:fs');
+    process.on('SIGTERM', () => {
+      fs.writeFileSync(${JSON.stringify(sigCountFile)}, String(Number(fs.readFileSync(${JSON.stringify(sigCountFile)}, 'utf8')) + 1));
+      setTimeout(() => {
+        fs.appendFileSync(${JSON.stringify(log)}, '[serve] exited cleanly\\n');
+        process.exit(0);
+      }, ${drainMs});
+    });
+    setInterval(() => {}, 1000);
+  `, readyFile)], { cwd: root, stdio: 'ignore' });
+}
+
+test('marker-aware RED->GREEN (i): a pid STOPPING_FILE already names gets ZERO signals from stopOwnScheduler, and still reports drained', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-marker-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const log = join(root, '_logs', 'daemon', 'serve.log');
+  writeFileSync(log, '[serve] forever-mode\n');
+  const sigCountFile = join(root, 'sigterm-count');
+  writeFileSync(sigCountFile, '0');
+  const ready = join(root, 'daemon.ready');
+  const child = spawnSignalCountingServe(root, { log, sigCountFile, readyFile: ready });
+  t.after(() => killIfAlive(child.pid));
+  writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
+  await waitForFileToExist(ready);
+
+  // The marker AND the signal a real supervisor's own `stop()` already sent
+  // — simulating `forge studio` having ended this pid's draining BEFORE this
+  // call ever runs, exactly the order the studio-then-serve fix requires.
+  writeFileSync(join(root, STOPPING_FILE), String(child.pid));
+  process.kill(child.pid, 'SIGTERM');
+
+  const r = stopOwnScheduler(root, 2000);
+
+  assert.equal(r.stopped, child.pid);
+  assert.equal(r.drained, true, 'must still report the drain completed');
+  assert.equal(
+    Number(readFileSync(sigCountFile, 'utf8')), 1,
+    'stopOwnScheduler must send ZERO signals of its own once the marker already names this pid',
+  );
+});
+
+test('marker-aware RED->GREEN (ii): no marker present → stopOwnScheduler writes it and sends exactly one SIGTERM', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-marker-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const log = join(root, '_logs', 'daemon', 'serve.log');
+  writeFileSync(log, '[serve] forever-mode\n');
+  const sigCountFile = join(root, 'sigterm-count');
+  writeFileSync(sigCountFile, '0');
+  const ready = join(root, 'daemon.ready');
+  const child = spawnSignalCountingServe(root, { log, sigCountFile, readyFile: ready });
+  t.after(() => killIfAlive(child.pid));
+  writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
+  await waitForFileToExist(ready);
+  assert.equal(existsSync(join(root, STOPPING_FILE)), false, 'no marker exists yet — this call is the first to ask');
+
+  const r = stopOwnScheduler(root, 2000);
+
+  assert.equal(r.stopped, child.pid);
+  assert.equal(r.how, 'SIGTERM');
+  assert.equal(r.drained, true);
+  assert.equal(Number(readFileSync(sigCountFile, 'utf8')), 1, 'exactly one SIGTERM must reach the daemon');
+  assert.equal(
+    readFileSync(join(root, STOPPING_FILE), 'utf8'), String(child.pid),
+    'and the marker must now name this pid, exactly as the supervisor itself would leave it',
+  );
 });
 
 /**
@@ -519,6 +617,80 @@ test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the
   assert.ok(result.census!.waitedMs < 1500, `a TERM-respecting child must not consume the full bound: waited ${result.census!.waitedMs} ms`);
   assert.equal(existsSync(cleanExitMarker), true, 'the grandchild exited on its own SIGTERM handler, never SIGKILLed');
   assert.equal(existsSync(heartbeat), false);
+});
+
+/**
+ * `stopStudioThenScheduler` — the studio-then-serve half of a run's own
+ * teardown. These doors drive it with INJECTED fakes (never a real bridge or
+ * a real daemon — `stopSchedulerCensusAndRelease` already owns that
+ * coverage above) to pin the one fact a real-process test cannot show
+ * directly: the CALL ORDER itself. `run.mjs`'s own `finally` block cannot be
+ * driven as a unit (it boots a real bridge and a real browser), so this
+ * function is the extracted, testable seam — `run.test.ts` pins that
+ * `main()` actually calls it.
+ */
+test('stopStudioThenScheduler: studio-stop runs BEFORE the bridge-group wait, which runs BEFORE the scheduler stop', async () => {
+  const order = [];
+  const bridgeProc = { pid: 4242 };
+  const result = await stopStudioThenScheduler(
+    '/fake/root', bridgeProc, { sinceMs: 0 },
+    {
+      killBridgeGroup: (proc, signal) => order.push(`kill:${proc.pid}:${signal}`),
+      waitBridgeGroupGone: async (pid) => { order.push(`wait:${pid}`); return { gone: true, waitedMs: 5 }; },
+      stopScheduler: async (root, opts) => {
+        order.push(`stop:${root}:${opts.sinceMs}`);
+        return { sched: { stopped: null }, census: null, release: null, deferred: null, lines: ['stop-line'] };
+      },
+    },
+  );
+
+  assert.deepEqual(order, ['kill:4242:SIGTERM', 'wait:4242', 'stop:/fake/root:0'], 'studio must be signalled, then waited out, then — only then — the scheduler half runs');
+  assert.deepEqual(result.bridge, { gone: true, waitedMs: 5, signal: 'SIGTERM' });
+  assert.deepEqual(result.lines, [
+    "[stories] ending this run's own studio (pid 4242) — its own exit sequence stops the scheduler daemon it supervises before this teardown ever looks at it",
+    '[stories] studio 4242 exited after 5 ms (SIGTERM)',
+    'stop-line',
+  ]);
+  assert.equal(result.sched?.stopped, null, 'the scheduler half\'s own result shape must pass through unchanged');
+});
+
+test('stopStudioThenScheduler: a bridge group that does not exit in time is SIGKILLed before the scheduler stop ever runs', async () => {
+  const order = [];
+  const bridgeProc = { pid: 7 };
+  let waitCalls = 0;
+  const result = await stopStudioThenScheduler(
+    '/fake/root', bridgeProc, { sinceMs: 0 },
+    {
+      killBridgeGroup: (proc, signal) => order.push(`kill:${signal}`),
+      waitBridgeGroupGone: async () => {
+        waitCalls += 1;
+        order.push(`wait:${waitCalls}`);
+        return waitCalls === 1 ? { gone: false, waitedMs: 30 } : { gone: true, waitedMs: 10 };
+      },
+      stopScheduler: async () => { order.push('stop'); return { sched: null, census: null, release: null, deferred: null, lines: [] }; },
+    },
+  );
+
+  assert.deepEqual(order, ['kill:SIGTERM', 'wait:1', 'kill:SIGKILL', 'wait:2', 'stop'], 'SIGKILL and the second wait must both land BEFORE the scheduler stop runs');
+  assert.equal(result.bridge.gone, true);
+  assert.equal(result.bridge.signal, 'SIGKILL');
+  assert.equal(result.bridge.waitedMs, 40, 'both waits\' durations must accumulate, not just the last one');
+});
+
+test('stopStudioThenScheduler: no bridge of this run\'s own (null) skips studio entirely and goes straight to the scheduler stop', async () => {
+  const order = [];
+  const result = await stopStudioThenScheduler(
+    '/fake/root', null, { sinceMs: 0 },
+    {
+      killBridgeGroup: () => order.push('kill'),
+      waitBridgeGroupGone: async () => { order.push('wait'); return { gone: true, waitedMs: 0 }; },
+      stopScheduler: async () => { order.push('stop'); return { sched: null, census: null, release: null, deferred: null, lines: ['x'] }; },
+    },
+  );
+
+  assert.deepEqual(order, ['stop'], 'a run that never booted its own bridge must never signal or wait on one');
+  assert.equal(result.bridge, null);
+  assert.deepEqual(result.lines, ['x']);
 });
 
 /**

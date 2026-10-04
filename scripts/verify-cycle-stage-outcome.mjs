@@ -1,58 +1,101 @@
 /**
- * verify-cycle-stage-outcome.mjs — did a `forge serve --once` stage actually
- * succeed? Bead forge-8vfn.6.10.6.
+ * verify-cycle-stage-outcome.mjs — did a claimed cycle actually succeed?
+ * Bead forge-8vfn.6.10.6; reworked for M7-E row 205.
  *
- * WHY THIS EXISTS. On 2026-09-04 (G1 run 3) the architect stage's serve pass
- * printed `PM FAILED …` and `· cycle ERROR: project-manager phase failed …`, and
- * `verify-cycle.mjs` handed off to develop nine seconds later — because
- * `runServeStage` returned nothing and the caller had nothing to consult. The
- * initiative went on to merge to a real project on a work-item set its own
- * validation had rejected.
+ * `forge studio` supervises a forever-mode `forge serve` and claims every
+ * eligible pending manifest on its own (ADR 011/031) — neither harness
+ * driver (`scripts/verify-cycle.mjs`, `scripts/stories/d12-demo-runs.mjs`)
+ * spawns `forge serve` itself, so there is no child process whose stdout a
+ * classifier can tail. `classifyCycleEventLog` reads the SAME structured
+ * record the product itself writes for every cycle — `_logs/<cycleId>/
+ * events.jsonl` (`packages/flows/scheduler-run-one.ts` / `cycle.ts`) — and is
+ * a pure function of those lines, the same shape (and for the same reason)
+ * as `scripts/lib/verify-outcomes.mjs`'s `classifyReflectorProgress`: a
+ * predicate only a live, paid run can exercise is a predicate nobody
+ * exercises (§15.163).
  *
- * It is a PURE function of the serve output so it can be tested without a live
- * run: a predicate only a $7 cycle can exercise is a predicate nobody exercises
- * (§15.163). Same shape, and same reason, as `ci-terminal.sh classify`.
+ * WHY THIS EXISTS. On 2026-09-04 (G1 run 3) a project-manager phase failure
+ * wrote `project-manager`/`error` and `orchestrator`/`cycle`/`error` events,
+ * and the caller handed off to develop nine seconds later because nothing
+ * read them. The initiative went on to merge to a real project on a
+ * work-item set its own validation had rejected.
  *
- * Ordering of the predicates matters and mirrors §15.154: a failure marker is
- * decisive whatever else the pass printed, and SILENCE IS NOT SUCCESS — a stage
- * that produced no outcome line has demonstrated nothing (§15.92).
+ * Ordering of the predicates matters, mirroring §15.154: a failure marker is
+ * decisive whatever else the log carries, and SILENCE IS NOT SUCCESS — a log
+ * with no `cycle.end` and no failure marker has demonstrated nothing yet
+ * (§15.92); the caller (`scripts/lib/serve-wait.mjs`'s `waitForManifestOutcome`)
+ * reads that as "still in progress" and keeps polling until its own deadline.
  */
 
-/** `· cycle ERROR: <reason>` — the serve loop's own terminal-failure marker. */
-const CYCLE_ERROR = /·\s*cycle ERROR:\s*(.+)$/;
-/** `· PM FAILED` — the phase verdict, which may sit on a line whose agent-turn
- *  `subtype=success` says the opposite (bead forge-8vfn.6.1). Read the phase. */
-const PHASE_FAILED = /·\s*(PM|DEV|REVIEW|DEMO|REFLECT) FAILED\b/;
-/** `· cycle done` / `· cycle <status>` — evidence the pass reached an outcome. */
-const CYCLE_OUTCOME = /·\s*cycle (done|complete|started|[a-z-]+)\b/;
+/** A structured failure the scheduler itself names before any worktree or
+ *  cycle exists (`packages/flows/scheduler-run-one.ts`'s `emitOrchestratorEvent`
+ *  call sites): `phase: 'orchestrator', skill: 'scheduler', message:
+ *  'claim.refused'`, `metadata: { reason, terminal }`. */
+function claimRefusedError(e) {
+  if (e.phase !== 'orchestrator' || e.skill !== 'scheduler' || e.message !== 'claim.refused') return null;
+  const md = e.metadata ?? {};
+  const kind = md.terminal === true ? 'terminal' : 'non-terminal';
+  return `claim refused (${kind}): ${md.reason ?? '(no reason recorded)'}`;
+}
 
-/** The scheduler's claim-refusal line: `[serve] <id> — claim refused (<terminal | non-terminal, …>): <reason>`. */
-const CLAIM_REFUSED = /\[serve\] \S+ — claim refused \(([^)]*)\): (.*)$/;
+/** The cycle's own terminal-failure marker (`cycle.ts`'s outer try/catch):
+ *  `phase: 'orchestrator', skill: 'cycle', event_type: 'error'`, `message`
+ *  carrying the thrown error's text verbatim (e.g. "project-manager phase
+ *  failed: …"). */
+function cycleErrorError(e) {
+  if (e.phase !== 'orchestrator' || e.skill !== 'cycle' || e.event_type !== 'error') return null;
+  return `cycle ERROR: ${e.message ?? '(no message)'}`;
+}
+
+/** The project-manager phase's own failure event (`scheduler-run-one.ts`'s
+ *  progress tee prints this as "PM FAILED"): `phase: 'project-manager',
+ *  event_type: 'error'`, `metadata: { result_subtype, work_item_count }`. */
+function pmFailedError(e) {
+  if (e.phase !== 'project-manager' || e.event_type !== 'error') return null;
+  const md = e.metadata ?? {};
+  return `PM FAILED (subtype=${md.result_subtype ?? '?'}, WIs=${md.work_item_count ?? '?'})`;
+}
+
+const FAILURE_CLASSIFIERS = [claimRefusedError, cycleErrorError, pmFailedError];
 
 /**
- * @param {readonly string[]} lines stdout+stderr of one `forge serve --once` pass
- * @returns {{ ok: boolean, errors: string[] }} `errors` carries each reason verbatim
+ * @param {readonly string[]} lines raw JSONL lines from one cycle's
+ *   `_logs/<cycleId>/events.jsonl` (or any subset of it); malformed lines are
+ *   skipped, matching every other line-scanner in this tree
+ * @returns {{ errors: string[], sawEnd: boolean, endStatus: string | null }}
+ *   `errors` carries each decisive failure, verbatim, in log order.
+ *   `sawEnd` is true once the cycle's own `orchestrator`/`cycle`/`end` event
+ *   is observed; `endStatus` is that event's `metadata.status` (e.g.
+ *   `'ready-for-review'`, `'merged'`, `'failed'`).
  */
-export function classifyServeStageOutcome(lines) {
+export function classifyCycleEventLog(lines) {
   const errors = [];
-  let sawOutcome = false;
+  let sawEnd = false;
+  let endStatus = null;
 
   for (const line of lines) {
-    // A refused claim is an outcome with a reason (scheduler-run-one.ts) — never "no outcome at all" (row 128).
-    const refused = CLAIM_REFUSED.exec(line);
-    if (refused) { errors.push(`claim refused (${refused[1]}): ${refused[2].trim()}`); sawOutcome = true; continue; }
-    const m = CYCLE_ERROR.exec(line);
-    if (m) { errors.push(m[1].trim()); sawOutcome = true; continue; }
-    if (PHASE_FAILED.test(line)) { errors.push(line.trim()); sawOutcome = true; continue; }
-    if (CYCLE_OUTCOME.test(line)) sawOutcome = true;
+    if (!line) continue;
+    let e;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    let matched = false;
+    for (const classify of FAILURE_CLASSIFIERS) {
+      const msg = classify(e);
+      if (msg !== null) {
+        errors.push(msg);
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+    if (e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end') {
+      sawEnd = true;
+      endStatus = e.metadata?.status ?? null;
+    }
   }
 
-  if (errors.length > 0) return { ok: false, errors };
-  if (!sawOutcome) {
-    return {
-      ok: false,
-      errors: ['the serve stage printed no cycle outcome at all — nothing was demonstrated, so the hand-off is refused'],
-    };
-  }
-  return { ok: true, errors: [] };
+  return { errors, sawEnd, endStatus };
 }

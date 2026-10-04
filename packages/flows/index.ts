@@ -71,7 +71,10 @@ export { PLAN_FLOW_ID, enqueuePlanRun } from './enqueue-plan-run.ts';
 // ---- Scheduler and daemon --------------------------------------------------
 export { checkInitiativeDeps, serve } from './scheduler.ts';
 export { decideAutoRetry } from './scheduler-dispatch.ts';
-export { clearPidFile, daemonPaths, daemonState, isAlive, isPaused, markStopping, pausedFlagPath, readPid, setPaused, spawnServeDetached, writePidFile } from './daemon.ts';
+export {
+  clearOwnPidFile, clearPidFile, daemonPaths, isAlive, markStopping, readPid,
+  spawnServeDetached, startServeLock, writePidFile,
+} from './daemon.ts';
 
 // ---- The run model the UI reads --------------------------------------------
 export { type Run, buildAgentSlugToNodeId, buildNodeMapping } from './run-model.ts';

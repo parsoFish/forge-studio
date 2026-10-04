@@ -702,10 +702,11 @@ DEPS line, so CONTRACT MET from it means the claim will pass, and Studio's
 project roadmap shows **Not claimable: DEPS** beside Start development while it
 fails. A project is still *born* contract-green before its dependencies are
 installed: project creation and Studio's contract readiness judge the other
-clauses only. A running scheduler does not
-retry a claim it refused for this reason (`packages/flows/claim-validator.ts`
-records the refusal for the life of the process), so after fixing the ground,
-stop and start the scheduler to have it claim the initiative again.
+clauses only. A running `forge serve` skips re-claiming a project refused for
+this reason for a bounded window (`packages/flows/claim-validator.ts`'s
+`NON_TERMINAL_RECHECK_MS`, 5 minutes) rather than re-walking preflight on
+every poll tick, but its next claim attempt past that window re-checks on its
+own — no restart required.
 
 ---
 

@@ -4,17 +4,19 @@
  *
  * GAP `forge-8vfn.8.1.6` (T1 row 6), follow-up finding. `bridgeSpawnOptions`
  * carries the run's effective ceiling on the BRIDGE process `bootOwnBridge`
- * spawns (`bridge.mjs`), and the ceiling only reaches a cycle THROUGH that
- * bridge's own `POST /api/scheduler/start` route
- * (`apps/forge/bridge-scheduler.ts`), which calls `spawnServeDetached`
- * (`packages/flows/daemon.ts`). THAT function's own liveness check —
- * `readPid(daemonPaths(forgeRoot).pidFile)` alive per `isAlive` — returns
- * `null` and starts NOTHING new when a scheduler pid is already up. So a
- * LEFTOVER `forge serve` from an earlier run (or an operator's own) keeps its
- * own, already-fixed env, and this run's `--ceiling` binds nothing at all —
- * silently, because the beat that presses Start still succeeds; it just
- * starts nothing new. This module closes that gap at the runner's own
- * preflight, before any beat can press Start.
+ * spawns (`bridge.mjs`) — the `forge studio` process whose own supervisor
+ * (`apps/forge/serve-supervisor.ts`) brings `forge serve` up at boot the same
+ * way it brings up the bridge and the UI (ADR 011). That supervisor's boot
+ * step ADOPTS a live pid when `daemonPaths(forgeRoot).pidFile` already names
+ * one alive per `isAlive` — supervising it, spawning nothing — and only
+ * SPAWNS a fresh `forge serve` (`spawnServeDetached`, `packages/flows/
+ * daemon.ts`, inheriting this run's env, ceiling included) when the pid file
+ * names none. So a LEFTOVER `forge serve` from an earlier run (or an
+ * operator's own) keeps its own, already-fixed env across the adopt, and
+ * this run's `--ceiling` binds nothing at all — silently, because the daemon
+ * is already claiming queued work; studio just never touched its env. This
+ * module closes that gap at the runner's own preflight, before `forge
+ * studio` ever boots.
  *
  * `run.mjs` runs under plain `node` (no `--experimental-strip-types`), so it
  * cannot import `packages/flows/daemon.ts` directly — the same constraint
@@ -38,11 +40,10 @@ import { join } from 'node:path';
 import { DAEMON_PID_FILE, isRunning } from './sweep-teardown-scheduler.mjs';
 
 /**
- * Is there ALREADY a live scheduler recorded for this tree? Scoped by the
- * caller to a run that actually has an effective ceiling to lose (`run.mjs`
- * only asks this when `bridgeCeilingUsd !== null`) — a costless batch never
- * needed the bridge's env to carry a ceiling in the first place, so an
- * operator's own unrelated `forge serve` is none of this check's business.
+ * Is there ALREADY a live `forge serve` recorded for this tree? `run.mjs`
+ * asks before every run, costed or costless: the run's own studio would
+ * adopt that serve, and it would claim this ground's queue under an env the
+ * run never set.
  *
  * @param {string} root the run's own worktree
  * @returns {{ok: boolean, reason: string}}

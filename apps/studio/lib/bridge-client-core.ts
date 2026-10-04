@@ -318,6 +318,33 @@ export async function probeBridgeHealth(): Promise<{ ok: true } | { ok: false; e
 }
 
 /**
+ * M7-E row 205 (ADR 011/031) — `forge studio` supervises `forge serve`
+ * directly; there is no operator start/pause/resume/stop surface, only this
+ * READ-ONLY status, folded into the same `GET /api/health` response the
+ * bridge identity rides. `unsupervised` means the bridge itself has no
+ * supervisor at all (the dry bridge, or a second studio that attached
+ * read-only) — never an error, just "nothing to report here".
+ */
+export type ServeStatus = {
+  state: 'running' | 'draining' | 'restarting' | 'down' | 'unsupervised';
+  pid: number | null;
+  /** Respawns this supervisor has performed after a detected crash. */
+  restarts: number;
+  /** ISO instant the pending crash-loop respawn will fire, else null. */
+  nextRestartAt: string | null;
+};
+
+/** Read the live `serve` status off `GET /api/health`. Null only when the
+ *  bridge itself could not be read (unreachable, non-2xx, malformed) — a
+ *  reachable OLD bridge with no `serve` field is not expected post-rollout,
+ *  but is handled the same honest way (null), never fabricated as healthy. */
+export async function fetchServeStatus(): Promise<ServeStatus | null> {
+  const r = await readBridgeJson<{ serve?: ServeStatus }>(() => bridgeFetch('/api/health'));
+  if (!r.ok) return null;
+  return r.data?.serve ?? null;
+}
+
+/**
  * POST to a bridge endpoint (JSON body when provided, bare POST otherwise) and
  * normalise the reply to the `{ ok, error }` envelope. `data` carries the
  * parsed body for the rare caller that needs an extra field (e.g. sessionId).

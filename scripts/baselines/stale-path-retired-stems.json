@@ -131,6 +131,7 @@
   "bridge-recovery.test",
   "bridge-result",
   "bridge-result.test",
+  "bridge-scheduler",
   "bridge-status",
   "bridge-status-render.test",
   "bridge-status.test",

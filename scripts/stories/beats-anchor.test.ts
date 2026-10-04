@@ -1,10 +1,10 @@
 /**
  * 718(1) — the channel door's "since the beat's declared ANCHOR" form.
  *
- * RUN 11 BOUGHT THIS, and the door was not wrong so much as over-spoken. S10's
- * beat 7 pressed `scheduler-start`; the daemon claimed the initiative and had
- * its cycle dir on disk at `13:21:29.798`, **449 ms BEFORE beat 7's own green
- * at `13:21:30.247`** — and therefore before beat 8 pressed anything. The door
+ * RUN 11 BOUGHT THIS, and the door was not wrong so much as over-spoken. The
+ * daemon claimed S10's initiative and had its cycle dir on disk at
+ * `13:21:29.798`, **449 ms BEFORE beat 7 itself went green at
+ * `13:21:30.247`** — and therefore before beat 8 pressed anything. The door
  * counts channels born SINCE THE PRESS, so that cycle was invisible to it by
  * construction, and beat 8 reded `no-channel: nothing under _logs/ was created
  * by this press`. The cycle it could not see ran to `cycle.end` sixty seconds
@@ -28,12 +28,12 @@ import { fileURLToPath } from 'node:url';
 import { resolveAnchorMs } from './beats-anchor.mjs';
 
 test('718(1): an anchor names an EARLIER press, and the door searches from there', () => {
-  const presses = new Map([['scheduler-start', 1_000], ['start-work-plan', 5_000]]);
-  assert.equal(resolveAnchorMs({ for: 'agent', anchor: 'scheduler-start' }, presses, 5_000), 1_000);
+  const presses = new Map([['approve-plan', 1_000], ['start-work-plan', 5_000]]);
+  assert.equal(resolveAnchorMs({ for: 'agent', anchor: 'approve-plan' }, presses, 5_000), 1_000);
 });
 
 test('718(1): no anchor keeps the wait\'s own start — the existing behaviour is untouched', () => {
-  const presses = new Map([['scheduler-start', 1_000]]);
+  const presses = new Map([['approve-plan', 1_000]]);
   assert.equal(resolveAnchorMs({ for: 'agent' }, presses, 5_000), 5_000);
   assert.equal(resolveAnchorMs(null, presses, 5_000), 5_000);
 });
@@ -42,7 +42,7 @@ test('718(1): an anchor naming a press that never happened REFUSES, never silent
   // A silent fallback to the wait's start would restore the exact bug this
   // exists to fix, and would do it invisibly — the beat would red with
   // `no-channel` again and the verdict would look identical to a real one.
-  const presses = new Map([['scheduler-start', 1_000]]);
+  const presses = new Map([['approve-plan', 1_000]]);
   assert.throws(
     () => resolveAnchorMs({ for: 'agent', anchor: 'never-pressed' }, presses, 5_000),
     /anchor "never-pressed".*no beat pressed it/,

@@ -120,14 +120,13 @@ packages/flows/cycle.ts existsSync 8
 packages/flows/cycle.ts mkdirSync 3
 packages/flows/cycle.ts readdirSync 1
 packages/flows/cycle.ts readFileSync 2
-packages/flows/daemon.ts existsSync 7
+packages/flows/daemon.ts existsSync 4
 packages/flows/daemon.ts mkdirSync 4
 packages/flows/daemon.ts openSync 1
 packages/flows/daemon.ts readFileSync 1
-packages/flows/daemon.ts rmSync 4
+packages/flows/daemon.ts rmSync 3
 packages/flows/daemon.ts spawn 1
-packages/flows/daemon.ts statSync 1
-packages/flows/daemon.ts writeFileSync 3
+packages/flows/daemon.ts writeFileSync 2
 packages/flows/drain-fix-loop.ts existsSync 3
 packages/flows/drain-fix-loop.ts readdirSync 1
 packages/flows/drain-fix-loop.ts readFileSync 1
@@ -307,7 +306,8 @@ packages/kernel/path-guard.ts readFileSync 1
 packages/kernel/path-guard.ts realpathSync 2
 packages/kernel/path-guard.ts renameSync 1
 packages/kernel/path-guard.ts writeFileSync 1
-packages/kernel/process-liveness.ts readFileSync 1
+packages/kernel/process-liveness.ts readFileSync 2
+packages/kernel/process-liveness.ts realpathSync 3
 packages/kernel/project-layout.ts existsSync 2
 packages/kernel/project-layout.ts mkdirSync 1
 packages/kernel/project-layout.ts readdirSync 1

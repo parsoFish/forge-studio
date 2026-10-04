@@ -25,19 +25,36 @@
  * two hours of a "stopped" run still writing into the tree the sweep had just
  * declared clear.
  *
+ * NEVER A SECOND SIGTERM TO THE SCHEDULER DAEMON. `forge studio` — inside
+ * the bridge group — supervises `forge serve` (`apps/forge/serve-supervisor.ts`)
+ * and, on the SIGTERM at step 1, runs its own exit sequence
+ * (`apps/forge/forge-watch.ts`'s `shutdown` → `runExitSequence`): it marks the
+ * daemon stopping and sends it ONE SIGTERM SYNCHRONOUSLY, before the studio
+ * process itself ever exits. `scheduler.ts` treats a SECOND SIGTERM as an
+ * operator's force-quit (`process.exit(130)`, no drain) — so step 4 below
+ * must never run before step 3 has confirmed the bridge group, studio
+ * included, is actually gone: only then can `stopOwnScheduler` trust that
+ * whatever marked the daemon stopping already did so, and wait rather than
+ * signal again.
+ *
  * THE ORDER IS THE RULE:
- *  1. SIGTERM the bridge's group — first, so nothing spawns a new turn;
+ *  1. SIGTERM the bridge's group — first, so nothing spawns a new turn, and
+ *     studio's own exit sequence starts stopping the daemon it supervises;
  *  2. reap every agent turn this run dispatched (`collectAgentRuns` +
  *     `reapAgentRuns`, the SAME pair the run-end abort backstop uses):
  *     SIGTERM, a bounded grace, then SIGKILL the survivors;
- *  3. stop the scheduler daemon THIS RUN started (row 213) — `stopOwnScheduler`
- *     (`sweep-teardown-scheduler.mjs`), the SAME ownership test and TERM/
- *     grace/KILL sequence the normal run-end sweep already uses, reused here
- *     rather than a second pid-finding path. It signals ONLY a pid whose pid
- *     file lives under THIS run's `root` AND whose own cwd resolves back to
- *     that same root — never a pid file read from another tree, and never a
- *     pid already confirmed dead;
- *  4. wait for the bridge's group to exit, bounded, escalating to SIGKILL;
+ *  3. wait for the bridge's group to exit, bounded, escalating to SIGKILL —
+ *     BEFORE the scheduler daemon is ever looked at, so studio's own stop
+ *     marker (and the one SIGTERM behind it) is already on disk by the time
+ *     step 4 runs;
+ *  4. stop the scheduler daemon THIS RUN started (row 213) — `stopOwnScheduler`
+ *     (`sweep-teardown-scheduler.mjs`), the SAME ownership test and
+ *     marker-aware TERM/grace/KILL sequence the normal run-end sweep already
+ *     uses, reused here rather than a second pid-finding path. It signals
+ *     ONLY a pid whose pid file lives under THIS run's `root` AND whose own
+ *     cwd resolves back to that same root — never a pid file read from
+ *     another tree, never a pid already confirmed dead, and never a pid the
+ *     stop marker already names (see the paragraph above);
  *  5. immediately before the clear, re-check that nothing this run started is
  *     still alive — the bridge group, every agent turn `collectAgentRuns`
  *     found, and the scheduler daemon. A survivor is named on its own
@@ -76,8 +93,11 @@ import { DAEMON_PID_FILE, DRAIN_GRACE_MS, stopOwnScheduler, isRunning } from './
 
 /** How long the bridge's group gets to exit on its own SIGTERM (run 5 measured ~20 s). */
 export const BRIDGE_EXIT_BOUND_MS = 30_000;
-/** After SIGKILL, how long before the path stops waiting and says so. */
-const BRIDGE_KILL_GRACE_MS = 5_000;
+/** After SIGKILL, how long before the path stops waiting and says so. Shared
+ *  with `sweep-teardown.mjs`'s `stopStudioThenScheduler` — the SAME bridge-
+ *  group kill-then-wait shape, for the run-end teardown rather than a
+ *  mid-run stop. */
+export const BRIDGE_KILL_GRACE_MS = 5_000;
 const POLL_MS = 100;
 /**
  * ROW 213 — how long the scheduler daemon THIS RUN started gets to drain
@@ -180,15 +200,44 @@ export async function runStopPath({
     log(`[stories] post-stop sweep: reaping this run's agent turns FAILED: ${err?.message ?? err}`);
   }
 
+  // THE BRIDGE GROUP'S OWN EXIT COMES BEFORE THE SCHEDULER CHECK BELOW, NEVER
+  // AFTER. `forge studio` (inside this group) runs its own exit sequence on
+  // the SIGTERM above (`apps/forge/forge-watch.ts`'s `shutdown` →
+  // `runExitSequence`), which stops its serve supervisor SYNCHRONOUSLY —
+  // marking the scheduler daemon stopping and sending it the ONE SIGTERM it
+  // is entitled to — before the studio process itself ever exits. Waiting for
+  // this group to be fully gone BEFORE `stopScheduler` runs is what lets that
+  // function (`stopOwnScheduler`, `sweep-teardown-scheduler.mjs`) see the
+  // marker already there and send NO signal of its own: `scheduler.ts` treats
+  // a SECOND SIGTERM as an operator's force-quit (`process.exit(130)`, no
+  // drain), so asking this path's own `stopScheduler` to signal a pid the
+  // studio it just ended may have already signalled strands whatever that
+  // daemon was draining.
+  let bridge = null;
+  if (bridgeProc !== null) {
+    bridge = { ...waitGroupGone(bridgeProc.pid, bridgeExitBoundMs, membersOf, sleep), signal: 'SIGTERM' };
+    if (!bridge.gone) {
+      killBridgeProcessGroup(bridgeProc, 'SIGKILL');
+      const after = waitGroupGone(bridgeProc.pid, BRIDGE_KILL_GRACE_MS, membersOf, sleep);
+      bridge = { gone: after.gone, waitedMs: bridge.waitedMs + after.waitedMs, signal: 'SIGKILL' };
+    }
+    log(
+      `[stories] post-stop sweep: bridge group ${bridgeProc.pid} ` +
+        (bridge.gone ? `exited after ${bridge.waitedMs} ms (${bridge.signal})` : `STILL ALIVE after ${bridge.waitedMs} ms and a SIGKILL`),
+    );
+  }
+
   // ROW 213 (forge-8vfn.8.5.49) — the scheduler daemon THIS RUN started
   // (`spawnServeDetached`, `packages/flows/daemon.ts`) is `detached: true` and
   // `unref()`d into ITS OWN process group, so the bridge-group SIGTERM above
-  // can never reach it. `stopOwnScheduler` is the SAME ownership test (pid
-  // file under `root`, cwd resolves back to `root`) plus TERM/grace/KILL
-  // sequence the normal run-end sweep already uses — reused here rather than
-  // a second pid-finding path. It never signals a pid file read from another
-  // root, and never signals a pid already confirmed dead (see its own header
-  // in `sweep-teardown-scheduler.mjs`).
+  // can never reach it directly — it reaches it only through the studio exit
+  // sequence described above, which this path has now waited out. `stopScheduler`
+  // (`stopOwnScheduler`) is the SAME ownership test (pid file under `root`,
+  // cwd resolves back to `root`) plus marker-aware TERM/grace/KILL sequence the
+  // normal run-end sweep already uses — reused here rather than a second
+  // pid-finding path. It never signals a pid file read from another root, and
+  // never signals a pid already confirmed dead (see its own header in
+  // `sweep-teardown-scheduler.mjs`).
   log(`[stories] post-stop sweep: checking for a scheduler daemon this run started (${DAEMON_PID_FILE})`);
   const sched = stopScheduler(root, schedulerGraceMs);
   if (sched.unknown) {
@@ -203,20 +252,6 @@ export async function runStopPath({
     log(`[stories] post-stop sweep: scheduler: ${sched.note}`);
   } else {
     log('[stories] post-stop sweep: no scheduler daemon recorded for this run');
-  }
-
-  let bridge = null;
-  if (bridgeProc !== null) {
-    bridge = { ...waitGroupGone(bridgeProc.pid, bridgeExitBoundMs, membersOf, sleep), signal: 'SIGTERM' };
-    if (!bridge.gone) {
-      killBridgeProcessGroup(bridgeProc, 'SIGKILL');
-      const after = waitGroupGone(bridgeProc.pid, BRIDGE_KILL_GRACE_MS, membersOf, sleep);
-      bridge = { gone: after.gone, waitedMs: bridge.waitedMs + after.waitedMs, signal: 'SIGKILL' };
-    }
-    log(
-      `[stories] post-stop sweep: bridge group ${bridgeProc.pid} ` +
-        (bridge.gone ? `exited after ${bridge.waitedMs} ms (${bridge.signal})` : `STILL ALIVE after ${bridge.waitedMs} ms and a SIGKILL`),
-    );
   }
 
   // ROW 213 — immediately before the clear, re-check that nothing this run

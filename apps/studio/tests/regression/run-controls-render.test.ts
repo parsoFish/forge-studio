@@ -1,5 +1,8 @@
 /**
- * PR #206 — W8-A3 WI-3 (flows-28/49/23): a failed/queued run had no controls, no Resume-vs-Requeue disclosure, no scheduler card.
+ * PR #206 — W8-A3 WI-3 (flows-28/49/23): a failed/queued run had no controls,
+ * no Resume-vs-Requeue disclosure, no serve status. M7-E row 205 (ADR
+ * 011/031): there is no operator lifecycle control over `forge serve` —
+ * only the one shared read-only `<ServeStatusNotice>`.
  *
  * W8-A3 WI-3 — `RunControls` rendered, and its composition into the run detail
  * page (`flows-28`, `flows-49`, `flows-23`).
@@ -7,18 +10,20 @@
  * `run-controls-view.test.ts` pins the derivation. This file pins the DOM
  * contract automation and the journeys read, by rendering the REAL components
  * through `react-dom/server` (the `lib/run-panel-render.test.ts` convention).
- * Click behaviour and the scheduler fetch do not run under
+ * Click behaviour and the serve-status fetch do not run under
  * `renderToStaticMarkup` — what is asserted here is the initial render, which
  * is exactly where the three defects lived:
  *
  *   flows-28 — the failed-run bar carried ONE button.
  *   flows-49 — it disclosed nothing about what Resume does.
  *   flows-23 — `/flows/[id]/run/[runId]` rendered zero buttons, no status and
- *              no scheduler card, for any run in any state.
+ *              no serve indicator, for any run in any state.
  */
-import { test, expect, vi } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+
+import type { ServeStatus } from '../../lib/bridge-client-core.ts';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, forward: () => {}, prefetch: () => {} }),
@@ -26,10 +31,24 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// MEDIUM-2 (review): `useServeStatus`'s fetch never resolves under
+// `renderToStaticMarkup` (no effects run), so the real hook always hands back
+// `null` — this repo's only way to exercise `running`/`draining`/etc. at this
+// render boundary is mocking the hook itself. `mockServeStatus` is read by the
+// factory on every call, so each test just sets it before rendering.
+let mockServeStatus: ServeStatus | null = null;
+vi.mock('@/lib/use-serve-status', () => ({
+  useServeStatus: () => ({ status: mockServeStatus, ready: true, refresh: async () => {} }),
+}));
+
 import { RunControls } from '../../components/studio/RunControls.tsx';
 import { FlowRunDetail } from '../../components/studio/FlowRunDetail.tsx';
 import { RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
 import type { Run, RunStatus, Flow } from '../../lib/studio-client.ts';
+
+beforeEach(() => {
+  mockServeStatus = null;
+});
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
   return {
@@ -117,24 +136,7 @@ test('a failed run carrying a failNote shows it rather than a bare "Run failed."
   expect(html).toContain('dev-loop wedged at WI-3');
 });
 
-// ---- flows-23: the queued run's control is the scheduler --------------------
-
-test('flows-23 (S3-6): the scheduler strip on a run page claims NO queue count — the surface never read the queue', () => {
-  // KILLS: the first cut's hard-coded `queuedCount={1}`, which made every run
-  // page state "1 queued run will not start until the scheduler runs" and
-  // `data-scheduler-queued="1"` regardless of the real queue — a fabricated
-  // number on a documented harness attribute, i.e. this change's own dominant
-  // defect class inside the change.
-  // KILLS both cuts: the hard-coded `1` (round 1, S3-6) AND the fabricated `0`
-  // the first fix left behind (round 2, finding 5) — SchedulerCard defaulted the
-  // prop and emitted the attribute unconditionally, so a surface that had never
-  // read the queue still asserted a number, and the fix's own test PINNED it.
-  // Absent is a different claim from zero.
-  const html = markup(RunControls, { run: run('planned') });
-  expect(html, 'nothing read the queue, so no count may be asserted at all').not.toMatch(/data-scheduler-queued=/);
-  // A caller that DOES know the real number passes it and it is carried verbatim.
-  expect(markup(RunControls, { run: run('planned'), queuedCount: 12 })).toContain('data-scheduler-queued="12"');
-});
+// ---- flows-23: the queued run's control is forge serve ----------------------
 
 test('flows-28/49 (S3-11): each control advertises BOTH ids — the run handle and the initiative id the routes take', () => {
   // KILLS: advertising only `data-run-id` (a cycle id once claimed) on buttons
@@ -146,10 +148,14 @@ test('flows-28/49 (S3-11): each control advertises BOTH ids — the run handle a
   expect(html).toContain(`data-initiative-id="${r.initiativeId}"`);
 });
 
-test('flows-23: a QUEUED run renders the scheduler strip — the only thing that can start it', () => {
+test('flows-23 / MEDIUM-2: a QUEUED run with serve UNREAD (null) says it could not confirm — never the pickup promise', () => {
+  // KILLS: rendering `queued-awaits-serve` whenever `serve` is falsy. `null`
+  // means the read never resolved (or failed) — ADR 031: Studio never claims
+  // a run is in progress unless a daemon is alive and claiming it.
+  mockServeStatus = null;
   const html = markup(RunControls, { run: run('planned') });
-  expect(html).toContain('data-component="scheduler-card"');
-  expect(html).toContain('data-scheduler-variant="strip"');
+  expect(html).toContain('data-component="queued-serve-unconfirmed"');
+  expect(html).not.toContain('data-component="queued-awaits-serve"');
   expect(html).toContain('data-run-status="planned"');
   // and no run-scoped recovery button, which would be a lie
   for (const action of RUN_CONTROL_ACTIONS) {
@@ -157,14 +163,41 @@ test('flows-23: a QUEUED run renders the scheduler strip — the only thing that
   }
 });
 
-test('flows-23: the scheduler strip can be opted out of where a surface already mounts one — and then a queued run renders nothing', () => {
-  const html = markup(RunControls, { run: run('planned'), schedulerStrip: false });
-  expect(html).toBe('');
-  // …while the default (the run detail page) still mounts it.
-  expect(markup(RunControls, { run: run('planned') })).toContain('data-component="scheduler-card"');
+test('flows-23 / MEDIUM-2: a QUEUED run with serve UNSUPERVISED (dry bridge) also says it could not confirm', () => {
+  mockServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null };
+  const html = markup(RunControls, { run: run('planned') });
+  expect(html).toContain('data-component="queued-serve-unconfirmed"');
+  expect(html).not.toContain('data-component="queued-awaits-serve"');
+  expect(html).not.toContain('data-component="serve-status-notice"');
 });
 
-test('a run with neither recovery controls nor a scheduler dependency renders nothing at all', () => {
+test('flows-23: a QUEUED run with serve CONFIRMED running renders the pickup promise', () => {
+  mockServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null };
+  const html = markup(RunControls, { run: run('planned') });
+  expect(html).toContain('data-component="queued-awaits-serve"');
+  expect(html).not.toContain('data-component="queued-serve-unconfirmed"');
+  expect(html).not.toContain('data-component="serve-status-notice"');
+});
+
+test('flows-23: a QUEUED run with serve CONFIRMED not-running (draining/restarting/down) renders the shared notice, never the pickup promise or the unconfirmed line', () => {
+  for (const state of ['draining', 'restarting', 'down'] as const) {
+    mockServeStatus = { state, pid: null, restarts: 1, nextRestartAt: null };
+    const html = markup(RunControls, { run: run('planned') });
+    expect(html, state).toContain('data-component="serve-status-notice"');
+    expect(html, state).toContain(`data-serve-state="${state}"`);
+    expect(html, state).not.toContain('data-component="queued-awaits-serve"');
+    expect(html, state).not.toContain('data-component="queued-serve-unconfirmed"');
+  }
+});
+
+test('flows-23: the queued-serve line can be opted out of where a surface already mounts one — and then a queued run renders nothing', () => {
+  const html = markup(RunControls, { run: run('planned'), serveStrip: false });
+  expect(html).toBe('');
+  // …while the default (the run detail page) still mounts it (serve unread → unconfirmed).
+  expect(markup(RunControls, { run: run('planned') })).toContain('data-component="queued-serve-unconfirmed"');
+});
+
+test('a run with neither recovery controls nor a queued-serve dependency renders nothing at all', () => {
   // row 150 (rulings 1771 + 1774): active/gated now offer stop-run — pinned
   // in its own test above; only complete (and null) render nothing.
   expect(markup(RunControls, { run: run('complete') })).toBe('');
@@ -190,9 +223,10 @@ test('flows-23: the run detail page of a FAILED run carries the recovery control
   }
 });
 
-test('flows-23: the run detail page of a QUEUED run carries the scheduler control', () => {
+test('flows-23: the run detail page of a QUEUED run carries the serve-claim line', () => {
+  mockServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null };
   const html = detail(run('planned'));
-  expect(html).toContain('data-component="scheduler-card"');
+  expect(html).toContain('data-component="queued-awaits-serve"');
 });
 
 test('flows-23: a run whose manifest names its architect session links back to it', () => {

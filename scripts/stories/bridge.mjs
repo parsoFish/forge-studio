@@ -51,7 +51,7 @@ const GH_TOKEN_ENV = 'GH_TOKEN';
  * reads it from its OWN env, never from a spawned agent's.
  *
  * (a) `resolveCostCeilingOverride` ignores a value `<= 0`, so `--ceiling 0` on a costed story does not halt at 0.
- * (b) This env binds only a scheduler THIS bridge spawns — a pre-existing one keeps its own; see `scheduler-preflight.mjs`'s refusal.
+ * (b) This env binds only a `forge serve` studio's own supervisor SPAWNS fresh at boot — one it ADOPTS instead keeps its own, already-fixed env; see `scheduler-preflight.mjs`'s refusal.
  */
 const COST_CEILING_ENV = 'FORGE_COST_CEILING_USD';
 
@@ -144,12 +144,13 @@ const BOOT_TIMEOUT_MS = 120_000;
  * surviving as an orphan still holding 4123/4124.
  *
  * ONE MECHANISM, THREE CALL SITES — forge-8vfn.8.5.21 (Defect B fold, row
- * 184b). The boot-timeout path below already had this exactly once; `run.mjs`
- * carried a SECOND, duplicate copy of it in its own `finally` block, and its
- * SIGINT/SIGTERM handler (`onStopSignal`) had neither — a story killed mid-run
- * left the bridge it booted, and `next-server` with it, bound to 4123/4124
- * for as long as ten minutes until an operator stopped it by hand. All three
- * now call this.
+ * 184b). The boot-timeout path below calls this directly; `stop-path.mjs`'s
+ * mid-run `runStopPath` and `sweep-teardown.mjs`'s run-end
+ * `stopStudioThenScheduler` both call it too, rather than either inlining its
+ * own copy of the same group kill — a story killed mid-run, or a run simply
+ * ending, must end the SAME bridge group the SAME way, or `next-server`
+ * outlives it, bound to 4123/4124 for as long as ten minutes until an
+ * operator stops it by hand.
  *
  * Falls back to signalling the ONE pid directly when the group kill itself
  * fails (ESRCH on a session leader already gone, or a platform with no

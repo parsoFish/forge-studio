@@ -15,7 +15,6 @@ import {
   type QueuePaths,
 } from './queue.ts';
 import * as worktree from './worktree.ts';
-import { isPaused } from './daemon.ts';
 import type { PhaseWiring } from './phase-wiring.ts';
 import { stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
@@ -137,24 +136,8 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // F-25: track which initiative IDs we've already announced as "blocked" so
   // the idle stdout doesn't repeat the same line every poll cycle (5s).
   const announcedBlocked = new Set<string>();
-  // Poll toggle: when `<queueRoot>/.paused` exists the scheduler stops
-  // CLAIMING new work but keeps the process alive (in-flight cycles drain,
-  // recovery sweeps still run). Announce the transition once so forever
-  // stdout isn't spammed every poll tick.
-  let announcedPaused = false;
 
   const tick = async (): Promise<boolean> => {
-    if (isPaused(cfg.queueRoot)) {
-      if (!announcedPaused) {
-        console.log('[serve] paused — not claiming new work (forge resume to re-enable)');
-        announcedPaused = true;
-      }
-      return inFlight.size > 0;
-    }
-    if (announcedPaused) {
-      console.log('[serve] resumed — claiming work again');
-      announcedPaused = false;
-    }
     while (inFlight.size < cfg.maxConcurrentInitiatives) {
       const pending = listPending(getPaths(cfg.queueRoot));
       if (pending.length === 0) return false;
@@ -176,11 +159,11 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
           continue;
         }
         announcedBlocked.delete(initiativeId);
-        // M3-6: skip initiatives refused as non-contract-ready in this process
-        // lifetime. validateClaimable already recorded the reason on the first
-        // attempt; re-claiming every 5 s would churn an inFlight slot and spam
-        // stdout. The manifest stays in pending/ so a fresh `forge serve` (after
-        // the operator fixes the project) re-checks from scratch.
+        // M3-6: skip initiatives refused as non-contract-ready, within the
+        // bounded re-check window (NON_TERMINAL_RECHECK_MS) — re-claiming every
+        // 5 s would churn an inFlight slot and spam stdout. The manifest stays
+        // in pending/; the next claim attempt past the window re-validates, no
+        // restart required.
         if (isNonTerminalRefused(initiativeId)) continue;
         const c = claim(filename, getPaths(cfg.queueRoot));
         if (c) {

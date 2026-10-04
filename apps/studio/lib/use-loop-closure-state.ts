@@ -1,30 +1,30 @@
 'use client';
 
 /**
- * useLoopClosureState — session → initiative → run linkage + scheduler state
- * for the architect post-approve surfaces (W7-A3, sessions-kinds-08/12,
- * artifact-plan-22/23).
+ * useLoopClosureState — session → initiative → run linkage + the live
+ * `forge serve` status for the architect post-approve surfaces (W7-A3,
+ * sessions-kinds-08/12, artifact-plan-22/23; M7-E row 205).
  *
  * The bridge's session row carries `initiativeIds` (derived from the session's
  * manifests dir); the runs list carries one run per queued/claimed manifest.
  * Joining them here (`deriveInitiativeLinkage`) gives the queue state + run
  * href per initiative with nothing stored anywhere. Runs are re-read on the
- * same slow, visible-only cadence as the scheduler status so a "queued" row
- * turns into "building" once the daemon claims it.
+ * same slow, visible-only cadence as the serve status so a "queued" row turns
+ * into "building" once `forge serve` claims it.
  */
 import { useEffect, useRef, useState } from 'react';
 
 import { fetchRuns, fetchStudioFlows, type Flow, type Run } from './studio-client';
 import { deriveInitiativeLinkage, type InitiativeLinkage } from './architect-plan-view';
-import { useSchedulerStatus, SCHEDULER_POLL_MS, type SchedulerStatusState } from './use-scheduler-status';
+import { useServeStatus, SERVE_STATUS_POLL_MS, type ServeStatusState } from './use-serve-status';
 
-export type LoopClosureState = SchedulerStatusState & {
+export type LoopClosureState = ServeStatusState & {
   linkage: InitiativeLinkage[];
   linkageReady: boolean;
 };
 
-export function useLoopClosureState(initiativeIds: string[] | undefined, enabled = true, pollMs: number = SCHEDULER_POLL_MS): LoopClosureState {
-  const scheduler = useSchedulerStatus(pollMs, enabled);
+export function useLoopClosureState(initiativeIds: string[] | undefined, enabled = true, pollMs: number = SERVE_STATUS_POLL_MS): LoopClosureState {
+  const serve = useServeStatus(pollMs, enabled);
   const [runs, setRuns] = useState<Run[]>([]);
   // W8-B3 (sessions-kinds-08) — the live flows roster, so a run naming a flow
   // that no longer exists (22 of 63 real runs carry the `"unknown"` sentinel)
@@ -67,5 +67,5 @@ export function useLoopClosureState(initiativeIds: string[] | undefined, enabled
   }, [enabled, pollMs]);
 
   const linkage = deriveInitiativeLinkage(idsKey ? idsKey.split('\n') : [], runs, flowIds);
-  return { ...scheduler, linkage, linkageReady };
+  return { ...serve, linkage, linkageReady };
 }

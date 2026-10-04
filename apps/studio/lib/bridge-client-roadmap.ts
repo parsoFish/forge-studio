@@ -2,7 +2,7 @@
  * `forge-8vfn.7.6.135` — the roadmap/cycles client surface, split out of
  * `bridge-client.ts` (pure move; the exported shape is unchanged, only which
  * file declares it). Covers cycle + work-item reads, the per-project
- * roadmap, cross-project attention, cost, recovery, and the scheduler.
+ * roadmap, cross-project attention, cost, and recovery.
  */
 import {
   bridgeReadOrThrow,
@@ -226,38 +226,4 @@ export async function recoveryAbandon(initiativeId: string): Promise<{ ok: boole
  */
 export async function recoveryStop(initiativeId: string): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/stop`);
-}
-
-export type SchedulerStatus = {
-  running: boolean;
-  pid?: number | null;
-  paused?: boolean;
-  /** W7-A3: pid-file mtime while running (daemonState), else null. */
-  startedAt?: string | null;
-  /** W7-FIX-A3 (A3-07): SIGTERM sent, pid still alive — draining in-flight
-   *  runs (daemonState folds the stop marker in while THAT pid is alive). */
-  stopping?: boolean;
-};
-
-export async function fetchSchedulerStatus(): Promise<SchedulerStatus | null> {
-  return bridgeReadOr404<SchedulerStatus>('/api/scheduler/status');
-}
-
-export async function startScheduler(): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/scheduler/start');
-}
-
-/** Pause the scheduler (stops claiming new work; in-flight cycles keep going). */
-export async function pauseScheduler(): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/scheduler/pause');
-}
-
-/** Resume claiming pending work. */
-export async function resumeScheduler(): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/scheduler/resume');
-}
-
-/** Stop the daemon (SIGTERM — drains in-flight cycles, then exits). */
-export async function stopScheduler(): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/scheduler/stop');
 }

@@ -18,6 +18,7 @@
  * them without saying which was which.
  */
 import type { Run } from './studio-client';
+import type { ServeStatus } from './bridge-client';
 
 export type RunControlId = 'resume' | 'requeue' | 'abandon' | 'stop';
 
@@ -98,12 +99,31 @@ export function deriveRunControls(run: Run | null): RunControl[] {
 }
 
 /**
- * True when the run is queued and the SCHEDULER is what will start it —
- * `flows-23`: the operator landing on a queued run's page needs the daemon's
- * state and its Start control, not a run-scoped button that does not exist.
+ * True when the run is queued and `forge serve` claiming it is what starts
+ * it — `flows-23`: the operator landing on a queued run's page needs serve's
+ * own state, not a run-scoped button that does not exist.
  */
-export function runAwaitsScheduler(run: Run | null): boolean {
+export function runAwaitsServe(run: Run | null): boolean {
   return run !== null && run.status === 'planned';
+}
+
+export type QueuedServeTone = 'running' | 'not-running' | 'unknown';
+
+/**
+ * MEDIUM-2: the queued-run serve line's three tones. ONLY `running` may
+ * promise a pickup (`queued-awaits-serve`) — `unknown` (the read failed, or
+ * this bridge has no supervisor at all: the dry bridge, or a second studio
+ * attached read-only) must say it could not confirm rather than render the
+ * SAME pickup promise `running` does (ADR 031: Studio never claims a run is
+ * in progress unless a daemon is alive and claiming it). `not-running` (a
+ * CONFIRMED draining/restarting/down) keeps the shared `<ServeStatusNotice>`.
+ * Mirrors `describePostCommit`'s own `unknown = serve === null ||
+ * serve.state === 'unsupervised'` rule (lib/architect-plan-view.ts).
+ */
+export function queuedServeTone(serve: ServeStatus | null): QueuedServeTone {
+  if (serve === null || serve.state === 'unsupervised') return 'unknown';
+  if (serve.state === 'running') return 'running';
+  return 'not-running';
 }
 
 /**
@@ -158,14 +178,14 @@ export function mayPostControl(control: RunControl, armedId: RunControlId | null
  * Review round 3, S2-5. The first cut returned `null` whenever the run offered
  * no controls, which is exactly what a SUCCESSFUL resume produces: the run flips
  * `failed → planned`, the control set empties, and on the flow monitor (which
- * mounts its own scheduler strip, so `schedulerStrip` is false there) the whole
- * section unmounted — throwing away the scheduler-aware outcome line that
- * `flows-49` ("make the outcome observable") exists to show. The `key` fix could
- * never have covered that: the early return is a second, independent cause.
+ * mounts its own serve notice, so `serveStrip` is false there) the whole
+ * section unmounted — throwing away the outcome line that `flows-49` ("make
+ * the outcome observable") exists to show. The `key` fix could never have
+ * covered that: the early return is a second, independent cause.
  */
 export function runControlsShouldRender(
   controlCount: number,
-  awaitsScheduler: boolean,
+  awaitsServe: boolean,
   /** The component's own outcome state, forwarded — NOT a boolean the call site
    *  computed. Review round 4, finding 6: a `hasOutcome: boolean` parameter left
    *  the caller free to pass `false` forever, with every test in the repo green
@@ -174,7 +194,7 @@ export function runControlsShouldRender(
   done: RunControlId | null,
   error: string | null,
 ): boolean {
-  return controlCount > 0 || awaitsScheduler || done !== null || error !== null;
+  return controlCount > 0 || awaitsServe || done !== null || error !== null;
 }
 
 /**

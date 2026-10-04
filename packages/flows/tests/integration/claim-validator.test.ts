@@ -30,6 +30,7 @@ import {
   isNonTerminalRefused,
   clearAllPendingRefusalLogs,
   clearPendingRefusalLog,
+  NON_TERMINAL_RECHECK_MS,
   type ClaimValidationResult,
 } from '../../claim-validator.ts';
 import { readOnDiskFlowVersion, checkFlowVersionSeam } from '../../flow-runner.ts';
@@ -686,6 +687,86 @@ test('validateClaimable: manifest class the flow does not accept → refused, te
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// M. MEDIUM-3: the skip-set is bounded, not process-lifetime-permanent — a
+//    refused DEPS claim re-checks on its own on the next claim attempt past
+//    NON_TERMINAL_RECHECK_MS, once the ground is actually fixed. No operator
+//    restart required.
+// ---------------------------------------------------------------------------
+
+/** Contract-ready except its declared gate ("vitest run") needs node_modules,
+ *  which is deliberately absent — the DEPS clause (not C1/C2/C4) refuses. */
+function setupDepsBlockedProject(dir: string): void {
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'deps-blocked', scripts: { test: 'vitest run' } }));
+  writeFileSync(join(dir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
+  writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
+  const name = dir.split('/').pop()!;
+  const centralBrain = join(dir, '..', '..', 'brain', 'projects', name);
+  mkdirSync(centralBrain, { recursive: true });
+  writeFileSync(join(centralBrain, 'profile.md'), '# Profile\n');
+}
+
+test('MEDIUM-3: a DEPS-refused claim is re-evaluated on the next poll once node_modules appears — no restart', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot, flowPath } = setupForgeRoot(root, VALID_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'deps-blocked');
+    mkdirSync(projectDir, { recursive: true });
+    setupDepsBlockedProject(projectDir);
+
+    const id = 'INIT-deps-blocked';
+    const r1 = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
+    assert.ok(!r1.ok, 'expected refusal while node_modules is absent');
+    if (!r1.ok) {
+      assert.equal(r1.terminal, false, 'DEPS fail is non-terminal (operator can still fix the ground)');
+      assert.ok(r1.blockedClauses?.includes('DEPS'), `blockedClauses should name DEPS: ${r1.blockedClauses}`);
+    }
+    assert.equal(isNonTerminalRefused(id), true, 'skip-set active immediately after refusal');
+
+    // Operator fixes the ground — no restart, no explicit clear.
+    mkdirSync(join(projectDir, 'node_modules'), { recursive: true });
+
+    // Within the window, the scheduler still skips (no churn on every 5s tick).
+    assert.equal(isNonTerminalRefused(id), true, 'still within the re-check window');
+
+    // Past the window, the next claim attempt re-checks on its own.
+    const pastWindow = Date.now() + NON_TERMINAL_RECHECK_MS + 1;
+    assert.equal(isNonTerminalRefused(id, pastWindow), false, 'window elapsed — next claim attempt re-checks');
+
+    const r2 = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
+    assert.ok(r2.ok, `expected ok once node_modules is provisioned: ${!r2.ok ? r2.reason : ''}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
+});
+
+test('MEDIUM-3: the re-check window is bounded, not infinite — isNonTerminalRefused flips at exactly its recorded deadline', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot, flowPath } = setupForgeRoot(root, VALID_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'deps-blocked-2');
+    mkdirSync(projectDir, { recursive: true });
+    setupDepsBlockedProject(projectDir);
+
+    const id = 'INIT-deps-window';
+    const before = Date.now();
+    const r = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
+    assert.ok(!r.ok);
+
+    // Immediately after: well within the window.
+    assert.equal(isNonTerminalRefused(id, before), true);
+    // One ms before the recorded deadline would still refuse to skip-check;
+    // well past it must not.
+    assert.equal(isNonTerminalRefused(id, before + NON_TERMINAL_RECHECK_MS + 10_000), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
   }
 });
 

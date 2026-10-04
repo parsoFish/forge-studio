@@ -299,10 +299,15 @@ export function planRun(kind, opts = {}) {
     class: 'code',
     acceptance_criteria,
     body: `# ${spec.wiTitle}\n\nSee \`WI-1\` for the full spec. One work item, no decomposition.\n`,
-    // Required so the develop-start hand-off (`enqueueDevelopRun`'s
-    // `allowRepointFrom: ['forge-architect']`) repoints without asking for
-    // confirmation it has no operator to give — see the driver's own header.
-    flow_id: 'forge-architect',
+    // The manifest is born already on `forge-develop` — the flow this
+    // driver's worktree + hand-off WI-1.md are shaped for — never
+    // `forge-architect`. `forge studio`'s supervised serve claims every
+    // eligible manifest in `_queue/pending/` the instant it exists
+    // (ADR 011/031), so a manifest that ever names `forge-architect` risks a
+    // REAL architect session being spawned against hand-authored, no-operator
+    // state; naming the final flow directly closes that off completely rather
+    // than relying on a repoint winning a race. See the driver's own header.
+    flow_id: 'forge-develop',
     // cascade-v4 #7: this is a throwaway verification cycle; it must never be
     // approved/merged (the driver stops at ready-for-review), but marking it
     // is cheap and honest regardless of whether reflection is ever reached.

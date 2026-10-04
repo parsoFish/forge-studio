@@ -10,9 +10,9 @@
  *    serves (`initiativeIds` off the session's manifests dir + the runs list),
  *    never stored;
  *  - "the autonomous loop is building it now" is only ever said when a run is
- *    actually active AND the scheduler is running.
+ *    actually active AND `forge serve` is running.
  */
-import type { ArchitectSessionSummary, SchedulerStatus } from './bridge-client';
+import type { ArchitectSessionSummary, ServeStatus } from './bridge-client';
 import type { Run } from './studio-client';
 
 export const ARCHITECT_RUN_PREFIX = '_architect-';
@@ -150,7 +150,7 @@ export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[], kn
       queueState: QUEUE_STATE_FOR_RUN[run.status] ?? 'unknown',
       // The INITIATIVE id is the stable run handle (the bridge's findRun
       // matches it in every queue state); a run's own `id` flips from the
-      // initiative id to the cycle id the moment the scheduler claims it.
+      // initiative id to the cycle id the moment forge serve claims it.
       runHref: `/flows/${flow}/run/${encodeURIComponent(initiativeId)}`,
       monitorHref: flowIsReal ? `/flows/${flow}` : null,
     };
@@ -159,64 +159,55 @@ export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[], kn
 
 export type PostCommitTone =
   | 'building'
-  | 'claimed-stopped'
-  | 'claimed-stopping'
+  | 'claimed-not-running'
   | 'claimed-unknown'
   | 'queued-running'
-  | 'queued-stopped'
-  | 'queued-stopping'
+  | 'queued-not-running'
   | 'queued-unknown'
   | 'gated'
   | 'done'
   | 'failed'
   | 'unknown';
 
-export type PostCommitView = { tone: PostCommitTone; headline: string; needsSchedulerStart: boolean };
+/** `serveNotReady` — true whenever the headline cannot promise progress (serve
+ *  unconfirmed, or confirmed but not currently running) and the caller should
+ *  mount the shared `<ServeStatusNotice>` for the precise detail. */
+export type PostCommitView = { tone: PostCommitTone; headline: string; serveNotReady: boolean };
 
 function idsIn(linkage: InitiativeLinkage[], state: InitiativeQueueState): string {
   return linkage.filter((l) => l.queueState === state).map((l) => l.initiativeId).join(', ');
 }
 
 /** The honest post-approve headline. Precedence: gated > building > queued >
- *  failed > done > unknown; the scheduler state decides whether "queued" /
- *  "claimed" can progress. */
-export function describePostCommit(linkage: InitiativeLinkage[], scheduler: SchedulerStatus | null): PostCommitView {
-  // W7-FIX-A3 (A3-04): `null` = the status could not be READ — a third state,
-  // never collapsed into "stopped" (the strip beneath renders "unknown" with
-  // no Start button, so a "start it" headline would contradict its controls).
-  const unknown = scheduler === null;
-  const running = !!scheduler?.running;
-  // W7-FIX-A3 (round-2 finding 4): the DRAIN window is a FOURTH state, not a
-  // flavour of running. `stopping` rides on `running: true` (the signalled pid
-  // is alive until the in-flight cycles settle), so a commit landing inside a
-  // Stop used to promise pickup from a daemon that exits at the end of the
-  // drain. It outranks `paused` — a draining daemon cannot be resumed into
-  // claiming (deriveSchedulerView offers no action at all in this state).
-  const stopping = running && !!scheduler?.stopping;
-  const paused = running && !stopping && !!scheduler?.paused;
+ *  failed > done > unknown; whether `forge serve` is actually running decides
+ *  whether "queued" / "claimed" can progress. There is no pause/stop state an
+ *  operator can put serve into any more (M7-E row 205) — only confirmed-running
+ *  vs confirmed-not-running (restarting/draining/down, detailed by the shared
+ *  notice) vs unconfirmed (the read failed, or no supervisor exists at all). */
+export function describePostCommit(linkage: InitiativeLinkage[], serve: ServeStatus | null): PostCommitView {
+  // `null` or `unsupervised` = never promise progress we cannot confirm.
+  const unknown = serve === null || serve.state === 'unsupervised';
+  const running = serve?.state === 'running';
   const has = (s: InitiativeQueueState) => linkage.some((l) => l.queueState === s);
-  const unconfirmed = 'could not confirm the scheduler is running; check its status below.';
+  const unconfirmed = 'could not confirm forge serve is running.';
 
-  if (has('gated')) return { tone: 'gated', headline: `${idsIn(linkage, 'gated')} is waiting on your verdict.`, needsSchedulerStart: false };
+  if (has('gated')) return { tone: 'gated', headline: `${idsIn(linkage, 'gated')} is waiting on your verdict.`, serveNotReady: false };
   if (has('building')) {
     const ids = idsIn(linkage, 'building');
-    if (unknown) return { tone: 'claimed-unknown', headline: `${ids} is claimed — ${unconfirmed}`, needsSchedulerStart: true };
-    if (stopping) return { tone: 'claimed-stopping', headline: `${ids} is claimed but the scheduler is stopping — it will not progress until you start it again.`, needsSchedulerStart: true };
+    if (unknown) return { tone: 'claimed-unknown', headline: `${ids} is claimed — ${unconfirmed}`, serveNotReady: true };
     return running
-      ? { tone: 'building', headline: `The autonomous loop is building ${ids} now.`, needsSchedulerStart: false }
-      : { tone: 'claimed-stopped', headline: `${ids} is claimed but the scheduler is stopped — it will not progress until you start it.`, needsSchedulerStart: true };
+      ? { tone: 'building', headline: `The autonomous loop is building ${ids} now.`, serveNotReady: false }
+      : { tone: 'claimed-not-running', headline: `${ids} is claimed but forge serve is not currently running — it will resume once Studio brings it back.`, serveNotReady: true };
   }
   if (has('queued')) {
     const ids = idsIn(linkage, 'queued');
-    if (unknown) return { tone: 'queued-unknown', headline: `${ids} is queued — ${unconfirmed}`, needsSchedulerStart: true };
-    if (stopping) return { tone: 'queued-stopping', headline: `${ids} is queued — the scheduler is stopping; start it again to build.`, needsSchedulerStart: true };
-    if (running && !paused) return { tone: 'queued-running', headline: `${ids} is queued — the scheduler will pick it up.`, needsSchedulerStart: false };
-    if (paused) return { tone: 'queued-running', headline: `${ids} is queued — the scheduler is paused; resume it to start.`, needsSchedulerStart: false };
-    return { tone: 'queued-stopped', headline: `${ids} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true };
+    if (unknown) return { tone: 'queued-unknown', headline: `${ids} is queued — ${unconfirmed}`, serveNotReady: true };
+    if (running) return { tone: 'queued-running', headline: `${ids} is queued — forge serve will pick it up.`, serveNotReady: false };
+    return { tone: 'queued-not-running', headline: `${ids} is queued — forge serve is not currently running; it will resume once Studio brings it back.`, serveNotReady: true };
   }
-  if (has('failed')) return { tone: 'failed', headline: `${idsIn(linkage, 'failed')} failed — see the run for the failure note.`, needsSchedulerStart: false };
+  if (has('failed')) return { tone: 'failed', headline: `${idsIn(linkage, 'failed')} failed — see the run for the failure note.`, serveNotReady: false };
   if (linkage.length > 0 && linkage.every((l) => l.queueState === 'complete')) {
-    return { tone: 'done', headline: `${idsIn(linkage, 'complete')} finished.`, needsSchedulerStart: false };
+    return { tone: 'done', headline: `${idsIn(linkage, 'complete')} finished.`, serveNotReady: false };
   }
-  return { tone: 'unknown', headline: 'Approved — no queue entry found for this session yet.', needsSchedulerStart: false };
+  return { tone: 'unknown', headline: 'Approved — no queue entry found for this session yet.', serveNotReady: false };
 }

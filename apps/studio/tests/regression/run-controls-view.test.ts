@@ -29,8 +29,9 @@
  */
 import { test, expect } from 'vitest';
 
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, queuedServeTone, runAwaitsServe, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
 import type { Run, RunStatus } from '../../lib/studio-client.ts';
+import type { ServeStatus } from '../../lib/bridge-client-core.ts';
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
   return {
@@ -107,11 +108,11 @@ test('flows-28: a QUEUED or COMPLETE run offers no recovery control at all', () 
 });
 
 test('flows-23: a QUEUED run awaits the scheduler — that, not a run-scoped button, is its control', () => {
-  expect(runAwaitsScheduler(run('planned'))).toBe(true);
+  expect(runAwaitsServe(run('planned'))).toBe(true);
   for (const status of ['active', 'gated', 'complete', 'failed'] as RunStatus[]) {
-    expect(runAwaitsScheduler(run(status)), status).toBe(false);
+    expect(runAwaitsServe(run(status)), status).toBe(false);
   }
-  expect(runAwaitsScheduler(null)).toBe(false);
+  expect(runAwaitsServe(null)).toBe(false);
 });
 
 test('the control set is derived per read — the same run object answers by its CURRENT status only', () => {
@@ -171,7 +172,7 @@ test('flows-28 (review round 2, S3-8): the poster itself refuses an unconfirmed 
 test('flows-49 (review round 3, S2-5): a successful action keeps the section mounted so its outcome stays observable', () => {
   // KILLS: `controls.length === 0 && !awaitsScheduler → null`. A successful
   // Resume flips the run failed → planned, which empties the control set; on the
-  // flow monitor (schedulerStrip=false) that unmounted the whole section and
+  // flow monitor (serveStrip=false) that unmounted the whole section and
   // discarded the scheduler-aware outcome line — "the scheduler is stopped,
   // nothing will run, Start it here" — which is the entire point of flows-49.
   expect(runControlsShouldRender(0, false, null, null), 'nothing to say → render nothing').toBe(false);
@@ -267,4 +268,34 @@ test('row 150: stopOnBudget still wins over operatorStop when (hypothetically) b
 
 test('row 150: operatorStop on a non-failed run never renders (same status gate as stopOnBudget)', () => {
   expect(runFailureNoteKind(run('active', { operatorStop: true }))).toBe(null);
+});
+
+// ---------------------------------------------------------------------------
+// MEDIUM-2 (review): `queuedServeTone` — only a CONFIRMED running serve may
+// promise the pickup. `serve === null` (the read hasn't resolved, or failed)
+// and `'unsupervised'` (no supervisor on this bridge at all) are both
+// UNKNOWN, never the pickup promise — mirrors `describePostCommit`'s own
+// `unknown` rule (lib/architect-plan-view.ts).
+// ---------------------------------------------------------------------------
+
+function serveStatus(state: ServeStatus['state']): ServeStatus {
+  return { state, pid: 1, restarts: 0, nextRestartAt: null };
+}
+
+test('queuedServeTone: null (unread/failed) is unknown, never the pickup promise', () => {
+  expect(queuedServeTone(null)).toBe('unknown');
+});
+
+test('queuedServeTone: unsupervised (dry bridge / read-only attach) is unknown', () => {
+  expect(queuedServeTone(serveStatus('unsupervised'))).toBe('unknown');
+});
+
+test('queuedServeTone: running is the only tone that may promise the pickup', () => {
+  expect(queuedServeTone(serveStatus('running'))).toBe('running');
+});
+
+test('queuedServeTone: draining/restarting/down are CONFIRMED not-running — the shared notice, not unknown', () => {
+  for (const state of ['draining', 'restarting', 'down'] as const) {
+    expect(queuedServeTone(serveStatus(state)), state).toBe('not-running');
+  }
 });

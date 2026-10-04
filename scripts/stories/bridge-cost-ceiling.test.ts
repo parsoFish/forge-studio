@@ -12,9 +12,10 @@
  *
  * THE ENV-REACH CHAIN THIS CLOSES, verified by reading (not guessed):
  *   this module's `env` -> the bridge process (`bootOwnBridge`, bridge.mjs)
- *     -> `apps/forge/bridge-scheduler.ts`'s `POST /api/scheduler/start`
+ *     -> `forge studio`'s own boot-time supervisor
+ *        (`apps/forge/serve-supervisor.ts`, ADR 011)
  *     -> `packages/flows/daemon.ts`'s `spawnServeDetached`: `spawn(...)` with
- *        NO `env:` override, i.e. a full inherit of the BRIDGE's own
+ *        NO `env:` override, i.e. a full inherit of the STUDIO process's own
  *        `process.env` — no allowlist sits at this seam
  *     -> the `forge serve` daemon calls `runCycle` IN-PROCESS
  *        (`packages/flows/scheduler-run-one.ts`)

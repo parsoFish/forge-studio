@@ -400,14 +400,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardRunId": "_agent-onboarding-agent-2026-10-03T10-47-33-029-zlkv",
-        "sessionId": "2026-10-03T10-47-33-f1d13416"
+        "onboardRunId": "_agent-onboarding-agent-2026-10-04T00-16-10-274-v9f6",
+        "sessionId": "2026-10-04T00-16-10-249f172f"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-run-id": "_agent-onboarding-agent-2026-10-03T10-47-33-029-zlkv",
-        "onboard-session-id": "2026-10-03T10-47-33-f1d13416",
+        "onboard-run-id": "_agent-onboarding-agent-2026-10-04T00-16-10-274-v9f6",
+        "onboard-session-id": "2026-10-04T00-16-10-249f172f",
         "onboard-attaching": "false"
       },
       "expect": {
@@ -469,12 +469,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "demoSessionId": "2026-10-03T10-54-00-edf2af16"
+        "demoSessionId": "2026-10-04T00-22-23-4ac451ae"
       },
       "data": {
         "action": "view-demo-session",
         "stage-detail-stage": "demo",
-        "demo-session-id": "2026-10-03T10-54-00-edf2af16"
+        "demo-session-id": "2026-10-04T00-22-23-4ac451ae"
       },
       "expect": {
         "stage-detail-stage": "demo",
@@ -531,13 +531,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T10-58-22-4b0ca059"
+        "architectSessionId": "2026-10-04T00-27-08-039e26d6"
       },
       "data": {
         "page": "projects",
         "project-id": "story-s1",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T10-58-22-4b0ca059"
+        "architect-session-id": "2026-10-04T00-27-08-039e26d6"
       },
       "expect": {
         "page": "projects",
@@ -572,19 +572,19 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 721233,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T10-47-33-029-zlkv",
-        "reason": "pid 721233: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2850882,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-04T00-16-10-274-v9f6",
+        "reason": "pid 2850882: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 845096,
-        "dir": "_logs/_architect-2026-10-03T10-58-22-4b0ca059",
-        "reason": "pid 845096: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 3020710,
+        "dir": "_logs/_architect-2026-10-04T00-27-08-039e26d6",
+        "reason": "pid 3020710: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 789643,
-        "dir": "_logs/_demo-2026-10-03T10-54-00-edf2af16",
-        "reason": "pid 789643: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2922356,
+        "dir": "_logs/_demo-2026-10-04T00-22-23-4ac451ae",
+        "reason": "pid 2922356: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -598,9 +598,9 @@
       "ok": true,
       "claimed": [
         {
-          "path": "_queue/pending/INIT-2026-10-03-overlay-team-grant-lint.md",
+          "path": "_queue/pending/INIT-2026-10-04-overlay-team-grant-lint.md",
           "state": "pending",
-          "reason": "created_at 2026-10-03T11:06:34.137Z falls inside this run"
+          "reason": "created_at 2026-10-04T00:39:15.717Z falls inside this run"
         }
       ],
       "left": [],
@@ -611,8 +611,8 @@
         "[stories] queue claim: failed/ holds 0",
         "[stories] queue claim: in-flight/ holds 0",
         "[stories] queue claim: merged/ holds 0",
-        "[stories] queue claim: pending/ holds 1 — INIT-2026-10-03-overlay-team-grant-lint.md",
-        "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-03-overlay-team-grant-lint.md — created_at 2026-10-03T11:06:34.137Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
+        "[stories] queue claim: pending/ holds 1 — INIT-2026-10-04-overlay-team-grant-lint.md",
+        "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-04-overlay-team-grant-lint.md — created_at 2026-10-04T00:39:15.717Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
@@ -630,8 +630,8 @@
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
       "[stories] queue claim: merged/ holds 0",
-      "[stories] queue claim: pending/ holds 1 — INIT-2026-10-03-overlay-team-grant-lint.md",
-      "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-03-overlay-team-grant-lint.md — created_at 2026-10-03T11:06:34.137Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
+      "[stories] queue claim: pending/ holds 1 — INIT-2026-10-04-overlay-team-grant-lint.md",
+      "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-04-overlay-team-grant-lint.md — created_at 2026-10-04T00:39:15.717Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
       "[stories] queue claim: ready-for-review/ holds 0"
     ]
   },
@@ -645,15 +645,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 3.8196955,
+    "usd": 5.4088978999999995,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "261162397fe8830785bd6b7acfb62c2bcfe73d91",
+    "dirty": false
   },
   "storyDigest": "5c0722d1ea6c598d"
 }

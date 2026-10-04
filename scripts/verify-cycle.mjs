@@ -11,15 +11,15 @@
  *
  *   1. forge-architect — POST /api/architect/start with the idea, auto-answer each
  *      interview round, approve the PLAN GATE (/api/plan-verdict). The architect
- *      promotes a manifest to _queue/pending; `forge serve --once` then runs the
- *      architect flow (pm decomposes the initiative into work items).
+ *      promotes a manifest to _queue/pending; studio's supervised serve (ADR
+ *      011/031) claims and runs it — this harness only WAITS for the outcome.
  *      THE HAND-OFF TO STAGE 2 IS GATED on this stage's verdict — see
- *      verify-cycle-stage-outcome.mjs and bead forge-8vfn.6.10.6.
+ *      verify-cycle-spine-wait.mjs and bead forge-8vfn.6.10.6.
  *   2. forge-develop — POST /api/develop/start hands off to the develop flow (same
- *      cycle_id; reuses the architect worktree + its work items). `forge serve
- *      --once` runs dev → demo → adversarial-review → verdict, parking at
- *      ready-for-review (the VERDICT GATE). Approve via /api/verdict; the bridge
- *      merges the PR and fires finalize.
+ *      cycle_id; reuses the architect worktree + its work items). The same
+ *      supervised serve runs dev → demo → adversarial-review → verdict, parking
+ *      at ready-for-review (the VERDICT GATE). Approve via /api/verdict; the
+ *      bridge merges the PR and fires finalize.
  *   3. reflect — finalize dispatches the standalone reflector AGENT run (W7-C1: no
  *      flow wrapper — forge-develop's `{on: merged, target: {kind: agent, ref:
  *      reflector}}`, resolved through the reflection-close band guard), which
@@ -67,7 +67,7 @@
  * summary.json with the verdict). Exits non-zero if the gate fails.
  */
 
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { architectFailurePhase } from './architect-phase.mjs';
@@ -78,7 +78,8 @@ import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
 import { harnessCeilingEnv } from './verify-cycle-ceiling.mjs';
-import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
+import { assertServeRunning, DEFAULT_POLL_MS } from './lib/serve-wait.mjs';
+import { createSpineWait, DEVELOP_PASS_BUDGET_MS } from './verify-cycle-spine-wait.mjs';
 import { classifyCriticFindings } from './verify-cycle-plan-gate.mjs';
 import { sumRunCost } from './verify-cycle-cost.mjs';
 import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSelection } from './verify-cycle-flow.mjs';
@@ -151,17 +152,21 @@ const FRAMES_DIR = join(OUT_DIR, 'frames');
 function log(msg) { console.log(`[verify ${new Date().toISOString().slice(11, 19)}] ${msg}`); }
 
 /**
- * Spawn env for forge subprocesses, with the headroom compression proxy stripped.
- * headroom (a global ~/.bashrc wrap of `claude`) exports
- * ANTHROPIC_BASE_URL=http://127.0.0.1:8787 + an X-Headroom custom header into the
- * shell, which forge then inherits. The proxy buffers the SDK's streaming SSE, so
- * forge's stream-deadline watchdog fires ("SDK stream produced no message for
- * 360s") and the dev-loop crashes at iterations:0 (observed: betterado WI-1,
- * 2026-06-16). forge must stream directly from Anthropic. Detected narrowly by the
- * headroom header or the :8787 base url so unrelated proxies are left untouched.
+ * Spawn env for `forge studio` (the sole child this driver spawns — M7-E row
+ * 205: it supervises `forge serve` itself from boot, inheriting THIS env, so
+ * threading the cost ceiling and the claim-time contract-check seam in here
+ * is what reaches the supervised serve too), with the headroom compression
+ * proxy stripped. headroom (a global ~/.bashrc wrap of `claude`) exports
+ * ANTHROPIC_BASE_URL=http://127.0.0.1:8787 + an X-Headroom custom header into
+ * the shell, which forge then inherits. The proxy buffers the SDK's
+ * streaming SSE, so forge's stream-deadline watchdog fires ("SDK stream
+ * produced no message for 360s") and the dev-loop crashes at iterations:0
+ * (observed: betterado WI-1, 2026-06-16). forge must stream directly from
+ * Anthropic. Detected narrowly by the headroom header or the :8787 base url
+ * so unrelated proxies are left untouched.
  */
 function forgeSpawnEnv(extra = {}) {
-  const env = { ...process.env, ...COST_CEILING_ENV, ...extra };
+  const env = { ...process.env, ...COST_CEILING_ENV, ...serveContractEnv(BASE_SHA), ...extra };
   const base = env.ANTHROPIC_BASE_URL ?? '';
   const headers = env.ANTHROPIC_CUSTOM_HEADERS ?? '';
   const isHeadroom = /headroom/i.test(headers) || /\/\/(127\.0\.0\.1|localhost):8787\b/.test(base);
@@ -512,6 +517,13 @@ async function startWatch() {
       if (l.trim()) log(`[watch] ${l}`);
     }
   };
+  // The claim contract check is skipped only on the routine tier (--base-sha,
+  // a frozen corpus that deliberately fails C2; see serveContractEnv). M7-E
+  // row 205: `forge studio` supervises `forge serve` itself from boot, so
+  // this env — not a per-call spawn env at claim time — is what reaches it.
+  log(serveContractEnv(BASE_SHA).FORGE_SKIP_CONTRACT_CHECK
+    ? 'contract-readiness claim check skipped (routine tier, --base-sha)'
+    : 'contract-readiness claim check ON (real ground)');
   const fresh = await spawnStudioReady({ fullEnv: forgeSpawnEnv(), timeoutMs: 150_000, log: teeLog });
   fresh.proc.on('exit', (code, signal) => log(`[watch] EXITED code=${code} signal=${signal}`));
   // handle = what verify-cycle-teardown.mjs signals at exit (M7-A row 82).
@@ -529,23 +541,6 @@ async function ensureWatch(watch) {
   log('!! watch bridge is DOWN mid-run — restarting it (state is disk-backed, safe)…');
   if (watch.handle) killGroupIfLive(watch.handle, 'SIGKILL');
   return startWatch();
-}
-
-function startServe() {
-  // The claim contract check is skipped only on the routine tier (--base-sha,
-  // a frozen corpus that deliberately fails C2); see serveContractEnv.
-  const contractEnv = serveContractEnv(BASE_SHA);
-  log(contractEnv.FORGE_SKIP_CONTRACT_CHECK ? 'contract-readiness claim check skipped (routine tier, --base-sha)' : 'contract-readiness claim check ON (real ground)');
-  return spawn(
-    process.execPath,
-    ['--experimental-strip-types', 'apps/forge/cli.ts', 'serve', '--once'],
-    {
-      cwd: FORGE_ROOT,
-      env: forgeSpawnEnv(contractEnv),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
-    },
-  );
 }
 
 async function captureFrame(page, name) {
@@ -873,41 +868,6 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   return { initiatives: inits, sessionId };
 }
 
-/** Spawn `forge serve --once` for one spine stage, capturing phase-transition
- *  frames while it runs, and resolve when it exits. */
-async function runServeStage(page, label) {
-  log(`spawning forge serve --once (${label})…`);
-  const serve = startServe();
-  const captured = []; // 6.10.6 — captured as well as echoed, then classified below
-  const cap = (d) => { for (const l of String(d).split('\n')) if (l.trim()) captured.push(l); };
-  serve.stdout.on('data', (d) => { cap(d); process.stdout.write(d); });
-  serve.stderr.on('data', (d) => { cap(d); process.stderr.write(d); });
-  const EXITED = Symbol('serve-exited');
-  const end = new Promise((res) => serve.on('exit', () => res(EXITED)));
-  const seen = new Map();
-  const poll = (async () => {
-    while (true) {
-      const r = await Promise.race([end, sleep(2000)]);
-      if (r === EXITED) break;
-      try {
-        const states = await getPhaseStates(page);
-        for (const [phase, status] of Object.entries(states)) {
-          if (seen.get(phase) !== status) {
-            seen.set(phase, status);
-            await captureFrame(page, `${label}-${phase}-${status}`);
-          }
-        }
-      } catch { /* */ }
-    }
-  })();
-  await end;
-  await poll;
-  log(`serve --once (${label}) exited`);
-  const outcome = classifyServeStageOutcome(captured);
-  for (const e of outcome.errors) log(`serve stage (${label}) FAILED: ${e}`);
-  return outcome;
-}
-
 // The two ports a spawned studio holds (bridge + Next UI) — the teardown
 // verification target (verify-cycle-teardown.mjs `verifyTornDown`).
 const STUDIO_PORTS = [4123, 4124];
@@ -1005,6 +965,7 @@ async function main() {
     });
     const page = await ctx.newPage();
     page.on('pageerror', (err) => console.error(`[pageerror] ${err.message}`));
+    const spineWait = createSpineWait({ forgeRoot: FORGE_ROOT, page, getPhaseStates, captureFrame, cycleStatusFromBridge, sleep, log });
 
     await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(
@@ -1014,12 +975,14 @@ async function main() {
     ).catch(() => log('page-ready timed out'));
     await captureFrame(page, 'initial-load');
 
-    // ===== STAGE 1: architect (interview + plan gate) → forge-architect serve =====
+    // ===== STAGE 1: architect (interview + plan gate) → forge-architect decompose =====
     // Plan-everything-before-kickoff: the session may promote N dependent
-    // initiatives; ONE serve pass decomposes them all (the dependency gate is
-    // flow_id-aware — decompose flows never wait on prerequisite merges).
+    // initiatives; Studio's supervised `forge serve` decomposes them all on
+    // its own (the dependency gate is flow_id-aware — decompose flows never
+    // wait on prerequisite merges) — this driver only waits for each one's
+    // manifest to land.
     const { initiatives, sessionId: architectSessionId } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
-    const architectStage = await runServeStage(page, 'architect');
+    const architectOutcomes = await spineWait.waitForArchitectStage(watch.bridgeUrl, initiatives);
     // Focus the first threaded cycle in the dashboard for the frame gallery.
     try {
       await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
@@ -1028,12 +991,18 @@ async function main() {
       await captureFrame(page, 'decision-pm-work-items');
     } catch (err) { log(`cycle focus failed: ${err.message}`); }
 
-    // ===== STAGE 2+3: batch hand-off → serve/approve loop until all initiatives land =====
+    // ===== STAGE 2+3: batch hand-off → wait/approve loop until all initiatives land =====
     // All initiatives enqueue for develop at once; the scheduler's merge-gate
-    // holds dependents until their prerequisite reaches done/. Each serve pass
-    // builds whatever is eligible; each ready-for-review cycle gets the verdict
-    // approve; the loop repeats until every initiative merged (or passes run out).
-    if (!architectStage.ok) { // 6.10.6 — gate the hand-off; nothing downstream can tell later
+    // holds dependents until their prerequisite reaches done/. Studio's
+    // supervised `forge serve` builds whatever is eligible on its own; each
+    // ready-for-review cycle gets the verdict approve; the loop repeats until
+    // every initiative merged (or the convergence deadline runs out).
+    const architectFailures = [...architectOutcomes].filter(([, r]) => r.outcome !== 'ok');
+    for (const [id, r] of architectFailures) {
+      const errs = r.errors.length > 0 ? r.errors : [`timed out waiting for ready-for-review/failed (last state: ${r.state})`];
+      for (const e of errs) log(`architect stage (${id}) FAILED: ${e}`);
+    }
+    if (architectFailures.length > 0) { // 6.10.6 — gate the hand-off; nothing downstream can tell later
       log('REFUSING the develop hand-off — the architect stage did not succeed (reasons above).');
       // `throw`, never `process.exit()` (M7-A row 82): a hard exit here skips
       // the `runGuarded` finally below and leaves a spawned studio running,
@@ -1041,20 +1010,24 @@ async function main() {
       // propagates to main().catch, which exits non-zero once teardown is done.
       throw new Error('REFUSING the develop hand-off — the architect stage did not succeed (reasons above)');
     }
+    await assertServeRunning(watch.bridgeUrl);
     await stageTwo.handoff(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
     const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
     const approveFailures = new Map();
     let sendBackDone = !SEND_BACK;
     const maxPasses = initiatives.length + 2;
-    for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
+    const developDeadlineMs = Date.now() + maxPasses * DEVELOP_PASS_BUDGET_MS;
+    const developFrames = spineWait.trackPhaseFrames('develop');
+    for (let pass = 1; remaining.size > 0 && Date.now() < developDeadlineMs; pass++) {
       // SCOPE (6.10.6): only the architect hand-off is GATED — the develop passes have
-      // their own convergence logic. Their outcome is still classified and logged.
-      await runServeStage(page, `develop-pass-${pass}`);
-      await sleep(2000);
+      // their own convergence logic. A live, supervised `forge serve` already does
+      // the work; this only polls for it (`developFrames` above keeps capturing a
+      // frame on every per-phase transition while it does).
+      await sleep(DEFAULT_POLL_MS);
       watch = await ensureWatch(watch);
       for (const init of [...remaining.values()]) {
         let status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
-        log(`develop status for ${init.initiativeId} after pass ${pass}: ${status}`);
+        log(`develop status for ${init.initiativeId} after poll ${pass}: ${status}`);
         if (status === 'done') { remaining.delete(init.initiativeId); continue; }
         if (status !== 'ready-for-review') continue;
         await captureFrame(page, `after-develop-${init.initiativeId}`);
@@ -1067,7 +1040,7 @@ async function main() {
           const sendBackOk = await postSendBack(watch.bridgeUrl, init.initiativeId);
           if (sendBackOk) {
             await captureFrame(page, 'decision-send-back');
-            await runServeStage(page, 'sendback-drain');
+            await spineWait.waitForSendBackDrain(watch, init.cycleId, Date.now() + DEVELOP_PASS_BUDGET_MS);
             await sleep(2000);
             try {
               await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(init.cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
@@ -1101,8 +1074,9 @@ async function main() {
         remaining.delete(init.initiativeId);
       }
     }
+    await developFrames.stop();
     if (remaining.size > 0) {
-      log(`unfinished initiatives after ${maxPasses} serve passes: ${[...remaining.keys()].join(', ')}`);
+      log(`unfinished initiatives after the develop convergence deadline (${maxPasses} pass-equivalents × ${DEVELOP_PASS_BUDGET_MS / 60_000}m): ${[...remaining.keys()].join(', ')}`);
     }
 
     // Collect gate inputs BEFORE tearing the bridge down — cycleStatusFromBridge

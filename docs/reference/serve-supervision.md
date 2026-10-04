@@ -1,48 +1,60 @@
-# Supervising `forge serve` — use a battle-tested OS supervisor
+# Supervising `forge serve`
 
-> forge does **not** hand-roll a process watchdog. Restarting a dead/wedged
-> daemon is the OS supervisor's job (systemd, pm2, runit, …). This honours the
-> CLAUDE.md "never re-invent a resource controller / process isolator" line and
-> ADRs 011–013.
+`forge studio` is `forge serve`'s supervisor (ADR 011, ADR 031 decision 5): it
+brings `serve` up the same way it brings up the bridge and the UI — spawning
+it detached at boot, adopting a live pid if one already exists, restarting a
+dead one with crash-loop backoff, and sending it exactly one `SIGTERM` when
+`forge studio` itself exits (recorded in `_logs/daemon/stopping`; in-flight
+cycles drain inside the detached `serve` process, and a later `forge studio`
+waits for that drain to finish before spawning a fresh one rather than
+signalling the same pid twice). The operator never manages `serve`'s process
+lifecycle as a separate step — `forge studio` is the one thing that does. A
+second, attach-only `forge studio` never supervises `serve`; it only reads its
+state.
+
+**Exactly one `forge serve` runs for a given forge root, enforced by `serve`
+itself.** Before `serve()` runs, `forge serve` (forever or `--once`) takes an
+exclusive per-root lock and then writes its own pid to
+`_logs/daemon/forge.pid`, so the pid file only ever names a serve that holds
+the lock. A second `forge serve` or `forge serve --once` for the same root
+refuses immediately — a non-zero exit and one clear stderr line naming the
+pid already holding the root — and it refuses whenever `forge.pid` names a
+live serve of this root, even one blocked in a long synchronous call that has
+let the lock age. A serve is recognised by its working directory (the forge
+root) and its argv (`bin/forge.mjs` or `apps/forge/cli.ts`, symlinks resolved,
+so `forge serve` through an npm-linked `forge` on `PATH` counts) with
+`serve`. `forge studio` adopts whichever
+`serve` already holds that lock — started by hand, by `forge studio` itself,
+or by systemd/pm2 (below) — rather than spawning a second one beside it.
 
 ## What forge does and does NOT do
 
-`forge serve` is the long-running scheduler daemon. Its recovery model (ADR
-012) is intentionally minimal: two file-system sweeps (stale-heartbeat +
+`forge serve` is the long-running daemon that claims every eligible pending
+manifest and drives it to completion. Its WORK-recovery model (ADR 012) is
+intentionally minimal: two file-system sweeps (stale-heartbeat +
 missing-worktree) that re-queue orphaned in-flight work on startup and on a
-5-minute timer. That handles *work* recovery — it does **not** restart the
-daemon *process* if the process itself dies or wedges. forge deliberately has
-no internal "restart myself" watchdog: a process cannot reliably resurrect
-itself, and re-inventing one is exactly the kind of community-tool re-invention
-the project forbids.
+5-minute timer — that recovers *work* that was mid-flight when a process died.
+Restarting the `serve` **process** itself belongs to `forge studio`, not to
+`serve` restarting itself: a process cannot reliably resurrect itself, so
+forge does not hand-roll a second watchdog beside the one `forge studio`
+already runs (CLAUDE.md's "never re-invent a resource controller / process
+isolator" line, ADRs 011–013).
 
 So the supervision contract is split cleanly:
 
 | Concern | Owner |
 | --- | --- |
 | Re-queue orphaned in-flight cycles | forge (ADR 012 sweeps) |
-| Restart the `forge serve` **process** when it exits/hangs | **OS supervisor** (systemd / pm2) |
-| **Surface** a stalled daemon to the operator | Studio (Feature #8) |
+| Restart the `forge serve` **process** when it exits or wedges | **`forge studio`**, with crash-loop backoff |
+| Surface `serve`'s liveness to the operator, read-only | Studio (`GET /api/health`'s `serve` object) |
 
-## The liveness surface (Feature #8)
+## Running `forge serve` without Studio
 
-The bridge (started by `forge studio`) exposes `GET /api/liveness`, which reports
-the **max heartbeat age across in-flight cycles** (read from the
-`_queue/in-flight/<id>.md.heartbeat` mtimes the scheduler writes). When that age
-exceeds a **generous** multiple of `staleHeartbeatMs` (6× the 5-minute default =
-30 minutes), the Studio UI:
-
-- flips the connection-state indicator's `data-connection-state` to
-  `daemon-stalled` (the bridge is still reachable — this is distinct from
-  `reconnecting` / `no-bridge`), and
-- fires **one** edge-triggered toast (not repeated) telling the operator to
-  check the supervisor.
-
-This is a *surface*, not a *fix*. Studio never tries to restart the daemon —
-it tells the human (or whatever is watching the Studio UI) that the supervisor
-should.
-
-## Recommended supervisor configs
+Some ground — a headless server, CI, a box where no one runs `forge studio`
+at all — still needs `serve` running without a supervising Studio. For that
+case only, hand the process to a battle-tested OS supervisor rather than
+hand-rolling one, matching ADR 011's "run in the foreground (or under
+systemd/pm2 for process supervision)" line:
 
 ### systemd (Linux servers)
 
@@ -58,9 +70,6 @@ WorkingDirectory=/path/to/forge
 ExecStart=/usr/bin/env forge serve
 Restart=always
 RestartSec=5
-# Optional hard liveness ceiling — systemd restarts the unit if it doesn't
-# ping the watchdog within the interval. forge does not currently sd_notify,
-# so prefer Restart=always + the Studio liveness surface for now.
 
 [Install]
 WantedBy=multi-user.target
@@ -73,6 +82,28 @@ pm2 start "forge serve" --name forge-serve --max-restarts 50 --restart-delay 500
 pm2 save
 ```
 
-Either supervisor restarts the process on exit; the Studio liveness surface
-covers the "process is alive but wedged" gap until the operator (or a future
-`sd_notify`/healthcheck hook) intervenes.
+Either config restarts the process on exit, standing in for what `forge
+studio` already does whenever it is the one running `serve`. If `forge
+studio` is started on this same root afterwards, it adopts this `serve`
+(the lock + pid file above name it) rather than spawning a second one.
+
+## The liveness surface
+
+`GET /api/health` carries a `serve` object —
+`state: "running"|"draining"|"restarting"|"down"|"unsupervised"`, `pid`,
+`restarts`, `nextRestartAt` — so Studio can tell the operator `serve` is
+between lives without inventing a control for it: while `state` is `running`
+the UI shows the ordinary claim/run-in-progress copy; while it is `restarting`
+or `down` it instead shows a read-only line (`data-serve-state`,
+`data-serve-restarts`) with no button, because there is nothing for the
+operator to press — `forge studio` is already handling it.
+
+Separately, the bridge also exposes `GET /api/liveness`, reporting the **max
+heartbeat age across in-flight cycles** (read from the
+`_queue/in-flight/<id>.md.heartbeat` mtimes `serve` writes) — a different
+question (is a specific cycle's work stalled) from whether the `serve`
+process itself is up. When that age exceeds a **generous** multiple of
+`staleHeartbeatMs` (6× the 5-minute default = 30 minutes), the Studio UI flips
+the connection-state indicator's `data-connection-state` to `daemon-stalled`
+(the bridge is still reachable — this is distinct from `reconnecting` /
+`no-bridge`) and fires one edge-triggered toast.

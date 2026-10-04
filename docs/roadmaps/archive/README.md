@@ -700,7 +700,7 @@ closeout; version 0.8.0.
 | Criterion | Delivering WI | Producer (route / agent / beat) | Proof today |
 |---|---|---|---|
 | A plan can be approved from Studio and the approved plan + its initiative are shown | W7-A3 | `/artifact?run=_architect-<sid>&type=plan&mode=gate` → `PlanGate` → `/api/plan-verdict`; journey `sessions-index`/architect beat | `grep -n "approve-plan" forge-ui/components/PlanGate.tsx` |
-| A pending initiative can be started from Studio and a run appears | W7-A3 | Home scheduler card + `/flows` → `POST /api/scheduler/start`; `_queue/pending/INIT-2026-08-18-add-version-flag.md` is the test vehicle | `grep -n "scheduler/start" apps/forge/ui-bridge.ts` |
+| A pending initiative can be started from Studio and a run appears | W7-A3 | Home + `/flows` → the daemon-boot route; `_queue/pending/INIT-2026-08-18-add-version-flag.md` is the test vehicle | `grep -n "scheduler" apps/forge/ui-bridge.ts` |
 | Every session kind can be cancelled from its page and from `/sessions` | W7-A2 | new `POST /api/studio/sessions/:kind/:id/cancel`; generic panel `data-action="cancel"` | (new) |
 | A crashed session reads `crashed` with its stderr on Home, `/sessions`, and its page | W7-A2 | session index derivation (`apps/forge/ui-bridge.ts` sessions index) + panel | operator's `community-refresh 2026-08-18T12-54-32` and two `kb-cleanup` sessions are the fixtures |
 | Home strips are labelled and visually distinct | W7-B1 | `/` `data-section="sessions-needing-you"` / `data-section="kbs-needing-attention"`; journey `home` beat | `grep -n "Active sessions" forge-ui/components/studio/HomeSessionsStrip.tsx` (W8-F4: this cell named `app/page.tsx`, where the heading has never lived — the claim never matched, under either heading text) |

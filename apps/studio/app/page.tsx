@@ -10,7 +10,8 @@ import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistoriesNotice';
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
 import { MonitorSummaryStrip } from '@/components/studio/MonitorSummaryStrip';
-import { SchedulerCard } from '@/components/SchedulerCard';
+import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { useServeStatus } from '@/lib/use-serve-status';
 import {
   buildConstellation,
   buildHomeAttention,
@@ -67,6 +68,10 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 export default function HomePage() {
   const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
+  // M7-E row 205 (ADR 011/031): the read-only serve status — the hook owns
+  // its own read (slow visible-only poll); Home adds no fetch, no interval,
+  // no endpoint literal of its own.
+  const { status: serveStatus } = useServeStatus();
 
   // ---- the merged everything-ledger, LIFTED and shared with /monitor ----
   const ledger = useEverythingLedger({ agents, runs, sessions, ready });
@@ -211,14 +216,17 @@ export default function HomePage() {
         onCancelled={(row, outcome) => { setLastCancel({ row, outcome }); void refreshSessions(); }}
       />
 
-      {/* ===== SCHEDULER — the daemon that turns queued work into runs (W7-A3,
-          flows-01/23; ADR-031 wave-7 amendment). Its own component owns its
-          read (`useSchedulerStatus`, slow visible-only poll) — Home itself
-          adds no fetch, no interval, no endpoint literal. `queuedCount` is
-          derived from the runs the shared hook already loaded. ===== */}
-      <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 24 }}>
-        <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
-      </section>
+      {/* ===== SERVE STATUS — M7-E row 205 (ADR 011/031): `forge studio`
+          supervises `forge serve` directly; there is no operator start/pause/
+          resume/stop control, so this renders ONLY the honest read-only
+          notice, and only while there is something to report (restarting/
+          draining/down/unsupervised) — nothing when serve is simply
+          running. ===== */}
+      {serveStatus && serveStatus.state !== 'running' && (
+        <section data-section="serve-status" aria-label="forge serve status" style={{ marginBottom: 24 }}>
+          <ServeStatusNotice status={serveStatus} />
+        </section>
+      )}
 
       {/* ===== PROJECTS NEEDING ATTENTION — gated reviews / flagged work.
           W7-B1 (home-sessions-01): every Home strip is NAMED on screen —
