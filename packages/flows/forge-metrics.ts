@@ -62,7 +62,7 @@ export function buildCycleReport(input: CycleReportInput): string {
   const manifest = loadManifest(forgeRoot, initiativeId);
   const metrics = summariseCycle(cycleId, dirname(cycleLogDir));
   const wis = loadWorkItemsSnapshot(cycleLogDir);
-  const cycleEnd = events.find((e) => e.phase === 'orchestrator' && e.event_type === 'end' && e.message === 'cycle.end');
+  const cycleEnd = [...events].reverse().find((e) => e.phase === 'orchestrator' && e.event_type === 'end' && e.message === 'cycle.end'); // the LAST attempt's (row 207)
   const cycleErr = events.find((e) => e.phase === 'orchestrator' && e.event_type === 'error');
   const status = (cycleEnd?.metadata?.status as string) ?? (cycleErr ? 'failed' : 'unknown');
   const reflectionStatus = (cycleEnd?.metadata?.reflection_status as string) ?? 'skipped';

@@ -135,7 +135,7 @@ export function spawnPreflightFix(
   // HIGH-1 (row 206 follow-up, forge-8vfn.8.5.56) — the SAME claim the
   // agent-dispatch seam uses, before anything spawns. Throws
   // DispatchInFlight; deliberately NOT caught below, so the caller (the
-  // route's own catch, mapped via `sendIfDispatchInFlight`) sees it.
+  // route's own catch, mapped via `sendIfDispatchRefused`) sees it.
   claimDispatchSlot(forgeRoot, logDirName, p.runId, isTurnAlive);
   const logDir = join(forgeRoot, '_logs', logDirName);
   mkdirSync(logDir, { recursive: true });

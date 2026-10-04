@@ -68,9 +68,9 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 export default function HomePage() {
   const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
-  // M7-E row 205 (ADR 011/031): the read-only serve status — the hook owns
-  // its own read (slow visible-only poll); Home adds no fetch, no interval,
-  // no endpoint literal of its own.
+  // M7-E row 205 (ADR 011/031): the read-only serve status — the hook shares
+  // the tab's ONE serve-status poll (lib/serve-status-store.ts, row 207); Home
+  // adds no fetch, no interval, no endpoint literal of its own.
   const { status: serveStatus } = useServeStatus();
 
   // ---- the merged everything-ledger, LIFTED and shared with /monitor ----

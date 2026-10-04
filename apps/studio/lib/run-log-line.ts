@@ -88,6 +88,13 @@ function isFailedEnd(event: EventLogEntry): boolean {
   return event.metadata?.['status'] === 'failed';
 }
 
+/** Row 207 — an operator-stopped cycle attempt ends `{ status: 'stopped',
+ *  error }` (`cycle.ts`): a stop the operator asked for, not a crash, and
+ *  never a clean end either. */
+function isStoppedEnd(event: EventLogEntry): boolean {
+  return event.metadata?.['status'] === 'stopped';
+}
+
 function textFor(event: EventLogEntry): string {
   const detail = metadataError(event);
   switch (event.event_type) {
@@ -98,8 +105,9 @@ function textFor(event: EventLogEntry): string {
       // A crashed run's end carries metadata.status 'failed': it reads FAILED,
       // with the error detail beside it when the end carries one, so a crash
       // never reads like a clean end.
-      if (!isFailedEnd(event)) return base;
-      return detail !== null ? `${base} · FAILED — ${detail}` : `${base} · FAILED`;
+      const marker = isFailedEnd(event) ? 'FAILED' : isStoppedEnd(event) ? 'STOPPED' : null;
+      if (marker === null) return base;
+      return detail !== null ? `${base} · ${marker} — ${detail}` : `${base} · ${marker}`;
     }
     case 'error': {
       // The real failure detail is never discarded — no "an error occurred"

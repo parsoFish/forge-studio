@@ -11,6 +11,8 @@ apps/forge/bridge-cycle-scan.ts existsSync 6
 apps/forge/bridge-cycle-scan.ts readdirSync 2
 apps/forge/bridge-cycle-scan.ts readFileSync 2
 apps/forge/bridge-cycle-scan.ts statSync 3
+apps/forge/bridge-halt.ts existsSync 1
+apps/forge/bridge-halt.ts readdirSync 1
 apps/forge/bridge-review-comments.ts existsSync 1
 apps/forge/bridge-studio-writes.ts cpSync 1
 apps/forge/bridge-studio-writes.ts existsSync 2
@@ -291,6 +293,11 @@ packages/kernel/forge-ref-guard-hook.ts writeFileSync 2
 packages/kernel/gh-identity.ts execFileSync 1
 packages/kernel/guarded-scan.ts openSync 1
 packages/kernel/guarded-scan.ts statSync 2
+packages/kernel/halt.ts mkdirSync 1
+packages/kernel/halt.ts readFileSync 1
+packages/kernel/halt.ts renameSync 1
+packages/kernel/halt.ts unlinkSync 1
+packages/kernel/halt.ts writeFileSync 1
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1

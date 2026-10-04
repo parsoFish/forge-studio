@@ -17,7 +17,7 @@ import { mkdirSync, readFileSync, openSync, closeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
-import { claimDispatchSlot, releaseDispatchSlot, randomRunSuffix, sendIfDispatchInFlight } from '@forge/kernel';
+import { claimDispatchSlot, releaseDispatchSlot, randomRunSuffix, sendIfDispatchRefused } from '@forge/kernel';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { type KbDescriptor } from '@forge/contracts';
@@ -61,7 +61,7 @@ export function spawnBrainFix(
   const logDirName = `_brainfix-${p.runId}`;
   // HIGH-1 — the SAME claim the agent-dispatch seam uses, before anything
   // spawns; throws DispatchInFlight, uncaught here so the route's own catch
-  // (mapped via `sendIfDispatchInFlight`) sees it.
+  // (mapped via `sendIfDispatchRefused`) sees it.
   claimDispatchSlot(forgeRoot, logDirName, p.runId, isAlive);
   const logDir = join(forgeRoot, '_logs', logDirName);
   mkdirSync(logDir, { recursive: true });
@@ -485,7 +485,7 @@ export async function handleKbMaintenance(
           // HIGH-1 — spawnBrainFix now claims a dispatch slot before it
           // spawns and can throw DispatchInFlight; map it to 409 like every
           // other caller of the seam, falling back to the existing 500.
-          if (!sendIfDispatchInFlight(res, err, origin)) {
+          if (!sendIfDispatchRefused(res, err, origin)) {
             sendJson(res, 500, { error: `failed to dispatch agent fix: ${sanitizeError(err)}` }, origin);
           }
           return true;

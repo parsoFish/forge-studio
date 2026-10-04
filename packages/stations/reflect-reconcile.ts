@@ -17,6 +17,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { endMetaIndicatesFailure } from '@forge/flows';
 
 export type RerunReflectorFn = (input: {
   cycleId: string;
@@ -39,7 +40,8 @@ export function needsReflectRerun(
 }
 
 /**
- * Latest `reflector.end` timestamp (ms) in an events.jsonl, or null if none.
+ * Latest completed `reflector.end` timestamp (ms) in an events.jsonl, or null if none —
+ * a lost run's own end carries the failed marker (row 207) and ingested nothing.
  * Best-effort: a missing file or malformed line is skipped, never throws.
  */
 export function lastReflectorEndMs(eventsPath: string): number | null {
@@ -53,13 +55,13 @@ export function lastReflectorEndMs(eventsPath: string): number | null {
   let latest: number | null = null;
   for (const line of raw.split('\n')) {
     if (!line.includes('reflector.end')) continue;
-    let ev: { message?: string; started_at?: string };
+    let ev: { message?: string; started_at?: string; metadata?: Record<string, unknown> };
     try {
-      ev = JSON.parse(line) as { message?: string; started_at?: string };
+      ev = JSON.parse(line) as typeof ev;
     } catch {
       continue;
     }
-    if (ev.message !== 'reflector.end' || !ev.started_at) continue;
+    if (ev.message !== 'reflector.end' || !ev.started_at || endMetaIndicatesFailure(ev.metadata)) continue;
     const ms = Date.parse(ev.started_at);
     if (!Number.isNaN(ms) && (latest === null || ms > latest)) latest = ms;
   }

@@ -67,8 +67,39 @@
  * `reapedDirs` and whose last start never closed is reported as a plain
  * `missing-end` violation — still running, or stopped for a reason this rule
  * was given no evidence of, is not this rule's call to make either way.
+ *
+ * ROW 207 (bead `forge-8vfn.8.5.57`, T1 ruling 1973qf) — S10, the first full
+ * develop cycle judged here, measured three more shapes on its cycle logs:
+ *
+ *   - PER-WORK-ITEM ROWS. developer-ralph writes one `ralph.end` per work
+ *     item (`metadata.work_item_id`) beside the developer-loop phase's own
+ *     end per attempt. A per-WI row never opens or closes a lane —
+ *     `isPerWorkItemRow` (packages/kernel/per-work-item-row.ts), the SAME
+ *     predicate `deriveNodeStatuses` reads.
+ *   - ID-LESS ROWS. forge's event logger mints an `event_id` on every row it
+ *     writes (`createLogger`, packages/kernel/logging.ts), so a row without
+ *     one is not a run-level emission: measured, the reflector AGENT appended
+ *     its own `reflector.start`/`reflector.end` text pair (Python spacing,
+ *     microsecond timestamps) inside the runtime's own reflector turn.
+ *     Excluded rather than paired as a nested stack, because a stack would
+ *     equally accept a forged pair that DOES carry an id — an id the agent
+ *     typed is still counted (a forged `end` still reds as `extra-end`).
+ *   - CYCLE ATTEMPTS. Every attempt's `cycle.start` is closed by its own
+ *     `cycle.end` (cycle.ts writes one on a throw too, `stopped` for an
+ *     operator stop), so a resumed attempt is simply the next FIFO pair. The
+ *     FINAL attempt — every run-level row from the channel's last
+ *     `orchestrator`/`cycle` start on — can still be running when the story
+ *     ends, inside the scheduler daemon this run started. It is judged with
+ *     the harness's own SERVE STOP as evidence, the way `reapedDirs` is for
+ *     an agent turn: `opts.serveAlivePid` (story end, the daemon still alive)
+ *     DEFERS its open starts; `opts.serveStop` (`serveStopEvidence`,
+ *     agent-parity-serve-stop.mjs, after the batch teardown's own stop)
+ *     satisfies them only when that stop KILLED the daemon (it did not
+ *     drain) with this initiative in `_queue/in-flight/`. An earlier attempt
+ *     left open is never deferred and never excused.
  */
 import { basename } from 'node:path';
+import { isPerWorkItemRow } from '../../packages/kernel/per-work-item-row.ts';
 
 /** @param {unknown} skill */
 function isHookSkill(skill) {
@@ -95,6 +126,8 @@ function runLevelCandidateRows(rows) {
   return (rows ?? []).filter(
     (r) =>
       (r?.event_type === 'start' || r?.event_type === 'end') &&
+      typeof r?.event_id === 'string' &&
+      !isPerWorkItemRow(r) &&
       !isHookSkill(r?.skill) &&
       !isPricingOnlyEnd(r),
   );
@@ -191,9 +224,10 @@ const eid = (r) => (typeof r?.event_id === 'string' ? r.event_id : null);
  * (FIFO) — `satisfied`, not a violation, when `reapedDirs` names this
  * channel (see the module header).
  */
-function groupViolations(rows, { channel, key, reapedDirs, oneShotOnly }) {
+function groupViolations(rows, { channel, key, reapedDirs, oneShotOnly, finalAttempt, serveAlivePid, serveExcuse }) {
   const violations = [];
   const satisfied = [];
+  const deferred = [];
   const open = [];
   let lastStart = null;
   for (const r of rows) {
@@ -212,16 +246,42 @@ function groupViolations(rows, { channel, key, reapedDirs, oneShotOnly }) {
     }
   }
   for (const leftover of open) {
+    const item = { kind: 'missing-end', channel, key, eventIds: [eid(leftover)] };
     if (reapedDirs.has(channel)) {
       satisfied.push({
-        kind: 'missing-end', channel, key, eventIds: [eid(leftover)],
+        ...item,
         reason: `closed by the harness's own reap of ${channel} (reapAgentRuns, scripts/stories/reap.mjs) — not a product red`,
       });
+    } else if (finalAttempt.has(leftover) && serveExcuse !== null) {
+      satisfied.push({ ...item, reason: serveExcuse });
+    } else if (finalAttempt.has(leftover) && serveAlivePid !== null) {
+      deferred.push({ ...item, serveAlivePid });
     } else {
-      violations.push({ kind: 'missing-end', channel, key, eventIds: [eid(leftover)] });
+      violations.push(item);
     }
   }
-  return { violations, satisfied };
+  return { violations, satisfied, deferred };
+}
+
+const isCycleStart = (r) => r.phase === 'orchestrator' && r.skill === 'cycle' && r.event_type === 'start';
+
+/**
+ * The final attempt of a `cycle` channel — every run-level row from its LAST
+ * `orchestrator`/`cycle` start on — and the serve-stop excuse for it, if the
+ * evidence holds one (see the module header, ROW 207). Empty for any other
+ * kind: only a cycle runs inside the scheduler daemon.
+ */
+function finalAttemptOf(relevant, kind, serveStop) {
+  let from = -1;
+  if (kind === 'cycle') relevant.forEach((r, i) => { if (isCycleStart(r)) from = i; });
+  const finalAttempt = new Set(from < 0 ? [] : relevant.slice(from));
+  const initiativeId = from < 0 ? undefined : relevant[from].initiative_id;
+  const killed = serveStop != null && !serveStop.drained && serveStop.inFlightInitiativeIds.has(initiativeId);
+  const serveExcuse = killed
+    ? `closed by the harness's own serve stop — scheduler pid ${serveStop.pid} by ${serveStop.how}, did not drain, ` +
+      `with ${initiativeId} in _queue/in-flight/ (stopStudioThenScheduler, scripts/stories/sweep-teardown.mjs) — not a product red`
+    : null;
+  return { finalAttempt, serveExcuse };
 }
 
 /**
@@ -232,13 +292,15 @@ function groupViolations(rows, { channel, key, reapedDirs, oneShotOnly }) {
  *   form `reapAgentRuns`' own `{dir}` rows use (both derived from the same
  *   `_logs` root) for a harness-stop to be recognised at all
  * @param {object[]} rows this channel's own `events.jsonl` rows, in any order
- * @param {{registeredSessionKindIds?: Set<string>, reapedDirs?: Set<string>}} [opts]
+ * @param {{registeredSessionKindIds?: Set<string>, reapedDirs?: Set<string>, serveAlivePid?: number|null,
+ *   serveStop?: ReturnType<typeof import('./agent-parity-serve-stop.mjs').serveStopEvidence>}} [opts]
  * @returns {Readonly<{channel: string, kind: string, detail: string, ok: boolean,
- *   violations: ReadonlyArray<object>, satisfied: ReadonlyArray<object>}>}
+ *   violations: ReadonlyArray<object>, satisfied: ReadonlyArray<object>, deferred: ReadonlyArray<object>}>}
  */
 export function channelParityVerdict(dir, rows, opts = {}) {
   const registeredSessionKindIds = opts.registeredSessionKindIds ?? new Set();
   const reapedDirs = opts.reapedDirs ?? new Set();
+  const serveAlivePid = opts.serveAlivePid ?? null;
 
   // Row 206 follow-on (MEDIUM-11) — `rows.unknown` (readRunEvents's own
   // carried fact, scripts/stories/run-observe.mjs) names a read that did NOT
@@ -275,7 +337,8 @@ export function channelParityVerdict(dir, rows, opts = {}) {
     // not this rule's violation to raise, same as a healthy read on it never
     // becomes one.
     return Object.freeze({
-      channel: dir, kind, detail, ok: true, violations: Object.freeze([]), satisfied: Object.freeze([]),
+      channel: dir, kind, detail, ok: true,
+      violations: Object.freeze([]), satisfied: Object.freeze([]), deferred: Object.freeze([]),
     });
   }
 
@@ -310,12 +373,15 @@ export function channelParityVerdict(dir, rows, opts = {}) {
     groups.get(key).push(r);
   }
 
+  const { finalAttempt, serveExcuse } = finalAttemptOf(relevant, kind, opts.serveStop);
   const violations = [];
   const satisfied = [];
+  const deferred = [];
   for (const [key, groupRows] of groups) {
-    const v = groupViolations(groupRows, { channel: dir, key, reapedDirs, oneShotOnly });
+    const v = groupViolations(groupRows, { channel: dir, key, reapedDirs, oneShotOnly, finalAttempt, serveAlivePid, serveExcuse });
     violations.push(...v.violations);
     satisfied.push(...v.satisfied);
+    deferred.push(...v.deferred);
   }
   // MEDIUM-11 — appended last, so a channel that is BOTH unmeasured AND
   // shows a real double-start/missing-end on the portion it COULD read
@@ -325,7 +391,7 @@ export function channelParityVerdict(dir, rows, opts = {}) {
   }
   return Object.freeze({
     channel: dir, kind, detail, ok: violations.length === 0,
-    violations: Object.freeze(violations), satisfied: Object.freeze(satisfied),
+    violations: Object.freeze(violations), satisfied: Object.freeze(satisfied), deferred: Object.freeze(deferred),
   });
 }
 
@@ -333,13 +399,17 @@ export function channelParityVerdict(dir, rows, opts = {}) {
  * Every channel a run launched.
  *
  * @param {Array<{dir: string, rows: object[]}>} channels
- * @param {{registeredSessionKindIds?: Set<string>, reapedDirs?: Set<string>}} [opts]
+ * @param {{registeredSessionKindIds?: Set<string>, reapedDirs?: Set<string>, serveAlivePid?: number|null,
+ *   serveStop?: ReturnType<typeof import('./agent-parity-serve-stop.mjs').serveStopEvidence>}} [opts]
  * @returns {Readonly<{ok: boolean, results: ReadonlyArray<ReturnType<typeof channelParityVerdict>>, violations: ReadonlyArray<object>}>}
  */
 export function agentParityVerdict(channels, opts = {}) {
   const results = (channels ?? []).map(({ dir, rows }) => channelParityVerdict(dir, rows, opts));
   const violations = results.flatMap((r) => r.violations);
-  return Object.freeze({ ok: violations.length === 0, results: Object.freeze(results), violations: Object.freeze(violations) });
+  const deferred = results.flatMap((r) => r.deferred);
+  return Object.freeze({
+    ok: violations.length === 0, results: Object.freeze(results), violations: Object.freeze(violations), deferred: Object.freeze(deferred),
+  });
 }
 
 /**
@@ -358,7 +428,13 @@ export function describeAgentParity(verdict) {
     for (const s of r.satisfied) {
       lines.push(`[stories] agent-parity: ${s.channel} — ${s.reason}`);
     }
-    if (r.ok) {
+    for (const d of r.deferred) {
+      lines.push(
+        `[stories] agent-parity: ${d.channel} — DEFERRED: ${d.key} start ${d.eventIds.join(', ')} is still open while this ` +
+        `run's own serve (pid ${d.serveAlivePid}) is alive; judged after the batch teardown's serve stop`,
+      );
+    }
+    if (r.ok && r.deferred.length === 0) {
       lines.push(`[stories] agent-parity: ${r.channel} (${r.kind}) — ok`);
     }
   }

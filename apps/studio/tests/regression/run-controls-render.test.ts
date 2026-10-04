@@ -164,7 +164,7 @@ test('flows-23 / MEDIUM-2: a QUEUED run with serve UNREAD (null) says it could n
 });
 
 test('flows-23 / MEDIUM-2: a QUEUED run with serve UNSUPERVISED (dry bridge) also says it could not confirm', () => {
-  mockServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null };
+  mockServeStatus = { state: 'unsupervised', pid: null, restarts: 0, nextRestartAt: null, halt: null };
   const html = markup(RunControls, { run: run('planned') });
   expect(html).toContain('data-component="queued-serve-unconfirmed"');
   expect(html).not.toContain('data-component="queued-awaits-serve"');
@@ -172,16 +172,25 @@ test('flows-23 / MEDIUM-2: a QUEUED run with serve UNSUPERVISED (dry bridge) als
 });
 
 test('flows-23: a QUEUED run with serve CONFIRMED running renders the pickup promise', () => {
-  mockServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null };
+  mockServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null, halt: null };
   const html = markup(RunControls, { run: run('planned') });
   expect(html).toContain('data-component="queued-awaits-serve"');
   expect(html).not.toContain('data-component="queued-serve-unconfirmed"');
   expect(html).not.toContain('data-component="serve-status-notice"');
 });
 
+test('emergency halt: a QUEUED run under halt renders queued-halted, never the pickup promise or the notice', () => {
+  mockServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null, halt: { since: null, actor: null, active: 0, queued: 1 } };
+  const html = markup(RunControls, { run: run('planned') });
+  expect(html).toContain('data-component="queued-halted"');
+  expect(html).toContain('Queued — the emergency halt is on; it starts when the halt is released.');
+  expect(html).not.toContain('data-component="queued-awaits-serve"');
+  expect(html).not.toContain('data-component="queued-serve-unconfirmed"');
+});
+
 test('flows-23: a QUEUED run with serve CONFIRMED not-running (draining/restarting/down) renders the shared notice, never the pickup promise or the unconfirmed line', () => {
   for (const state of ['draining', 'restarting', 'down'] as const) {
-    mockServeStatus = { state, pid: null, restarts: 1, nextRestartAt: null };
+    mockServeStatus = { state, pid: null, restarts: 1, nextRestartAt: null, halt: null };
     const html = markup(RunControls, { run: run('planned') });
     expect(html, state).toContain('data-component="serve-status-notice"');
     expect(html, state).toContain(`data-serve-state="${state}"`);
@@ -224,7 +233,7 @@ test('flows-23: the run detail page of a FAILED run carries the recovery control
 });
 
 test('flows-23: the run detail page of a QUEUED run carries the serve-claim line', () => {
-  mockServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null };
+  mockServeStatus = { state: 'running', pid: 1, restarts: 0, nextRestartAt: null, halt: null };
   const html = detail(run('planned'));
   expect(html).toContain('data-component="queued-awaits-serve"');
 });

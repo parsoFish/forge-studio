@@ -19,6 +19,7 @@
  *
  * DOM contract:
  *   [data-component="enqueue-outcome"][data-enqueue-kind][data-run-id]
+ *     [data-component="queued-halted"]  (instead of the claim, while the emergency halt is on)
  *     a[data-action=<runAction>]  (when a run href is known)
  *     [data-component="serve-status-notice"][data-serve-state] (when serve is not running)
  */
@@ -26,6 +27,7 @@
 import Link from 'next/link';
 
 import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
+import { queuedServeTone, QUEUED_HALTED_TEXT } from '@/lib/run-controls';
 import { useServeStatus } from '@/lib/use-serve-status';
 import type { ServeStatus } from '@/lib/bridge-client';
 
@@ -79,9 +81,15 @@ export function EnqueueOutcomeLineView({
       style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>
-          {KIND_CLAIM[kind]}
-        </span>
+        {queuedServeTone(serve) === 'halted' ? (
+          <span data-component="queued-halted" style={{ fontSize: 12, color: 'var(--dim)', fontWeight: 600 }}>
+            {QUEUED_HALTED_TEXT}
+          </span>
+        ) : (
+          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>
+            {KIND_CLAIM[kind]}
+          </span>
+        )}
         {runHref && (
           <Link
             data-action={runAction}

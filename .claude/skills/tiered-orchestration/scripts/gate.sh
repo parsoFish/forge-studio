@@ -20,6 +20,9 @@
 #   OTHER JOB   every OTHER step of every other job — stories' own install/cache/upload steps,
 #               plus any further run-lock job (ui-walkthrough, deadpaths), which need a free
 #               4123/4124 and are run by the lane under its own lock
+# Recorded (costed) stories run one per invocation, and a green story's recording is committed
+# before the next invocation starts — or the gallery-regenerating story runs first: the gallery
+# guard refuses to index frames another invocation wrote and left untracked (row 207, T1 1973qp).
 #
 # Every path is an argument: `gate-M4.sh`, which this generalises, hard-coded a repo root for its
 # helper tools and one session's scratchpad for its logs, so it answered a different question in

@@ -34,7 +34,7 @@ import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
 import { costlessGuardFor } from './costless-beat.mjs';
-import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard, agentParitySoFar } from './run-observe.mjs';
+import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard, storyEndParity } from './run-observe.mjs';
 import {
   applyFence,
   describeFence,
@@ -94,7 +94,7 @@ const VIEWPORT = { width: 1600, height: 1000 };
 const slug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
-export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null, writtenThisRun) {
+export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null, writtenThisRun, deferredCycleParity) {
   // This run's own stamp for its red evidence (`6.11.50`) — one value for the
   // whole run, so the DOM captured at a beat and the ground read before the
   // sweep land in the SAME directory and no previous run's files sit beside
@@ -350,8 +350,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     reason: reapReasonFor(story, beats),
   });
   for (const line of describeReap(reap)) console.log(line);
-  const parity = agentParitySoFar({ root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)) });
-  for (const line of parity.lines) console.log(line);
+  // Row 207 (C2): a final cycle attempt still open under our live serve is deferred to the batch.
+  const parity = storyEndParity({ root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)), deferInto: deferredCycleParity });
 
   // Bead `forge-8vfn.6.11.8` — the spend COLUMN. Read from the dispatched
   // runs' OWN event logs, collected before the reap removed them from the

@@ -60,6 +60,7 @@ import {
 import { isDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { bindReleaseFinalize } from './example-hooks.ts';
 import { handleCycleDataRoutes, servedFileHeaders } from './bridge-cycle-data.ts';
+import { handleHaltRoutes, haltStatus } from './bridge-halt.ts';
 import { handleRunTriggerRoutes } from './bridge-run-triggers.ts';
 import { handleReviewCommentRoutes } from './bridge-review-comments.ts';
 import {
@@ -652,12 +653,13 @@ async function handleHttp(
   }
 
   if (await dispatchRoute(ctx.routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, readBody: () => readJson(req) }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW; `readBody` hands down the RESULT of the host's body policy (CSRF checked just above), never the policy itself (ruling 30)
+  if (await handleHaltRoutes(req, res, { forgeRoot: ctx.forgeRoot }, url, method)) return;
   if (method === 'GET' && url === '/api/health') {
     // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
     // healthy forge bridge from a stale/foreign listener and attach instead of
     // killing it. Probes still treat any 200 as "up", so readiness is unchanged.
     // M7-E row 205: `serve` rides along — the supervisor's own read-only status.
-    sendJson(res, 200, { ...ctx.identity, serve: ctx.getServeStatus() }, origin);
+    sendJson(res, 200, { ...ctx.identity, serve: { ...ctx.getServeStatus(), halt: haltStatus(ctx.forgeRoot) } }, origin);
     return;
   }
   if (method === 'GET' && url === '/api/cycles') {

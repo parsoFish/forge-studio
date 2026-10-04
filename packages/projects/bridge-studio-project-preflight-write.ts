@@ -56,7 +56,7 @@ import {
   loadConfig,
   resolveProjectsDir,
   PROJECT_ID_RE,
-  sendIfDispatchInFlight,
+  sendIfDispatchRefused,
   randomRunSuffix,
   type StudioContext,
   type RouteContext,
@@ -278,7 +278,7 @@ export function makePreflightWriteHandlers(deps: PreflightWriteDeps): {
       } catch (err) {
         // HIGH-1 — spawnPreflightFix claims before it spawns and can throw
         // DispatchInFlight; map to 409 like every other caller of the seam.
-        if (!sendIfDispatchInFlight(res, err, origin)) {
+        if (!sendIfDispatchRefused(res, err, origin)) {
           sendJson(res, 500, { error: `failed to dispatch preflight-fix: ${sanitizeError(err)}` }, origin);
         }
         return true;

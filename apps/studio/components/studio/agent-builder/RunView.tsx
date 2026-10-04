@@ -31,6 +31,8 @@
  * fabricated content through a not-found path.
  */
 
+import type { ReactNode } from 'react';
+
 import { RunLog } from '@/components/studio/RunLog';
 import type { RunLogLine } from '@/lib/run-log-line';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
@@ -38,6 +40,9 @@ import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 export type RunMaterialRef = { path: string; kind: string };
 
 export type RunViewProps = {
+  /** The Studio nav (with the halt control and banner), rendered as the first
+   *  child of the `main[data-page]` so it sits inside the page root. */
+  nav?: ReactNode;
   runId: string;
   /** false = no dispatch record exists for this runId. */
   found: boolean;
@@ -69,7 +74,7 @@ export type RunViewProps = {
   };
 };
 
-export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputRefs, errorText, trigger }: RunViewProps) {
+export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputRefs, errorText, trigger, nav = null }: RunViewProps) {
   return (
     // W7-C3 (agents-35): <main>, not <div> — the run page had no <main>
     // landmark at all; every other route roots its [data-page] on one.
@@ -81,46 +86,49 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
       data-run-cost={costUsd}
       data-run-found={found ? 'true' : 'false'}
       data-page-ready="true"
-      style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
+      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
-      {/* W7-C3 (crosscut-18): the page's ONE h1. */}
-      <h1 style={{ margin: 0, fontSize: 15 }}>Agent run {runId}</h1>
-      {!found ? (
-        <RunNotFound runId={runId} />
-      ) : (
-        <>
-          {/* W7-B5 (agents-19): the failure reason, verbatim, next to the
-              run — never only the bare word "failed".
-              Review round 1: keyed off the run's STATE, not off `errorText`
-              alone. The cancel route SIGTERMs the child before writing its
-              own marker, so a child that catches the signal and writes
-              `agent-dispatch.failed` on the way out leaves BOTH markers in
-              the log — `state` correctly derives the sticky `cancelled`,
-              but the banner was still announcing "Run failed: …" (in a
-              `role="alert"`) about a run the operator deliberately stopped.
-              A cancelled run's error text is a consequence of the cancel,
-              not a failure to report. */}
-          {errorText && state !== 'cancelled' ? (
-            <div
-              data-component="run-error"
-              role="alert"
-              style={{ border: '1px solid var(--err, #b91c1c)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12.5, color: 'var(--err, #b91c1c)' }}
-            >
-              Run failed: {errorText}
-            </div>
-          ) : null}
-          <RunTrigger trigger={trigger} />
+      {nav}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
+        {/* W7-C3 (crosscut-18): the page's ONE h1. */}
+        <h1 style={{ margin: 0, fontSize: 15 }}>Agent run {runId}</h1>
+        {!found ? (
+          <RunNotFound runId={runId} />
+        ) : (
+          <>
+            {/* W7-B5 (agents-19): the failure reason, verbatim, next to the
+                run — never only the bare word "failed".
+                Review round 1: keyed off the run's STATE, not off `errorText`
+                alone. The cancel route SIGTERMs the child before writing its
+                own marker, so a child that catches the signal and writes
+                `agent-dispatch.failed` on the way out leaves BOTH markers in
+                the log — `state` correctly derives the sticky `cancelled`,
+                but the banner was still announcing "Run failed: …" (in a
+                `role="alert"`) about a run the operator deliberately stopped.
+                A cancelled run's error text is a consequence of the cancel,
+                not a failure to report. */}
+            {errorText && state !== 'cancelled' ? (
+              <div
+                data-component="run-error"
+                role="alert"
+                style={{ border: '1px solid var(--err, #b91c1c)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12.5, color: 'var(--err, #b91c1c)' }}
+              >
+                Run failed: {errorText}
+              </div>
+            ) : null}
+            <RunTrigger trigger={trigger} />
 
-          <section data-section="run-log">
-            <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Log</h3>
-            <RunLog lines={lines} />
-          </section>
+            <section data-section="run-log">
+              <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Log</h3>
+              <RunLog lines={lines} />
+            </section>
 
-          <RunMaterialsSection materials={materials} />
-          <CeilingProvenance ceilingUsd={ceilingUsd} />
-          <RunOutputsSection outputRefs={outputRefs} />
-        </>
-      )}
+            <RunMaterialsSection materials={materials} />
+            <CeilingProvenance ceilingUsd={ceilingUsd} />
+            <RunOutputsSection outputRefs={outputRefs} />
+          </>
+        )}
+      </div>
     </main>
   );
 }

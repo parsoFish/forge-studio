@@ -4,54 +4,34 @@
  * useServeStatus — the live, READ-ONLY `forge serve` supervisor status
  * (M7-E row 205, ADR 011/031). `forge studio` supervises serve directly
  * and the operator has no lifecycle control over it, so this hook only
- * reads: a slow poll (while the tab is visible) of `GET /api/health`'s `serve` field, which every
- * consumer renders as the single shared `<ServeStatusNotice>` wherever a
- * "is this actually being claimed right now" signal is needed.
+ * reads: every consumer shares the ONE tab-wide poll in
+ * `lib/serve-status-store.ts` (row 207), and renders the single shared
+ * `<ServeStatusNotice>` wherever a "is this actually being claimed right now"
+ * signal is needed. `enabled=false` subscribes to nothing.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
-import { fetchServeStatus, type ServeStatus } from './bridge-client';
+import {
+  serveStatusStore,
+  SERVE_STATUS_POLL_MS,
+  type ServeStatusSnapshot,
+} from './serve-status-store';
 
-export type ServeStatusState = {
-  status: ServeStatus | null;
-  /** True once the first read settled (success or failure). */
-  ready: boolean;
+export { SERVE_STATUS_POLL_MS };
+
+export type ServeStatusState = ServeStatusSnapshot & {
   refresh: () => Promise<void>;
 };
 
-export const SERVE_STATUS_POLL_MS = 10_000;
+const NOT_READ: ServeStatusSnapshot = { status: null, ready: false };
+const noSubscription = () => () => {};
+const getNotRead = () => NOT_READ;
 
-export function useServeStatus(pollMs: number = SERVE_STATUS_POLL_MS, enabled = true): ServeStatusState {
-  const [status, setStatus] = useState<ServeStatus | null>(null);
-  const [ready, setReady] = useState(false);
-  const alive = useRef(true);
-
-  const refresh = useCallback(async () => {
-    let s: ServeStatus | null = null;
-    try {
-      s = await fetchServeStatus();
-    } catch {
-      s = null;
-    }
-    if (!alive.current) return;
-    setStatus(s);
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!enabled) return;
-    alive.current = true;
-    void refresh();
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      void refresh();
-    };
-    const id = setInterval(tick, pollMs);
-    return () => {
-      alive.current = false;
-      clearInterval(id);
-    };
-  }, [refresh, pollMs, enabled]);
-
-  return { status, ready, refresh };
+export function useServeStatus(enabled = true): ServeStatusState {
+  const snapshot = useSyncExternalStore(
+    enabled ? serveStatusStore.subscribe : noSubscription,
+    enabled ? serveStatusStore.getSnapshot : getNotRead,
+    getNotRead,
+  );
+  return { status: snapshot.status, ready: snapshot.ready, refresh: serveStatusStore.refresh };
 }

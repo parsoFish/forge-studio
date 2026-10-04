@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { readHalt } from '@forge/kernel';
 import { getPaths, recover, type QueuePaths } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
@@ -45,9 +46,10 @@ export async function runFinalizeSweep(wiring: PhaseWiring): Promise<void> {
  * drain skips merged PRs — a merge always wins). Best-effort — never throws
  * out of the timer.
  */
-export async function runDrainSweep(wiring: PhaseWiring): Promise<void> {
+export async function runDrainSweep(wiring: PhaseWiring, queueRoot: string): Promise<void> {
+  if (readHalt(queueRoot) !== null) return; // the emergency halt (ADR 011): re-entry is a claim
   try {
-    for (const r of await drainPendingFixWorkItems({ notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
+    for (const r of await drainPendingFixWorkItems({ queueRoot, notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
       if (r.status === 'drained') {
         console.log(`[serve] fix loop ${r.initiativeId} — fix work items run in the same cycle (${r.detail})`);
       } else if (r.status === 'error') {

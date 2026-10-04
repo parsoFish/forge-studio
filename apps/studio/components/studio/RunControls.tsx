@@ -40,6 +40,7 @@
  *     [data-component="run-control-error"]      (verbatim failure text)
  *     [data-component="run-control-outcome"][data-outcome-control=<id>]
  *       -> EnqueueOutcomeLine's own contract ([data-component="enqueue-outcome"] …)
+ *     [data-component="queued-halted"]                              (queued runs, emergency halt on)
  *     [data-component="queued-awaits-serve"]                         (queued runs, serve CONFIRMED running)
  *     [data-component="serve-status-notice"][data-serve-state]       (queued runs, serve CONFIRMED not running)
  *     [data-component="queued-serve-unconfirmed"]                    (queued runs, serve status unknown — null or unsupervised)
@@ -59,6 +60,7 @@ import {
   intentForControlClick,
   mayPostControl,
   queuedServeTone,
+  QUEUED_HALTED_TEXT,
   runAwaitsServe,
   runControlsShouldRender,
   runFailureNoteKind,
@@ -109,7 +111,7 @@ export function RunControls({
 }): JSX.Element | null {
   const controls = deriveRunControls(run);
   const awaitsServe = serveStrip && runAwaitsServe(run);
-  const { status: serve } = useServeStatus(undefined, awaitsServe);
+  const { status: serve } = useServeStatus(awaitsServe);
   const [busy, setBusy] = useState<RunControlId | null>(null);
   const [pendingDestructive, setPendingDestructive] = useState<RunControlId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -282,7 +284,7 @@ export function RunControls({
           data-outcome-control="stop"
           style={{ fontSize: 12, color: 'var(--faint)' }}
         >
-          Stop requested — the run halts at its next clean boundary; the worktree and branch are kept.
+          Stop requested — the run stops at its next clean boundary; the worktree and branch are kept.
         </span>
       )}
 
@@ -293,6 +295,13 @@ export function RunControls({
           line rather than the same promise `running` gets. */}
       {awaitsServe && (() => {
         const tone = queuedServeTone(serve);
+        if (tone === 'halted') {
+          return (
+            <span data-component="queued-halted" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
+              {QUEUED_HALTED_TEXT}
+            </span>
+          );
+        }
         if (tone === 'running') {
           return (
             <span data-component="queued-awaits-serve" style={{ fontSize: 11.5, color: 'var(--dim)' }}>

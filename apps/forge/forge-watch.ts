@@ -247,26 +247,26 @@ export function startUiSpawnArgs(uiPort: number): string[] {
  * reliably free a port on WSL2. No-op when `proc` has already exited or been
  * killed.
  *
- * Extracted (review finding #2) so the SIGINT-during-build race in
- * `runWatch`'s `shutdown()` — a DIFFERENT owner of the same child (the
- * build/start continuation) nulling a SHARED `uiProc` variable the instant
- * this same child's 'exit' event fires, out from under a caller that
- * re-reads that shared variable after its own await — is unit-testable
- * without spawning a real process. The contract this function relies on:
- * every caller passes a LOCALLY CAPTURED reference, never the shared
- * variable re-read post-await.
+ * Every caller passes a LOCALLY CAPTURED reference, never the shared `uiProc`
+ * re-read post-await (review finding #2: the build continuation nulls it on
+ * this same child's 'exit'). The UI children are spawned `detached` — their
+ * own process group — so the group signal reaches `npm` → `sh` →
+ * `next-server` and none of them outlives Studio (row 207).
  */
 export async function terminateChild(proc: ChildProcess, opts: { graceMs?: number } = {}): Promise<void> {
   if (proc.exitCode !== null || proc.killed) return;
-  try { proc.kill('SIGTERM'); } catch { /* already dead */ }
+  signalGroup(proc, 'SIGTERM');
   await new Promise<void>((r) => {
     const done = () => r();
     proc.once('exit', done);
     setTimeout(done, opts.graceMs ?? 2500);
   });
-  if (proc.exitCode === null) {
-    try { proc.kill('SIGKILL'); } catch { /* already dead */ }
-  }
+  if (proc.exitCode === null) signalGroup(proc, 'SIGKILL');
+}
+
+function signalGroup(proc: ChildProcess, sig: NodeJS.Signals): void {
+  if (proc.pid !== undefined) { try { process.kill(-proc.pid, sig); } catch { /* group already gone */ } }
+  try { proc.kill(sig); } catch { /* already dead */ }
 }
 
 /**
@@ -584,7 +584,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
 
       if (opts.dev) {
         console.log(`${label} ui at ${uiUrl} (starting next dev…)`);
-        uiProc = spawn('npm', devUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+        uiProc = spawn('npm', devUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit', detached: true });
         uiLaunched = true;
       } else {
         // 2b. Production path (default, W6-P3): build once (skipped when the
@@ -606,7 +606,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
           // survive to convince a later run this (possibly broken) `.next/`
           // output is trustworthy, even if source hasn't changed since.
           clearBuildStamp(uiDir);
-          const buildProc = spawn('npm', buildUiSpawnArgs(), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+          const buildProc = spawn('npm', buildUiSpawnArgs(), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit', detached: true });
           uiProc = buildProc;
           const buildExitCode = await new Promise<number | null>((resolveBuild) => {
             buildProc.on('error', (err) => {
@@ -633,7 +633,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
           writeBuildStamp(uiDir, newestSourceMs);
         }
         console.log(`${label} ui at ${uiUrl} (starting next start…)`);
-        uiProc = spawn('npm', startUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+        uiProc = spawn('npm', startUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit', detached: true });
         uiLaunched = true;
       }
 

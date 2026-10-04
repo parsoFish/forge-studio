@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
-import { allowedOrigin, sendJson, sendIfDispatchInFlight, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
+import { allowedOrigin, sendJson, sendIfDispatchRefused, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import {
@@ -321,7 +321,7 @@ export async function handleArchitectRoutes(
     } catch (err) {
       // Row 206 — a freshly-minted sessionId makes DispatchInFlight
       // unreachable here in practice, mapped the same way anyway.
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -401,7 +401,7 @@ export async function handleArchitectRoutes(
       // already make DispatchInFlight unreachable here in practice (a second
       // concurrent answer 409s on phase before it ever reaches the seam),
       // mapped the same way anyway.
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -477,7 +477,7 @@ export async function handleArchitectRoutes(
     } catch (err) {
       // Row 206 — a LIVE turn is refused by the seam as DispatchInFlight,
       // mapped to 409 here rather than the generic 500 below.
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }

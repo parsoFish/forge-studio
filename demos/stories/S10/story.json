@@ -138,14 +138,11 @@
         }
       },
       {
-        "act": "Start the scheduler so queued work can be claimed",
-        "say": "Planning and building are done by a scheduler that claims queued work. Nothing the operator enqueues moves until it is running, and the product says so plainly rather than leaving the work to sit — so starting it is part of the journey, not setup hidden behind it.",
+        "act": "Go to the roadmap, where the approved plan is already being worked",
+        "say": "The plan is approved, and the factory is already at work on it. The roadmap is where that work becomes visible to the operator.",
         "do": [
           {
             "press": "project-tab-roadmap"
-          },
-          {
-            "press": "scheduler-start"
           }
         ],
         "expect": {
@@ -153,20 +150,20 @@
           "data": {
             "page": "projects",
             "project-id": "gitpulse",
-            "scheduler-status": "running"
+            "section": "project-roadmap"
           }
         }
       },
       {
         "act": "Watch the factory plan and build the initiative",
-        "say": "Starting the scheduler was the operator's last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.",
+        "say": "Approving the plan was the operator's last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.",
         "do": [],
         "wait": {
           "for": "agent",
           "upTo": 1800000,
           "boundBasis": "MAX_DECLARED_WAIT_MS binding at 1800000 ms; ground.budget_usd $44 at the measured $0.5029/min would afford 5249123 ms",
           "terminal": "ready-for-review",
-          "anchor": "scheduler-start"
+          "anchor": "approve-plan"
         },
         "expect": {
           "route": "/projects/gitpulse",
@@ -208,6 +205,89 @@
             "press": "start-development"
           }
         ],
+        "expect": {
+          "route": "/projects/gitpulse",
+          "data": {
+            "page": "projects",
+            "project-id": "gitpulse",
+            "enqueue-kind": "develop"
+          }
+        }
+      },
+      {
+        "act": "Open the flows index to watch the build",
+        "say": "The build flow is running the initiative now. The operator opens the flow itself to watch it work.",
+        "do": [],
+        "expect": {
+          "route": "/flows",
+          "data": {
+            "page": "flows-index",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Open the develop flow monitor",
+        "say": "This is the surface with per-work-item evidence while a run builds.",
+        "do": [],
+        "expect": {
+          "route": "/flows/forge-develop",
+          "data": {
+            "page": "flow-monitor",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Wait for the build flow to claim the run",
+        "say": "Something is genuinely running before anything is held back — the run is claimed and a work item is building.",
+        "do": [
+          {
+            "pressBound": {
+              "action": "select-run-",
+              "bind": "cycleId"
+            }
+          }
+        ],
+        "wait": {
+          "for": "agent",
+          "upTo": 1800000,
+          "boundBasis": "MAX_DECLARED_WAIT_MS binding at 1800000 ms; ground.budget_usd $44 at the measured $0.5029/min would afford 5249123 ms",
+          "anchor": "start-development"
+        },
+        "expect": {
+          "route": "/flows/forge-develop",
+          "data": {
+            "page": "flow-monitor",
+            "section": "run-controls",
+            "run-id": "<cycleId>",
+            "hex-kind": "wi",
+            "node-id": "dev",
+            "status": "active"
+          }
+        }
+      },
+      {
+        "act": "Pull the emergency halt while the run builds",
+        "say": "One press. The control flips to its on state and a banner names it on every page: one run finishing, nothing new starts.",
+        "do": [
+          {
+            "press": "emergency-halt"
+          }
+        ],
+        "expect": {
+          "route": "/flows/forge-develop",
+          "data": {
+            "halt-state": "on",
+            "component": "emergency-halt-banner",
+            "halt-active": "1"
+          }
+        }
+      },
+      {
+        "act": "The active run finishes under the halt",
+        "say": "The halt stops new work, not work in progress. The run finishes, and the banner now reads every active run finished.",
+        "do": [],
         "wait": {
           "for": "agent",
           "upTo": 1800000,
@@ -217,11 +297,26 @@
           "anchor": "start-development"
         },
         "expect": {
-          "route": "/projects/gitpulse",
+          "route": "/flows/forge-develop",
           "data": {
-            "page": "projects",
-            "project-id": "gitpulse",
-            "enqueue-kind": "develop"
+            "halt-state": "on",
+            "component": "emergency-halt-banner",
+            "halt-active": "0"
+          }
+        }
+      },
+      {
+        "act": "Release the halt",
+        "say": "Release is one press from the same place. The factory claims work again and the banner is gone.",
+        "do": [
+          {
+            "press": "release-halt"
+          }
+        ],
+        "expect": {
+          "route": "/flows/forge-develop",
+          "data": {
+            "halt-state": "off"
           }
         }
       },
@@ -663,8 +758,8 @@
         }
       },
       {
-        "act": "ACT 2 — return to the roadmap; the scheduler is still running from ACT 1",
-        "say": "The scheduler never stopped between the two initiatives — there is nothing to start again.",
+        "act": "ACT 2 — return to the roadmap, where the second plan is already being worked",
+        "say": "The factory claims queued work the same way for every initiative — there is nothing to start again.",
         "do": [
           {
             "press": "project-tab-roadmap"
@@ -675,7 +770,7 @@
           "data": {
             "page": "projects",
             "project-id": "gitpulse",
-            "scheduler-status": "running"
+            "section": "project-roadmap"
           }
         }
       },
@@ -832,8 +927,8 @@
         }
       },
       {
-        "act": "ACT 2 — step away while the halt lands",
-        "say": "The runner needs a moment to reach the boundary it halts at.",
+        "act": "ACT 2 — step away while the stop lands",
+        "say": "The runner needs a moment to reach the boundary it stops at.",
         "do": [
           {
             "press": "back-to-monitor"
@@ -848,7 +943,7 @@
         }
       },
       {
-        "act": "ACT 2 — after the halt, the running work item finished naturally",
+        "act": "ACT 2 — after the stop, the running work item finished naturally",
         "say": "The work item already in flight when the operator stopped the run is not thrown away mid-turn — it finishes, because nothing in this product aborts a live turn.",
         "do": [
           {
@@ -928,6 +1023,22 @@
         }
       },
       {
+        "act": "ACT 2 — pull the emergency halt before resuming",
+        "say": "The operator holds the factory before resuming the stopped run, to see what the halt does to queued work.",
+        "do": [
+          {
+            "press": "emergency-halt"
+          }
+        ],
+        "expect": {
+          "route": "/flows/forge-develop/run/<cycleId2>",
+          "data": {
+            "halt-state": "on",
+            "component": "emergency-halt-banner"
+          }
+        }
+      },
+      {
         "act": "ACT 2 — resume via the run's own resume control",
         "say": "Resume is not a fresh start. It picks up from what the stop preserved — the worktree, the branch, the work items already done.",
         "do": [
@@ -941,6 +1052,68 @@
             "page": "flow-run",
             "section": "run-controls",
             "outcome-control": "resume"
+          }
+        }
+      },
+      {
+        "act": "ACT 2 — step back to the monitor before reading the queued run",
+        "say": "The run page reads its run once; a fresh load shows the state resume left behind.",
+        "do": [
+          {
+            "press": "back-to-monitor"
+          }
+        ],
+        "expect": {
+          "route": "/flows/forge-develop",
+          "data": {
+            "page": "flow-monitor",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "ACT 2 — open the resumed run's detail page",
+        "say": "A fresh read of the run the operator just resumed.",
+        "do": [],
+        "expect": {
+          "route": "/flows/forge-develop/run/<cycleId2>",
+          "data": {
+            "page": "flow-run",
+            "run-found": "true"
+          }
+        }
+      },
+      {
+        "act": "ACT 2 — the resumed run waits queued while the halt is on",
+        "say": "Resume put the run back in the queue and the halt keeps it there: the run says it starts when the halt is released, and nothing it had done is lost.",
+        "do": [],
+        "wait": {
+          "for": "agent",
+          "upTo": 60000,
+          "anchor": "resume-run"
+        },
+        "expect": {
+          "route": "/flows/forge-develop/run/<cycleId2>",
+          "data": {
+            "page": "flow-run",
+            "run-status": "planned",
+            "halt-state": "on",
+            "component": "queued-halted"
+          }
+        }
+      },
+      {
+        "act": "ACT 2 — release the halt so the resumed run can start",
+        "say": "Releasing the halt lets the factory claim the queued run; the next beats watch it pick up where the stop left it.",
+        "do": [
+          {
+            "press": "release-halt"
+          }
+        ],
+        "expect": {
+          "route": "/flows/forge-develop/run/<cycleId2>",
+          "data": {
+            "halt-state": "off"
           }
         }
       },
@@ -1069,12 +1242,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T11-08-18-ca24c432"
+        "architectSessionId": "2026-10-04T18-25-38-e973a07d"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T11-08-18-ca24c432"
+        "architect-session-id": "2026-10-04T18-25-38-e973a07d"
       },
       "expect": {
         "page": "architect-new",
@@ -1140,37 +1313,37 @@
       "frame": "frames/06-go-back-to-the-project-the-plan-belongs-.png"
     },
     {
-      "act": "Start the scheduler so queued work can be claimed",
-      "say": "Planning and building are done by a scheduler that claims queued work. Nothing the operator enqueues moves until it is running, and the product says so plainly rather than leaving the work to sit — so starting it is part of the journey, not setup hidden behind it.",
+      "act": "Go to the roadmap, where the approved plan is already being worked",
+      "say": "The plan is approved, and the factory is already at work on it. The roadmap is where that work becomes visible to the operator.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
-        "scheduler-status": "running"
+        "section": "project-roadmap"
       },
       "expect": {
         "page": "projects",
         "project-id": "gitpulse",
-        "scheduler-status": "running"
+        "section": "project-roadmap"
       },
-      "frame": "frames/07-start-the-scheduler-so-queued-work-can-b.png"
+      "frame": "frames/07-go-to-the-roadmap-where-the-approved-pla.png"
     },
     {
       "act": "Watch the factory plan and build the initiative",
-      "say": "Starting the scheduler was the operator's last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.",
+      "say": "Approving the plan was the operator's last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.",
       "status": "green",
       "failures": [],
       "bindings": {
-        "runId": "INIT-2026-10-03-exclude-author-filter"
+        "runId": "INIT-2026-10-04-exclude-author-filter"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "initiative-status": "ready-for-review",
         "plan-state": "planned",
-        "initiative-id": "INIT-2026-10-03-exclude-author-filter"
+        "initiative-id": "INIT-2026-10-04-exclude-author-filter"
       },
       "expect": {
         "page": "projects",
@@ -1187,13 +1360,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId": "2026-10-03T11-14-20_INIT-2026-10-03-exclude-author-filter"
+        "cycleId": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "run-active": "true",
-        "run-cycle-id": "2026-10-03T11-14-20_INIT-2026-10-03-exclude-author-filter"
+        "run-cycle-id": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
       },
       "expect": {
         "page": "projects",
@@ -1222,6 +1395,115 @@
       "frame": "frames/10-hand-the-plan-to-the-build-flow.png"
     },
     {
+      "act": "Open the flows index to watch the build",
+      "say": "The build flow is running the initiative now. The operator opens the flow itself to watch it work.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flows-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "expect": {
+        "page": "flows-index",
+        "page-ready": "true"
+      },
+      "frame": "frames/11-open-the-flows-index-to-watch-the-build.png"
+    },
+    {
+      "act": "Open the develop flow monitor",
+      "say": "This is the surface with per-work-item evidence while a run builds.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "page-ready": "true"
+      },
+      "expect": {
+        "page": "flow-monitor",
+        "page-ready": "true"
+      },
+      "frame": "frames/12-open-the-develop-flow-monitor.png"
+    },
+    {
+      "act": "Wait for the build flow to claim the run",
+      "say": "Something is genuinely running before anything is held back — the run is claimed and a work item is building.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "cycleId": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
+      },
+      "data": {
+        "page": "flow-monitor",
+        "section": "run-controls",
+        "run-id": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter",
+        "hex-kind": "wi",
+        "node-id": "dev",
+        "status": "active"
+      },
+      "expect": {
+        "page": "flow-monitor",
+        "section": "run-controls",
+        "run-id": "<cycleId>",
+        "hex-kind": "wi",
+        "node-id": "dev",
+        "status": "active"
+      },
+      "frame": "frames/13-wait-for-the-build-flow-to-claim-the-run.png"
+    },
+    {
+      "act": "Pull the emergency halt while the run builds",
+      "say": "One press. The control flips to its on state and a banner names it on every page: one run finishing, nothing new starts.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "component": "emergency-halt-banner",
+        "halt-state": "on",
+        "halt-active": "1"
+      },
+      "expect": {
+        "halt-state": "on",
+        "component": "emergency-halt-banner",
+        "halt-active": "1"
+      },
+      "frame": "frames/14-pull-the-emergency-halt-while-the-run-bu.png"
+    },
+    {
+      "act": "The active run finishes under the halt",
+      "say": "The halt stops new work, not work in progress. The run finishes, and the banner now reads every active run finished.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "component": "emergency-halt-banner",
+        "halt-state": "on",
+        "halt-active": "0"
+      },
+      "expect": {
+        "halt-state": "on",
+        "component": "emergency-halt-banner",
+        "halt-active": "0"
+      },
+      "frame": "frames/15-the-active-run-finishes-under-the-halt.png"
+    },
+    {
+      "act": "Release the halt",
+      "say": "Release is one press from the same place. The factory claims work again and the banner is gone.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "halt-state": "off"
+      },
+      "expect": {
+        "halt-state": "off"
+      },
+      "frame": "frames/16-release-the-halt.png"
+    },
+    {
       "act": "Watch the run build",
       "say": "The dev station fans out over the work items the plan decomposed into. Each row on the timeline is a station with its own status and its own cost, so \"what is it doing and what has it spent\" is one screen, not an investigation.",
       "status": "green",
@@ -1245,7 +1527,7 @@
         "node-id": "dev",
         "status": "complete"
       },
-      "frame": "frames/11-watch-the-run-build.png"
+      "frame": "frames/17-watch-the-run-build.png"
     },
     {
       "act": "The built work is assembled for review",
@@ -1265,7 +1547,7 @@
         "node-id": "integrate",
         "status": "complete"
       },
-      "frame": "frames/12-the-built-work-is-assembled-for-review.png"
+      "frame": "frames/18-the-built-work-is-assembled-for-review.png"
     },
     {
       "act": "The review station finishes its pass",
@@ -1285,7 +1567,7 @@
         "node-id": "adversarial-review",
         "status": "complete"
       },
-      "frame": "frames/13-the-review-station-finishes-its-pass.png"
+      "frame": "frames/19-the-review-station-finishes-its-pass.png"
     },
     {
       "act": "The review findings are on the run page",
@@ -1301,7 +1583,7 @@
         "page": "flow-run",
         "section": "review-findings"
       },
-      "frame": "frames/14-the-review-findings-are-on-the-run-page.png"
+      "frame": "frames/20-the-review-findings-are-on-the-run-page.png"
     },
     {
       "act": "Open the review verdict at its gate",
@@ -1317,7 +1599,7 @@
         "page": "artifact",
         "page-ready": "true"
       },
-      "frame": "frames/15-open-the-review-verdict-at-its-gate.png"
+      "frame": "frames/21-open-the-review-verdict-at-its-gate.png"
     },
     {
       "act": "Anchor one blocking comment to the precedence criterion (the first criterion, said so in the log, when none names precedence) and send it back",
@@ -1338,12 +1620,12 @@
         "region-comment-count": "1"
       },
       "anchor": {
-        "by": "fallback",
+        "by": "text",
         "attr": "demo-region",
         "text": "precedence",
-        "region": "ac-1"
+        "region": "ac-14"
       },
-      "frame": "frames/16-anchor-one-blocking-comment-to-the-prece.png"
+      "frame": "frames/22-anchor-one-blocking-comment-to-the-prece.png"
     },
     {
       "act": "The fix lands on the same branch and comes back for re-review",
@@ -1365,7 +1647,7 @@
         "status": "complete",
         "review-round": "2"
       },
-      "frame": "frames/17-the-fix-lands-on-the-same-branch-and-com.png"
+      "frame": "frames/23-the-fix-lands-on-the-same-branch-and-com.png"
     },
     {
       "act": "Open the re-reviewed verdict at its gate",
@@ -1381,7 +1663,7 @@
         "page": "artifact",
         "page-ready": "true"
       },
-      "frame": "frames/18-open-the-re-reviewed-verdict-at-its-gate.png"
+      "frame": "frames/24-open-the-re-reviewed-verdict-at-its-gate.png"
     },
     {
       "act": "Read the fix against the criterion, and resolve the blocking comment it answers (the first criterion's, said so in the log, when none names precedence)",
@@ -1403,9 +1685,9 @@
         "by": "text",
         "attr": "demo-region",
         "text": "precedence",
-        "region": "ac-1"
+        "region": "ac-14"
       },
-      "frame": "frames/19-read-the-fix-against-the-criterion-and-r.png"
+      "frame": "frames/25-read-the-fix-against-the-criterion-and-r.png"
     },
     {
       "act": "Approve — which is the merge",
@@ -1421,7 +1703,7 @@
         "page": "artifact",
         "gate-state": "approved"
       },
-      "frame": "frames/20-approve-which-is-the-merge.png"
+      "frame": "frames/26-approve-which-is-the-merge.png"
     },
     {
       "act": "Reflect on the cycle",
@@ -1435,7 +1717,7 @@
       "expect": {
         "section": "reflect-done"
       },
-      "frame": "frames/21-reflect-on-the-cycle.png"
+      "frame": "frames/27-reflect-on-the-cycle.png"
     },
     {
       "act": "Open the knowledge graph",
@@ -1452,7 +1734,7 @@
         "page": "knowledge",
         "page-ready": "true"
       },
-      "frame": "frames/22-open-the-knowledge-graph.png"
+      "frame": "frames/28-open-the-knowledge-graph.png"
     },
     {
       "act": "Find what the cycle learned on the knowledge graph",
@@ -1471,7 +1753,7 @@
         "page-ready": "true",
         "kb-id": "gitpulse"
       },
-      "frame": "frames/23-find-what-the-cycle-learned-on-the-knowl.png"
+      "frame": "frames/29-find-what-the-cycle-learned-on-the-knowl.png"
     },
     {
       "act": "Open the flows index",
@@ -1488,7 +1770,7 @@
         "page": "flows-index",
         "page-ready": "true"
       },
-      "frame": "frames/24-open-the-flows-index.png"
+      "frame": "frames/30-open-the-flows-index.png"
     },
     {
       "act": "Check what the run cost",
@@ -1496,19 +1778,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runCostUsd": "14.6751"
+        "runCostUsd": "16.6719"
       },
       "data": {
         "page": "flow-monitor",
         "page-ready": "true",
-        "run-cost-usd": "14.6751"
+        "run-cost-usd": "16.6719"
       },
       "expect": {
         "page": "flow-monitor",
         "page-ready": "true",
         "run-cost-usd": "<runCostUsd>"
       },
-      "frame": "frames/25-check-what-the-run-cost.png"
+      "frame": "frames/31-check-what-the-run-cost.png"
     },
     {
       "act": "ACT 2 — open the projects index to start a second initiative",
@@ -1522,7 +1804,7 @@
       "expect": {
         "fetch-status": "ok"
       },
-      "frame": "frames/26-act-2-open-the-projects-index-to-start-a.png"
+      "frame": "frames/32-act-2-open-the-projects-index-to-start-a.png"
     },
     {
       "act": "ACT 2 — open gitpulse again",
@@ -1540,7 +1822,7 @@
         "project-id": "gitpulse",
         "page-ready": "true"
       },
-      "frame": "frames/27-act-2-open-gitpulse-again.png"
+      "frame": "frames/33-act-2-open-gitpulse-again.png"
     },
     {
       "act": "ACT 2 — press \"Architect →\" for the second idea",
@@ -1562,7 +1844,7 @@
         "roster-state": "ok",
         "new-idea-ready": "false"
       },
-      "frame": "frames/28-act-2-press-architect-for-the-second-ide.png"
+      "frame": "frames/34-act-2-press-architect-for-the-second-ide.png"
     },
     {
       "act": "ACT 2 — describe the second idea and start its architect",
@@ -1570,19 +1852,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId2": "2026-10-03T12-11-22-1ffd265d"
+        "architectSessionId2": "2026-10-04T19-39-54-8f41b9bb"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T12-11-22-1ffd265d"
+        "architect-session-id": "2026-10-04T19-39-54-8f41b9bb"
       },
       "expect": {
         "page": "architect-new",
         "section": "new-idea",
         "architect-session-id": "<architectSessionId2>"
       },
-      "frame": "frames/29-act-2-describe-the-second-idea-and-start.png"
+      "frame": "frames/35-act-2-describe-the-second-idea-and-start.png"
     },
     {
       "act": "ACT 2 — open the session and answer the second interview",
@@ -1602,7 +1884,7 @@
         "session-kind": "architect",
         "session-phase": "awaiting-verdict"
       },
-      "frame": "frames/30-act-2-open-the-session-and-answer-the-se.png"
+      "frame": "frames/36-act-2-open-the-session-and-answer-the-se.png"
     },
     {
       "act": "ACT 2 — read the second plan at the gate and approve it",
@@ -1622,7 +1904,7 @@
         "gate-armed": "false",
         "plan-mode": "view"
       },
-      "frame": "frames/31-act-2-read-the-second-plan-at-the-gate-a.png"
+      "frame": "frames/37-act-2-read-the-second-plan-at-the-gate-a.png"
     },
     {
       "act": "ACT 2 — go back to the project for the second initiative",
@@ -1638,25 +1920,25 @@
         "page": "projects",
         "page-ready": "true"
       },
-      "frame": "frames/32-act-2-go-back-to-the-project-for-the-sec.png"
+      "frame": "frames/38-act-2-go-back-to-the-project-for-the-sec.png"
     },
     {
-      "act": "ACT 2 — return to the roadmap; the scheduler is still running from ACT 1",
-      "say": "The scheduler never stopped between the two initiatives — there is nothing to start again.",
+      "act": "ACT 2 — return to the roadmap, where the second plan is already being worked",
+      "say": "The factory claims queued work the same way for every initiative — there is nothing to start again.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
-        "scheduler-status": "running"
+        "section": "project-roadmap"
       },
       "expect": {
         "page": "projects",
         "project-id": "gitpulse",
-        "scheduler-status": "running"
+        "section": "project-roadmap"
       },
-      "frame": "frames/33-act-2-return-to-the-roadmap-the-schedule.png"
+      "frame": "frames/39-act-2-return-to-the-roadmap-where-the-se.png"
     },
     {
       "act": "ACT 2 — watch the factory plan and build the second initiative",
@@ -1664,14 +1946,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runId2": "INIT-2026-10-03-coupling-sort-flag"
+        "runId2": "INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "initiative-status": "ready-for-review",
         "plan-state": "planned",
-        "initiative-id": "INIT-2026-10-03-coupling-sort-flag"
+        "initiative-id": "INIT-2026-10-04-coupling-sort-flag"
       },
       "expect": {
         "page": "projects",
@@ -1680,7 +1962,7 @@
         "plan-state": "planned",
         "initiative-id": "<runId2>"
       },
-      "frame": "frames/34-act-2-watch-the-factory-plan-and-build-t.png"
+      "frame": "frames/40-act-2-watch-the-factory-plan-and-build-t.png"
     },
     {
       "act": "ACT 2 — open the second initiative to find the run it produced",
@@ -1688,13 +1970,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "run-active": "true",
-        "run-cycle-id": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "run-cycle-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "expect": {
         "page": "projects",
@@ -1702,7 +1984,7 @@
         "run-active": "true",
         "run-cycle-id": "<cycleId2>"
       },
-      "frame": "frames/35-act-2-open-the-second-initiative-to-find.png"
+      "frame": "frames/41-act-2-open-the-second-initiative-to-find.png"
     },
     {
       "act": "ACT 2 — hand the second plan to the build flow",
@@ -1720,7 +2002,7 @@
         "project-id": "gitpulse",
         "enqueue-kind": "develop"
       },
-      "frame": "frames/36-act-2-hand-the-second-plan-to-the-build-.png"
+      "frame": "frames/42-act-2-hand-the-second-plan-to-the-build-.png"
     },
     {
       "act": "ACT 2 — open the flows index to watch the second run build",
@@ -1737,7 +2019,7 @@
         "page": "flows-index",
         "page-ready": "true"
       },
-      "frame": "frames/37-act-2-open-the-flows-index-to-watch-the-.png"
+      "frame": "frames/43-act-2-open-the-flows-index-to-watch-the-.png"
     },
     {
       "act": "ACT 2 — open the develop flow monitor",
@@ -1753,7 +2035,7 @@
         "page": "flow-monitor",
         "page-ready": "true"
       },
-      "frame": "frames/38-act-2-open-the-develop-flow-monitor.png"
+      "frame": "frames/44-act-2-open-the-develop-flow-monitor.png"
     },
     {
       "act": "ACT 2 — wait for the second run's first work item to start",
@@ -1761,12 +2043,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag",
+        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-1",
@@ -1781,7 +2063,7 @@
         "wi-id": "WI-1",
         "status": "active"
       },
-      "frame": "frames/39-act-2-wait-for-the-second-run-s-first-wo.png"
+      "frame": "frames/45-act-2-wait-for-the-second-run-s-first-wo.png"
     },
     {
       "act": "ACT 2 — open the second run's own detail page",
@@ -1799,7 +2081,7 @@
         "run-found": "true",
         "page-ready": "true"
       },
-      "frame": "frames/40-act-2-open-the-second-run-s-own-detail-p.png"
+      "frame": "frames/46-act-2-open-the-second-run-s-own-detail-p.png"
     },
     {
       "act": "ACT 2 — stop the second run mid-flight",
@@ -1817,11 +2099,11 @@
         "section": "run-controls",
         "outcome-control": "stop"
       },
-      "frame": "frames/41-act-2-stop-the-second-run-mid-flight.png"
+      "frame": "frames/47-act-2-stop-the-second-run-mid-flight.png"
     },
     {
-      "act": "ACT 2 — step away while the halt lands",
-      "say": "The runner needs a moment to reach the boundary it halts at.",
+      "act": "ACT 2 — step away while the stop lands",
+      "say": "The runner needs a moment to reach the boundary it stops at.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -1833,20 +2115,20 @@
         "page": "flow-monitor",
         "page-ready": "true"
       },
-      "frame": "frames/42-act-2-step-away-while-the-halt-lands.png"
+      "frame": "frames/48-act-2-step-away-while-the-stop-lands.png"
     },
     {
-      "act": "ACT 2 — after the halt, the running work item finished naturally",
+      "act": "ACT 2 — after the stop, the running work item finished naturally",
       "say": "The work item already in flight when the operator stopped the run is not thrown away mid-turn — it finishes, because nothing in this product aborts a live turn.",
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag",
+        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-1",
@@ -1861,7 +2143,7 @@
         "wi-id": "WI-1",
         "status": "complete"
       },
-      "frame": "frames/43-act-2-after-the-halt-the-running-work-it.png"
+      "frame": "frames/49-act-2-after-the-stop-the-running-work-it.png"
     },
     {
       "act": "ACT 2 — and the next work item never started at all",
@@ -1869,12 +2151,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag",
+        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-2",
@@ -1889,7 +2171,7 @@
         "wi-id": "WI-2",
         "status": "pending"
       },
-      "frame": "frames/44-act-2-and-the-next-work-item-never-start.png"
+      "frame": "frames/50-act-2-and-the-next-work-item-never-start.png"
     },
     {
       "act": "ACT 2 — open the second run's own detail page again",
@@ -1907,7 +2189,7 @@
         "run-found": "true",
         "page-ready": "true"
       },
-      "frame": "frames/45-act-2-open-the-second-run-s-own-detail-p.png"
+      "frame": "frames/51-act-2-open-the-second-run-s-own-detail-p.png"
     },
     {
       "act": "ACT 2 — confirm the stopped, resumable state",
@@ -1925,7 +2207,23 @@
         "run-status": "failed",
         "run-stop-reason": "operator-stop"
       },
-      "frame": "frames/46-act-2-confirm-the-stopped-resumable-stat.png"
+      "frame": "frames/52-act-2-confirm-the-stopped-resumable-stat.png"
+    },
+    {
+      "act": "ACT 2 — pull the emergency halt before resuming",
+      "say": "The operator holds the factory before resuming the stopped run, to see what the halt does to queued work.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "component": "emergency-halt-banner",
+        "halt-state": "on"
+      },
+      "expect": {
+        "halt-state": "on",
+        "component": "emergency-halt-banner"
+      },
+      "frame": "frames/53-act-2-pull-the-emergency-halt-before-res.png"
     },
     {
       "act": "ACT 2 — resume via the run's own resume control",
@@ -1943,7 +2241,73 @@
         "section": "run-controls",
         "outcome-control": "resume"
       },
-      "frame": "frames/47-act-2-resume-via-the-run-s-own-resume-co.png"
+      "frame": "frames/54-act-2-resume-via-the-run-s-own-resume-co.png"
+    },
+    {
+      "act": "ACT 2 — step back to the monitor before reading the queued run",
+      "say": "The run page reads its run once; a fresh load shows the state resume left behind.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "page-ready": "true"
+      },
+      "expect": {
+        "page": "flow-monitor",
+        "page-ready": "true"
+      },
+      "frame": "frames/55-act-2-step-back-to-the-monitor-before-re.png"
+    },
+    {
+      "act": "ACT 2 — open the resumed run's detail page",
+      "say": "A fresh read of the run the operator just resumed.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-run",
+        "run-found": "true"
+      },
+      "expect": {
+        "page": "flow-run",
+        "run-found": "true"
+      },
+      "frame": "frames/56-act-2-open-the-resumed-run-s-detail-page.png"
+    },
+    {
+      "act": "ACT 2 — the resumed run waits queued while the halt is on",
+      "say": "Resume put the run back in the queue and the halt keeps it there: the run says it starts when the halt is released, and nothing it had done is lost.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-run",
+        "run-status": "planned",
+        "component": "queued-halted",
+        "halt-state": "on"
+      },
+      "expect": {
+        "page": "flow-run",
+        "run-status": "planned",
+        "halt-state": "on",
+        "component": "queued-halted"
+      },
+      "frame": "frames/57-act-2-the-resumed-run-waits-queued-while.png"
+    },
+    {
+      "act": "ACT 2 — release the halt so the resumed run can start",
+      "say": "Releasing the halt lets the factory claim the queued run; the next beats watch it pick up where the stop left it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "halt-state": "off"
+      },
+      "expect": {
+        "halt-state": "off"
+      },
+      "frame": "frames/58-act-2-release-the-halt-so-the-resumed-ru.png"
     },
     {
       "act": "ACT 2 — step back to the monitor to watch the resumed run",
@@ -1959,7 +2323,7 @@
         "page": "flow-monitor",
         "page-ready": "true"
       },
-      "frame": "frames/48-act-2-step-back-to-the-monitor-to-watch-.png"
+      "frame": "frames/59-act-2-step-back-to-the-monitor-to-watch-.png"
     },
     {
       "act": "ACT 2 — the finished work item survived the stop and the resume",
@@ -1967,12 +2331,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag",
+        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-1",
@@ -1987,7 +2351,7 @@
         "wi-id": "WI-1",
         "status": "complete"
       },
-      "frame": "frames/49-act-2-the-finished-work-item-survived-th.png"
+      "frame": "frames/60-act-2-the-finished-work-item-survived-th.png"
     },
     {
       "act": "ACT 2 — the unfinished work item resumes, not skipped",
@@ -1995,12 +2359,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag",
+        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-2",
@@ -2015,21 +2379,21 @@
         "wi-id": "WI-2",
         "status": "complete"
       },
-      "frame": "frames/50-act-2-the-unfinished-work-item-resumes-n.png"
+      "frame": "frames/61-act-2-the-unfinished-work-item-resumes-n.png"
     }
   ],
   "reap": {
     "reaped": [],
     "skipped": [
       {
-        "pid": 895639,
-        "dir": "_logs/_architect-2026-10-03T11-08-18-ca24c432",
-        "reason": "pid 895639: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 709859,
+        "dir": "_logs/_architect-2026-10-04T18-25-38-e973a07d",
+        "reason": "pid 709859: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1287391,
-        "dir": "_logs/_architect-2026-10-03T12-11-22-1ffd265d",
-        "reason": "pid 1287391: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1213915,
+        "dir": "_logs/_architect-2026-10-04T19-39-54-8f41b9bb",
+        "reason": "pid 1213915: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -2041,69 +2405,66 @@
       "ok": true,
       "claimed": [
         {
-          "path": "_queue/done/INIT-2026-10-03-exclude-author-filter.md",
+          "path": "_queue/done/INIT-2026-10-04-exclude-author-filter.md",
           "state": "done",
-          "reason": "created_at 2026-10-03T11:12:55.390Z falls inside this run"
-        },
-        {
-          "path": "_queue/failed/INIT-2026-10-03-coupling-sort-flag.md",
-          "state": "failed",
-          "reason": "created_at 2026-10-03T12:16:01.112Z falls inside this run"
+          "reason": "created_at 2026-10-04T18:32:29.016Z falls inside this run"
         }
       ],
-      "left": [],
+      "left": [
+        {
+          "path": "_queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md",
+          "state": "in-flight",
+          "reason": "this tree's own scheduler is alive — an in-flight manifest is never claimed while its heartbeat writer could still be running (row 166)"
+        },
+        {
+          "path": "_queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md.heartbeat",
+          "state": "in-flight",
+          "reason": "not an INIT manifest — the story-id sweep owns this one"
+        }
+      ],
       "unattributable": [],
       "failed": [],
       "lines": [
-        "[stories] queue claim: done/ holds 1 — INIT-2026-10-03-exclude-author-filter.md",
-        "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-03-exclude-author-filter.md — created_at 2026-10-03T11:12:55.390Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
-        "[stories] queue claim: failed/ holds 1 — INIT-2026-10-03-coupling-sort-flag.md",
-        "[stories] queue claim: CLAIMED _queue/failed/INIT-2026-10-03-coupling-sort-flag.md — created_at 2026-10-03T12:16:01.112Z falls inside this run; captured to demos/stories/S10/queue-claim/failed before removal",
-        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: done/ holds 1 — INIT-2026-10-04-exclude-author-filter.md",
+        "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-04-exclude-author-filter.md — created_at 2026-10-04T18:32:29.016Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 2 — INIT-2026-10-04-coupling-sort-flag.md, INIT-2026-10-04-coupling-sort-flag.md.heartbeat",
+        "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md — the scheduler this run started is still alive, so an in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)",
+        "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md.heartbeat — not an INIT manifest (the story-id sweep owns it)",
         "[stories] queue claim: merged/ holds 0",
         "[stories] queue claim: pending/ holds 0",
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
     "artefacts": {
-      "dest": "_logs/_story-run-artefacts-clear/S10/1791024373102",
+      "dest": "_logs/_story-run-artefacts-clear/S10/1791138319540",
       "captured": [
-        "_logs/2026-10-03T11-14-20_INIT-2026-10-03-exclude-author-filter",
-        "_worktrees/INIT-2026-10-03-coupling-sort-flag",
-        "_worktrees/wi/INIT-2026-10-03-coupling-sort-flag",
-        "_logs/2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag"
+        "_logs/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
       ],
       "cleared": [
-        "_logs/2026-10-03T11-14-20_INIT-2026-10-03-exclude-author-filter",
-        "_worktrees/INIT-2026-10-03-coupling-sort-flag",
-        "_worktrees/wi/INIT-2026-10-03-coupling-sort-flag",
-        "_logs/2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag",
-        "_worktrees/wi (emptied container)"
+        "_logs/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
       ],
       "refused": [],
       "unremoved": []
     },
     "lines": [
-      "[stories] queue claim: done/ holds 1 — INIT-2026-10-03-exclude-author-filter.md",
-      "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-03-exclude-author-filter.md — created_at 2026-10-03T11:12:55.390Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
-      "[stories] queue claim: failed/ holds 1 — INIT-2026-10-03-coupling-sort-flag.md",
-      "[stories] queue claim: CLAIMED _queue/failed/INIT-2026-10-03-coupling-sort-flag.md — created_at 2026-10-03T12:16:01.112Z falls inside this run; captured to demos/stories/S10/queue-claim/failed before removal",
-      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: done/ holds 1 — INIT-2026-10-04-exclude-author-filter.md",
+      "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-04-exclude-author-filter.md — created_at 2026-10-04T18:32:29.016Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 2 — INIT-2026-10-04-coupling-sort-flag.md, INIT-2026-10-04-coupling-sort-flag.md.heartbeat",
+      "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md — the scheduler this run started is still alive, so an in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)",
+      "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md.heartbeat — not an INIT manifest (the story-id sweep owns it)",
       "[stories] queue claim: merged/ holds 0",
       "[stories] queue claim: pending/ holds 0",
       "[stories] queue claim: ready-for-review/ holds 0",
-      "[stories] own artefacts: CAPTURED 4 path(s) to _logs/_story-run-artefacts-clear/S10/1791024373102",
-      "[stories] own artefacts: CLEARED _logs/2026-10-03T11-14-20_INIT-2026-10-03-exclude-author-filter — removed, re-read to confirm",
-      "[stories] own artefacts: CLEARED _worktrees/INIT-2026-10-03-coupling-sort-flag — removed, re-read to confirm",
-      "[stories] own artefacts: CLEARED _worktrees/wi/INIT-2026-10-03-coupling-sort-flag — removed, re-read to confirm",
-      "[stories] own artefacts: CLEARED _logs/2026-10-03T12-16-45_INIT-2026-10-03-coupling-sort-flag — removed, re-read to confirm",
-      "[stories] own artefacts: CLEARED _worktrees/wi (emptied container) — removed, re-read to confirm"
+      "[stories] own artefacts: CAPTURED 1 path(s) to _logs/_story-run-artefacts-clear/S10/1791138319540",
+      "[stories] own artefacts: CLEARED _logs/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter — removed, re-read to confirm"
     ]
   },
   "fence": {
     "restored": [],
     "removed": [
-      "brain/cycles/_raw/2026-10-03T11-14-20_INIT-2026-10-03-exclude-author-filter.md"
+      "brain/cycles/_raw/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter.md"
     ],
     "removedContents": [],
     "failed": [],
@@ -2112,12 +2473,12 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 34.5376167,
+    "usd": 34.4824282,
     "unmeasured": false
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
+    "sha": "5e58de00cb02c71e83c63d77086457aece7d3fc2",
     "dirty": true
   },
-  "storyDigest": "c528b75211440a42"
+  "storyDigest": "d4045991cec2548d"
 }

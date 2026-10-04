@@ -37,6 +37,7 @@ const TONE_COLOR: Record<string, string> = {
   'queued-running': 'var(--green)',
   done: 'var(--green)',
   gated: 'var(--amber)',
+  'queued-halted': 'var(--ember)',
   'queued-not-running': 'var(--ember)',
   'claimed-not-running': 'var(--ember)',
   'queued-unknown': 'var(--dim)',

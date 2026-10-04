@@ -31,7 +31,7 @@ import {
 } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
 
-import { parseManifest } from '@forge/flows';
+import { endMetaIndicatesFailure, parseManifest } from '@forge/flows';
 import type { InitiativeManifest } from '@forge/contracts';
 import type { EventLogEntry } from '@forge/kernel';
 import type { LintStatus } from '@forge/flows';
@@ -234,7 +234,7 @@ function computeStats(
     if (typeof e.duration_ms === 'number') duration += e.duration_ms;
     if (e.message === 'reviewer.verdict.send-back') sendBacks += 1;
     if (e.event_type === 'iteration' && e.phase === 'developer-loop') devIters += 1;
-    if (e.message === 'reflector.end') sawReflectorEnd = true;
+    if (e.message === 'reflector.end' && !endMetaIndicatesFailure(e.metadata)) sawReflectorEnd = true; // row 207
     if (e.message === 'cycle.start' && typeof e.started_at === 'string') {
       const ms = Date.parse(e.started_at);
       if (!Number.isNaN(ms)) cycleStartTs = ms;
@@ -372,13 +372,13 @@ function formatOutcome(
   manifest: InitiativeManifest | null,
   events: EventLogEntry[],
 ): string {
-  // Look for the cycle's terminal status: cycle.end's metadata.status, the
-  // reviewer.merged event, or fall back to "closed".
+  // The cycle's terminal status: the LAST attempt's cycle.end metadata.status
+  // (row 207 — an earlier stopped attempt never names the run), a later
+  // reviewer.merged event, or "closed".
   let status = 'closed';
   for (const e of events) {
     if (e.message === 'cycle.end' && typeof e.metadata?.['status'] === 'string') {
       status = String(e.metadata['status']);
-      break;
     }
     if (e.message === 'reviewer.merged') status = 'merged';
   }

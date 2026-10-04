@@ -73,16 +73,18 @@ Invoke `brain-query` BEFORE writing anything (ADR 010). First tool calls MUST be
 
 The reflector does NOT move the manifest to `_queue/done/` — the reviewer already did that.
 
-## Event-log entries to emit
+## Event-log entries
 
-- `reflector.start`
+The runtime brackets this run (`packages/stations/phases/reflector.ts`, through forge's event logger, which mints each row's `event_id`): it writes `reflector.start` before you begin and `reflector.end` after you exit. **Never write a `start` or `end` row yourself** — a `reflector.start`/`reflector.end` you append opens or closes a turn the runtime never ran (S10 run 2, 2026-10-04: an agent-written pair inside the runtime's own turn read as a second reflector run).
+
+Progress rows you append to `_logs/<cycle-id>/events.jsonl` are `event_type: "log"`, `phase: "reflection"`, `skill: "reflector"`:
+
 - `reflector.brain-query` (per query)
 - `reflector.self-reflection-complete`
 - `reflector.user-question-emitted` (per question written into `user-questions.md`)
 - `reflector.user-feedback-captured`
 - `reflector.theme-emitted` (per theme file written)
 - `reflector.lint-pass-clean` (after structural validation passes)
-- `reflector.end`
 
 ## Process
 

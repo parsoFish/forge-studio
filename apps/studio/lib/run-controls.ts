@@ -52,7 +52,7 @@ const RUNNING_CONTROLS: RunControl[] = [
     // the cost ceiling already halts at — ADR 028 amendment). Gated: no live
     // agent to signal, so this moves the manifest to failed/ directly.
     detail:
-      'Halts at the next clean boundary (or immediately if gated). The worktree and ' +
+      'Stops at the next clean boundary (or immediately if gated). The worktree and ' +
       'branch are kept — resumable.',
     destructive: false,
   },
@@ -107,7 +107,7 @@ export function runAwaitsServe(run: Run | null): boolean {
   return run !== null && run.status === 'planned';
 }
 
-export type QueuedServeTone = 'running' | 'not-running' | 'unknown';
+export type QueuedServeTone = 'halted' | 'running' | 'not-running' | 'unknown';
 
 /**
  * MEDIUM-2: the queued-run serve line's three tones. ONLY `running` may
@@ -120,7 +120,11 @@ export type QueuedServeTone = 'running' | 'not-running' | 'unknown';
  * Mirrors `describePostCommit`'s own `unknown = serve === null ||
  * serve.state === 'unsupervised'` rule (lib/architect-plan-view.ts).
  */
+/** The queued-run line while the emergency halt is on — shared by every surface that would otherwise promise a pickup. */
+export const QUEUED_HALTED_TEXT = 'Queued — the emergency halt is on; it starts when the halt is released.';
+
 export function queuedServeTone(serve: ServeStatus | null): QueuedServeTone {
+  if (serve !== null && serve.halt !== null) return 'halted';
   if (serve === null || serve.state === 'unsupervised') return 'unknown';
   if (serve.state === 'running') return 'running';
   return 'not-running';

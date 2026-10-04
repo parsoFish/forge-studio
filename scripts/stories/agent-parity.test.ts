@@ -53,8 +53,8 @@ describe('classifyChannelDir', () => {
 
   test('more than one top-level `phase` value is a cycle log, regardless of dirname', () => {
     const rows = [
-      { phase: 'orchestrator', skill: 'cycle', event_type: 'start' },
-      { phase: 'architect', skill: 'architect', event_type: 'start' },
+      { event_id: 'EV_1', phase: 'orchestrator', skill: 'cycle', event_type: 'start' },
+      { event_id: 'EV_2', phase: 'architect', skill: 'architect', event_type: 'start' },
     ];
     assert.equal(classifyChannelDir('anything-at-all', rows, SESSION_KINDS).kind, 'cycle');
   });
@@ -352,7 +352,9 @@ test('row 206: the row-202 S1 capture (two starts 37 ms apart under one run id) 
     row({ event_id: 'EV_murpk0kk_yw2rdk4i', started_at: '2026-10-03T01:23:11.204Z', event_type: 'start', metadata: meta }),
     row({ event_id: 'EV_murpk0ll_9owbn3t5', started_at: '2026-10-03T01:23:11.241Z', event_type: 'start', metadata: meta }),
     row({ event_id: 'EV_murpqy0z_wxu2j2vs', started_at: '2026-10-03T01:28:34.499Z', event_type: 'end', cost_usd: 0.7996867999999998, metadata: meta }),
-    row({ started_at: '2026-10-03T01:32:28.042Z', event_type: 'end', cost_usd: 1.3711322999999997, metadata: meta }),
+    // The real capture's own id (`_story-logs-clear/S1/2026-10-03T01-21-41-376Z`) — row 207 counts only
+    // rows forge's event logger wrote, and that logger mints an id on every one.
+    row({ event_id: 'EV_murpvy8a_yykv2icx', started_at: '2026-10-03T01:32:28.042Z', event_type: 'end', cost_usd: 1.3711322999999997, metadata: meta }),
   ];
   const v = channelParityVerdict(run, events, { registeredSessionKindIds: new Set() });
   assert.equal(v.kind, 'standalone');

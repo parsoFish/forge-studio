@@ -23,7 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { allowedOrigin, sanitizeError, sendJson, sendIfDispatchInFlight, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
+import { allowedOrigin, sanitizeError, sendJson, sendIfDispatchRefused, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 
 import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-session-store.ts';
@@ -507,7 +507,7 @@ export async function handleDemoRoutes(
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
     } catch (err) {
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }

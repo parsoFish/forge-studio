@@ -27,7 +27,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { parseRetroMd } from '../reflection-doc.ts';
 
-import type { EventLogger } from '@forge/kernel';
+import { endStartOnThrow, type EventLogger, type EventLogEntry } from '@forge/kernel';
 import { parseManifest } from '@forge/flows';
 import type { StreamQueryFn, HeartbeatTimers } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
@@ -105,44 +105,44 @@ export type ReflectorDeps = {
  *
  * Live invocation contract (prompt builders + tool tally) lives in
  * packages/stations/phases/reflector-binding.ts (single source of truth).
+ *
+ * Row 207: every `reflector.start` gets exactly one end — the closed end
+ * below, the disposable skip's, `emitReflectionLost`'s failed one, or (a
+ * throw past the start) `endStartOnThrow`'s.
  */
 export async function runReflector(
   input: CycleInput,
   logger: EventLogger,
   deps: ReflectorDeps,
 ): Promise<ReflectorPhaseResult> {
-  const def = deps.agentDef;
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'reflection',
-    skill: def.slug,
+    skill: deps.agentDef.slug,
     event_type: 'start',
     input_refs: [input.manifestPath, logger.logFilePath],
     output_refs: [],
     message: 'reflector.start',
   });
+  return endStartOnThrow(logger, start, () => reflectFromStart(input, logger, deps, start));
+}
+
+async function reflectFromStart(
+  input: CycleInput, logger: EventLogger, deps: ReflectorDeps, start: EventLogEntry,
+): Promise<ReflectorPhaseResult> {
+  const def = deps.agentDef;
   const startedAtMs = Date.now();
 
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
   const cycleId = logger.cycleId;
   // Row 212 follow-up 3 (bead forge-8vfn.8.5.48): `cycleLogDir` is scratch
   // (brain-gaps.jsonl, user-questions.md/json, retro.md, brain-lint.md,
-  // artifacts/, recap.md) co-located with the cycle's OWN event log, not the
-  // shared `brain/` this phase also writes to off the always-real `forgeRoot`
-  // above — the two concerns share one local variable but were never the
-  // same requirement. `input.logsRoot` is already `CycleInput`'s documented
-  // override for exactly this ("this cycle's logger/snapshot/report";
-  // forge-8vfn.8.1.10), and sibling phases already honour it
-  // (`adversarial-review.ts`'s chunk records, `release-finalize.ts`'s
-  // artifacts) — `runReflector` alone never read it, so every reflector test
-  // wrote this scratch into the REAL checkout's `_logs/<cycleId>/` even when
-  // it gave `logger` a tmp root, because this line recomputed the root
-  // itself instead of asking. Omitted ⇒ `<forgeRoot>/_logs`, byte-identical
-  // to today's only caller shape (the scheduler never sets `logsRoot`).
-  // `logsRoot` (not just `cycleLogDir`) is threaded to `writeCycleRecap`
-  // below too — `cycle-recap.ts` independently re-derives the SAME `_logs/
-  // <cycleId>/*` paths from a `forgeRoot` of its own, the second half of this
-  // same defect.
+  // artifacts/, recap.md) beside the cycle's OWN event log, not the shared
+  // `brain/` under the always-real `forgeRoot` above. `input.logsRoot` is
+  // `CycleInput`'s documented override for exactly this (forge-8vfn.8.1.10),
+  // honoured by sibling phases too; omitted ⇒ `<forgeRoot>/_logs` (the
+  // scheduler never sets it). `writeCycleRecap` below gets `logsRoot` as well,
+  // since `cycle-recap.ts` derives the same `_logs/<cycleId>/*` paths itself.
   const logsRoot = input.logsRoot ?? resolve(forgeRoot, '_logs');
   const cycleLogDir = resolve(logsRoot, cycleId);
 

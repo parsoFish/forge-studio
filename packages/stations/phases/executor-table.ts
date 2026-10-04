@@ -9,21 +9,13 @@
 
 import { resolve, basename, dirname } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { parseManifest } from '@forge/flows';
-import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome } from '@forge/flows';
-import { classifyCrash } from '@forge/agents';
-import { REPO_RE, type TriggerPayload } from '@forge/flows';
+import { parseManifest, REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome, REPO_RE, type TriggerPayload } from '@forge/flows';
+import { enqueueGateFixWorkItems, writeMergeGateConfigErrorMarker, readOperatorStopRequest } from '@forge/flows';
+import type { NodeExecContext, NodeKind } from '@forge/flows';
+import { classifyCrash, resolveBandGuard, runAgent } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
-import { enqueueGateFixWorkItems } from '@forge/flows';
-import { writeMergeGateConfigErrorMarker } from '@forge/flows';
-import { resolveBandGuard } from '@forge/agents';
-import { runAgent } from '@forge/agents';
-import type { PhaseExecutor } from '@forge/kernel';
-import { createBandRegistry, FORGE_ROOT } from '@forge/kernel';
 import { BAND_GUARD_IDS, type BandGuardId } from '@forge/contracts';
-import type { NodeExecContext } from '@forge/flows';
-import type { NodeKind } from '@forge/flows';
-import { readOperatorStopRequest } from '@forge/flows';
+import { createBandRegistry, FORGE_ROOT, endStartOnThrow, type PhaseExecutor } from '@forge/kernel';
 import { type FlowRunnerDeps, buildDefaultDeps, raceWithWedge } from './executor-deps.ts';
 import { requireCycleId } from './cycle-id.ts';
 import type { ClassProfilePort } from '../class-profile-port.ts';
@@ -202,49 +194,115 @@ const execIntegrate: NodeExecutor = async (ctx) => {
     output_refs: [],
     metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId },
   });
+  await endStartOnThrow(nodeLogger, start, async () => {
+    // Close-contract prep (items 4,5): commit stragglers + push/sync so the
+    // merge-boundary gate and the demo run on the true integrated branch tip.
+    deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId); // 4
+    deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId); // 5
+    // Empty-branch guard (item 7) — nothing to gate/ship if the dev-loop produced nothing.
+    const delivery = deps.computeDeliveryStats(input, nodeLogger);
+    deps.assertNonEmptyDelivery(delivery, input.initiativeId, input.worktreePath, nodeLogger); // 7
 
-  // Close-contract prep (items 4,5): commit stragglers + push/sync so the
-  // merge-boundary gate and the demo run on the true integrated branch tip.
-  deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId); // 4
-  deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId); // 5
-  // Empty-branch guard (item 7) — nothing to gate/ship if the dev-loop produced nothing.
-  const delivery = deps.computeDeliveryStats(input, nodeLogger);
-  deps.assertNonEmptyDelivery(delivery, input.initiativeId, input.worktreePath, nodeLogger); // 7
+    // R4-10-F2 merge-boundary full-suite gate (relocated composedUnifierGate.
+    // initiative_gate + the CI delivery net; item 8's successor). Runs the WHOLE
+    // suite on the integrated branch tip BEFORE the demo — a build-breaking
+    // cross-WI regression would otherwise fail the demo capture (a hard cycle
+    // failure) instead of the auto-remediable gate-fix loop. A red baseline never
+    // opens a PR (the preserved invariant): compile a scoped gate-fix WI + stamp
+    // the send-back, then terminate the walk to ready-for-review so the drain
+    // re-enters resume_from:'develop' and the develop agent turns the suite green.
+    const gate = deps.runMergeBoundaryGate(input, nodeLogger);
+    if (!gate.ok && gate.failedGate === 'config') {
+      // The gate could not even READ the project config — there is no fix a dev
+      // agent can compile (the operator's own `.forge/project.json` is not part
+      // of the initiative's diff, and a red `testProcess` declaration can never
+      // be turned green by editing the initiative's branch). Park needs-operator
+      // with the reason and terminate BEFORE enqueueGateFixWorkItems ever runs —
+      // no gate-fix work item is compiled. Not wrapped in a try/catch: if the
+      // marker itself cannot be written, that must surface as a hard failure,
+      // not vanish behind another swallowed error (the defect this task fixes).
+      writeMergeGateConfigErrorMarker(input.worktreePath, gate.reason);
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: 'error',
+        input_refs: [input.worktreePath],
+        output_refs: [],
+        message: 'merge-gate.config-error',
+        metadata: { reason: gate.reason, origin: 'gate-fix' },
+      });
+      state.terminateEarly = true;
+      // `status: 'failed'` so the integrate hex renders as a failed/blocked state, not
+      // the green 'complete' a real integrate run earns — it never ran here; the
+      // merge-boundary gate could not even read the project config
+      // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'orchestrator',
+        skill: def.slug,
+        event_type: 'end',
+        input_refs: [],
+        output_refs: [],
+        metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
+      });
+      return;
+    }
+    if (!gate.ok) {
+      const enqueue = enqueueGateFixWorkItems({
+        worktreePath: input.worktreePath,
+        manifestPath: input.manifestPath,
+        initiativeId: input.initiativeId,
+        failedGate: gate.failedGate,
+        projectGateCmd: input.qualityGateCmd ?? [],
+      });
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: enqueue.status === 'compiled' ? 'log' : 'error',
+        input_refs: [input.worktreePath],
+        output_refs: enqueue.status === 'compiled' ? enqueue.appended.map((id) => `.forge/work-items/${id}.md`) : [],
+        message: `merge-gate.fix-loop.${enqueue.status}`,
+        metadata: {
+          failed_gate: gate.failedGate,
+          origin: 'gate-fix',
+          ...(enqueue.status === 'compiled'
+            ? { appended_work_items: enqueue.appended, round: enqueue.round }
+            : { detail: enqueue.detail }),
+        },
+      });
+      state.terminateEarly = true;
+      // `status: 'failed'` so the integrate hex renders as a failed/blocked state, not
+      // the green 'complete' a real integrate run earns — it never ran here; the
+      // merge-boundary gate blocked the band on a red full-suite baseline
+      // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'orchestrator',
+        skill: def.slug,
+        event_type: 'end',
+        input_refs: [],
+        output_refs: [],
+        metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
+      });
+      return;
+    }
 
-  // R4-10-F2 merge-boundary full-suite gate (relocated composedUnifierGate.
-  // initiative_gate + the CI delivery net; item 8's successor). Runs the WHOLE
-  // suite on the integrated branch tip BEFORE the demo — a build-breaking
-  // cross-WI regression would otherwise fail the demo capture (a hard cycle
-  // failure) instead of the auto-remediable gate-fix loop. A red baseline never
-  // opens a PR (the preserved invariant): compile a scoped gate-fix WI + stamp
-  // the send-back, then terminate the walk to ready-for-review so the drain
-  // re-enters resume_from:'develop' and the develop agent turns the suite green.
-  const gate = deps.runMergeBoundaryGate(input, nodeLogger);
-  if (!gate.ok && gate.failedGate === 'config') {
-    // The gate could not even READ the project config — there is no fix a dev
-    // agent can compile (the operator's own `.forge/project.json` is not part
-    // of the initiative's diff, and a red `testProcess` declaration can never
-    // be turned green by editing the initiative's branch). Park needs-operator
-    // with the reason and terminate BEFORE enqueueGateFixWorkItems ever runs —
-    // no gate-fix work item is compiled. Not wrapped in a try/catch: if the
-    // marker itself cannot be written, that must surface as a hard failure,
-    // not vanish behind another swallowed error (the defect this task fixes).
-    writeMergeGateConfigErrorMarker(input.worktreePath, gate.reason);
-    nodeLogger.emit({
-      initiative_id: input.initiativeId,
-      phase: 'orchestrator',
-      skill: 'cycle',
-      event_type: 'error',
-      input_refs: [input.worktreePath],
-      output_refs: [],
-      message: 'merge-gate.config-error',
-      metadata: { reason: gate.reason, origin: 'gate-fix' },
-    });
-    state.terminateEarly = true;
-    // `status: 'failed'` so the integrate hex renders as a failed/blocked state, not
-    // the green 'complete' a real integrate run earns — it never ran here; the
-    // merge-boundary gate could not even read the project config
-    // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
+    // Gate green → derive the bundle. The gate's own evidence rows are an INPUT
+    // here: the demo says which suites proved the branch because the orchestrator
+    // that ran them said so, not because anything downstream described them.
+    const result = deps.runIntegrate(input, nodeLogger, gate.evidence);
+
+    // Delivery gate — the band must have produced a bundle. There is no partial
+    // outcome any more: a derivation either produced the artifacts or named the
+    // reason it could not, and either way there is nothing to re-author.
+    if (result.status === 'failed') {
+      throw new Error(integrateDeliveryFailure(result.reason, result.detail));
+    }
+
     nodeLogger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -252,74 +310,9 @@ const execIntegrate: NodeExecutor = async (ctx) => {
       skill: def.slug,
       event_type: 'end',
       input_refs: [],
-      output_refs: [],
-      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
+      output_refs: [result.demoJsonPath],
+      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, integrate_status: result.status },
     });
-    return;
-  }
-  if (!gate.ok) {
-    const enqueue = enqueueGateFixWorkItems({
-      worktreePath: input.worktreePath,
-      manifestPath: input.manifestPath,
-      initiativeId: input.initiativeId,
-      failedGate: gate.failedGate,
-      projectGateCmd: input.qualityGateCmd ?? [],
-    });
-    nodeLogger.emit({
-      initiative_id: input.initiativeId,
-      phase: 'orchestrator',
-      skill: 'cycle',
-      event_type: enqueue.status === 'compiled' ? 'log' : 'error',
-      input_refs: [input.worktreePath],
-      output_refs: enqueue.status === 'compiled' ? enqueue.appended.map((id) => `.forge/work-items/${id}.md`) : [],
-      message: `merge-gate.fix-loop.${enqueue.status}`,
-      metadata: {
-        failed_gate: gate.failedGate,
-        origin: 'gate-fix',
-        ...(enqueue.status === 'compiled'
-          ? { appended_work_items: enqueue.appended, round: enqueue.round }
-          : { detail: enqueue.detail }),
-      },
-    });
-    state.terminateEarly = true;
-    // `status: 'failed'` so the integrate hex renders as a failed/blocked state, not
-    // the green 'complete' a real integrate run earns — it never ran here; the
-    // merge-boundary gate blocked the band on a red full-suite baseline
-    // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
-    nodeLogger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'orchestrator',
-      skill: def.slug,
-      event_type: 'end',
-      input_refs: [],
-      output_refs: [],
-      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
-    });
-    return;
-  }
-
-  // Gate green → derive the bundle. The gate's own evidence rows are an INPUT
-  // here: the demo says which suites proved the branch because the orchestrator
-  // that ran them said so, not because anything downstream described them.
-  const result = deps.runIntegrate(input, nodeLogger, gate.evidence);
-
-  // Delivery gate — the band must have produced a bundle. There is no partial
-  // outcome any more: a derivation either produced the artifacts or named the
-  // reason it could not, and either way there is nothing to re-author.
-  if (result.status === 'failed') {
-    throw new Error(integrateDeliveryFailure(result.reason, result.detail));
-  }
-
-  nodeLogger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'orchestrator',
-    skill: def.slug,
-    event_type: 'end',
-    input_refs: [],
-    output_refs: [result.demoJsonPath],
-    metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, integrate_status: result.status },
   });
 };
 
@@ -361,24 +354,25 @@ const execAdversarialReview: NodeExecutor = async (ctx) => {
     output_refs: [],
     metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId },
   });
+  await endStartOnThrow(nodeLogger, start, async () => {
+    const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, def, sig));
+    if (result.status === 'failed') {
+      throw new Error(
+        `adversarial review pipeline failed (${result.reason}: ${result.detail}) — ` +
+          `no findings artifact was produced for the verdict gate. Triage before re-running.`,
+      );
+    }
 
-  const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, def, sig));
-  if (result.status === 'failed') {
-    throw new Error(
-      `adversarial review pipeline failed (${result.reason}: ${result.detail}) — ` +
-        `no findings artifact was produced for the verdict gate. Triage before re-running.`,
-    );
-  }
-
-  nodeLogger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'orchestrator',
-    skill: def.slug,
-    event_type: 'end',
-    input_refs: [],
-    output_refs: [result.findingsPath],
-    metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId, counts: result.counts },
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'orchestrator',
+      skill: def.slug,
+      event_type: 'end',
+      input_refs: [],
+      output_refs: [result.findingsPath],
+      metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId, counts: result.counts },
+    });
   });
 };
 
@@ -483,24 +477,37 @@ const execOnboardPreflight: NodeExecutor = async (ctx) => {
     output_refs: [],
     metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId },
   });
+  await endStartOnThrow(nodeLogger, start, async () => {
+    const report = ctx.projectGate.runPreflight(input.projectRepoPath, { forgeRoot: FORGE_ROOT });
+    const failingClauseIds = report.clauses.filter((c) => c.hard && !c.pass).map((c) => c.clause);
 
-  const report = ctx.projectGate.runPreflight(input.projectRepoPath, { forgeRoot: FORGE_ROOT });
-  const failingClauseIds = report.clauses.filter((c) => c.hard && !c.pass).map((c) => c.clause);
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'orchestrator',
+      skill: 'contract-check',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'onboard-preflight.report',
+      metadata: { ok: report.ok, clause_count: report.clauses.length, failing_clause_ids: failingClauseIds },
+    });
 
-  nodeLogger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'orchestrator',
-    skill: 'contract-check',
-    event_type: 'log',
-    input_refs: [],
-    output_refs: [],
-    message: 'onboard-preflight.report',
-    metadata: { ok: report.ok, clause_count: report.clauses.length, failing_clause_ids: failingClauseIds },
-  });
+    if (!report.ok) {
+      state.terminateEarly = true;
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'orchestrator',
+        skill: 'contract-check',
+        event_type: 'end',
+        input_refs: [],
+        output_refs: [],
+        metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId, status: 'failed' },
+      });
+      return;
+    }
 
-  if (!report.ok) {
-    state.terminateEarly = true;
     nodeLogger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -509,20 +516,8 @@ const execOnboardPreflight: NodeExecutor = async (ctx) => {
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId, status: 'failed' },
+      metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId, status: 'complete' },
     });
-    return;
-  }
-
-  nodeLogger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'orchestrator',
-    skill: 'contract-check',
-    event_type: 'end',
-    input_refs: [],
-    output_refs: [],
-    metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId, status: 'complete' },
   });
 };
 

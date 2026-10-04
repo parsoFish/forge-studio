@@ -6,8 +6,9 @@
  * roster (`fetchStudioAgents` — the SAME fetch `/library` already makes)
  * and this section's "recent agent runs" ledger (`lib/agents-index.ts`'s
  * `fetchRecentAgentRuns`) and renders `<AgentsIndexView .../>` with the
- * resolved data. `StudioNav` stays OUT of this component (it lives in the
- * page shell) so this component stays renderable via `renderToStaticMarkup`
+ * resolved data. `StudioNav` is mounted by the page shell and handed in as
+ * the `nav` prop, rendered first inside the `main[data-page]`, so this
+ * component stays renderable via `renderToStaticMarkup` without the router
  * in tests — see `../../lib/agents-index-render.test.ts`'s header for the
  * full rationale (the same one `run-view-render.test.ts` documents for its
  * own sibling split).
@@ -37,6 +38,7 @@
  * fetch-outcome convention already establishes on `/agents/[id]`).
  */
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { AgentCard } from '@/components/studio/LibraryCard';
 import { RecentRuns } from '@/components/RecentRuns';
@@ -71,12 +73,15 @@ export type AgentsIndexViewProps = {
   /** W7-B5 (agents-40): "view all" — refetch under the expanded bound.
    *  Omitted (or already expanded) renders no affordance. */
   onShowAllRecentRuns?: (() => void) | null;
+  /** The Studio nav (with the halt control and banner), rendered as the first
+   *  child of the `main[data-page]` so it sits inside the page root. */
+  nav?: ReactNode;
 };
 
 export function AgentsIndexView({
   ready, agents, recentRunsReady, recentRuns, nowMs, error = null, onRetry,
   recentRunsUnresolved = 0, recentRunsTotal = 0, onRetryRecentRuns,
-  recentRunsLimit, onShowAllRecentRuns = null,
+  recentRunsLimit, onShowAllRecentRuns = null, nav = null,
 }: AgentsIndexViewProps) {
   return (
     <main
@@ -87,6 +92,7 @@ export function AgentsIndexView({
       data-fetch-status={error ? 'error' : ready ? 'ok' : 'loading'}
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >
+      {nav}
       <div className="page-wrap" style={{ maxWidth: 1280, margin: '0 auto', padding: '40px 28px 64px' }}>
         {/* W7-C3 (crosscut-18/agents-35): one h1 per page — the roster's
             visible identity is the badge row, so the heading is sr-only. */}

@@ -445,3 +445,20 @@ test('runWatch: the UI-spawn "error" handler shuts down with a non-zero code, no
   );
   assert.match(errorHandler, /void shutdown\(\s*[1-9]/, 'must pass a non-zero code to shutdown()');
 });
+
+// Row 207 (forge-8vfn.8.5.57, T1 1973ra) — `forge studio`'s UI child is
+// `npm run start` → `sh` → `next-server`; a SIGTERM to Studio ended npm and sh
+// and left next-server listening on 4124 under PPID 1. terminateChild ends
+// the child's whole process group (the UI child is spawned `detached`).
+test('terminateChild: a detached child\'s grandchild does not outlive it', async () => {
+  const { spawn } = await import('node:child_process');
+  const child = spawn('sh', ['-c', 'sleep 30 & echo $!; wait'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  const grandchild = await new Promise<number>((r) => child.stdout!.once('data', (d) => r(Number(String(d).trim()))));
+  const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  assert.ok(alive(grandchild), 'grandchild started');
+  await terminateChild(child, { graceMs: 1000 });
+  await new Promise((r) => setTimeout(r, 200));
+  const left = alive(grandchild);
+  if (left) process.kill(grandchild, 'SIGKILL');
+  assert.equal(left, false, `grandchild ${grandchild} outlived terminateChild`);
+});

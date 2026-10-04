@@ -20,7 +20,7 @@ import { stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import { notify, type NotifyConfig } from './notify.ts';
-import { loadConfig } from '@forge/kernel';
+import { forgeQueueRoot, loadConfig } from '@forge/kernel';
 import { isNonTerminalRefused } from './claim-validator.ts';
 import { runOne, makeProgressTee } from './scheduler-run-one.ts';
 import {
@@ -31,9 +31,11 @@ import {
   runRecoverySweep,
   cleanupRecoveredWorktrees,
 } from './scheduler-sweeps.ts';
+import { createHaltWatch } from './halt-watch.ts';
 
 export type SchedulerConfig = {
   queueRoot?: string;
+  logsRoot?: string; // ABSOLUTE `_logs` root for claimed runs (runOne); omitted ⇒ `<forgeRoot>/_logs`
   worktreesRoot?: string; // where git worktrees live
   maxConcurrentInitiatives?: number;
   heartbeatIntervalMs?: number;
@@ -47,10 +49,9 @@ export type SchedulerConfig = {
   recoverIntervalMs?: number;
 };
 
-const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs'>> & {
+const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs' | 'queueRoot' | 'logsRoot'>> & {
   recoverIntervalMs: number;
 } = {
-  queueRoot: '_queue',
   worktreesRoot: '_worktrees',
   maxConcurrentInitiatives: 2,
   heartbeatIntervalMs: 30_000,
@@ -72,6 +73,8 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   const cfg = {
     ...DEFAULTS,
     ...opts,
+    // The same resolver the dispatch claim and the bridge use (serve runs with cwd = forge root).
+    queueRoot: opts.queueRoot ?? forgeQueueRoot(process.cwd()),
     notify:
       opts.notify ??
       (userConfig.notify
@@ -117,7 +120,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   await runFinalizeSweep(opts.phaseWiring);
   // ADR 026: at startup, drain any review work-items appended while the daemon
   // was down (the operator sent back; the cycle must re-run them in place).
-  await runDrainSweep(opts.phaseWiring);
+  await runDrainSweep(opts.phaseWiring, cfg.queueRoot);
   // Stage C: dispatch any flow-trigger run-requests staged while down.
   runFlowTriggerSweep();
   // R2-04 (ADR-041): arm the cron triggers declared across studio/flows/*.
@@ -137,7 +140,11 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // the idle stdout doesn't repeat the same line every poll cycle (5s).
   const announcedBlocked = new Set<string>();
 
+  const haltWatch = createHaltWatch(cfg.queueRoot, { log: (l) => console.log(l), now: () => Date.now() });
+
   const tick = async (): Promise<boolean> => {
+    // The emergency halt (ADR 011): claim nothing; in-flight work is untouched.
+    if (haltWatch()) return inFlight.size > 0;
     while (inFlight.size < cfg.maxConcurrentInitiatives) {
       const pending = listPending(getPaths(cfg.queueRoot));
       if (pending.length === 0) return false;
@@ -240,7 +247,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
     void runRecoverySweep(cfg);
     // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
     // then (ADR 026) drain any review work-items appended since the last sweep.
-    void runFinalizeSweep(opts.phaseWiring).then(() => runDrainSweep(opts.phaseWiring)).then(() => runCronSync());
+    void runFinalizeSweep(opts.phaseWiring).then(() => runDrainSweep(opts.phaseWiring, cfg.queueRoot)).then(() => runCronSync());
     // Stage C: dispatch any flow-trigger run-requests (on:complete chaining).
     runFlowTriggerSweep();
   }, cfg.recoverIntervalMs);

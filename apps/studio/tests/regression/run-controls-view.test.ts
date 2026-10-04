@@ -279,7 +279,7 @@ test('row 150: operatorStop on a non-failed run never renders (same status gate 
 // ---------------------------------------------------------------------------
 
 function serveStatus(state: ServeStatus['state']): ServeStatus {
-  return { state, pid: 1, restarts: 0, nextRestartAt: null };
+  return { state, pid: 1, restarts: 0, nextRestartAt: null, halt: null };
 }
 
 test('queuedServeTone: null (unread/failed) is unknown, never the pickup promise', () => {

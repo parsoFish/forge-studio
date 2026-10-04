@@ -25,6 +25,8 @@ export * from './config.ts';
 export * from './gh-identity.ts';
 /** First-run scaffolding: the `_queue/`, `_worktrees/`, `_logs/` layout. */
 export * from './init.ts';
+/** The one emergency halt record (ADR 011): `<queueRoot>/halt.json`. */
+export * from './halt.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
 export { safeReadFileInSession } from './contained-read.ts';
@@ -89,6 +91,7 @@ export * from './bounded-log.ts';
  *  `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler
  *  preflight so the two can never disagree about a zombie pid (forge-8vfn.8.1.6). */
 export * from './process-liveness.ts';
+export * from './per-work-item-row.ts';
 /** The `reference-transaction` git hook that refuses an agent spawn's ref
  *  move against the FORGE repo itself, and the idempotent installer for it
  *  (forge-8vfn.8.5.47, row 211) — it replaced row 208's PreToolUse

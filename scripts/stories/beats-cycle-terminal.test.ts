@@ -459,7 +459,7 @@ test('7.6.147: a bound cycleOf resolves, and an absent one is not an error', () 
 /**
  * 7.6.147 RED-AT-BASE ON RUN 21'S OWN BEAT (T1 ruling 1164).
  *
- * Not a hand-built object: S10's REAL beat 10, through the REAL validator,
+ * Not a hand-built object: S10's REAL develop-cycle wait beat, through the REAL validator,
  * driven with the empty bindings a stalled beat 8 leaves behind. Run 21 reached
  * exactly this state and reded with "NO WAITER CONSUMED IT — give the beat a
  * `do` block", which is advice for a different failure: beat 10 has a `do`
@@ -468,13 +468,15 @@ test('7.6.147: a bound cycleOf resolves, and an absent one is not an error', () 
  * The prior wiring passed this state straight through (unbound -> null -> fall
  * back to the anchor form), so this test fails against it.
  */
-test('7.6.147: S10 beat 10 with no bindings REFUSES, naming the placeholder', async () => {
+test('7.6.147: S10 develop-cycle wait beat with no bindings REFUSES, naming the placeholder', async () => {
   const story = await import('../../tests/stories/S10.story.mjs');
   const { validateStory } = await import('./story-file.mjs');
   const { driveBeat } = await import('./beats-drive.mjs');
   const st = validateStory((story as any).story ?? (story as any).default) as any;
 
-  const v = await driveBeat(null, st.beats[9], 9, 'http://localhost:0', {});
+  const at = st.beats.findIndex((b: any) => b.wait?.cycleOf === '<runId>');
+  assert.notEqual(at, -1, 'S10 declares one beat whose wait names <runId> as its cycle');
+  const v = await driveBeat(null, st.beats[at], at, 'http://localhost:0', {});
 
   assert.equal(v.status, 'red', 'a beat that cannot name the cycle it watches must not proceed (§15.504)');
   assert.match(v.failures[0], /needs <runId>, which no earlier beat bound/);

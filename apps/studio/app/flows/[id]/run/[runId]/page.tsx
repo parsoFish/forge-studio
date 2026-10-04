@@ -53,6 +53,8 @@ import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import type { RunLogLine } from '@/lib/run-log-line';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
+const SHELL_STYLE = { minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' } as const;
+
 export default function FlowRunPage() {
   const params = useParams();
   const flowId = decodeURIComponent((params?.id as string) ?? '');
@@ -145,33 +147,32 @@ export default function FlowRunPage() {
   }
 
   if (!loaded) {
+    // <main>, matching FlowRunDetail's own root element: a route's
+    // [data-page] must sit on the SAME element type in every state, or a
+    // selector written against one state silently misses the others. The nav
+    // is the main's first child in every state, inside the page root.
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
+      <main id={MAIN_CONTENT_ID} data-page="flow-run" data-run-id={runId} data-page-ready="false" className="muted" style={SHELL_STYLE}>
         <StudioNav />
-        {/* <main>, matching FlowRunDetail's own root element: a route's
-            [data-page] must sit on the SAME element type in every state, or a
-            selector written against one state silently misses the others. */}
-        <main id={MAIN_CONTENT_ID} data-page="flow-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
-          Loading run…
-        </main>
-      </div>
+        <div style={{ padding: 20, fontSize: 13 }}>Loading run…</div>
+      </main>
     );
   }
 
   if (resolution?.kind === 'unresolved') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
+      <main
+        id={MAIN_CONTENT_ID}
+        data-page="flow-run"
+        data-run-id={runId}
+        data-flow-id={flowId}
+        data-run-resolution="unresolved"
+        data-page-ready="true"
+        className="muted"
+        style={SHELL_STYLE}
+      >
         <StudioNav />
-        <main
-          id={MAIN_CONTENT_ID}
-          data-page="flow-run"
-          data-run-id={runId}
-          data-flow-id={flowId}
-          data-run-resolution="unresolved"
-          data-page-ready="true"
-          className="muted"
-          style={{ padding: 20, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}
-        >
+        <div style={{ padding: 20, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
           Could not reach the bridge to resolve this run right now — try again shortly.
           <button
             type="button"
@@ -182,8 +183,8 @@ export default function FlowRunPage() {
           >
             Retry
           </button>
-        </main>
-      </div>
+        </div>
+      </main>
     );
   }
 
@@ -210,20 +211,18 @@ export default function FlowRunPage() {
   const rows = deriveFlowRunTimeline(flow, run);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
-      <StudioNav />
-      <FlowRunDetail
-        runId={runId}
-        found={found}
-        flow={flow}
-        run={run}
-        rows={rows}
-        findings={findings}
-        expandedNodeId={expandedNodeId}
-        nodeLogLines={nodeLogLines}
-        onNodeClick={handleNodeClick}
-        ready
-      />
-    </div>
+    <FlowRunDetail
+      nav={<StudioNav />}
+      runId={runId}
+      found={found}
+      flow={flow}
+      run={run}
+      rows={rows}
+      findings={findings}
+      expandedNodeId={expandedNodeId}
+      nodeLogLines={nodeLogLines}
+      onNodeClick={handleNodeClick}
+      ready
+    />
   );
 }

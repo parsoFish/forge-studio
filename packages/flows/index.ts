@@ -78,7 +78,7 @@ export {
 
 // ---- The run model the UI reads --------------------------------------------
 export { type Run, buildAgentSlugToNodeId, buildNodeMapping } from './run-model.ts';
-export { eventToNodeId } from './run-model-derive.ts';
+export { endMetaIndicatesFailure, eventToNodeId } from './run-model-derive.ts';
 export { _resetRunListCacheForTest, cachedListRuns } from './run-list-cache.ts';
 
 // ---- Git and PR mechanics --------------------------------------------------

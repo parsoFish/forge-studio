@@ -15,7 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
-import { allowedOrigin, sendJson, sendIfDispatchInFlight } from '@forge/kernel';
+import { allowedOrigin, sendJson, sendIfDispatchRefused } from '@forge/kernel';
 import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
@@ -245,7 +245,7 @@ export async function handleProjectBrainRoutes(
       ctx.broadcastProjectBrainChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
     } catch (err) {
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -287,7 +287,7 @@ export async function handleProjectBrainRoutes(
       // Only approve spawns — abandon is exempt-local and carries no marker.
       sendJson(res, 200, { ok: true, ...(approve ? ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/approve', body.sessionId) : {}) }, origin);
     } catch (err) {
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }  return false;

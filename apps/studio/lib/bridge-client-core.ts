@@ -23,6 +23,7 @@
  */
 import { DEFAULT_BRIDGE_PORT } from './bridge-port.ts';
 import {
+  bridgeErrorMessage,
   readBridgeJson,
   unwrapBridgeRead,
   unwrapBridgeReadOr404,
@@ -332,16 +333,59 @@ export type ServeStatus = {
   restarts: number;
   /** ISO instant the pending crash-loop respawn will fire, else null. */
   nextRestartAt: string | null;
+  /** The one emergency halt — null when not halted. */
+  halt: ServeHalt | null;
 };
+
+/** The emergency-halt record as `GET /api/health` reports it. Nulls mean the
+ *  bridge did not supply that field; a malformed halt object still reads as
+ *  halted (with nulls) — never as "not halted". */
+export type ServeHalt = {
+  since: string | null;
+  actor: string | null;
+  active: number | null;
+  queued: number | null;
+};
+
+/** Validate the wire `halt` value: absent/null → not halted; any other value
+ *  → halted, with each field kept only when well-typed. */
+export function parseServeHalt(raw: unknown): ServeHalt | null {
+  if (raw === null || raw === undefined) return null;
+  const rec = (typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+  return { since: str(rec.since), actor: str(rec.actor), active: num(rec.active), queued: num(rec.queued) };
+}
+
+/** Normalise the wire `serve` object, validating `halt`. */
+export function parseServeStatus(raw: unknown): ServeStatus | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  return { ...(r as Omit<ServeStatus, 'halt'>), halt: parseServeHalt(r.halt) };
+}
 
 /** Read the live `serve` status off `GET /api/health`. Null only when the
  *  bridge itself could not be read (unreachable, non-2xx, malformed) — a
  *  reachable OLD bridge with no `serve` field is not expected post-rollout,
  *  but is handled the same honest way (null), never fabricated as healthy. */
 export async function fetchServeStatus(): Promise<ServeStatus | null> {
-  const r = await readBridgeJson<{ serve?: ServeStatus }>(() => bridgeFetch('/api/health'));
+  const r = await readBridgeJson<{ serve?: unknown }>(() => bridgeFetch('/api/health'));
   if (!r.ok) return null;
-  return r.data?.serve ?? null;
+  return parseServeStatus(r.data?.serve);
+}
+
+/** `POST /api/halt` — pull the one emergency halt. Resolves the new halt state; throws on refusal. */
+export async function pullEmergencyHalt(): Promise<ServeHalt | null> {
+  const r = await bridgePost('/api/halt');
+  // The halt routes answer `{ halt }` with no `ok` flag: a refusal carries `error`.
+  if (r.error !== undefined) throw new Error(r.error);
+  return parseServeHalt(r.data?.halt);
+}
+
+/** `POST /api/halt/release` — release the halt. Throws on refusal. */
+export async function releaseEmergencyHalt(): Promise<void> {
+  const r = await bridgePost('/api/halt/release');
+  if (r.error !== undefined) throw new Error(r.error);
 }
 
 /**
@@ -359,7 +403,7 @@ export async function bridgePost(
       ? { method: 'POST', headers: { 'x-forge-csrf': '1' } }
       : { method: 'POST', headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' }, body: JSON.stringify(body) });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string } & Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: data.error ?? data.message ?? `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: bridgeErrorMessage(res.status, data) };
     return { ok: !!data.ok, data };
   } catch (err) {
     return { ok: false, error: String(err) };

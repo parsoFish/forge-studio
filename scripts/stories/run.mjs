@@ -51,6 +51,7 @@ import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopStudioThenScheduler, teardownExitCode } from './sweep-teardown.mjs';
 import { preexistingSchedulerVerdict } from './scheduler-preflight.mjs';
+import { clearRunHalt, preexistingHaltVerdict } from './halt-record.mjs';
 import {
   decideStoryBridge,
   readProcCwd,
@@ -59,6 +60,7 @@ import {
   bridgeSpawnOptions,
 } from './bridge.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
+import { reportDeferredCycleParity } from './agent-parity-serve-stop.mjs';
 import { recordReapedCancellations } from './reap-cancel.mjs';
 // Defect B fold, row 184b (forge-8vfn.8.5.21) — the SIGINT/SIGTERM path's own
 // version of the own-ground clear `run-story.mjs` already runs at the end of
@@ -203,6 +205,9 @@ async function main() {
       } catch (err) {
         console.error(`[stories] post-stop sweep failed: ${err?.message ?? err}`);
       }
+      // The emergency halt this run may have pulled (halt-record.mjs): studio
+      // and serve are already gone here, so clearing it cannot let a claim in.
+      for (const line of clearRunHalt(ROOT).lines) console.log(`[stories] post-stop sweep: ${line}`);
       try {
         const bornLogs = captureAndClearBornLogDirs(ROOT, {
           prefixes: ['_agent-', '_authoring-'], sinceMs: startedMs, evidenceDir,
@@ -494,6 +499,10 @@ async function main() {
   // that used to throw out of `runStory` and abort every story still queued
   // in the loop below.
   const writtenThisRun = [];
+  // Row 207 (C2) — every cycle channel a story deferred because its final
+  // attempt was still open under this run's own live serve; judged below,
+  // after the batch teardown's serve stop, with that stop as the evidence.
+  const deferredCycleParity = [];
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
@@ -581,6 +590,14 @@ async function main() {
       return 1;
     }
     console.log(`[stories] serve ok — ${sched.reason}`);
+    // A ground already carrying the emergency halt claims nothing and refuses
+    // every dispatch — every claim-waiting beat would time out unexplained.
+    const halt = preexistingHaltVerdict(ROOT);
+    if (!halt.ok) {
+      console.error(`[stories] REFUSING: ${halt.reason}`);
+      return 1;
+    }
+    console.log(`[stories] halt ok — ${halt.reason}`);
 
     if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.
@@ -631,7 +648,7 @@ async function main() {
         // `runStory` actually starting, so a crash inside it can never leave
         // a gap where the story still reads as unstarted.
         startedStoryIds.add(story.id);
-        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd, writtenThisRun)) || exitCode;
+        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd, writtenThisRun, deferredCycleParity)) || exitCode;
         // `runStory` already cleared its OWN minted sessions on every path it
         // reached (every return, every throw past its own try/finally) — so
         // by the time control returns here, `onStopSignal` must stop treating
@@ -689,6 +706,14 @@ async function main() {
     const teardown = teardownExitCode(exitCode, stop);
     exitCode = teardown.exitCode;
     for (const line of teardown.lines) console.error(line);
+    // Row 207 (C2): each deferred cycle attempt is judged NOW, on this stop's
+    // own result, before anything moves `_logs` (`agent-parity-serve-stop.mjs`).
+    if (reportDeferredCycleParity({ deferred: deferredCycleParity, stop, root: ROOT })) exitCode = exitCode || 1;
+    // Studio and serve are stopped above, so clearing a halt this run pulled
+    // cannot let a claim in; a halt left behind would wedge the next run.
+    const haltClear = clearRunHalt(ROOT);
+    for (const line of haltClear.lines) console.log(line);
+    if (!haltClear.ok) exitCode = exitCode || 1;
 
     const put = restoreSweptCommitted(ROOT, sweptPaths);
     for (const p of put.restored) console.log(`[stories] restored ${p} — swept before the run and never regenerated`);

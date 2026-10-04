@@ -13,6 +13,7 @@ import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHalt
 import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 import { agentParityVerdict, describeAgentParity } from './agent-parity.mjs';
 import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs';
+import { ownSchedulerPidState } from './sweep-teardown-scheduler.mjs';
 import { join, basename } from 'node:path';
 
 /**
@@ -493,14 +494,38 @@ export function makeWaitSpendGuard({ root, startedMs, realSpawn, ceilingUsd, pol
  * `agent-parity.mjs`'s own header). A channel the reap SKIPPED (a provenance
  * refusal, never a confirmed kill) is not in this set and is not excused.
  *
- * @param {{root: string, startedMs: number, reapedDirs: Set<string>}} args
+ * `deferInto` (row 207) is the batch's array of deferred cycle channels. When
+ * given, the scheduler daemon THIS run started is read (`ownSchedulerPidState`):
+ * a cycle's final attempt still open under that live daemon is DEFERRED into
+ * the array, judged after the batch teardown's serve stop
+ * (`agent-parity-serve-stop.mjs`), never excused here; with no live daemon of
+ * ours there is nothing left to close it, so it is judged now.
+ *
+ * @param {{root: string, startedMs: number, reapedDirs: Set<string>, deferInto?: object[]|null}} args
  * @returns {{verdict: ReturnType<typeof agentParityVerdict>, lines: string[]}}
  */
-export function agentParitySoFar({ root, startedMs, reapedDirs }) {
+export function agentParitySoFar({ root, startedMs, reapedDirs, deferInto = null }) {
   const channels = collectSpendDirs(root, startedMs).map((dir) => ({ dir, rows: readRunEvents(dir) }));
   const verdict = agentParityVerdict(channels, {
     registeredSessionKindIds: loadRegisteredSessionKindIds(root),
     reapedDirs,
+    serveAlivePid: deferInto === null ? null : ownSchedulerPidState(root).pid,
   });
+  for (const r of verdict.results) {
+    if (deferInto !== null && r.deferred.length > 0) deferInto.push({ channel: r.channel, reported: r.violations });
+  }
   return { verdict, lines: describeAgentParity(verdict) };
+}
+
+/**
+ * Story-end parity (`run-story.mjs`): `agentParitySoFar` plus its
+ * per-channel trail — ok, satisfied-by-reap, PRODUCT RED, DEFERRED — printed
+ * to the run log, so a verdict never gates on lines nobody can read.
+ *
+ * @param {Parameters<typeof agentParitySoFar>[0]} args
+ */
+export function storyEndParity(args) {
+  const parity = agentParitySoFar(args);
+  for (const line of parity.lines) console.log(line);
+  return parity;
 }

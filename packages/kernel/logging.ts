@@ -151,18 +151,24 @@ export function createLogger(
   const dir = resolve(logsDir, cycleId);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const logFilePath = join(dir, 'events.jsonl');
+  const ended = new Set<string>();
 
-  return {
+  const logger: EventLogger = {
     cycleId,
     logFilePath,
     emit: (partial) => {
+      // Destructured, never spread over the minted fields: a caller passing
+      // `event_id: undefined` must not strip the id (row 207 — run-end parity
+      // reads an id-less row as one this logger did not write).
+      const { event_id, started_at, ...rest } = partial;
       const entry: EventLogEntry = {
-        event_id: partial.event_id ?? newEventId(),
+        event_id: event_id ?? newEventId(),
         cycle_id: cycleId,
-        started_at: partial.started_at ?? new Date().toISOString(),
-        ...partial,
+        started_at: started_at ?? new Date().toISOString(),
+        ...rest,
       } as EventLogEntry;
       appendFileSync(logFilePath, JSON.stringify(entry) + '\n');
+      if (entry.event_type === 'end' && entry.parent_event_id !== undefined) ended.add(entry.parent_event_id);
       if (opts.tee) {
         try {
           opts.tee(entry);
@@ -173,7 +179,13 @@ export function createLogger(
       return entry;
     },
   };
+  endedStarts.set(logger, ended);
+  return logger;
 }
+
+/** Per logger, the start ids it has already written an end for — so
+ *  `endStartOnThrow` never writes a second end for one start. */
+const endedStarts = new WeakMap<EventLogger, ReadonlySet<string>>();
 
 /** Tiny ULID-ish ID: timestamp + random. Not a real ULID, but monotonic-ish and unique enough. */
 function newEventId(): string {
@@ -299,4 +311,26 @@ export function errorEndMetadata(err: unknown): { status: 'failed'; error: strin
     status: 'failed',
     error: err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err),
   };
+}
+
+/**
+ * Row 207 (bead `forge-8vfn.8.5.57`) — run `body` under a run-level `start`
+ * the caller already wrote; if it throws, write THAT start's own `end`
+ * (`parent_event_id` = the start, the start's metadata plus the
+ * `errorEndMetadata` marker) and rethrow, so every start gets exactly one end
+ * on the throw path too — unless the body already ended it (a loss path that
+ * wrote its failed end, then a later step threw). The normal path writes its
+ * own end, unchanged.
+ */
+export async function endStartOnThrow<T>(logger: EventLogger, start: EventLogEntry, body: () => Promise<T>): Promise<T> {
+  try {
+    return await body();
+  } catch (err) {
+    if (endedStarts.get(logger)?.has(start.event_id)) throw err; // the body already ended this start
+    logger.emit({
+      initiative_id: start.initiative_id, parent_event_id: start.event_id, phase: start.phase, skill: start.skill,
+      event_type: 'end', input_refs: [], output_refs: [], metadata: { ...start.metadata, ...errorEndMetadata(err) },
+    });
+    throw err;
+  }
 }

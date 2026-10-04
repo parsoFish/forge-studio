@@ -18,7 +18,7 @@ import { EnqueueOutcomeLineView } from '@/components/studio/EnqueueOutcomeLine';
 import type { ServeStatus } from '@/lib/bridge-client';
 
 const INIT = 'INIT-2026-08-18-add-version-flag';
-const RUNNING: ServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null };
+const RUNNING: ServeStatus = { state: 'running', pid: 123, restarts: 0, nextRestartAt: null, halt: null };
 
 function render(props: Partial<React.ComponentProps<typeof EnqueueOutcomeLineView>>): string {
   return renderToStaticMarkup(React.createElement(EnqueueOutcomeLineView, {
@@ -45,7 +45,7 @@ test('plan enqueue, serve restarting → the shared notice mounts + the run link
     runAction: 'open-plan-run',
     runId: 'c1',
     flowId: 'forge-architect',
-    serve: { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z' },
+    serve: { state: 'restarting', pid: null, restarts: 1, nextRestartAt: '2026-01-01T00:00:01.000Z', halt: null },
   });
   expect(html).toContain('Planning enqueued — forge serve will decompose it into work items.');
   expect(html).toContain('data-component="serve-status-notice"');
@@ -106,4 +106,21 @@ test('7.6.8: no run id, no attribute — never an empty string a beat could bind
   const html = render({ runId: undefined, flowId: 'forge-develop' });
   expect(html).toContain('data-component="enqueue-outcome"');
   expect(html).not.toContain('data-run-id');
+});
+
+// Row 207, forge-8vfn.8.5.57 — the claim is halt-aware. A halted serve claims
+// nothing, so the pickup promise is the one string this line must never show
+// while the halt is on; the run controls' queued-halted wording stands in.
+test('emergency halt on → the queued-halted wording replaces the pickup promise', () => {
+  const html = render({
+    kind: 'flow',
+    runId: 'c1',
+    flowId: 'forge-develop',
+    serve: { ...RUNNING, halt: { active: 0, queued: 1 } } as unknown as ServeStatus,
+  });
+  expect(html).toContain('data-component="queued-halted"');
+  expect(html).toContain('Queued — the emergency halt is on; it starts when the halt is released.');
+  expect(html).not.toContain('forge serve will pick it up');
+  expect(html).not.toContain('enqueued —');
+  expect(html).toMatch(/<a[^>]*data-action="open-develop-run"/);
 });

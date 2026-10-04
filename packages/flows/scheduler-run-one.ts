@@ -18,6 +18,7 @@ import { parseManifest as parseFullManifest, type InitiativeManifest } from './m
 import type { EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
+import { endMetaIndicatesFailure } from './run-model-derive-status.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
 import { probeRemoteBranch, shouldRefuseFreshAttempt } from './stale-remote-branch-guard.ts';
@@ -180,8 +181,8 @@ export function makeProgressTee(): (entry: EventLogEntry) => void {
     // Reflection phase
     if (e.phase === 'reflection') {
       if (e.event_type === 'start') console.log(`[${ts}] ${id} · reflection started`);
-      else if (e.event_type === 'end')
-        console.log(`[${ts}] ${id} · reflection done${cost}${dur}`);
+      else if (e.event_type === 'end') // row 207: a lost reflection's own end is marked failed
+        console.log(`[${ts}] ${id} · reflection ${endMetaIndicatesFailure(e.metadata) ? 'FAILED' : 'done'}${cost}${dur}`);
       else if (e.event_type === 'error')
         console.log(`[${ts}] ${id} · reflection FAILED: ${e.message ?? '(no message)'}`);
       return;
@@ -211,7 +212,7 @@ export async function runOne(
   manifestPath: string,
   filename: string,
   // logsRoot (forge-8vfn.8.1.10): ABSOLUTE; omitted ⇒ `<forgeRoot>/_logs`.
-  cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig; logsRoot?: string },
+  cfg: Required<Omit<SchedulerConfig, 'notify' | 'logsRoot'>> & { notify: NotifyConfig; logsRoot?: string },
   tee: ((entry: EventLogEntry) => void) | undefined,
   wiring: PhaseWiring,
 ): Promise<void> {

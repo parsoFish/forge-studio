@@ -110,22 +110,20 @@ export default function AgentsIndexPage() {
   useDocumentTitle('Agents');
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      <StudioNav />
-      <AgentsIndexView
-        ready={ready}
-        agents={agents}
-        recentRunsReady={recentRunsReady}
-        recentRuns={recentRuns}
-        recentRunsUnresolved={recentRunsMeta.unresolved}
-        recentRunsTotal={recentRunsMeta.total}
-        onRetryRecentRuns={retryRecentRuns}
-        recentRunsLimit={recentRunsLimit}
-        onShowAllRecentRuns={recentRunsLimit < RECENT_AGENT_RUNS_EXPANDED_LIMIT ? showAllRecentRuns : null}
-        nowMs={Date.now()}
-        error={error}
-        onRetry={reload}
-      />
-    </div>
+    <AgentsIndexView
+      nav={<StudioNav />}
+      ready={ready}
+      agents={agents}
+      recentRunsReady={recentRunsReady}
+      recentRuns={recentRuns}
+      recentRunsUnresolved={recentRunsMeta.unresolved}
+      recentRunsTotal={recentRunsMeta.total}
+      onRetryRecentRuns={retryRecentRuns}
+      recentRunsLimit={recentRunsLimit}
+      onShowAllRecentRuns={recentRunsLimit < RECENT_AGENT_RUNS_EXPANDED_LIMIT ? showAllRecentRuns : null}
+      nowMs={Date.now()}
+      error={error}
+      onRetry={reload}
+    />
   );
 }

@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { EventLogger, EventLogEntry } from '@forge/kernel';
+import { errorEndMetadata, type EventLogger, type EventLogEntry } from '@forge/kernel';
 import { runAgent, makeToolEventSink } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { classifyCrash } from '@forge/agents';
@@ -42,7 +42,8 @@ import type { ReflectorDeps } from './reflector.ts';
  * 2.10 reflector pipeline honesty — record the loss of a cycle's reflection
  * in events.jsonl AT THE MOMENT it happens. Every catch/early-return in
  * `runReflector`/`runReflectorBrainWrites` that abandons reflection calls
- * this (a deliberate disposable skip does NOT — that is not a loss).
+ * this (a deliberate disposable skip does NOT — that is not a loss), then
+ * ends that start with its own failed `reflector.end` (row 207, `errorEndMetadata`).
  */
 export function emitReflectionLost(
   logger: EventLogger,
@@ -66,6 +67,11 @@ export function emitReflectionLost(
     output_refs: [],
     message: REFLECTION_LOST_EVENT,
     metadata: { cause: opts.cause, detail: opts.detail, ...(opts.extraMetadata ?? {}) },
+  });
+  logger.emit({
+    initiative_id: opts.initiativeId, ...(opts.parentEventId !== undefined ? { parent_event_id: opts.parentEventId } : {}),
+    phase: 'reflection', skill: opts.skill, event_type: 'end', input_refs: [], output_refs: [], message: 'reflector.end',
+    metadata: errorEndMetadata(`${REFLECTION_LOST_EVENT} ${opts.cause}: ${opts.detail}`),
   });
 }
 
@@ -182,12 +188,9 @@ export async function runReflectorBrainWrites(
     return { ok: false };
   }
 
-  // 2.10: a non-success SDK result means the reflector died mid-run
-  // (budget/turn exhaustion, execution error) — its outputs are incomplete
-  // and the reflection is LOST, not closed. Previously this fell through: a
-  // budget-exhausted reflector that had already read the brain cleared the
-  // F-13 gate and closed silently (the July silent-loss pattern). Same
-  // precedent as release-finalize's non-success handling.
+  // 2.10: a non-success SDK result (budget/turn exhaustion, execution error)
+  // means incomplete outputs — the reflection is LOST, never closed, even past
+  // the F-13 gate (the July silent-loss pattern; release-finalize's precedent).
   if (resultSubtype !== undefined && resultSubtype !== 'success') {
     const cause =
       resultSubtype === 'error_max_budget_usd'
