@@ -28,6 +28,7 @@
  * in neither is `unmeasured`, never a pass.
  */
 import { existsSync } from 'node:fs';
+import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs';
 import { basename, join } from 'node:path';
 import { channelParityVerdict } from './agent-parity.mjs';
 import { readRunEvents } from './run-observe.mjs';
@@ -92,4 +93,22 @@ export function judgeDeferredCycleChannels({
     if (fresh.length === 0) lines.push(`[stories] agent-parity: ${channel} (${verdict.kind}) — ok after the serve stop (read from ${dir})`);
   }
   return { violations, lines };
+}
+
+/**
+ * The batch-end call `run.mjs` makes right after its serve stop: judge every
+ * deferred channel on that stop's own result and print the verdict. Returns
+ * `true` when the run is RED. A throw is RED too, never a pass, and never
+ * escapes — the caller still releases the host lock.
+ */
+export function reportDeferredCycleParity({ deferred, stop, root }) {
+  try {
+    const out = judgeDeferredCycleChannels({ deferred, stop, registeredSessionKindIds: loadRegisteredSessionKindIds(root) });
+    for (const line of out.lines) console.log(line);
+    if (out.violations.length === 0) return false;
+    console.error(`[stories] RED — ${out.violations.length} cycle parity violation(s) judged after the serve stop. The run is RED regardless of its beats.`);
+  } catch (err) {
+    console.error(`[stories] RED — deferred cycle parity could not be judged after the serve stop: ${err?.message ?? err}`);
+  }
+  return true;
 }

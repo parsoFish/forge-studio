@@ -83,7 +83,6 @@ import { collectAgentRuns, reapAgentRuns, describeReap, withPricedTerminationLab
 import { reappeared } from './quiesce.mjs';
 import { reapCensusAndSweep } from './sweep-teardown.mjs';
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
-import { ownSchedulerPidState } from './sweep-teardown-scheduler.mjs';
 // Needed by ROOT below, not by the moved body — the one import here that a
 // scan of the body alone would have missed.
 import { fileURLToPath } from 'node:url';
@@ -351,16 +350,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     reason: reapReasonFor(story, beats),
   });
   for (const line of describeReap(reap)) console.log(line);
-  // Row 207 (C2): a cycle's final attempt still open under this run's own
-  // live serve is deferred, and handed to `run.mjs`, which judges it after
-  // the batch teardown's serve stop (`agent-parity-serve-stop.mjs`).
-  const parity = agentParitySoFar({
-    root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)), serveAlivePid: ownSchedulerPidState(ROOT).pid,
-  });
-  for (const line of parity.lines) console.log(line);
-  for (const r of parity.verdict.results) {
-    if (r.deferred.length > 0) deferredCycleParity.push({ channel: r.channel, reported: r.violations });
-  }
+  // Row 207 (C2): a final cycle attempt still open under our live serve is deferred to the batch.
+  const parity = agentParitySoFar({ root: ROOT, startedMs, reapedDirs: new Set(reap.reaped.map((r) => r.dir)), deferInto: deferredCycleParity });
 
   // Bead `forge-8vfn.6.11.8` — the spend COLUMN. Read from the dispatched
   // runs' OWN event logs, collected before the reap removed them from the

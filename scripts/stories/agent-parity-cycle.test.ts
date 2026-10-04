@@ -232,19 +232,19 @@ describe('judgeDeferredCycleChannels — the batch-end half of C2', () => {
 describe('wiring — the deferred final attempt is judged AFTER the serve stop, on that stop\'s own result', () => {
   const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 
-  test('run.mjs: stopStudioThenScheduler, THEN judgeDeferredCycleChannels on its result, before the host lock releases', () => {
+  test('run.mjs: stopStudioThenScheduler, THEN reportDeferredCycleParity on its result, before the host lock releases', () => {
     const s = read('./run.mjs');
     const stopAt = s.indexOf('const stop = await stopStudioThenScheduler(ROOT');
-    const judgeAt = s.indexOf('judgeDeferredCycleChannels({');
+    const judgeAt = s.indexOf('reportDeferredCycleParity({');
     const releaseAt = s.lastIndexOf('await release();');
     assert.ok(stopAt > 0 && judgeAt > stopAt && releaseAt > judgeAt, `order stop ${stopAt} < judge ${judgeAt} < release ${releaseAt}`);
     assert.match(s.slice(judgeAt, judgeAt + 200), /deferred: deferredCycleParity, stop,/);
     assert.match(s, /await runStory\(story, uiUrl, startedMs, args\.ceilingUsd, writtenThisRun, deferredCycleParity\)/);
   });
 
-  test('run-story.mjs: story-end parity gets the live serve pid and hands every deferred channel to the batch', () => {
+  test('run-story.mjs: story-end parity hands every deferred channel to the batch; run-observe reads the live serve pid for it', () => {
     const s = read('./run-story.mjs');
-    assert.match(s, /serveAlivePid: ownSchedulerPidState\(ROOT\)\.pid/);
-    assert.match(s, /deferredCycleParity\.push\(\{ channel: r\.channel, reported: r\.violations \}\)/);
+    assert.match(s, /deferInto: deferredCycleParity/);
+    assert.match(read('./run-observe.mjs'), /serveAlivePid: deferInto === null \? null : ownSchedulerPidState\(root\)\.pid/);
   });
 });
