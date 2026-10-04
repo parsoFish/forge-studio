@@ -107,3 +107,36 @@ process itself is up. When that age exceeds a **generous** multiple of
 the connection-state indicator's `data-connection-state` to `daemon-stalled`
 (the bridge is still reachable — this is distinct from `reconnecting` /
 `no-bridge`) and fires one edge-triggered toast.
+
+## The emergency halt
+
+The emergency halt is one record, `_queue/halt.json` (`{ "since", "actor" }`).
+While the file exists, `forge serve` stays running and polling but claims
+nothing: no pending manifest moves to `in-flight/`, and the drain sweep does
+not re-enter ready-for-review cycles. Work already in flight runs to its own
+end; nothing is signalled. A file that cannot be read or parsed counts as a
+halt (the brake fails closed).
+
+`serve` prints one line when it first sees the halt, naming the way out:
+
+```
+[serve] emergency halt on since <iso time> — claiming nothing; release it from Studio (Release halt) or remove <abs path>/_queue/halt.json
+```
+
+While the halt stays on it repeats that line at most once every ten minutes,
+and it prints `[serve] emergency halt released — claiming again` once when the
+file goes. `serve --once` under a halt prints the first line, claims nothing
+and exits normally.
+
+The supervisor reads a halted `serve` as `running`: a halt is queue state, not
+a serve state, so it never restarts the process and never counts a restart.
+
+Release without Studio by removing the file from the forge root:
+
+```
+rm _queue/halt.json
+```
+
+`serve`'s next tick (within `pollIntervalMs`) claims again. Studio's
+"Release halt" button removes the same file; `GET /api/health` reports it as
+`serve.halt` (`{ since, actor, active, queued }`, or `null`).

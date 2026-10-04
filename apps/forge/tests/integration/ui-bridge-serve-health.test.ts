@@ -32,7 +32,7 @@ test('GET /api/health reports serve: UNSUPERVISED_SERVE_STATUS when no getServeS
     assert.equal(res.status, 200);
     const body = (await res.json()) as { service: string; serve: ServeSupervisorStatus };
     assert.equal(body.service, 'forge-bridge', 'the identity fields still ride the same response');
-    assert.deepEqual(body.serve, UNSUPERVISED_SERVE_STATUS);
+    assert.deepEqual(body.serve, { ...UNSUPERVISED_SERVE_STATUS, halt: null });
   } finally {
     await close();
   }
@@ -47,14 +47,14 @@ test('GET /api/health reports the injected supervisor status verbatim, live', as
   });
   try {
     const first = (await (await fetch(`${url}/api/health`)).json()) as { serve: ServeSupervisorStatus };
-    assert.deepEqual(first.serve, { state: 'running', pid: 4242, restarts: 0, nextRestartAt: null });
+    assert.deepEqual(first.serve, { state: 'running', pid: 4242, restarts: 0, nextRestartAt: null, halt: null });
 
     // The getter is read on EVERY request, not snapshotted at startBridge —
     // a live supervisor's status (crash-looping, then recovered) must be
     // visible without restarting the bridge.
     live = { state: 'restarting', pid: null, restarts: 3, nextRestartAt: '2026-01-01T00:00:01.000Z' };
     const second = (await (await fetch(`${url}/api/health`)).json()) as { serve: ServeSupervisorStatus };
-    assert.deepEqual(second.serve, { state: 'restarting', pid: null, restarts: 3, nextRestartAt: '2026-01-01T00:00:01.000Z' });
+    assert.deepEqual(second.serve, { state: 'restarting', pid: null, restarts: 3, nextRestartAt: '2026-01-01T00:00:01.000Z', halt: null });
   } finally {
     await close();
   }
