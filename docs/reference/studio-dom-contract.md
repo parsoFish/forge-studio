@@ -552,7 +552,9 @@ is what this contract reads — but it cannot be the only distinguisher.
   same line. A QUEUED run's line in the run controls is
   `[data-component="queued-halted"]` ("Queued — the emergency halt is on; it
   starts when the halt is released.") whenever a halt is on, ahead of every
-  other tone. A dispatch the halt refuses (`409 { error: "halted" }`) reads
+  other tone. The enqueue outcome line renders the same
+  `[data-component="queued-halted"]` text in place of its pickup claim while a
+  halt is on. A dispatch the halt refuses (`409 { error: "halted" }`) reads
   "The emergency halt is on — release it to start new work." wherever a
   session or agent start shows its bridge error.
   A second, attach-only `forge studio` never supervises `serve` and reads the

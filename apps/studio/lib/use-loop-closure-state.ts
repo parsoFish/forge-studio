@@ -24,7 +24,7 @@ export type LoopClosureState = ServeStatusState & {
 };
 
 export function useLoopClosureState(initiativeIds: string[] | undefined, enabled = true, pollMs: number = SERVE_STATUS_POLL_MS): LoopClosureState {
-  const serve = useServeStatus(pollMs, enabled);
+  const serve = useServeStatus(enabled);
   const [runs, setRuns] = useState<Run[]>([]);
   // W8-B3 (sessions-kinds-08) — the live flows roster, so a run naming a flow
   // that no longer exists (22 of 63 real runs carry the `"unknown"` sentinel)

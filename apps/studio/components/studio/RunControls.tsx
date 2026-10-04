@@ -60,6 +60,7 @@ import {
   intentForControlClick,
   mayPostControl,
   queuedServeTone,
+  QUEUED_HALTED_TEXT,
   runAwaitsServe,
   runControlsShouldRender,
   runFailureNoteKind,
@@ -110,7 +111,7 @@ export function RunControls({
 }): JSX.Element | null {
   const controls = deriveRunControls(run);
   const awaitsServe = serveStrip && runAwaitsServe(run);
-  const { status: serve } = useServeStatus(undefined, awaitsServe);
+  const { status: serve } = useServeStatus(awaitsServe);
   const [busy, setBusy] = useState<RunControlId | null>(null);
   const [pendingDestructive, setPendingDestructive] = useState<RunControlId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -297,7 +298,7 @@ export function RunControls({
         if (tone === 'halted') {
           return (
             <span data-component="queued-halted" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
-              Queued — the emergency halt is on; it starts when the halt is released.
+              {QUEUED_HALTED_TEXT}
             </span>
           );
         }

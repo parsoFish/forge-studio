@@ -120,6 +120,9 @@ export type QueuedServeTone = 'halted' | 'running' | 'not-running' | 'unknown';
  * Mirrors `describePostCommit`'s own `unknown = serve === null ||
  * serve.state === 'unsupervised'` rule (lib/architect-plan-view.ts).
  */
+/** The queued-run line while the emergency halt is on — shared by every surface that would otherwise promise a pickup. */
+export const QUEUED_HALTED_TEXT = 'Queued — the emergency halt is on; it starts when the halt is released.';
+
 export function queuedServeTone(serve: ServeStatus | null): QueuedServeTone {
   if (serve !== null && serve.halt !== null) return 'halted';
   if (serve === null || serve.state === 'unsupervised') return 'unknown';
