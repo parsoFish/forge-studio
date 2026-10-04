@@ -341,7 +341,8 @@ export function findLastErrorNode(
  * 1. An explicit `cycle.reflection-lost` event (emitted by the reflector /
  *    its callers at the moment of loss) with no LATER reflection `end` —
  *    a later end means a rerun (`forge reflect --rerun`, boot reconcile)
- *    recovered it, which clears the flag.
+ *    recovered it, which clears the flag. An end carrying the failed marker
+ *    (`endMetaIndicatesFailure` — the lost run's own end, row 207) is no end.
  * 2. The stranded case: the queue says complete (manifest in `_queue/done/`),
  *    reflection STARTED but never emitted any `end`, and the cycle has gone
  *    quiet past the wedge threshold — a SIGKILL / Studio restart leaves no
@@ -365,7 +366,7 @@ export function findReflectionLoss(
     if (e.phase !== 'reflection') continue;
     sawReflectionEvent = true;
     if (e.event_type === 'end') {
-      lastEndIdx = i;
+      if (!endMetaIndicatesFailure(e.metadata)) lastEndIdx = i;
       continue;
     }
     if (e.message === REFLECTION_LOST_EVENT) {

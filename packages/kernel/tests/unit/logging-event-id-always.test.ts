@@ -73,3 +73,21 @@ test('endStartOnThrow: a throwing body writes the start\'s own end (failed marke
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('endStartOnThrow writes no second end for a start the logger already ended (one end per start)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-end-once-'));
+  try {
+    const logger = createLogger('C-3', dir);
+    const start = logger.emit({ initiative_id: 'I', phase: 'reflection', skill: 'reflector', event_type: 'start', input_refs: [], output_refs: [] });
+    await assert.rejects(endStartOnThrow(logger, start, async () => {
+      // A loss path that ended its own start, then a later step (a lease release) throws.
+      logger.emit({ initiative_id: 'I', parent_event_id: start.event_id, phase: 'reflection', skill: 'reflector', event_type: 'end', input_refs: [], output_refs: [], metadata: { status: 'failed' } });
+      throw new Error('release failed');
+    }), /release failed/);
+    const ends = readFileSync(logger.logFilePath, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+      .filter((e) => e.event_type === 'end' && e.parent_event_id === start.event_id);
+    assert.equal(ends.length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

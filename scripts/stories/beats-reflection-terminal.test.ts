@@ -338,3 +338,41 @@ test('8.1.34 (d): plain `reflected` is UNCHANGED — the same fixture resolves o
   );
   assert.equal(seen.state, REFLECTION_TERMINAL_STATE);
 });
+
+// Row 207 (bead forge-8vfn.8.5.57), T1 ruling 1973qh (4) — a lost reflection
+// now writes its start's own `reflector.end` carrying the failed marker
+// (`status: 'failed'`), right AFTER the loss row. Last-in-order wins here, so
+// that end must read as the loss it closes, never as `reflected`.
+function appendRow(dir: string, row: object): void {
+  appendFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ phase: 'reflection', skill: 'reflector', ...row })}\n`);
+}
+
+test('R6j: a loss then its own failed reflector.end is NOT reflected — the door reads lost', () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-25T22:58:00.000Z');
+  appendRow(dir, { event_type: 'start', message: 'reflector.start', started_at: '2026-09-25T23:00:15.000Z' });
+  appendRow(dir, { event_type: 'error', message: 'cycle.reflection-lost', started_at: '2026-09-25T23:10:34.000Z', metadata: { cause: 'budget-exhausted' } });
+  appendRow(dir, { event_type: 'end', message: 'reflector.end', started_at: '2026-09-25T23:10:34.001Z', metadata: { status: 'failed', error: 'cycle.reflection-lost budget-exhausted' } });
+
+  const seen = makeReflectionDoor(root, INIT)!(null, ANCHOR, REFLECTION_TERMINAL_STATE)!;
+  assert.equal(seen.done, false, seen.detail);
+  assert.equal(seen.state, 'lost');
+  assert.match(seen.detail, /failed/);
+});
+
+test('R6j: the answered rerun after a lost first pass resolves reflected-answered only on its own closed end', () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-25T22:58:00.000Z');
+  appendRow(dir, { event_type: 'start', message: 'reflector.start', started_at: '2026-09-25T23:00:15.000Z' });
+  appendRow(dir, { event_type: 'error', message: 'cycle.reflection-lost', started_at: '2026-09-25T23:10:34.000Z', metadata: { cause: 'budget-exhausted' } });
+  appendRow(dir, { event_type: 'end', message: 'reflector.end', started_at: '2026-09-25T23:10:34.001Z', metadata: { status: 'failed', error: 'cycle.reflection-lost budget-exhausted' } });
+  writeFileSync(join(dir, 'user-feedback.md'), 'answers\n');
+  const fbMs = Date.parse('2026-09-25T23:10:35.000Z');
+  utimesSync(join(dir, 'user-feedback.md'), fbMs / 1000, fbMs / 1000);
+  appendRow(dir, { event_type: 'start', message: 'reflector.start', started_at: '2026-09-25T23:10:35.500Z' });
+  const door = makeReflectionDoor(root, INIT)!;
+  assert.equal(door(null, ANCHOR, REFLECTION_ANSWERED_TERMINAL_STATE), null, 'the rerun has not ended yet');
+  appendRow(dir, { event_type: 'end', message: 'reflector.end', started_at: '2026-09-25T23:11:27.000Z', metadata: { status: 'closed' } });
+  const seen = door(null, ANCHOR, REFLECTION_ANSWERED_TERMINAL_STATE)!;
+  assert.equal(seen.done, true, seen.detail);
+});

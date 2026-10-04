@@ -317,3 +317,35 @@ test('the claim contract check is skipped ONLY on the routine tier (--base-sha),
   assert.deepEqual(serveContractEnv(null), {});
   assert.deepEqual(serveContractEnv(undefined), {});
 });
+
+// ---------------------------------------------------------------------------
+// Row 207 (bead forge-8vfn.8.5.57), T1 ruling 1973qh (2) — a lost reflection
+// now writes its start's own `reflector.end` carrying the failed marker
+// (`status: 'failed'`). R6j's capture rows (S10 `2026-10-02T05-13-08_…`) plus
+// that end: it is never a completed reflection.
+// ---------------------------------------------------------------------------
+
+const R6J = {
+  start: '{"event_id":"EV_muqjyxhv_3hfdxtnr","started_at":"2026-10-02T05:59:03.187Z","initiative_id":"INIT-2026-10-02-exclude-author-flag-complete","phase":"reflection","skill":"reflector","event_type":"start","message":"reflector.start"}',
+  lost: '{"event_id":"EV_muqkc78w_43etnnmk","started_at":"2026-10-02T06:09:22.352Z","initiative_id":"INIT-2026-10-02-exclude-author-flag-complete","parent_event_id":"EV_muqjyxhv_3hfdxtnr","phase":"reflection","skill":"reflector","event_type":"error","message":"cycle.reflection-lost","metadata":{"cause":"budget-exhausted","detail":"reflector SDK run ended with result subtype \\"error_max_budget_usd\\" — reflection outputs are incomplete","result_subtype":"error_max_budget_usd"}}',
+  failedEnd: '{"event_id":"EV_r207_failed_end","started_at":"2026-10-02T06:09:22.353Z","initiative_id":"INIT-2026-10-02-exclude-author-flag-complete","parent_event_id":"EV_muqjyxhv_3hfdxtnr","phase":"reflection","skill":"reflector","event_type":"end","message":"reflector.end","metadata":{"status":"failed","error":"cycle.reflection-lost budget-exhausted: reflector SDK run ended with result subtype \\"error_max_budget_usd\\""}}',
+  rerunStart: '{"event_id":"EV_muqkc7s4_3wrx4wzu","started_at":"2026-10-02T06:09:23.044Z","phase":"reflection","skill":"reflector","event_type":"start","message":"reflector.start"}',
+  rerunEnd: '{"event_id":"EV_muqkdcfe_zf9vr1q2","started_at":"2026-10-02T06:10:15.722Z","parent_event_id":"EV_muqkc7s4_3wrx4wzu","phase":"reflection","skill":"reflector","event_type":"end","message":"reflector.end","metadata":{"status":"closed","result_subtype":"success"}}',
+};
+
+test('classifyReflectorProgress: R6j — a loss then its own failed reflector.end → lost (naming the cause), never ended', () => {
+  const result = classifyReflectorProgress([R6J.start, R6J.lost, R6J.failedEnd]);
+  assert.equal(result.state, 'lost', result.detail);
+  assert.match(result.detail, /budget-exhausted/);
+});
+
+test('classifyReflectorProgress: a failed reflector.end with no loss row yet (a throw) → lost, never ended', () => {
+  const result = classifyReflectorProgress([R6J.start, R6J.failedEnd]);
+  assert.equal(result.state, 'lost', result.detail);
+  assert.match(result.detail, /failed/);
+});
+
+test('classifyReflectorProgress: R6j\'s real tail — a closed rerun end after the failed one → ended', () => {
+  const result = classifyReflectorProgress([R6J.start, R6J.lost, R6J.failedEnd, R6J.rerunStart, R6J.rerunEnd]);
+  assert.equal(result.state, 'ended');
+});

@@ -31,7 +31,7 @@ import {
 } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
 
-import { parseManifest } from '@forge/flows';
+import { endMetaIndicatesFailure, parseManifest } from '@forge/flows';
 import type { InitiativeManifest } from '@forge/contracts';
 import type { EventLogEntry } from '@forge/kernel';
 import type { LintStatus } from '@forge/flows';
@@ -234,7 +234,7 @@ function computeStats(
     if (typeof e.duration_ms === 'number') duration += e.duration_ms;
     if (e.message === 'reviewer.verdict.send-back') sendBacks += 1;
     if (e.event_type === 'iteration' && e.phase === 'developer-loop') devIters += 1;
-    if (e.message === 'reflector.end') sawReflectorEnd = true;
+    if (e.message === 'reflector.end' && !endMetaIndicatesFailure(e.metadata)) sawReflectorEnd = true; // row 207
     if (e.message === 'cycle.start' && typeof e.started_at === 'string') {
       const ms = Date.parse(e.started_at);
       if (!Number.isNaN(ms)) cycleStartTs = ms;

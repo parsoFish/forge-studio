@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { cycleDirForInitiative } from './beats-channel-scan.mjs';
 import { readRunEvents } from './run-observe.mjs';
 import { terminalWatchAround } from './beats-agent-proc.mjs';
+import { endMetaIndicatesFailure } from '@forge/flows';
 
 /** The FIRST reflection's terminal — success only, no operator answer required. */
 export const REFLECTION_TERMINAL_STATE = 'reflected';
@@ -165,7 +166,15 @@ export function makeReflectionDoor(forgeRoot, cycleOf) {
         lastStartAt = at;
         continue;
       }
-      if (ev?.message === REFLECTOR_END_EVENT) {
+      if (ev?.message === REFLECTOR_END_EVENT && endMetaIndicatesFailure(ev.metadata)) {
+        // Row 207: a lost run writes its own end AFTER the loss row, carrying
+        // the failed marker — last-in-order must read it as that loss.
+        found = {
+          state: 'lost',
+          detail: `the reflector's own ${REFLECTOR_END_EVENT} event for ${cycleOf} is marked ` +
+            `${ev.metadata.status} (${ev.metadata.error ?? 'no error recorded'}) — the reflection was lost, not completed`,
+        };
+      } else if (ev?.message === REFLECTOR_END_EVENT) {
         found = {
           state: wantsAnswered ? REFLECTION_ANSWERED_TERMINAL_STATE : REFLECTION_TERMINAL_STATE,
           detail: `the reflector's own ${REFLECTOR_END_EVENT} event fired for ${cycleOf}`,

@@ -45,13 +45,16 @@
  * delegates to `packages/kernel/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
  * single source of truth for cost summation also used by `packages/flows/metrics.ts`,
  * `packages/flows/run-model.ts` and `packages/flows/run-model-derive.ts` — rather
- * than re-implementing the restatement rule a second time. That module's own
+ * than re-implementing the restatement rule a second time; the former reads a
+ * failed end through `@forge/flows`' `endMetaIndicatesFailure`, the one reader
+ * rule for the failed marker (row 207). `event-cost.ts`'s own
  * import of `EventLogEntry` is `import type`, erased at load, so pulling it
  * in from plain `.mjs` stays side-effect-free; Node v22's native TS type
  * stripping loads the `.ts` file directly, no build step needed.
  */
 
 import { sumAuthoritativeCostUsd } from '@forge/kernel';
+import { endMetaIndicatesFailure } from '@forge/flows';
 
 /** The harness's default verify ground — an independent repo, never `mdtoc`
  *  (which is committed inside forge's own repo). */
@@ -215,7 +218,8 @@ const REFLECTION_LOST_MESSAGE = 'cycle.reflection-lost';
  *   - `'started'` — `reflector.start` seen, no end and no loss yet (reads as
  *     slow, not dead — the exact ambiguity this classification resolves for
  *     the caller once combined with the deadline)
- *   - `'ended'`  — `reflector.end` observed — reflection completed
+ *   - `'ended'`  — `reflector.end` observed — reflection completed (an end
+ *     carrying the failed marker is a `'lost'`, never an `'ended'`)
  *   - `'lost'`   — `cycle.reflection-lost` observed — reflection died;
  *     `detail` names the real cause/detail carried on that event, never a
  *     generic string
@@ -234,7 +238,11 @@ export function classifyReflectorProgress(logLines) {
       continue;
     }
     if (e.skill === 'reflector' && e.event_type === 'start') sawStart = true;
-    if (e.skill === 'reflector' && e.event_type === 'end') sawEnd = true;
+    if (e.skill === 'reflector' && e.event_type === 'end') {
+      // Row 207: a lost run's own end carries the failed marker — never a completed reflection.
+      if (!endMetaIndicatesFailure(e.metadata)) sawEnd = true;
+      else lostDetail ??= `reflector.end marked ${e.metadata.status}: ${e.metadata.error ?? 'no error recorded'}`;
+    }
     if (e.message === REFLECTION_LOST_MESSAGE) {
       const cause = e.metadata?.cause ?? 'unknown';
       const causeDetail = e.metadata?.detail ?? 'no detail recorded';
