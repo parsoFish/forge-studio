@@ -74,13 +74,33 @@ function metadataError(event: EventLogEntry): string | null {
   return typeof err === 'string' && err.length > 0 ? err : null;
 }
 
+/** Row 206 follow-on (MEDIUM-9) — `errorEndMetadata` (`@forge/kernel`,
+ *  every runner that terminates on a thrown error: `runAgent`/
+ *  `runBandAgentStandalone`, `runKindTurn`/`runFixTurn`) marks a crash `end`
+ *  event `{ status: 'failed', error: '<Class>: <message>' }`. Checked by
+ *  bare equality, not re-derived from `endMetaIndicatesFailure`
+ *  (`@forge/flows`) — that predicate additionally reasons about per-WI
+ *  cycle-level work-item counts this single-agent session/standalone
+ *  renderer never sees, and `apps/studio` carries no `@forge/*` dependency
+ *  at all (this file stays a pure mapper over the client-mirrored
+ *  `EventLogEntry` shape — see the module header). */
+function isFailedEnd(event: EventLogEntry): boolean {
+  return event.metadata?.['status'] === 'failed';
+}
+
 function textFor(event: EventLogEntry): string {
   const detail = metadataError(event);
   switch (event.event_type) {
     case 'start':
       return `start · ${event.skill}`;
-    case 'end':
-      return `end · ${event.skill}${typeof event.cost_usd === 'number' ? ` · $${event.cost_usd.toFixed(4)}` : ''}`;
+    case 'end': {
+      const base = `end · ${event.skill}${typeof event.cost_usd === 'number' ? ` · $${event.cost_usd.toFixed(4)}` : ''}`;
+      // A crashed run's end carries metadata.status 'failed': it reads FAILED,
+      // with the error detail beside it when the end carries one, so a crash
+      // never reads like a clean end.
+      if (!isFailedEnd(event)) return base;
+      return detail !== null ? `${base} · FAILED — ${detail}` : `${base} · FAILED`;
+    }
     case 'error': {
       // The real failure detail is never discarded — no "an error occurred"
       // placeholder even when `message` happens to be present.

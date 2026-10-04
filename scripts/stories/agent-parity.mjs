@@ -137,8 +137,12 @@ const eid = (r) => (typeof r?.event_id === 'string' ? r.event_id : null);
 
 /**
  * Parity over ONE group's own run-level rows, already time-ordered — a group
- * is one skill (`standalone`/`session`) or one `phase::skill` pair (`cycle`:
- * "per-phase starts are legit", so each phase's own skill gets its own FIFO).
+ * is the WHOLE CHANNEL (`standalone`/`session`: the channel runs exactly one
+ * turn at a time, whatever skill each one is dispatched under, so two
+ * overlapping starts under different skill values collide in one FIFO)
+ * or one `phase::skill` pair (`cycle`: "per-phase starts are legit", so each
+ * phase's own skill gets its own FIFO, because a cycle genuinely runs more
+ * than one phase concurrently).
  *
  * `oneShotOnly` (standalone/fix-turn) treats ANY second start as a
  * `double-start` — this run id should see exactly one dispatch ever, so even
@@ -201,6 +205,18 @@ export function channelParityVerdict(dir, rows, opts = {}) {
   const registeredSessionKindIds = opts.registeredSessionKindIds ?? new Set();
   const reapedDirs = opts.reapedDirs ?? new Set();
 
+  // Row 206 follow-on (MEDIUM-11) — `rows.unknown` (readRunEvents's own
+  // carried fact, scripts/stories/run-observe.mjs) names a read that did NOT
+  // fully succeed: an unreadable `events.jsonl` (EACCES/EIO/a torn line) or a
+  // line that would not parse. A channel this run could not fully read is
+  // never judged ok on partial evidence — an unmeasured channel is never a
+  // clean pass; a torn log
+  // could easily be hiding the very end row that would have closed this
+  // channel's FIFO. Captured BEFORE dedup rebuilds a fresh array below,
+  // which would otherwise drop the property silently (a plain array copy
+  // carries no custom properties with it).
+  const unmeasured = Array.isArray(rows) && Array.isArray(rows.unknown) ? rows.unknown : [];
+
   // Deduped by `event_id`, the same defence `spend.mjs`'s `summariseRunSpend`
   // takes against a row read twice — cheap, and never wrong when ids are
   // already unique.
@@ -218,6 +234,11 @@ export function channelParityVerdict(dir, rows, opts = {}) {
   const name = basename(dir);
   const { kind, detail } = classifyChannelDir(name, deduped, registeredSessionKindIds);
   if (kind === 'excluded') {
+    // Unchanged by MEDIUM-11: an excluded channel (the bridge's own log, an
+    // unrecognised dir shape) is not an agent/session/cycle channel this
+    // rule polices at all, per the module header — a read failure on it is
+    // not this rule's violation to raise, same as a healthy read on it never
+    // becomes one.
     return Object.freeze({
       channel: dir, kind, detail, ok: true, violations: Object.freeze([]), satisfied: Object.freeze([]),
     });
@@ -239,9 +260,17 @@ export function channelParityVerdict(dir, rows, opts = {}) {
   // `started_at` is carried on each row for display only.
   const relevant = runLevelRows(deduped, kind);
   const oneShotOnly = kind === 'standalone';
+  // Row 206 follow-on (MEDIUM-10) — `standalone`/`session` group by the
+  // WHOLE CHANNEL, a single fixed key, never the row's own `skill`: two
+  // starts in one channel under different skills must collide in the SAME
+  // FIFO, because the channel itself (one dispatch, one session dir) runs
+  // exactly one turn at a time regardless of which skill names it. Only a
+  // `cycle` channel legitimately runs more than one phase concurrently, so
+  // it keeps its own `phase::skill` lane — one FIFO per phase, not one per
+  // channel.
   const groups = new Map();
   for (const r of relevant) {
-    const key = kind === 'cycle' ? `${r.phase ?? ''}::${r.skill ?? ''}` : String(r.skill ?? '');
+    const key = kind === 'cycle' ? `${r.phase ?? ''}::${r.skill ?? ''}` : '(whole channel)';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(r);
   }
@@ -252,6 +281,12 @@ export function channelParityVerdict(dir, rows, opts = {}) {
     const v = groupViolations(groupRows, { channel: dir, key, reapedDirs, oneShotOnly });
     violations.push(...v.violations);
     satisfied.push(...v.satisfied);
+  }
+  // MEDIUM-11 — appended last, so a channel that is BOTH unmeasured AND
+  // shows a real double-start/missing-end on the portion it COULD read
+  // reports both, never one eclipsing the other.
+  for (const u of unmeasured) {
+    violations.push({ kind: 'unmeasured', channel: dir, error: (u && u.error) ?? 'unreadable' });
   }
   return Object.freeze({
     channel: dir, kind, detail, ok: violations.length === 0,
@@ -293,6 +328,13 @@ export function describeAgentParity(verdict) {
     }
   }
   for (const v of verdict.violations) {
+    // MEDIUM-11 — `unmeasured` carries no `key`/`eventIds` (there is no FIFO
+    // group to blame; the read itself is what failed), so it gets its own
+    // line shape naming the channel and the real read error verbatim.
+    if (v.kind === 'unmeasured') {
+      lines.push(`[stories] agent-parity: PRODUCT RED — unmeasured channel ${v.channel} — ${v.error}`);
+      continue;
+    }
     lines.push(
       `[stories] agent-parity: PRODUCT RED — ${v.kind} on channel ${v.channel} (${v.key}), event id(s) ${v.eventIds.join(', ')}`,
     );

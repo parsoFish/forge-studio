@@ -10,7 +10,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyChannelDir, channelParityVerdict, agentParityVerdict } from './agent-parity.mjs';
+import { classifyChannelDir, channelParityVerdict, agentParityVerdict, describeAgentParity } from './agent-parity.mjs';
 
 const SESSION_KINDS = new Set(['architect', 'instructions', 'project-brain', 'demo', 'onboarding', 'authoring', 'kb-cleanup']);
 
@@ -137,6 +137,26 @@ describe('channelParityVerdict — standalone', () => {
     assert.equal(v.violations[0].kind, 'extra-end');
     assert.deepEqual(v.violations[0].eventIds, ['EV_e1']);
   });
+
+  // MEDIUM-10 — two starts under different skills in one channel. Grouping
+  // by the WHOLE CHANNEL puts them in the SAME FIFO, where the second start
+  // is correctly a double-start regardless of its own skill name.
+  test('two starts under TWO DIFFERENT skills, no end between, is a double-start — grouping by skill made this invisible', () => {
+    const rows = [
+      start({ event_id: 'EV_s1', started_at: '2026-01-01T00:00:00.000Z', skill: 'onboarding-agent' }),
+      start({ event_id: 'EV_s2', started_at: '2026-01-01T00:00:00.001Z', skill: 'a-completely-different-skill' }),
+    ];
+    const v = channelParityVerdict('_agent-onboarding-agent-x', rows, { registeredSessionKindIds: SESSION_KINDS });
+    assert.equal(v.ok, false);
+    // Not an exact count: both dangling starts ALSO each raise their own
+    // `missing-end` (nothing closes either) — the grouping-by-skill DEFECT
+    // this test pins is specifically that `double-start` never appeared AT
+    // ALL (each skill got its own clean one-row group), so its presence is
+    // the assertion, not the total violation count.
+    const dbl = v.violations.find((x) => x.kind === 'double-start');
+    assert.ok(dbl, JSON.stringify(v.violations));
+    assert.deepEqual(dbl.eventIds, ['EV_s1', 'EV_s2']);
+  });
 });
 
 describe('channelParityVerdict — session', () => {
@@ -196,6 +216,22 @@ describe('channelParityVerdict — session', () => {
     ];
     const v = channelParityVerdict('_architect-x', rows, { registeredSessionKindIds: SESSION_KINDS });
     assert.equal(v.ok, true, JSON.stringify(v.violations));
+  });
+
+  // MEDIUM-10 — the session-kind twin of the standalone case above: two
+  // overlapping turns in one session dir under two different skill values
+  // (a shape no real runner is known to produce, but the grouping bug would
+  // hide it exactly the same way) must still collide into one FIFO.
+  test('two turns live at once under TWO DIFFERENT skills is a double-start for a session channel too', () => {
+    const rows = [
+      start({ event_id: 'EV_s1', started_at: '2026-01-01T00:00:00.000Z', skill: 'demo-builder-runner', metadata: { phase: 'generating' } }),
+      start({ event_id: 'EV_s2', started_at: '2026-01-01T00:00:00.001Z', skill: 'a-different-skill-entirely', metadata: { phase: 'locking' } }),
+    ];
+    const v = channelParityVerdict('_demo-x', rows, { registeredSessionKindIds: SESSION_KINDS });
+    assert.equal(v.ok, false);
+    const dbl = v.violations.find((x) => x.kind === 'double-start');
+    assert.ok(dbl, JSON.stringify(v.violations));
+    assert.deepEqual(dbl.eventIds, ['EV_s1', 'EV_s2']);
   });
 
   test('interactive-runner.ts\'s generic turn (the `authoring` kind) is covered the same way', () => {
@@ -259,6 +295,48 @@ describe('agentParityVerdict', () => {
     const row = start({ event_id: 'EV_dup', skill: 'a' });
     const r = agentParityVerdict([{ dir: '_agent-a', rows: [row, { ...row }, end({ skill: 'a' })] }], { registeredSessionKindIds: SESSION_KINDS });
     assert.equal(r.ok, true);
+  });
+});
+
+describe('channelParityVerdict — MEDIUM-11, rows.unknown (readRunEvents\'s own carried read-failure fact)', () => {
+  test('a channel whose events.jsonl could not be fully read is NEVER a clean pass, even with zero readable rows', () => {
+    const rows = Object.assign([], { unknown: [{ dir: '_agent-a', error: 'EACCES: permission denied' }] });
+    const v = channelParityVerdict('_agent-a', rows, { registeredSessionKindIds: SESSION_KINDS });
+    assert.equal(v.ok, false);
+    assert.equal(v.violations.length, 1);
+    assert.equal(v.violations[0].kind, 'unmeasured');
+    assert.equal(v.violations[0].channel, '_agent-a');
+    assert.match(v.violations[0].error, /EACCES/);
+  });
+
+  test('an unmeasured channel reports BOTH the unmeasured violation AND a real double-start it could still see on the readable rows', () => {
+    const rows = Object.assign(
+      [start({ event_id: 'EV_s1', skill: 'a' }), start({ event_id: 'EV_s2', skill: 'a' })],
+      { unknown: [{ dir: '_agent-a', error: 'unparseable event line' }] },
+    );
+    const v = channelParityVerdict('_agent-a', rows, { registeredSessionKindIds: SESSION_KINDS });
+    assert.equal(v.ok, false);
+    // Not an exact count: the two dangling opens each ALSO raise their own
+    // `missing-end` (no `end` row closes either) — this test's own point is
+    // only that `unmeasured` rides alongside whatever the readable rows
+    // genuinely show, alongside them.
+    assert.ok(v.violations.some((x) => x.kind === 'unmeasured'), JSON.stringify(v.violations));
+    assert.ok(v.violations.some((x) => x.kind === 'double-start'), JSON.stringify(v.violations));
+  });
+
+  test('an excluded channel (the bridge\'s own log) stays a clean exclusion even when unreadable — not an agent/session/cycle channel, per the module header', () => {
+    const rows = Object.assign([], { unknown: [{ dir: '_bridge-x', error: 'EACCES: permission denied' }] });
+    const v = channelParityVerdict('_bridge-x', rows, { registeredSessionKindIds: SESSION_KINDS });
+    assert.equal(v.kind, 'excluded');
+    assert.equal(v.ok, true);
+    assert.deepEqual(v.violations, []);
+  });
+
+  test('describeAgentParity renders the unmeasured line naming the channel and the real read error, with no key/eventIds shape assumed', () => {
+    const rows = Object.assign([], { unknown: [{ dir: '_agent-a', error: 'EIO: i/o error' }] });
+    const r = agentParityVerdict([{ dir: '_agent-a', rows }], { registeredSessionKindIds: SESSION_KINDS });
+    const lines = describeAgentParity(r);
+    assert.ok(lines.some((l) => l.includes('PRODUCT RED') && l.includes('unmeasured') && l.includes('_agent-a') && l.includes('EIO: i/o error')));
   });
 });
 

@@ -317,6 +317,26 @@ describe('agentParitySoFar — row 206 (bead forge-8vfn.8.5.56)', () => {
     assert.ok(lines.some((l) => l.includes('PRODUCT RED') && l.includes('EV_a') && l.includes('EV_b')));
   });
 
+  // MEDIUM-11 (row 206 follow-on) — `agentParitySoFar` reads `.unknown`, so a
+  // channel whose `events.jsonl` carries a torn line (or cannot be read at
+  // all) never judges `ok` on whatever partial rows DID
+  // parse — an unmeasured channel is never a clean pass.
+  test('a torn/unparseable events.jsonl line is a product-red `unmeasured` violation, end to end through agentParitySoFar', () => {
+    const r = rootWithEmptyRegistry();
+    const dir = dispatch(r, '_agent-onboarding-agent-torn');
+    writeFileSync(join(dir, 'events.jsonl'), [
+      JSON.stringify({ event_id: 'EV_1', event_type: 'start', skill: 'onboarding-agent' }),
+      'this is not valid json at all',
+      JSON.stringify({ event_id: 'EV_2', event_type: 'end', skill: 'onboarding-agent' }),
+    ].join('\n') + '\n');
+    const { verdict, lines } = agentParitySoFar({ root: r, startedMs: 0, reapedDirs: new Set() });
+    assert.equal(verdict.ok, false);
+    const unmeasured = verdict.violations.find((v) => v.kind === 'unmeasured');
+    assert.ok(unmeasured, JSON.stringify(verdict.violations));
+    assert.equal(unmeasured.channel, dir);
+    assert.ok(lines.some((l) => l.includes('PRODUCT RED') && l.includes('unmeasured') && l.includes(dir)));
+  });
+
   test('a trailing unmatched start IS satisfied, never a product red, when the dir is in `reapedDirs` — T1 point 2', () => {
     const r = rootWithEmptyRegistry();
     const dir = dispatch(r, '_agent-onboarding-agent-z');
