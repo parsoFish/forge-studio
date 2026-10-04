@@ -63,6 +63,7 @@ const routes = knowledgeRoutes({
   sessionIsReadable: () => {
     throw new Error('unexpected session-readability probe call in this test');
   },
+  isTurnAlive: () => false,
 });
 
 /** The 17 routes the two handlers dispatch at the pin (161c5abb), in the

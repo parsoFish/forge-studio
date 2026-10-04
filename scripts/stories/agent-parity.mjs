@@ -332,7 +332,7 @@ export function describeAgentParity(verdict) {
     // group to blame; the read itself is what failed), so it gets its own
     // line shape naming the channel and the real read error verbatim.
     if (v.kind === 'unmeasured') {
-      lines.push(`[stories] agent-parity: PRODUCT RED — unmeasured channel ${v.channel} — ${v.error}`);
+      lines.push(`[stories] agent-parity: UNMEASURED — channel ${v.channel} — ${v.error}`);
       continue;
     }
     lines.push(

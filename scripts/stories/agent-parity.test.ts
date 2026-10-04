@@ -336,7 +336,7 @@ describe('channelParityVerdict — MEDIUM-11, rows.unknown (readRunEvents\'s own
     const rows = Object.assign([], { unknown: [{ dir: '_agent-a', error: 'EIO: i/o error' }] });
     const r = agentParityVerdict([{ dir: '_agent-a', rows }], { registeredSessionKindIds: SESSION_KINDS });
     const lines = describeAgentParity(r);
-    assert.ok(lines.some((l) => l.includes('PRODUCT RED') && l.includes('unmeasured') && l.includes('_agent-a') && l.includes('EIO: i/o error')));
+    assert.ok(lines.some((l) => l.includes('UNMEASURED') && l.includes('_agent-a') && l.includes('EIO: i/o error')));
   });
 });
 

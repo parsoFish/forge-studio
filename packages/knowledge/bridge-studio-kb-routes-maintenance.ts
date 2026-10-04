@@ -358,12 +358,12 @@ import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
  */
 export function createKbMaintenanceHandler(deps: {
   runFixTurn: KbDrainRunFixTurnFn;
-  /** HIGH-1 — threaded to `spawnBrainFix`'s claim; OPTIONAL like
-   *  `ensureAgentRunTail` elsewhere here — absent, no fixture pid is ever live. */
-  isTurnAlive?: (pid: number, ownershipMark: string) => boolean;
+  /** HIGH-1 — threaded to `spawnBrainFix`'s claim; required, so no caller
+   *  can dispatch without the liveness check. */
+  isTurnAlive: (pid: number, ownershipMark: string) => boolean;
 }) {
   return (req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string) =>
-    handleKbMaintenance(req, res, ctx, rawUrl, method, deps.runFixTurn, deps.isTurnAlive);
+    handleKbMaintenance(req, res, ctx, rawUrl, method, deps.isTurnAlive, deps.runFixTurn);
 }
 
 export async function handleKbMaintenance(
@@ -372,8 +372,8 @@ export async function handleKbMaintenance(
   ctx: RouteContext,
   rawUrl: string,
   method: string,
+  isTurnAlive: (pid: number, ownershipMark: string) => boolean,
   runFixTurn?: KbDrainRunFixTurnFn,
-  isTurnAlive?: (pid: number, ownershipMark: string) => boolean,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
@@ -480,7 +480,7 @@ export async function handleKbMaintenance(
           // a TOCTOU window open for no reason; resolveGuardedPath already
           // paid for the realpath walk, so its output is what gets forwarded
           // to the spawned process.
-          spawnBrainFix(ctx.forgeRoot, { kbId, file: guardedTarget.realPath, check, kind, fixHint, message, runId }, isTurnAlive ?? (() => false));
+          spawnBrainFix(ctx.forgeRoot, { kbId, file: guardedTarget.realPath, check, kind, fixHint, message, runId }, isTurnAlive);
         } catch (err) {
           // HIGH-1 — spawnBrainFix now claims a dispatch slot before it
           // spawns and can throw DispatchInFlight; map it to 409 like every

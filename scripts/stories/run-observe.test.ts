@@ -334,7 +334,7 @@ describe('agentParitySoFar — row 206 (bead forge-8vfn.8.5.56)', () => {
     const unmeasured = verdict.violations.find((v) => v.kind === 'unmeasured');
     assert.ok(unmeasured, JSON.stringify(verdict.violations));
     assert.equal(unmeasured.channel, dir);
-    assert.ok(lines.some((l) => l.includes('PRODUCT RED') && l.includes('unmeasured') && l.includes(dir)));
+    assert.ok(lines.some((l) => l.includes('UNMEASURED') && l.includes(dir)));
   });
 
   test('a trailing unmatched start IS satisfied, never a product red, when the dir is in `reapedDirs` — T1 point 2', () => {

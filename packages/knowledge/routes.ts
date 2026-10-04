@@ -159,10 +159,8 @@ export type KnowledgeRouteDeps = KbCreateDeps & KbDrainTailDeps & {
   /** HIGH-1 (row 206 follow-up, forge-8vfn.8.5.56) — same rank problem as
    *  `runFixTurn`: `spawnBrainFix`'s dispatch claim needs the real
    *  `isTurnAlive` (`@forge/sessions`, rank 4); the assembly supplies it.
-   *  OPTIONAL like `ensureAgentRunTail` above — every existing route test
-   *  in this package supplies neither and stays unaffected; absent, no
-   *  fixture pid is ever treated as a live holder. */
-  isTurnAlive?(pid: number, ownershipMark: string): boolean;
+   *  Required: a caller that forgot it would let a live holder go unseen. */
+  isTurnAlive(pid: number, ownershipMark: string): boolean;
 };
 
 export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeRouteContext> {
