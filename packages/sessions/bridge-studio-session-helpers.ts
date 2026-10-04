@@ -83,11 +83,31 @@ export type SpawnTurnOutcome =
   | { readonly ok: true; readonly spawned: boolean }
   | { readonly ok: false; readonly error: string };
 
+export type SpawnableTurnAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
+
 export type SessionHostSurface = {
   /** `spawnAgentTurn` — the detached per-kind runner spawn. */
   readonly spawnAgentTurn: (
     forgeRoot: string,
-    agentId: 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup',
+    agentId: SpawnableTurnAgentId,
+    project: string,
+    sessionId: string,
+  ) => SpawnTurnOutcome;
+  /** Row 206 part (a) — the CLAIM half of `spawnAgentTurn`, split out for a
+   *  route that must write session state (status.json, answers.json, a
+   *  revise's feedback.md, …) BEFORE the turn spawns: call this first, write
+   *  state, then `spawnClaimedAgentTurn` — never the other order, or a
+   *  refused claim (`DispatchInFlight`, thrown here uncaught — see
+   *  `@forge/kernel`'s `claimDispatchSlot`) leaves the write stranded with
+   *  nothing to undo it. A deliberate no-op under dry-bridge/no-spawn or an
+   *  unsafe sessionId — `spawnClaimedAgentTurn` makes the identical check and
+   *  reports it. */
+  readonly claimAgentTurnSlot: (forgeRoot: string, agentId: SpawnableTurnAgentId, sessionId: string) => void;
+  /** The SPAWN half: assumes `claimAgentTurnSlot` already secured the slot
+   *  (or made the claim moot) — NEVER claims again. */
+  readonly spawnClaimedAgentTurn: (
+    forgeRoot: string,
+    agentId: SpawnableTurnAgentId,
     project: string,
     sessionId: string,
   ) => SpawnTurnOutcome;
@@ -96,6 +116,22 @@ export type SessionHostSurface = {
   /** `spawnAgentDispatch` — the generic studio-agent dispatch the onboarding
    *  kickoff uses instead of a per-kind turn spawn. */
   readonly spawnAgentDispatch: (
+    forgeRoot: string,
+    slug: string,
+    runId: string,
+    project?: string,
+    inputs?: Record<string, string>,
+    sessionDir?: string,
+    costCeilingUsd?: number,
+    projectsRoot?: string,
+  ) => void;
+  /** Row 206 part (a) — the CLAIM half of `spawnAgentDispatch`, mirroring
+   *  `claimAgentTurnSlot` above: claim FIRST, write state, then
+   *  `spawnClaimedAgentDispatch`. */
+  readonly claimAgentDispatchSlot: (forgeRoot: string, slug: string, runId: string) => void;
+  /** The SPAWN half: assumes `claimAgentDispatchSlot` already secured the
+   *  slot — NEVER claims again. */
+  readonly spawnClaimedAgentDispatch: (
     forgeRoot: string,
     slug: string,
     runId: string,

@@ -10,7 +10,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -158,4 +158,203 @@ test('newRunStamp: sortable leading timestamp, non-empty random tail, charset sa
   const b = newRunStamp();
   assert.notEqual(a, b);
   assert.match(a, /^[0-9A-Za-z-]+$/, 'must be a safe path segment (no colons/dots/slashes)');
+});
+
+// ---------------------------------------------------------------------------
+// Row 206 regression (m7-e-r206-fixgate-s1 capture) — "a turn writes its
+// run-level `end` and then takes a moment to exit; LIVE must mean 'has not
+// written its end', never 'pid not yet reaped'." A holder the OS still
+// reports alive is no longer in flight once ITS OWN run-level end is on
+// disk, per `holderHasEnded` (judged against the MARK recorded when this
+// holder's claim was minted, never a value recomputed now — see the
+// double-press tests below for why the mark, not a fresh read, is load-
+// bearing).
+// ---------------------------------------------------------------------------
+
+function appendRunLevelRow(
+  logsRoot: string,
+  logDirName: string,
+  eventType: 'start' | 'end',
+  metadata: Record<string, unknown> = {},
+): void {
+  const row = {
+    event_id: `EV_${eventType}_${Math.random().toString(36).slice(2, 8)}`,
+    cycle_id: logDirName,
+    initiative_id: logDirName,
+    phase: 'architect',
+    skill: 'architect-runner',
+    event_type: eventType,
+    input_refs: [],
+    output_refs: [],
+    started_at: new Date().toISOString(),
+    metadata,
+  };
+  mkdirSync(join(logsRoot, logDirName), { recursive: true });
+  appendFileSync(join(logsRoot, logDirName, 'events.jsonl'), `${JSON.stringify(row)}\n`);
+}
+
+test('row 206 follow-up: a holder the OS reports ALIVE but whose own run-level END is already on disk (since its claim mark) is NOT in flight — the claim proceeds', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dispatch-claim-ended-'));
+  const logsRoot = join(root, '_logs');
+  try {
+    mkdirSync(logsRoot, { recursive: true });
+    // Mint the FIRST claim for real, so its own mark is recorded at the
+    // moment the slot was empty (mark = 0 — nothing in events.jsonl yet).
+    claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true });
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '4242\n'); // the "real pid" overwrite finalizeSpawnedTurn does
+    // The holder's own turn runs: a run-level start, then its run-level end.
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { session_id: 'x', phase: 'drafting' });
+    appendRunLevelRow(logsRoot, 'run-1', 'end', { session_id: 'x', phase: 'awaiting-review' });
+    // alwaysAlive simulates the OS still reporting pid 4242 as running
+    // (writing its own end and then taking a moment to exit) — the claim
+    // must still proceed.
+    assert.doesNotThrow(
+      () => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true }),
+      'a holder whose own run-level end is already on disk must not refuse a live claim as DispatchInFlight',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 206 follow-up: a holder the OS reports ALIVE with only an OPEN run-level start (no end yet, since its claim mark) is still refused — 409', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dispatch-claim-open-start-'));
+  const logsRoot = join(root, '_logs');
+  try {
+    mkdirSync(logsRoot, { recursive: true });
+    claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true });
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '4242\n');
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { session_id: 'x', phase: 'drafting' });
+    assert.throws(
+      () => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true }),
+      (err: unknown) => err instanceof DispatchInFlight,
+      'an open start with no end yet must still refuse a second claim while the holder is alive',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 206 follow-up: hook sub-turns and pricing-only end rows are never mistaken for the run-level boundary', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dispatch-claim-hook-pricing-'));
+  const logsRoot = join(root, '_logs');
+  try {
+    mkdirSync(logsRoot, { recursive: true });
+    claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true });
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '4242\n');
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { session_id: 'x', phase: 'drafting' });
+    // A hook fired mid-turn: its own start/end pair, same dir, NOT the
+    // run-level boundary (no `phase` in its metadata either way).
+    appendFileSync(
+      join(logsRoot, 'run-1', 'events.jsonl'),
+      `${JSON.stringify({ event_id: 'EV_hook', phase: 'architect', skill: 'hook:pre-tool', event_type: 'end', input_refs: [], output_refs: [], started_at: new Date().toISOString(), metadata: { session_id: 'x', phase: 'drafting' } })}\n`,
+    );
+    appendFileSync(
+      join(logsRoot, 'run-1', 'events.jsonl'),
+      `${JSON.stringify({ event_id: 'EV_price', phase: 'architect', skill: 'architect-runner', event_type: 'end', input_refs: [], output_refs: [], started_at: new Date().toISOString(), metadata: { session_id: 'x', phase: 'drafting', priced: false } })}\n`,
+    );
+    // Still no REAL run-level end (just the open start + a hook end + a
+    // pricing-only end) — the holder must still read as in flight.
+    assert.throws(
+      () => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true }),
+      (err: unknown) => err instanceof DispatchInFlight,
+      'a hook end or a pricing-only end must never be read as the turn\'s own run-level boundary',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 206 follow-up: sessionTurnShape requires metadata.phase — a standalone (runAgent/fix-turn) end with no phase key still counts as the run-level boundary when sessionTurnShape is OMITTED', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dispatch-claim-standalone-'));
+  const logsRoot = join(root, '_logs');
+  try {
+    mkdirSync(logsRoot, { recursive: true });
+    // No `sessionTurnShape` — the standalone (runAgent/fix-turn) shape, whose
+    // run-level rows carry NO metadata.phase at all.
+    claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive);
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '4242\n');
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { agent_slug: 'x' });
+    appendRunLevelRow(logsRoot, 'run-1', 'end', { agent_slug: 'x' });
+    assert.doesNotThrow(
+      () => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive),
+      'a standalone channel\'s own end (no metadata.phase) must still free the slot when sessionTurnShape is not requested',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The amendment: "last run-level row is an end -> finished" is ALSO true for
+// a holder that was JUST reclaimed and has not written its own start yet —
+// for the first moments of the new turn the log still ends with the
+// PREVIOUS holder's end. The mark recorded at claim time (not a value
+// recomputed now) is what tells the two apart: row 202's double-start, two
+// dispatches 5ms apart, both spawned before either logged.
+// ---------------------------------------------------------------------------
+
+test('row 202 double-start (mark-based fix): a log that ALREADY ends in an end, then two back-to-back dispatches -> exactly the FIRST claims, the second is refused — the second must not read the FIRST holder\'s pre-mark history as its own', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dispatch-claim-double-press-'));
+  const logsRoot = join(root, '_logs');
+  try {
+    mkdirSync(logsRoot, { recursive: true });
+    // History: a PREVIOUS turn (already reclaimed away) ran to completion.
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { session_id: 'x', phase: 'drafting' });
+    appendRunLevelRow(logsRoot, 'run-1', 'end', { session_id: 'x', phase: 'awaiting-review' });
+    // A dead pid names the old (already-finished) holder — the FIRST
+    // dispatch below reclaims it exactly like the existing dead-pid test.
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '9999\n');
+
+    // Dispatch attempt 1 — reclaims the dead holder, mints a NEW mark at the
+    // CURRENT end of the file (i.e. past the history above).
+    claimDispatchSlot(root, 'run-1', 'run-1', neverAlive, { sessionTurnShape: true });
+    // The "real spawn" step a caller does right after a successful claim:
+    // overwrite the placeholder with the new holder's real (ALIVE) pid.
+    // Its own turn has NOT written anything yet — the exact boot-window
+    // this fix targets.
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '4242\n');
+
+    // Dispatch attempt 2 — 5ms later, before holder 4242 has written its own
+    // start. Without the mark, the LAST run-level row in the whole file is
+    // still the PREVIOUS holder's `end`, which would wrongly read as
+    // "finished" and spawn a SECOND child. With the mark, the window since
+    // THIS holder's own claim is empty -> not ended -> still refused.
+    assert.throws(
+      () => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true }),
+      (err: unknown) => {
+        assert.ok(err instanceof DispatchInFlight);
+        assert.equal((err as DispatchInFlight).holderPid, 4242, 'must name the just-claimed holder, not the old dead one');
+        return true;
+      },
+      'a holder that was JUST reclaimed and has not written its own start yet must still refuse a concurrent second claim',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 202 double-start (mark-based fix, positive): once the reclaimed holder writes its OWN end, a THIRD dispatch succeeds', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dispatch-claim-double-press-positive-'));
+  const logsRoot = join(root, '_logs');
+  try {
+    mkdirSync(logsRoot, { recursive: true });
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { session_id: 'x', phase: 'drafting' });
+    appendRunLevelRow(logsRoot, 'run-1', 'end', { session_id: 'x', phase: 'awaiting-review' });
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '9999\n');
+
+    claimDispatchSlot(root, 'run-1', 'run-1', neverAlive, { sessionTurnShape: true });
+    writeFileSync(join(logsRoot, 'run-1', 'turn.pid'), '4242\n');
+    assert.throws(() => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true }), DispatchInFlight);
+
+    // Holder 4242 now writes its OWN start+end (since the mark) and exits.
+    appendRunLevelRow(logsRoot, 'run-1', 'start', { session_id: 'x', phase: 'drafting' });
+    appendRunLevelRow(logsRoot, 'run-1', 'end', { session_id: 'x', phase: 'awaiting-review' });
+    assert.doesNotThrow(
+      () => claimDispatchSlot(root, 'run-1', 'run-1', alwaysAlive, { sessionTurnShape: true }),
+      'once the CURRENT holder\'s own end is on disk, a later dispatch must proceed',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -764,7 +764,9 @@ export async function handleOnboardingBrief(
   }
   const inputs = { northStar: brief };
 
-  // SYNC INVARIANT: no await between the caller's status read and the writes.
+  // Row 206 part (a) — claim BEFORE either write. SYNC INVARIANT: no await
+  // between the caller's status read and the writes.
+  ctx.claimAgentDispatchSlot(ctx.forgeRoot, 'onboarding-agent', runId);
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], renderOnboardingPrompt(inputs)) === null ||
     guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'running' }) === null
@@ -780,7 +782,7 @@ export async function handleOnboardingBrief(
     event_type: 'log', input_refs: [], output_refs: [],
     message: 'agent-run.dispatched', metadata: { agent_slug: 'onboarding-agent', project },
   });
-  ctx.spawnAgentDispatch(
+  ctx.spawnClaimedAgentDispatch(
     ctx.forgeRoot, 'onboarding-agent', runId, project, inputs,
     join(projectsRoot, ...dirSegs), undefined, ctx.projectsRoot,
   );

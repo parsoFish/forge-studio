@@ -492,6 +492,10 @@ export async function handleDemoRoutes(
         sendJson(res, 409, { error: `session is not awaiting review (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
         return true;
       }
+      // Row 206 part (a) — claim BEFORE this write: the m7-e-r206-fixgate-s1
+      // capture is this exact route writing `phase: 'locking'` and then
+      // finding the prior turn's exit window still live.
+      ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', body.sessionId);
       if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
         ...status,
         phase: 'locking',
@@ -500,7 +504,7 @@ export async function handleDemoRoutes(
         sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
         return true;
       }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
+      ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
     } catch (err) {

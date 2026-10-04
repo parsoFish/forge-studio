@@ -179,6 +179,195 @@ test('row 206 (stale claim): a turn.pid naming a DEAD pid is removed and reclaim
 // dispatch`). Same claim, keyed on runId instead of sessionId.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Row 206 follow-up (m7-e-r206-fixgate-s1 capture) — "a turn writes its
+// run-level `end` and then takes a moment to exit; LIVE must mean 'has not
+// written its end', never 'pid not yet reaped'." These three stand-in CLIs
+// write REAL run-level rows (matching `runKindTurn`'s own
+// `metadata.phase`-bearing shape) into the architect session's own
+// `events.jsonl`, so the claim's `sessionTurnShape: true` discrimination is
+// exercised against real file content, not a fixture shaped by hand.
+// ---------------------------------------------------------------------------
+
+/** Writes spawned.json, then a run-level start+end pair into the session's
+ *  own events.jsonl, then stays alive for `aliveMs` more before exiting —
+ *  the captured evidence's own shape (end written, exit still pending). */
+function writeEndedStubCli(root: string, aliveMs: number): void {
+  mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
+  writeFileSync(
+    join(root, 'apps', 'forge', 'cli.ts'),
+    [
+      "import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const sessionId = process.argv[4];", // argv: ['architect', 'run', sessionId, '--project', project]
+      "const root = join(import.meta.dirname, '..', '..');",
+      "writeFileSync(join(root, 'spawned.json'), JSON.stringify({ argv: process.argv.slice(2), pid: process.pid }));",
+      "const logDir = join(root, '_logs', `_architect-${sessionId}`);",
+      'mkdirSync(logDir, { recursive: true });',
+      "const row = (type, phase) => JSON.stringify({ event_id: `EV_${type}_${process.pid}`, phase: 'architect', skill: 'architect-runner', event_type: type, input_refs: [], output_refs: [], started_at: new Date().toISOString(), metadata: { session_id: sessionId, phase } }) + '\\n';",
+      "appendFileSync(join(logDir, 'events.jsonl'), row('start', 'drafting'));",
+      "appendFileSync(join(logDir, 'events.jsonl'), row('end', 'awaiting-review'));",
+      `setTimeout(() => process.exit(0), ${aliveMs});`,
+      '',
+    ].join('\n'),
+  );
+}
+
+/** Writes spawned.json and a run-level START ONLY — never an end — then
+ *  stays alive forever (SIGTERM-ended), for the "open start" refusal test. */
+function writeOpenStartStubCli(root: string): void {
+  mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
+  writeFileSync(
+    join(root, 'apps', 'forge', 'cli.ts'),
+    [
+      "import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const sessionId = process.argv[4];",
+      "const root = join(import.meta.dirname, '..', '..');",
+      "writeFileSync(join(root, 'spawned.json'), JSON.stringify({ argv: process.argv.slice(2), pid: process.pid }));",
+      "const logDir = join(root, '_logs', `_architect-${sessionId}`);",
+      'mkdirSync(logDir, { recursive: true });',
+      "appendFileSync(join(logDir, 'events.jsonl'), JSON.stringify({ event_id: `EV_start_${process.pid}`, phase: 'architect', skill: 'architect-runner', event_type: 'start', input_refs: [], output_refs: [], started_at: new Date().toISOString(), metadata: { session_id: sessionId, phase: 'drafting' } }) + '\\n');",
+      'setInterval(() => {}, 1000);',
+      '',
+    ].join('\n'),
+  );
+}
+
+/** Writes spawned.json immediately, but waits `delayMs` before writing ANY
+ *  run-level row — the exact boot window a double-press races: the real pid
+ *  is already on disk (turn.pid), but the child has not logged its own
+ *  start yet. */
+function writeDelayedStubCli(root: string, delayMs: number): void {
+  mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
+  writeFileSync(
+    join(root, 'apps', 'forge', 'cli.ts'),
+    [
+      "import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const sessionId = process.argv[4];",
+      "const root = join(import.meta.dirname, '..', '..');",
+      "writeFileSync(join(root, 'spawned.json'), JSON.stringify({ argv: process.argv.slice(2), pid: process.pid }));",
+      "const logDir = join(root, '_logs', `_architect-${sessionId}`);",
+      'mkdirSync(logDir, { recursive: true });',
+      "const row = (type, phase) => JSON.stringify({ event_id: `EV_${type}_${process.pid}`, phase: 'architect', skill: 'architect-runner', event_type: type, input_refs: [], output_refs: [], started_at: new Date().toISOString(), metadata: { session_id: sessionId, phase } }) + '\\n';",
+      `setTimeout(() => {`,
+      "  appendFileSync(join(logDir, 'events.jsonl'), row('start', 'drafting'));",
+      "  appendFileSync(join(logDir, 'events.jsonl'), row('end', 'awaiting-review'));",
+      `  setTimeout(() => process.exit(0), 1500);`,
+      `}, ${delayMs});`,
+      '',
+    ].join('\n'),
+  );
+}
+
+function readEventsText(sessionId: string): string {
+  try {
+    return readFileSync(join(forgeRoot, '_logs', `_architect-${sessionId}`, 'events.jsonl'), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+test('row 206 follow-up (REAL spawn): a holder still alive but whose own run-level END is already written -> the next dispatch proceeds, exactly one NEW child', async () => {
+  const sessionId = `row206-ended-${Date.now()}`;
+  writeEndedStubCli(forgeRoot, 2000);
+  rmSync(join(forgeRoot, 'spawned.json'), { force: true });
+
+  const first = spawnAgentTurn(forgeRoot, 'architect', 'demoproj', sessionId);
+  assert.deepEqual(first, { ok: true, spawned: true });
+  await waitFor(() => existsSync(join(forgeRoot, 'spawned.json')), 5000);
+  const firstPid = readTurnPid(sessionId);
+  livePids.push(firstPid);
+
+  // Wait for the child's own run-level end, while it is STILL ALIVE (its
+  // 2000ms sleep has not elapsed).
+  await waitFor(() => readEventsText(sessionId).includes('"event_type":"end"'), 5000);
+  assert.doesNotThrow(() => process.kill(firstPid, 0), 'the holder must still be alive at the moment of the second dispatch');
+
+  const second = spawnAgentTurn(forgeRoot, 'architect', 'demoproj', sessionId);
+  assert.deepEqual(second, { ok: true, spawned: true }, 'a holder that already wrote its own end must not refuse the next dispatch, even while its process is still exiting');
+  await waitFor(() => readTurnPid(sessionId) !== firstPid, 5000);
+  const secondPid = readTurnPid(sessionId);
+  assert.notEqual(secondPid, firstPid, 'the second dispatch must be a genuinely NEW child');
+  livePids.push(secondPid);
+
+  process.kill(firstPid, 'SIGKILL'); // best-effort — it may have already exited on its own
+  process.kill(secondPid, 'SIGTERM');
+  await waitForExit(secondPid);
+  writeStubCli(forgeRoot); // restore the default stand-in for any test that follows
+});
+
+test('row 206 follow-up (REAL spawn): a holder alive with only an OPEN run-level start (no end) is still refused as DispatchInFlight', async () => {
+  const sessionId = `row206-openstart-${Date.now()}`;
+  writeOpenStartStubCli(forgeRoot);
+  rmSync(join(forgeRoot, 'spawned.json'), { force: true });
+
+  const first = spawnAgentTurn(forgeRoot, 'architect', 'demoproj', sessionId);
+  assert.deepEqual(first, { ok: true, spawned: true });
+  await waitFor(() => existsSync(join(forgeRoot, 'spawned.json')), 5000);
+  const firstPid = readTurnPid(sessionId);
+  livePids.push(firstPid);
+  await waitFor(() => readEventsText(sessionId).includes('"event_type":"start"'), 5000);
+
+  assert.throws(
+    () => spawnAgentTurn(forgeRoot, 'architect', 'demoproj', sessionId),
+    (err: unknown) => err instanceof DispatchInFlight,
+    'an open start with no end yet must refuse a second dispatch while the holder is alive',
+  );
+
+  process.kill(firstPid, 'SIGTERM');
+  await waitForExit(firstPid);
+  writeStubCli(forgeRoot);
+});
+
+test('row 202 double-start (REAL spawn, mark-based fix): two dispatches back-to-back right after a reclaim -> exactly ONE new child, the second gets 409', async () => {
+  const sessionId = `row202-doublepress-${Date.now()}`;
+  const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+  mkdirSync(logDir, { recursive: true });
+  // Pre-existing history: a PREVIOUS turn already ran to completion in this
+  // SAME session dir, and its holder has since died (dead-pid stale claim —
+  // the ordinary reclaim path).
+  const priorEnd = JSON.stringify({
+    event_id: 'EV_prior_end', phase: 'architect', skill: 'architect-runner', event_type: 'end',
+    input_refs: [], output_refs: [], started_at: new Date().toISOString(),
+    metadata: { session_id: sessionId, phase: 'awaiting-review' },
+  });
+  writeFileSync(join(logDir, 'events.jsonl'), `${JSON.stringify({ event_id: 'EV_prior_start', phase: 'architect', skill: 'architect-runner', event_type: 'start', input_refs: [], output_refs: [], started_at: new Date().toISOString(), metadata: { session_id: sessionId, phase: 'drafting' } })}\n${priorEnd}\n`);
+  const deadHolder = await deadPid();
+  writeFileSync(join(logDir, 'turn.pid'), `${deadHolder}\n`);
+
+  // The real holder, once dispatched, waits 1200ms before writing ANYTHING —
+  // the exact boot window row 202's double-start raced.
+  writeDelayedStubCli(forgeRoot, 1200);
+  rmSync(join(forgeRoot, 'spawned.json'), { force: true });
+
+  const first = spawnAgentTurn(forgeRoot, 'architect', 'demoproj', sessionId);
+  assert.deepEqual(first, { ok: true, spawned: true }, 'the first dispatch reclaims the dead prior holder');
+  const firstPid = readTurnPid(sessionId);
+  assert.notEqual(firstPid, deadHolder);
+  livePids.push(firstPid);
+
+  // Immediately (no wait) — the child has not written its own start/end yet
+  // (events.jsonl still ends with the PRIOR holder's `end`). Without the
+  // claim mark this would misread that stale `end` as "this holder is
+  // finished" and spawn a SECOND child.
+  assert.throws(
+    () => spawnAgentTurn(forgeRoot, 'architect', 'demoproj', sessionId),
+    (err: unknown) => {
+      assert.ok(err instanceof DispatchInFlight);
+      assert.equal((err as DispatchInFlight).holderPid, firstPid, 'must name the just-claimed REAL holder, not the dead prior one');
+      return true;
+    },
+    'a dispatch immediately after a reclaim must not spawn a second child before the new holder has logged anything',
+  );
+  assert.equal(readTurnPid(sessionId), firstPid, 'the refused second dispatch must not touch the live holder\'s turn.pid');
+
+  process.kill(firstPid, 'SIGTERM');
+  await waitForExit(firstPid);
+  writeStubCli(forgeRoot);
+});
+
 test('row 206 (spawnAgentDispatch): two dispatches for one run id -> exactly one child born, the second refused as a typed DispatchInFlight', async () => {
   const runId = `row206-dispatch-onestart-${Date.now()}`;
   rmSync(join(forgeRoot, 'spawned.json'), { force: true });

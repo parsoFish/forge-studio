@@ -343,8 +343,11 @@ export async function handleDemoBrief(
   }
   const brief = parsed.answers[0].answer;
 
-  // SYNC INVARIANT: no await between the caller's status read and either
-  // write below — see this file's header note.
+  // Row 206 part (a) — claim BEFORE either write below: a refused dispatch
+  // must leave prompt.md/status.json untouched. SYNC INVARIANT: no await
+  // between the caller's status read and either write — see this file's
+  // header note.
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', sessionId);
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
     guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: 1, prompt: brief }) === null
@@ -352,7 +355,7 @@ export async function handleDemoBrief(
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
   }
-  ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+  ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
   ctx.broadcastKindChanged('demo');
   sendJson(res, 200, { ok: true, phase: 'generating', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
@@ -380,11 +383,12 @@ export async function handleDemoVerdict(
   // kb-cleanup's now-fixed `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) —
   // this file's header note.
   if (verdict === 'reject') {
+    ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', sessionId);
     if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
       sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
       return;
     }
-    ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+    ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
     ctx.broadcastKindChanged('demo');
     sendJson(res, 200, { ok: true, phase: 'abandoned', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
     return;
@@ -397,6 +401,7 @@ export async function handleDemoVerdict(
     sendJson(res, 400, { error: `generation must be an integer >= 1, got ${JSON.stringify(body.generation)}` }, origin);
     return;
   }
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', sessionId);
   if (
     guardedWriteSessionStatus(projectsRoot, dirSegs, {
       ...status,
@@ -407,7 +412,7 @@ export async function handleDemoVerdict(
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
   }
-  ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+  ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
   ctx.broadcastKindChanged('demo');
   sendJson(res, 200, { ok: true, phase: 'locking', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }

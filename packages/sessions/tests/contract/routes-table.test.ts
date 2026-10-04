@@ -35,6 +35,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     broadcastInstructionsChanged: () => {},
     broadcastProjectBrainChanged: () => {},
     spawnAgentDispatch: () => {},
+    claimAgentDispatchSlot: () => {},
+    spawnClaimedAgentDispatch: () => {},
     newRunStamp: () => 'stamp',
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
     broadcastDemoChanged: () => {},
@@ -45,6 +47,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     // dispatch one unnoticed.
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     spawnAgentTurn: () => ({ ok: true, spawned: false }),
+    claimAgentTurnSlot: () => {},
+    spawnClaimedAgentTurn: () => ({ ok: true, spawned: false }),
     spawnAgentSpecs: {},
     safeParseJson: () => null,
     servedFileHeaders: () => ({}),

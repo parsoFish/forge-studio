@@ -232,6 +232,8 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 409, { error: `session is not awaiting a brief (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
         return true;
       }
+      // Row 206 part (a) — claim BEFORE either write below.
+      ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', body.sessionId);
       if (
         guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], body.brief ?? '') === null ||
         guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs, { ...status, phase: 'analyzing', prompt: body.brief ?? '' }) === null
@@ -239,7 +241,7 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
       }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
+      ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
     } catch (err) {
@@ -273,11 +275,14 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 409, { error: `session is not awaiting review (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
         return true;
       }
+      // Row 206 part (a) — claim BEFORE the write, but only on the `approve`
+      // path: `abandon` never spawns, so it has no claim to protect.
+      if (approve) ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', body.sessionId);
       if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs, { ...status, phase: approve ? 'committing' : 'abandoned' }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
       }
-      if (approve) ctx.spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
+      if (approve) ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       // Only approve spawns — abandon is exempt-local and carries no marker.
       sendJson(res, 200, { ok: true, ...(approve ? ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/approve', body.sessionId) : {}) }, origin);

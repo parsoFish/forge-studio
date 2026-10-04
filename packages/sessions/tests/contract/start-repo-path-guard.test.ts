@@ -55,7 +55,11 @@ function deps(projectsRoot: string): SessionsRouteDeps {
     // dispatch one unnoticed.
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     spawnAgentTurn: () => ({ ok: true, spawned: false }),
+    claimAgentTurnSlot: () => {},
+    spawnClaimedAgentTurn: () => ({ ok: true, spawned: false }),
     spawnAgentDispatch: () => {},
+    claimAgentDispatchSlot: () => {},
+    spawnClaimedAgentDispatch: () => {},
     spawnAgentSpecs: {},
     safeParseJson: () => null,
     servedFileHeaders: () => ({}),

@@ -9,7 +9,7 @@
  *                                  row landing on it, i.e. nothing to re-run.
  *   2. `reviseSpawnAgentId null` — a kind with a producer but no wired turn
  *                                  spawner.
- *   3. a failed spawn (A7)       — `spawnAgentTurn` reporting `{ok:false}`.
+ *   3. a failed spawn (A7)       — `spawnClaimedAgentTurn` reporting `{ok:false}`.
  *
  * All three are driven here against a SYNTHETIC registry and INJECTED deps,
  * through this package's own route TABLE — the same table `apps/forge`
@@ -102,7 +102,12 @@ before(async () => {
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), yaml.dump(SYNTHETIC_KINDS), 'utf8');
 
   deps = affordanceDeps(forgeRoot, {
-    spawnAgentTurn: () => { spawnCalls += 1; return spawnOutcome; },
+    // Row 206 part (a) — `handleGenericRevise` claims first, then spawns
+    // UNDER the held claim via `spawnClaimedAgentTurn`, never the one-call
+    // `spawnAgentTurn`; the override must sit on the same seam the route
+    // actually calls, or this file's A7 (failed-spawn) case would silently
+    // exercise the inert default instead of `spawnOutcome`/`spawnCalls`.
+    spawnClaimedAgentTurn: () => { spawnCalls += 1; return spawnOutcome; },
   });
 });
 

@@ -13,6 +13,13 @@
  * `SPAWN_AGENT_SPECS`, `SAFE_INPUT_KEY_RE` and `newRunStamp` are exported:
  * `startBridge` (still in ui-bridge.ts) imports them back to wire into
  * `makeRouteTable`'s deps, which the carved session/agents routes inject.
+ * Row 206 part (a) also exports the claim/spawn SPLIT each one-call helper
+ * is built from — `claimAgentTurnSlot`/`spawnClaimedAgentTurn` and
+ * `claimAgentDispatchSlot`/`spawnClaimedAgentDispatch` — for a route that
+ * must write session state BEFORE the turn/run dispatches (claim first,
+ * write state, spawn under the held claim); `spawnAgentTurn`/
+ * `spawnAgentDispatch` themselves stay the claim-then-spawn convenience for
+ * a route with no state of its own to protect.
  * The five `/api/architect/*` arms carved to `@forge/sessions`
  * (`bridge-studio-architect.ts`); `/api/plan-verdict` did NOT, and the reason
  * is a dependency measurement rather than an ownership opinion: `ctx.mergePr`,
@@ -187,14 +194,59 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
     return { ok: false, error: 'unsafe sessionId (path-traversal risk) — refusing to spawn' };
   }
+  claimAgentTurnSlotUnguarded(forgeRoot, agentId, sessionId);
+  return spawnUnderHeldAgentTurnClaim(forgeRoot, agentId, project, sessionId);
+}
+
+/** `claimDispatchSlot` call shared by `spawnAgentTurn` and
+ *  `claimAgentTurnSlot` below — no dry-bridge/safe-id guard of its own
+ *  (each exported caller already ran its own). */
+function claimAgentTurnSlotUnguarded(forgeRoot: string, agentId: SpawnableAgentId, sessionId: string): void {
+  const { logPrefix } = SPAWN_AGENT_SPECS[agentId];
+  // Row 206 — refuse a second live turn for this session BEFORE anything
+  // spawns. Throws DispatchInFlight; deliberately NOT caught here (see
+  // claimDispatchSlot's own doc) so a caller that doesn't explicitly handle
+  // it sees a loud, real failure instead of this helper silently no-opping
+  // into a route's 200. `sessionTurnShape: true` — every `SpawnableAgentId`
+  // runs through `runKindTurn`/`interactive-runner.ts`'s shared plumbing,
+  // which stamps `metadata.phase` on its own run-level start/end.
+  claimDispatchSlot(forgeRoot, `_${logPrefix}-${sessionId}`, sessionId, isTurnAlive, { sessionTurnShape: true });
+}
+
+/**
+ * Row 206 part (a) follow-up — the CLAIM half of `spawnAgentTurn`, split out
+ * so a route that must write session state (status.json, answers.json, a
+ * revise's feedback.md, …) can claim the slot BEFORE that write: a refused
+ * claim then leaves the write un-made, and the UI can retry on the SAME
+ * state it last saw. Pair with `spawnClaimedAgentTurn` below — call this
+ * first, write state, then call that. `spawnAgentTurn` itself stays the
+ * claim-then-spawn-in-one-call convenience for a route with no state of its
+ * own to protect (a fresh session's `/start`, or a rerun with nothing to
+ * roll back).
+ */
+export function claimAgentTurnSlot(forgeRoot: string, agentId: SpawnableAgentId, sessionId: string): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return; // nothing to claim; spawnClaimedAgentTurn below no-ops the same way
+  if (!isSafeRunId(sessionId)) return; // spawnClaimedAgentTurn's identical check reports this to the caller
+  claimAgentTurnSlotUnguarded(forgeRoot, agentId, sessionId);
+}
+
+/** The SPAWN half: assumes `claimAgentTurnSlot` already secured the slot (or
+ *  that dry-bridge/no-spawn made the claim moot) — NEVER claims again. */
+export function spawnClaimedAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return { ok: true, spawned: false };
+  if (!isSafeRunId(sessionId)) {
+    console.error(`spawnClaimedAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
+    return { ok: false, error: 'unsafe sessionId (path-traversal risk) — refusing to spawn' };
+  }
+  return spawnUnderHeldAgentTurnClaim(forgeRoot, agentId, project, sessionId);
+}
+
+/** The mkdir+spawn+finalize body shared by `spawnAgentTurn` (claims then
+ *  calls this) and `spawnClaimedAgentTurn` (assumes the claim already
+ *  held) — ONE spawn mechanism, never two copies drifting apart. */
+function spawnUnderHeldAgentTurnClaim(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
   const { argvPrefix, logPrefix } = SPAWN_AGENT_SPECS[agentId];
   const logDirName = `_${logPrefix}-${sessionId}`;
-  // Row 206 — refuse a second live turn for this session BEFORE anything
-  // spawns. Throws DispatchInFlight; deliberately NOT caught by the
-  // try/catch below (see claimDispatchSlot's own doc) so a caller that
-  // doesn't explicitly handle it sees a loud, real failure instead of this
-  // helper silently no-opping into a route's 200.
-  claimDispatchSlot(forgeRoot, logDirName, sessionId, isTurnAlive);
   try {
     const logDir = join(forgeRoot, '_logs', logDirName);
     mkdirSync(logDir, { recursive: true });
@@ -306,6 +358,43 @@ export function spawnAgentDispatch(
   /** Bead forge-c6h — see `buildAgentDispatchArgs`'s matching parameter. */
   projectsRoot?: string,
 ): void {
+  claimAgentDispatchSlot(forgeRoot, slug, runId);
+  spawnClaimedAgentDispatch(forgeRoot, slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
+}
+
+/**
+ * Row 206 part (a) follow-up — the CLAIM half of `spawnAgentDispatch`, split
+ * out for a route that writes session state (e.g. onboarding's brief —
+ * `prompt.md` + `status.json` phase `running`) before dispatching: claim
+ * FIRST, write state, then `spawnClaimedAgentDispatch`. A deliberate no-op
+ * (never throws) under dry-bridge/no-spawn or an unsafe slug/runId —
+ * `spawnClaimedAgentDispatch` below makes the identical check and reports
+ * it; this half only ever needs to either claim or get out of the way.
+ */
+export function claimAgentDispatchSlot(forgeRoot: string, slug: string, runId: string): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) return;
+  // Row 206 — refuse a second live dispatch for this run id BEFORE anything
+  // spawns (same seam as spawnAgentTurn's claimDispatchSlot call above).
+  // Deliberately uncaught here, same as spawnAgentTurn's own claim: a
+  // caller that writes state after this call must see the refusal before
+  // it ever writes anything.
+  claimDispatchSlot(forgeRoot, runId, runId, isTurnAlive);
+}
+
+/** The SPAWN half: assumes `claimAgentDispatchSlot` already secured the
+ *  slot (or made the claim moot) — NEVER claims again. Dry-bridge / no-spawn
+ *  guarded; best-effort (a spawn error never bubbles into the request). */
+export function spawnClaimedAgentDispatch(
+  forgeRoot: string,
+  slug: string,
+  runId: string,
+  project?: string,
+  inputs?: Record<string, string>,
+  sessionDir?: string,
+  costCeilingUsd?: number,
+  projectsRoot?: string,
+): void {
   // Argv construction is pure (no I/O, no side effects) — safe to build
   // above the spawn-suppression early-return below, so it stays observable
   // as ordinary function composition rather than something only a real spawn
@@ -313,17 +402,10 @@ export function spawnAgentDispatch(
   const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
-    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
+    console.error(`spawnClaimedAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
     return;
   }
   const args = ['--experimental-strip-types', 'apps/forge/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
-  // Row 206 — refuse a second live dispatch for this run id BEFORE anything
-  // spawns (same seam as spawnAgentTurn's claimDispatchSlot call above).
-  // Deliberately OUTSIDE the best-effort try/catch below: this helper stays
-  // "a spawn error never bubbles into the request" for every OTHER failure,
-  // but a dispatch-in-flight refusal is the one failure every caller must
-  // see, so it is thrown before entering the swallowing try.
-  claimDispatchSlot(forgeRoot, runId, runId, isTurnAlive);
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });

@@ -232,6 +232,13 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       // module's header); injecting it here is what keeps the carve at zero new
       // boundary rows in either direction.
       spawnAgentTurn: deps.spawnAgentTurn,
+      // Row 206 part (a) — the claim/spawn split a route uses when it must
+      // write session state BEFORE the turn/run dispatches (see
+      // `SessionHostSurface`'s own doc on each pair).
+      claimAgentTurnSlot: deps.claimAgentTurnSlot,
+      spawnClaimedAgentTurn: deps.spawnClaimedAgentTurn,
+      claimAgentDispatchSlot: deps.claimAgentDispatchSlot,
+      spawnClaimedAgentDispatch: deps.spawnClaimedAgentDispatch,
       spawnAgentSpecs: deps.spawnAgentSpecs,
       safeParseJson: deps.safeParseJson,
       servedFileHeaders: deps.servedFileHeaders,

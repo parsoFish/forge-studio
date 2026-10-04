@@ -378,6 +378,11 @@ export async function handleArchitectRoutes(
         const priorRaw = guardedReadFile(ctx.projectsRoot, [...dirSegs, 'answers.json']);
         const prior = (priorRaw !== null ? ctx.safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
         round = prior.length + 1;
+        // Row 206 part (a) — claim BEFORE this write: the m7-e-r206-fixgate-s1
+        // capture is exactly this route writing `phase: 'interviewing'` and
+        // THEN finding the prior turn's exit window still live — a refused
+        // claim must leave answers.json/status.json untouched.
+        ctx.claimAgentTurnSlot(ctx.forgeRoot, 'architect', body.sessionId);
         if (
           guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
           guardedWriteStatus(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
@@ -388,7 +393,7 @@ export async function handleArchitectRoutes(
       } finally {
         if (release) await release().catch(() => {});
       }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
+      ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, round, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);
     } catch (err) {

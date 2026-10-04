@@ -116,6 +116,15 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
     broadcastProjectBrainChanged: deps.broadcastProjectBrainChanged,
     spawnAgentDispatch: deps.spawnAgentDispatch,
+    // Row 206 part (a) — the claim/spawn split: a route that must write
+    // session state before dispatching claims first via these, instead of
+    // the one-call `spawnAgentTurn`/`spawnAgentDispatch` above (which would
+    // claim a SECOND time if called after an explicit claim already holds
+    // the slot).
+    claimAgentTurnSlot: deps.claimAgentTurnSlot,
+    spawnClaimedAgentTurn: deps.spawnClaimedAgentTurn,
+    claimAgentDispatchSlot: deps.claimAgentDispatchSlot,
+    spawnClaimedAgentDispatch: deps.spawnClaimedAgentDispatch,
     newRunStamp: deps.newRunStamp,
     safeInputKeyRe: deps.safeInputKeyRe,
     broadcastDemoChanged: deps.broadcastDemoChanged,
