@@ -15,7 +15,7 @@
  * or similar handle in the codebase) — waits for its first work item to be
  * genuinely IN FLIGHT (never for it to finish — ROW 149 ROUND 2's own beat
  * comment explains why that shape is vacuous), stops the run mid-build,
- * confirms the halt landed on the product's own `operator-stop` terms with
+ * confirms the stop landed on the product's own `operator-stop` terms with
  * the finished work item complete and the next one never started, resumes
  * it, and confirms the finished work item survived while the unfinished one
  * resumes rather than being skipped. It ends there — the ruling is "do not
@@ -413,7 +413,7 @@ export const ACT_2 = [
       // `active` instead presses stop WHILE WI-1 is still building: WI-1
       // finishes naturally (nothing aborts a live turn), and the very next
       // checkpoint — before WI-2's worktree would be created — is where the
-      // halt actually lands, which is what makes "WI-2 was genuinely
+      // stop actually lands, which is what makes "WI-2 was genuinely
       // unfinished at the stop" a checked fact two beats from here, not an
       // assumption.
       //
@@ -488,14 +488,14 @@ export const ACT_2 = [
       // on its own click, no arm-then-confirm step. `outcome-control` flips
       // SYNCHRONOUSLY once the POST resolves (`RunControls.tsx`'s `act()`),
       // which is what this beat's own `expect.data` reads — the wait below
-      // is for the SEPARATE, asynchronous fact that the halt actually landed
+      // is for the SEPARATE, asynchronous fact that the stop actually landed
       // on disk, read through `cycleOf`/`terminal` (a queue-directory
       // transition, `beats-queue-terminal.mjs`) rather than through this
       // page's own DOM, which never refreshes on its own (this file's
       // header). `terminal: 'failed'` is `_queue/failed/`, the SAME state
       // every other terminal but `ready-for-review` reads by mtime
       // (`beats-queue-terminal.mjs`'s own header). UNMEASURED bound: the
-      // halt lands at the next clean node/work-item boundary (ADR 028's
+      // stop lands at the next clean node/work-item boundary (ADR 028's
       // amendment), which for this idea is at most one more work item's
       // build — `CYCLE_BOUND` is generous headroom over that.
       act: 'ACT 2 — stop the second run mid-flight',
@@ -516,36 +516,36 @@ export const ACT_2 = [
     },
     {
       // Forces a fresh read (this file's header): the run-detail page fetched
-      // once, before the halt landed, and never refetches on its own. Also
-      // where the halt's WORK-ITEM-LEVEL effect is checked (the next two
+      // once, before the stop landed, and never refetches on its own. Also
+      // where the stop's WORK-ITEM-LEVEL effect is checked (the next two
       // beats) — the monitor, not the run-detail page, carries it.
-      act: 'ACT 2 — step away while the halt lands',
+      act: 'ACT 2 — step away while the stop lands',
       do: [{ press: 'back-to-monitor' }],
       expect: {
         route: '/flows/forge-develop',
         data: { page: 'flow-monitor', 'page-ready': 'true' },
       },
-      say: 'The runner needs a moment to reach the boundary it halts at.',
+      say: 'The runner needs a moment to reach the boundary it stops at.',
     },
     {
       // ROW 149 ROUND 2, REQUIREMENT 3 — THE UNFINISHED WORK IS A CHECKED
-      // FACT, NOT AN ASSUMPTION. This beat and the next assert the halt's
+      // FACT, NOT AN ASSUMPTION. This beat and the next assert the stop's
       // own two-sided effect BEFORE any resume: the work item the stop's own
       // wait (previous beats) let finish naturally is `complete`, and the one
       // it never let start is still `pending` — never inferred from having
       // waited for `active` earlier. `section`+`run-id` guard the wrong-run
       // risk this file's header explains (ROUND 3: `run-id` alone is
-      // vacuous). UNMEASURED bound: the halt was already confirmed on disk
+      // vacuous). UNMEASURED bound: the stop was already confirmed on disk
       // (the stop beat's own `cycleOf`/`terminal` wait); this one is only
       // for the monitor's own live-refresh to catch up, which `CYCLE_BOUND`
       // is generous headroom for.
       //
       // ROW 156 — `select-run-<cycleId2>` FIRST, same reasoning as the
-      // earlier hex beat: the predecessor ("step away while the halt lands")
+      // earlier hex beat: the predecessor ("step away while the stop lands")
       // presses `back-to-monitor` and its OWN `expect.route` is already
       // `/flows/forge-develop`, so this beat's `do` starts on the monitor —
       // no navigation of its own runs after this press.
-      act: 'ACT 2 — after the halt, the running work item finished naturally',
+      act: 'ACT 2 — after the stop, the running work item finished naturally',
       do: [{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }],
       wait: {
         for: 'agent', anchor: 'stop-run',
@@ -565,7 +565,7 @@ export const ACT_2 = [
         'mid-turn — it finishes, because nothing in this product aborts a live turn.',
     },
     {
-      // The SECOND half, on the SAME fresh read: the work item the halt
+      // The SECOND half, on the SAME fresh read: the work item the stop
       // never let start. `pending` is `wiStatusFor`'s own word for "zero
       // events" (`run-model-derive-status.ts:177`) — its worktree was never
       // created, because `shouldStopBeforeWorkItem` refused it BEFORE that
@@ -611,7 +611,7 @@ export const ACT_2 = [
     },
     {
       // A fresh mount, a fresh fetch (this file's header), reading the STATE
-      // AFTER the halt the earlier beats' own `cycleOf`/`terminal` wait
+      // AFTER the stop the earlier beats' own `cycleOf`/`terminal` wait
       // already confirmed on disk. `data-run-status` is the page root's own
       // attribute (`FlowRunDetail.tsx`'s `main`, solo — the only element on
       // the page carrying it), and `data-run-stop-reason="operator-stop"` is

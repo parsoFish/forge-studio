@@ -20,7 +20,7 @@ import { stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import { notify, type NotifyConfig } from './notify.ts';
-import { loadConfig } from '@forge/kernel';
+import { forgeQueueRoot, loadConfig } from '@forge/kernel';
 import { isNonTerminalRefused } from './claim-validator.ts';
 import { runOne, makeProgressTee } from './scheduler-run-one.ts';
 import {
@@ -48,10 +48,9 @@ export type SchedulerConfig = {
   recoverIntervalMs?: number;
 };
 
-const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs'>> & {
+const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs' | 'queueRoot'>> & {
   recoverIntervalMs: number;
 } = {
-  queueRoot: '_queue',
   worktreesRoot: '_worktrees',
   maxConcurrentInitiatives: 2,
   heartbeatIntervalMs: 30_000,
@@ -73,6 +72,8 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   const cfg = {
     ...DEFAULTS,
     ...opts,
+    // The same resolver the dispatch claim and the bridge use (serve runs with cwd = forge root).
+    queueRoot: opts.queueRoot ?? forgeQueueRoot(process.cwd()),
     notify:
       opts.notify ??
       (userConfig.notify
