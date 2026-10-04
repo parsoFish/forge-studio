@@ -372,13 +372,13 @@ function formatOutcome(
   manifest: InitiativeManifest | null,
   events: EventLogEntry[],
 ): string {
-  // Look for the cycle's terminal status: cycle.end's metadata.status, the
-  // reviewer.merged event, or fall back to "closed".
+  // The cycle's terminal status: the LAST attempt's cycle.end metadata.status
+  // (row 207 — an earlier stopped attempt never names the run), a later
+  // reviewer.merged event, or "closed".
   let status = 'closed';
   for (const e of events) {
     if (e.message === 'cycle.end' && typeof e.metadata?.['status'] === 'string') {
       status = String(e.metadata['status']);
-      break;
     }
     if (e.message === 'reviewer.merged') status = 'merged';
   }

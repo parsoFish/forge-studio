@@ -39,6 +39,7 @@ import {
   deriveArtifacts,
   deriveStopOnBudget,
   deriveOperatorStop,
+  endMetaIndicatesFailure,
   findGateNodeId,
   findGateNote,
   findFailure,
@@ -428,7 +429,8 @@ function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
  */
 function findCompletedAt(events: readonly EventLogEntry[]): string | undefined {
   for (const e of events) {
-    if (e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end') return e.started_at;
+    // Row 207: a stopped/failed attempt's own cycle.end is never the completion instant.
+    if (e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end' && !endMetaIndicatesFailure(e.metadata)) return e.started_at;
   }
   for (let i = events.length - 1; i >= 0; i--) {
     if (events[i].phase !== 'reflection') return events[i].started_at;

@@ -4,7 +4,7 @@
  */
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import type { EventLogEntry } from '@forge/kernel';
-import { costStreamFacts, sumAuthoritativeCostUsd } from '@forge/kernel';
+import { costStreamFacts, sumAuthoritativeCostUsd, isPerWorkItemRow } from '@forge/kernel';
 import type { RunStatus, RunPhaseStatus } from '@forge/contracts';
 import { eventToNodeId } from './run-model-derive-node-id.ts';
 import { findDelivered, findLatestWiVerdict } from './run-model-derive-cost.ts';
@@ -44,9 +44,8 @@ export function deriveNodeStatuses(
 
     acc.lastAt = e.started_at;
 
-    // Per-WI end events do NOT end the dev phase
-    const isPerWiEnd = e.event_type === 'end' && typeof e.metadata?.work_item_id === 'string';
-    if (e.event_type === 'end' && !isPerWiEnd) {
+    // Per-WI end events do NOT end the dev phase (one rule, @forge/kernel)
+    if (e.event_type === 'end' && !isPerWorkItemRow(e)) {
       acc.ended = true;
       if (endMetaIndicatesFailure(e.metadata)) acc.endFailed = true;
     }
@@ -76,7 +75,7 @@ export function deriveNodeStatuses(
 export function endMetaIndicatesFailure(meta: EventLogEntry['metadata']): boolean {
   if (!meta) return false;
   if (meta.resumed === true) return false;
-  if (meta.status === 'failed') return true;
+  if (meta.status === 'failed' || meta.status === 'stopped') return true; // row 207: a stopped attempt never reads complete
   if (typeof meta.failed === 'number' && meta.failed > 0) return true;
   if (
     typeof meta.work_item_count === 'number' && meta.work_item_count > 0 &&

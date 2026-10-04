@@ -129,3 +129,13 @@ test('a materials-staged `log` event is NOT filtered out of the mapped stream â€
   expect(line.text.length).toBeGreaterThan(0);
   expect(['think', 'tool', 'out']).toContain(line.kind);
 });
+
+test('row 207: a cycle.end with metadata.status "stopped" renders STOPPED with its detail â€” an operator-stopped attempt never reads like a clean end', () => {
+  const line = deriveLogLine(ev({
+    event_type: 'end', skill: 'cycle', message: 'cycle.end',
+    metadata: { status: 'stopped', error: 'OperatorStopError: operator-stop: the operator requested this run stop' },
+  }));
+  expect(line.text).toContain('STOPPED');
+  expect(line.text).toContain('OperatorStopError: operator-stop:');
+  expect(line.text).not.toContain('FAILED');
+});

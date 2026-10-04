@@ -156,11 +156,15 @@ export function createLogger(
     cycleId,
     logFilePath,
     emit: (partial) => {
+      // Destructured, never spread over the minted fields: a caller passing
+      // `event_id: undefined` must not strip the id (row 207 — run-end parity
+      // reads an id-less row as one this logger did not write).
+      const { event_id, started_at, ...rest } = partial;
       const entry: EventLogEntry = {
-        event_id: partial.event_id ?? newEventId(),
+        event_id: event_id ?? newEventId(),
         cycle_id: cycleId,
-        started_at: partial.started_at ?? new Date().toISOString(),
-        ...partial,
+        started_at: started_at ?? new Date().toISOString(),
+        ...rest,
       } as EventLogEntry;
       appendFileSync(logFilePath, JSON.stringify(entry) + '\n');
       if (opts.tee) {
@@ -299,4 +303,23 @@ export function errorEndMetadata(err: unknown): { status: 'failed'; error: strin
     status: 'failed',
     error: err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err),
   };
+}
+
+/**
+ * Row 207 (bead `forge-8vfn.8.5.57`) — run `body` under a run-level `start`
+ * the caller already wrote; if it throws, write THAT start's own `end`
+ * (`parent_event_id` = the start, the start's metadata plus the
+ * `errorEndMetadata` marker) and rethrow, so every start gets exactly one end
+ * on the throw path too. The normal path writes its own end, unchanged.
+ */
+export async function endStartOnThrow<T>(logger: EventLogger, start: EventLogEntry, body: () => Promise<T>): Promise<T> {
+  try {
+    return await body();
+  } catch (err) {
+    logger.emit({
+      initiative_id: start.initiative_id, parent_event_id: start.event_id, phase: start.phase, skill: start.skill,
+      event_type: 'end', input_refs: [], output_refs: [], metadata: { ...start.metadata, ...errorEndMetadata(err) },
+    });
+    throw err;
+  }
 }

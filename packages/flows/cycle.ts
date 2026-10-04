@@ -17,8 +17,9 @@ import { FORGE_ROOT, guardedReadFile } from '@forge/kernel';
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import type { CeilingSource } from './flow-budgets.ts';
-import { createLogger } from '@forge/kernel';
+import { createLogger, errorEndMetadata } from '@forge/kernel';
 import { classifyCycleFailure } from '@forge/agents';
+import { OperatorStopError } from './operator-stop.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin, readManifestCycleId, readManifestFlowId, readManifestCostCeiling, persistManifestCycleId, parseManifest } from './manifest.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
@@ -342,60 +343,36 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
     // just finished writing — including the orchestrator-level error event
     // emitted above.
     emitFailureClassification(logger, input.initiativeId, cycleId);
-    const result: CycleResult = {
-      cycle_id: cycleId,
-      initiative_id: input.initiativeId,
-      status: 'failed',
-      reflection_status: reflectionStatus,
-      lint_status: lintStatus,
-      duration_ms: Math.round(performance.now() - started),
-      log_path: logger.logFilePath,
-    };
-    // Snapshot artefacts + write report even on failure — failed cycles
-    // still produce useful evidence for diagnosis. AWAIT the snapshot so
-    // the report's "decomposition" / "verification" sections find the
-    // copied work-items + demo dirs (otherwise the report runs before the
-    // copy completes and silently shows the no-snapshot fallback).
-    await snapshotCycleArtefacts(input, cycleId).catch(() => { /* best-effort */ });
-    writeCycleReportSafely(cycleId, logsRoot);
-    return result;
+    // Row 207 (C1): a throw ends its attempt too — every cycle.start gets one
+    // cycle.end. An operator stop ends `stopped`, anything else carries the
+    // shared failed marker; the CycleResult the scheduler routes on stays 'failed'.
+    const failedEnd = { ...errorEndMetadata(err), ...(err instanceof OperatorStopError ? { status: 'stopped' } : {}) };
+    return finishCycle({ input, logger, logsRoot, cycleId, started, status: 'failed', reflectionStatus, lintStatus, endMetadata: failedEnd });
   }
+  return finishCycle({ input, logger, logsRoot, cycleId, started, status: cycleOutcome, reflectionStatus, lintStatus });
+}
 
-  // Snapshot before cycle.end so the report can include the cycle.end
-  // metadata and reference durable artefacts.
-  await snapshotCycleArtefacts(input, cycleId).catch(() => { /* best-effort */ });
-
+/**
+ * The ONE way out of `runCycle`, success or throw: snapshot the artefacts
+ * (AWAITED, so the report's decomposition/verification sections find the
+ * copied work-items + demo dirs), write `cycle.end`, then the best-effort
+ * report — a failed report write never fails the cycle.
+ */
+async function finishCycle(a: {
+  input: CycleInput; logger: EventLogger; logsRoot: string; cycleId: string; started: number;
+  status: CycleResult['status']; reflectionStatus: ReflectionStatus; lintStatus: LintStatus; endMetadata?: Record<string, unknown>;
+}): Promise<CycleResult> {
+  await snapshotCycleArtefacts(a.input, a.cycleId).catch(() => { /* best-effort */ });
   const result: CycleResult = {
-    cycle_id: cycleId,
-    initiative_id: input.initiativeId,
-    status: cycleOutcome,
-    reflection_status: reflectionStatus,
-    lint_status: lintStatus,
-    duration_ms: Math.round(performance.now() - started),
-    log_path: logger.logFilePath,
+    cycle_id: a.cycleId, initiative_id: a.input.initiativeId, status: a.status, reflection_status: a.reflectionStatus,
+    lint_status: a.lintStatus, duration_ms: Math.round(performance.now() - a.started), log_path: a.logger.logFilePath,
   };
-
-  logger.emit({
-    initiative_id: input.initiativeId,
-    phase: 'orchestrator',
-    skill: 'cycle',
-    event_type: 'end',
-    input_refs: [input.manifestPath],
-    output_refs: [logger.logFilePath],
-    duration_ms: result.duration_ms,
-    message: 'cycle.end',
-    metadata: {
-      status: result.status,
-      reflection_status: result.reflection_status,
-      lint_status: result.lint_status,
-    },
+  a.logger.emit({
+    initiative_id: a.input.initiativeId, phase: 'orchestrator', skill: 'cycle', event_type: 'end',
+    input_refs: [a.input.manifestPath], output_refs: [a.logger.logFilePath], duration_ms: result.duration_ms, message: 'cycle.end',
+    metadata: { status: result.status, reflection_status: result.reflection_status, lint_status: result.lint_status, ...a.endMetadata },
   });
-
-  // Generate the human-facing report as the final cycle step. Best-effort —
-  // a failed report write does not fail the cycle (the merge already
-  // happened; the report is meta).
-  writeCycleReportSafely(cycleId, logsRoot);
-
+  writeCycleReportSafely(a.cycleId, a.logsRoot);
   return result;
 }
 
