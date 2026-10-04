@@ -424,20 +424,19 @@ export async function handleDemoRoutes(
     return true;
   }
 
-  // `/api/demo-builder/{brief,feedback,abandon}` — DELETED (row 206 sweep,
-  // forge-8vfn.8.5.56). Measured unused: `demoBuilderBrief`/
+  // There is no `/api/demo-builder/{brief,feedback,abandon}` route here
+  // (row 206 sweep, forge-8vfn.8.5.56). Measured unused: `demoBuilderBrief`/
   // `demoBuilderFeedback`/`demoBuilderAbandon` (`apps/studio/lib/bridge-client-interviews.ts`)
   // have no caller anywhere in `apps/studio` — every demo-builder affordance
-  // the UI actually drives (briefing, feedback, abandon) now POSTs through
+  // the UI actually drives (briefing, feedback, abandon) POSTs through
   // the generic `question-form`/`verdict` affordance (`postSessionAffordance`,
   // `packages/sessions/kinds/demo-builder.ts`'s `handleDemoBrief`/
-  // `handleDemoVerdict`, phase-gated via `deriveSessionAffordances`). These
-  // three arms spawned unconditionally with no phase gate at all — a
-  // dispatch a ruling had already moved elsewhere, still spawning.
+  // `handleDemoVerdict`, phase-gated via `deriveSessionAffordances`), each
+  // arm individually phase-gated rather than spawning unconditionally.
   //
-  // `/api/demo-builder/lock` SURVIVES: `demoBuilderLock` IS still called
-  // (`apps/studio/app/sessions/[kind]/[sessionId]/page.tsx` and
-  // `GenerationGallery.tsx`), so it keeps spawning but now through the SAME
+  // `/api/demo-builder/lock` is the one demo-builder route here:
+  // `demoBuilderLock` IS called (`apps/studio/app/sessions/[kind]/[sessionId]/page.tsx`
+  // and `GenerationGallery.tsx`), so it spawns through the SAME
   // phase gate its generic twin's verdict-approve already enforces — read
   // from the shared `deriveSessionAffordances` derivation, not a hand-kept
   // second copy of "which phase may lock".

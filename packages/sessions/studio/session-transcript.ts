@@ -389,9 +389,9 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     const body = readCandidate(filename);
     if (body === null) continue;
     // W8-B3 (ON-5) — a BLANK opener is not a turn. Every real brief write
-    // (`/api/project-brain/brief`; the generic question-form affordance for
-    // instructions/demo-builder since row 206's sweep, forge-8vfn.8.5.56,
-    // deleted their own bespoke `/brief` routes) writes `body.brief ?? ''`,
+    // (`/api/project-brain/brief`; the generic question-form affordance,
+    // instructions/demo-builder's one write path for `brief` since row
+    // 206's sweep, forge-8vfn.8.5.56) writes `body.brief ?? ''`,
     // so an operator who skips the optional brief gets a zero-byte
     // `prompt.md` — which rendered as an EMPTY operator bubble in the
     // transcript. The file is still reported in `sourcesFound` (it really is

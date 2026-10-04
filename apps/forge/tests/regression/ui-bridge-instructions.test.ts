@@ -83,10 +83,11 @@ test('POST /api/instructions/start defaults mode=edit when an AGENTS.md exists',
   }
 });
 
-// `POST /api/instructions/brief` is DELETED (row 206 sweep, forge-8vfn.8.5.56
-// — no forge-ui caller; every instructions briefing now POSTs through the
-// generic question-form affordance). Its three tests here (brief kicks off
-// the agent; the 8KB cap; the boundary value) moved with the behaviour to
+// There is no `POST /api/instructions/brief` test here: instructions has
+// no bespoke `/brief` route (row 206 sweep, forge-8vfn.8.5.56 — no
+// forge-ui caller); every instructions briefing POSTs through the generic
+// question-form affordance. Its three tests (brief kicks off the agent;
+// the 8KB cap; the boundary value) live in
 // `packages/sessions/kinds/instructions.ts`'s own test coverage.
 
 // --- ADR-043 §3 amendment (wave-6 kickoff model-tier seam) -----------------
@@ -175,10 +176,10 @@ test('demo sessions surface no fragments, and there is no fragment route', async
   assert.doesNotMatch(await frag.text(), /cli fragment/);
 });
 
-// `POST /api/demo-builder/brief` is DELETED (row 206 sweep,
-// forge-8vfn.8.5.56 — no forge-ui caller; every demo-builder briefing now
-// POSTs through the generic question-form affordance,
-// `packages/sessions/kinds/demo-builder.ts`'s `handleDemoBrief`).
+// There is no `POST /api/demo-builder/brief` test here: demo-builder has
+// no bespoke `/brief` route (row 206 sweep, forge-8vfn.8.5.56 — no
+// forge-ui caller); every demo-builder briefing POSTs through the generic
+// question-form affordance, `packages/sessions/kinds/demo-builder.ts`'s `handleDemoBrief`.
 
 test('start does not 400 on a missing project (only project is required)', async () => {
   const { status } = await post('/api/instructions/start', {});

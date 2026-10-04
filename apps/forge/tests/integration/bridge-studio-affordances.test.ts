@@ -446,11 +446,11 @@ test("TBL-instructions-brief-4: question-form (brief) with an over-8KB answer ->
   assert.equal(readPhase(sessionDir), 'briefing');
 });
 
-// `PARITY-instructions-brief` is DELETED (row 206 sweep, forge-8vfn.8.5.56):
-// it compared the generic twin against `/api/instructions/brief`, which is
-// itself deleted (no forge-ui caller) — there is no bespoke side left to
-// compare against. `TBL-instructions-brief-1..4` above still pin the generic
-// route's own behaviour directly.
+// There is no `PARITY-instructions-brief` test: instructions has no
+// bespoke `/brief` route to compare the generic affordance against (row
+// 206 sweep, forge-8vfn.8.5.56 — no forge-ui caller). The TABLE TESTS
+// `TBL-instructions-brief-1..4` above pin the generic route's own
+// behaviour directly.
 
 // ===========================================================================
 // TABLE TEST — demo (question-form: brief; verdict: lock/abandon)
@@ -810,13 +810,13 @@ test('UNHANDLED-2: a valid, currently-derived next-turn affordance -> 501 Unhand
 // per-kind route reaches, for an equivalent sibling session
 // ===========================================================================
 
-// `PARITY-instructions` and `PARITY-demo-brief` are DELETED (row 206 sweep,
-// forge-8vfn.8.5.56): both compared the generic twin against a bespoke route
-// that is itself now deleted (`/api/instructions/verdict`,
-// `/api/demo-builder/brief` — neither has a forge-ui caller). The TABLE
-// TESTS above still pin each generic route's own behaviour directly.
-// `PARITY-demo` below SURVIVES: `/api/demo-builder/lock` is the one bespoke
-// demo-builder route still called from forge-ui.
+// There is no `PARITY-instructions` or `PARITY-demo-brief` test: neither
+// `/api/instructions/verdict` nor `/api/demo-builder/brief` has a bespoke
+// route to compare the generic twin against (row 206 sweep,
+// forge-8vfn.8.5.56 — neither has a forge-ui caller). The TABLE TESTS above
+// pin each generic route's own behaviour directly. `PARITY-demo` below
+// covers the one case with a bespoke route still called from forge-ui:
+// `/api/demo-builder/lock`.
 
 test('PARITY-demo: generic verdict-approve and the bespoke /api/demo-builder/lock route reach the SAME phase', async () => {
   const project = 'paritydemo';

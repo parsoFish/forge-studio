@@ -7,10 +7,10 @@
  * route's session bookkeeping proceeds exactly as under NO_SPAWN today, but
  * the skipped agent turn is EXPLICIT — the 200 body gains `dryBridge: {
  * skipped: ['agent-turn'] }` and one `dry-bridge.skip` JSONL event fires per
- * suppressed turn. Never silent. (`instructions` dropped out of this list —
- * row 206 sweep, forge-8vfn.8.5.56 — its one spawning bespoke route,
- * `/api/instructions/brief`, is deleted; the kind's dry-bridge coverage now
- * lives entirely on the generic question-form affordance.)
+ * suppressed turn. Never silent. (`instructions` has no spawning bespoke
+ * route of its own — row 206 sweep, forge-8vfn.8.5.56 — so its dry-bridge
+ * coverage lives entirely on the generic question-form affordance, the
+ * kind's one write surface for `brief`.)
  *
  * Safety note: with NO_SPAWN unset, a broken guard would exec
  * `node orchestrator/cli.ts …` with cwd = this tmp forgeRoot — where no
@@ -196,10 +196,10 @@ const FAMILIES: Array<{
       return { status, json, logDirName: `_architect-${sid}` };
     },
   },
-  // `instructions (spawnInstructionsTurn)` via `/api/instructions/brief` is
-  // DELETED (row 206 sweep, forge-8vfn.8.5.56 — no forge-ui caller; every
-  // instructions briefing now POSTs through the generic question-form
-  // affordance, which has its own dry-bridge coverage).
+  // `instructions (spawnInstructionsTurn)` has no bespoke `/brief` route
+  // (row 206 sweep, forge-8vfn.8.5.56 — no forge-ui caller); every
+  // instructions briefing POSTs through the generic question-form
+  // affordance, which carries this family's dry-bridge coverage.
   {
     family: 'project-brain (spawnProjectBrainTurn)',
     eventRoute: '/api/project-brain/brief',
@@ -212,11 +212,11 @@ const FAMILIES: Array<{
     },
   },
   {
-    // Row 206 sweep — `/brief` is deleted (no forge-ui caller); `/lock` is
-    // the one surviving demo-builder spawn route, so it carries this
-    // family's dry-bridge coverage now. `/lock` requires `awaiting-review`
-    // (its own new phase gate, same PR), seeded directly via fs — mirrors
-    // `ui-bridge-demo-generations.test.ts`'s own `patchDemoStatus` idiom.
+    // Row 206 sweep: demo-builder has no bespoke `/brief` route (no
+    // forge-ui caller); `/lock` is the one demo-builder spawn route and
+    // carries this family's dry-bridge coverage. `/lock` requires
+    // `awaiting-review` (its own new phase gate, same PR), seeded directly
+    // via fs — matches `ui-bridge-demo-generations.test.ts`'s `patchDemoStatus` idiom.
     family: 'demo-builder (spawnDemoBuilderTurn)',
     eventRoute: '/api/demo-builder/lock',
     drive: async () => {

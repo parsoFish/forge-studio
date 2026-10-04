@@ -88,7 +88,7 @@ test('the table is ordered, and every entry declares method, path, matcher and a
     ['POST', '/api/demo-builder/feedback'],
     ['POST', '/api/demo-builder/abandon'],
   ] as const) {
-    assert.equal(claimant(method, deadUrl), null, `${deadUrl}: row 206 sweep deleted this route — it must claim nothing`);
+    assert.equal(claimant(method, deadUrl), null, `${deadUrl}: no route claims this URL`);
   }
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
@@ -134,8 +134,8 @@ for (const [method, url, path] of ARCHITECT_ROUTES) {
   });
 }
 
-// Row 206 sweep (forge-8vfn.8.5.56) — /brief, /answer and /verdict are
-// DELETED (no forge-ui caller); only the three surviving arms are pinned.
+// Row 206 sweep (forge-8vfn.8.5.56): instructions has no bespoke /brief,
+// /answer or /verdict route (no forge-ui caller); only these three arms are pinned.
 const INSTRUCTIONS_ROUTES = [
   ['GET', '/api/instructions/sessions', '/api/instructions/sessions'],
   ['GET', '/api/instructions/file/mdtoc/s1/AGENTS.md', '/api/instructions/file/:project/:sessionId/*name'],

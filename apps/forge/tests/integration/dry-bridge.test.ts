@@ -129,9 +129,9 @@ test('KB maintenance op=fix-agent is refuse/spawn-agent; op=lint|fix-auto|index 
 });
 
 test('the NO_SPAWN-guarded spawn routes are stub-actions via the spawn-helper mechanism (never a 409)', () => {
-  // Row 206 sweep (forge-8vfn.8.5.56) — /api/instructions/{brief,answer,
-  // verdict} and /api/demo-builder/{brief,feedback,abandon} are DELETED (no
-  // forge-ui caller); /api/demo-builder/lock survives.
+  // Row 206 sweep (forge-8vfn.8.5.56): /api/instructions/{brief,answer,
+  // verdict} and /api/demo-builder/{brief,feedback,abandon} have no
+  // forge-ui caller; /api/demo-builder/lock is the one listed below.
   const spawnRoutes: Array<[string, string]> = [
     ['POST', '/api/architect/start'],
     ['POST', '/api/architect/answer'],

@@ -39,9 +39,9 @@ const SRC = readFileSync(
 );
 
 /** Extract the POST /api/instructions/start handler block: from its route
- *  match to the end of the function. `/start` is now the LAST arm —
- *  `/api/instructions/{brief,answer,verdict}` are DELETED (row 206 sweep,
- *  forge-8vfn.8.5.56; no forge-ui caller), so there is no next handler left
+ *  match to the end of the function. `/start` is the LAST arm in this
+ *  file — `/api/instructions/{brief,answer,verdict}` have no forge-ui
+ *  caller (row 206 sweep, forge-8vfn.8.5.56), so there is no next handler
  *  to bound against. */
 function instructionsStartBlock(src: string): string {
   const startMarker = "url === '/api/instructions/start'";

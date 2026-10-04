@@ -62,12 +62,12 @@ after(async () => {
   else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
 });
 
-// Row 206 sweep (forge-8vfn.8.5.56) — retargeted from `/api/instructions/
-// brief`, which is deleted (no forge-ui caller). `/api/project-brain/brief`
-// has the SAME shape (project/sessionId/brief, writes status at `briefing`)
-// and is still a real, spawning bespoke route — its own new phase gate
-// (same PR) requires exactly the `briefing` phase this fixture already
-// seeds, so it does not interfere with the boundary this test pins.
+// This test targets `/api/project-brain/brief` (row 206 sweep,
+// forge-8vfn.8.5.56 — instructions has no bespoke `/brief` route to target
+// instead): it has the SAME shape (project/sessionId/brief, writes status
+// at `briefing`) and is a real, spawning bespoke route — its own new phase
+// gate (same PR) requires exactly the `briefing` phase this fixture
+// already seeds, so it does not interfere with the boundary this test pins.
 test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn attempted', async () => {
   const realSessionId = 'sess1';
   const dir = join(forgeRoot, 'projects', PROJECT, '_project-brain', realSessionId);

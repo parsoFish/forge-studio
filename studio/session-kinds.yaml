@@ -68,11 +68,9 @@
       # transition source (`briefing`, not an interview round). Dispatched by
       # `handleInstructionsBrief` (packages/sessions/kinds/instructions.ts),
       # phase-selected off this SAME `question-form` affordance id alongside
-      # `handleInstructionsAnswer`. The bespoke `POST /api/instructions/brief`
-      # this mirrored is DELETED (row 206 sweep, forge-8vfn.8.5.56 — no
-      # remaining frontend caller, and by then no remaining reason to keep a
-      # second route doing the same write) — this generic affordance is now
-      # the only write path for this phase.
+      # `handleInstructionsAnswer`. This generic affordance is the one
+      # write path for this phase (row 206 sweep, forge-8vfn.8.5.56):
+      # instructions has no bespoke `/brief` route alongside it.
       - { phase: briefing, step: noop, awaits: questions, next: interviewing }
       # orchestrator/instructions-runner.ts:18, runInterviewStep (agent turn,
       # orchestrator/instructions-runner.ts:310) — branches (needs input ->
