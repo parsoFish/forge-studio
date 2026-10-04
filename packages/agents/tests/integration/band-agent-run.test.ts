@@ -289,6 +289,41 @@ test('runBandAgentStandalone: the review arm passes projectName from the manifes
   }
 });
 
+test('runBandAgentStandalone: a throwing pipeline still terminates the run-level log with exactly one end, naming the error, then rethrows (MEDIUM-4, row 206 follow-up)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'band-run-throw-'));
+  try {
+    const wt = join(root, '_worktrees', 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(join(root, '_queue', 'ready-for-review'), wt);
+
+    const deps: BandAgentDeps = {
+      queuePaths: fakeQueuePaths,
+      parseInitiativeManifest: fakeParseManifest,
+      runPipeline: async () => {
+        throw new Error('pinned pipeline failure');
+      },
+    };
+
+    await assert.rejects(
+      runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, deps),
+      /pinned pipeline failure/,
+      'the throw must still propagate — this fix changes event logging, not control flow',
+    );
+
+    const events = readFileSync(join(root, '_logs', RUN, 'events.jsonl'), 'utf8')
+      .trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const types = events.map((e) => e.event_type);
+    assert.equal(types.filter((t) => t === 'start').length, 1, `exactly one start, got ${JSON.stringify(types)}`);
+    assert.equal(types.filter((t) => t === 'end').length, 1, `a throwing pipeline must still get exactly one end, got ${JSON.stringify(types)}`);
+
+    const end = events.find((e) => e.event_type === 'end');
+    assert.equal(end.metadata.status, 'failed', 'a crashed run must carry the shared failure marker');
+    assert.match(String(end.metadata.error), /Error: pinned pipeline failure/, 'the end must carry the thrown class + message');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // The structural half of exit row 4. A green functional test above would still
 // pass if a single file in the package re-imported a phase, so assert the

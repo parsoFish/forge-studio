@@ -236,6 +236,9 @@ test('runKindTurn: a THROWING step still terminates the log with exactly one end
     assert.equal(meta.session_id, SESSION_ID);
     assert.equal(meta.phase, 'working', 'the error end reports the phase the turn was IN, not a fabricated terminal one');
     assert.match(String(meta.error), /Error: pinned step failure/, 'the end must carry the thrown class + message');
+    // MEDIUM-4 (row 206 follow-up) — the ONE failure marker every runner's
+    // error-end shares (`errorEndMetadata`, @forge/kernel).
+    assert.equal(meta.status, 'failed', 'a crashed turn must carry the shared failure marker');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

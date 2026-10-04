@@ -156,6 +156,13 @@ export type KnowledgeRouteDeps = KbCreateDeps & KbDrainTailDeps & {
   /** M7-C U8 (bead forge-u8y2) — same rank problem as `runFixTurn`, same
    *  REQUIRED shape — see `design.md` ("The session-readability port"). */
   sessionIsReadable: SessionReadabilityProbe;
+  /** HIGH-1 (row 206 follow-up, forge-8vfn.8.5.56) — same rank problem as
+   *  `runFixTurn`: `spawnBrainFix`'s dispatch claim needs the real
+   *  `isTurnAlive` (`@forge/sessions`, rank 4); the assembly supplies it.
+   *  OPTIONAL like `ensureAgentRunTail` above — every existing route test
+   *  in this package supplies neither and stays unaffected; absent, no
+   *  fixture pid is ever treated as a live holder. */
+  isTurnAlive?(pid: number, ownershipMark: string): boolean;
 };
 
 export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeRouteContext> {

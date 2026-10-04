@@ -174,6 +174,8 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       // `draftSession` pointers never mint a `/sessions/kb-cleanup/<id>` link
       // this bridge cannot actually serve.
       sessionIsReadable,
+      // HIGH-1 (row 206 follow-up) — spawnBrainFix's dispatch claim.
+      isTurnAlive,
     }),
     ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource, authoringSession: authoringSessionPort }),
     ...projectsRoutes({

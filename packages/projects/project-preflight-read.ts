@@ -69,9 +69,13 @@ function readPreflightFixState(
   try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
   for (const line of raw.split('\n').reverse()) {
     if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean } };
+    let ev: { event_type?: string; message?: string; metadata?: { status?: string; cleared?: boolean } };
     try { ev = JSON.parse(line); } catch { continue; }
     if (ev.event_type === 'end' || ev.message?.startsWith('preflight-fix.end')) {
+      // HIGH-7 — the crash path's `end` (after its `error` event) arrives
+      // first in this reversed scan; read its `status: 'failed'` marker
+      // before the cleared shape below, or a crash misreads as resolved.
+      if (ev.metadata?.status === 'failed') return { state: 'failed', cleared: false };
       const cleared = ev.metadata?.cleared === true;
       return { state: cleared ? 'cleared' : 'not-cleared', cleared };
     }

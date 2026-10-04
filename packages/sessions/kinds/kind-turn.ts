@@ -53,7 +53,7 @@ import { resolve, join } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
-import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
+import { createLogger, guardedReadFile, resolveGuardedPath, errorEndMetadata, type EventLogger, type Phase } from '@forge/kernel';
 
 import { makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
 import { makeHeartbeatWriter } from '../heartbeat.ts';
@@ -431,7 +431,7 @@ export async function runKindTurn<
         session_id: input.sessionId,
         phase: stepError !== undefined ? status.phase : result!.phase,
         ...(stepError !== undefined
-          ? { error: stepError instanceof Error ? `${stepError.constructor.name}: ${stepError.message}` : String(stepError) }
+          ? errorEndMetadata(stepError)
           : (variant.endMetadata?.(result!) ?? {})),
       },
     });

@@ -34,8 +34,8 @@ import { spawn } from 'node:child_process';
 import { join, basename, dirname } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
-import { isDryBridge, guardedWriteFile, guardedWriteFileExclusive, guardedUnlink, guardedReadFile } from '@forge/kernel';
-import { DispatchInFlight } from '@forge/kernel';
+import { isDryBridge, guardedWriteFile } from '@forge/kernel';
+import { claimDispatchSlot, releaseDispatchSlot, newRunStamp } from '@forge/kernel';
 import { isSafeRunId } from '@forge/agents';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
 // one the carved `POST /api/agents/:slug/run` route applies, so the package
@@ -62,14 +62,12 @@ export type ArchitectContext = {
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 export const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
-/** Timestamp stamp + short random suffix for a generated run id
- *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
- *  dispatches of the same slug in the same millisecond (a programmatic driver,
- *  e.g. R4-02 fanout) don't collide onto one `_logs/<runId>/` dir. */
-export function newRunStamp(): string {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
-  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
-}
+// Row 206 (HIGH-1 follow-up) — `newRunStamp` lives in `@forge/kernel`
+// (`dispatch-claim.ts`), so `spawnPreflightFix`/`spawnBrainFix` reuse its
+// random-suffix collision guard without importing this host module;
+// re-exported here so every importer of THIS file (`apps/forge/ui-bridge.ts`,
+// `apps/forge/routes.ts`) keeps one import.
+export { newRunStamp };
 
 /** The 5 detached-runner turn families the bridge spawns — each `argvPrefix`
  *  is prepended to `<sid> --project <project>` to build the full argv passed
@@ -149,74 +147,27 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
 // sessions carve moved them and ruling 87 deleted the affordances host file
 // outright. The comment kept naming files that no longer existed; repointed
 // with the M4-flows host carve.
-/** A placeholder written while a slot is being claimed, before the real
- *  child's pid exists. Deliberately NOT numeric: `readClaimedPid` (below)
- *  only recognises `/^\d+\s*$/`, so a reader mid-claim never misreads this
- *  as a dead/stale pid and removes a claim that is genuinely in flight — it
- *  reads as "something's here, but not yet a pid", which is exactly true. */
-const CLAIMING_PLACEHOLDER = 'claiming\n';
+// Row 206 (HIGH-1 follow-up) — `claimDispatchSlot`/`releaseDispatchSlot`
+// live in `@forge/kernel` (`dispatch-claim.ts`), the ONE claim this seam,
+// `spawnPreflightFix` and `spawnBrainFix` all share rather than each
+// copying. `isAlive` is passed explicitly below (`isTurnAlive`, imported
+// above) — kernel is rank 1 and cannot import `@forge/sessions` (rank 4).
 
-function readClaimedPid(logsRoot: string, logDirName: string): number | null {
-  const raw = guardedReadFile(logsRoot, [logDirName, 'turn.pid']);
-  return raw !== null && /^\d+\s*$/.test(raw.trim()) ? Number.parseInt(raw.trim(), 10) : null;
-}
-
-/**
- * Row 206 (forge-8vfn.8.5.56) — the ONE claim every spawn below makes before
- * it spawns: `_logs/<logDirName>/turn.pid` may hold at most one LIVE, OWNED
- * turn at a time. Called synchronously, with no `await` before the caller's
- * own `spawn()` — the bridge is single-threaded, so nothing can interleave
- * between this claim and the spawn it guards.
- *
- * A live turn already holding the slot (`isTurnAlive`, proven via
- * `ownershipMark` in the holder's own argv — the same proof
- * `killTrackedTurn`/`killTrackedRun` use) throws `DispatchInFlight` naming
- * the holder pid, BEFORE anything spawns. Never swallowed: every route that
- * calls the seam maps this to HTTP 409 via `@forge/kernel`'s
- * `sendIfDispatchInFlight` — one shared helper, not a per-route copy.
- *
- * A STALE slot (a dead pid, or a live pid that fails the ownership proof —
- * i.e. not ours) is removed first, then re-claimed via an EXCLUSIVE create
- * (the 'wx' flag) rather than a plain overwrite: `O_CREAT|O_EXCL` is atomic
- * even ACROSS OS PROCESSES, so a raw spawner racing this exact slot from a
- * separate process can never both believe it won the just-emptied slot —
- * whichever loses the `wx` sees the winner's claim on its very next read and
- * refuses instead of spawning a second child. (Today every caller of this
- * seam runs inside the one bridge process, so this cross-process case is
- * forward-looking insurance, not a live gap — T1 1973ns point 4, optional.)
- *
- * KNOWN, ACCEPTED LIMITATION: a host crash between this claim and the real
- * pid being written over `CLAIMING_PLACEHOLDER` (a few synchronous
- * instructions, no I/O in between) leaves the slot claimed with no process
- * behind it — the same exposure any pid-file lock carries, and already
- * smaller than the pre-existing window between a real `spawn()` and its
- * turn.pid write below. The caller's own failure path (its `catch`) releases
- * the claim on an ordinary spawn error, so a ROUTINE failure never bricks
- * the run id permanently; only a crash mid-claim does.
- */
-function claimDispatchSlot(forgeRoot: string, logDirName: string, ownershipMark: string): void {
-  const logsRoot = join(forgeRoot, '_logs');
-  const existingPid = readClaimedPid(logsRoot, logDirName);
-  if (existingPid !== null) {
-    if (isTurnAlive(existingPid, ownershipMark)) {
-      throw new DispatchInFlight(existingPid, ownershipMark);
-    }
-    guardedUnlink(logsRoot, [logDirName, 'turn.pid']);
+/** Row 206 MEDIUM-2 — the ONE place a spawn ATTEMPT's outcome is recorded:
+ *  a numeric pid overwrites the claim placeholder (safe without its own
+ *  exclusive-create — `claimDispatchSlot` already proved sole ownership of
+ *  the slot); anything else (EAGAIN/ENOMEM — no sync throw, no pid either)
+ *  releases the claim and reports the failure, rather than leaving a wedged
+ *  placeholder and returning `ok:true` for a turn that never started.
+ *  Extracted so this is testable with a literal pid — no spawn, no mock. */
+export function finalizeSpawnedTurn(forgeRoot: string, logDirName: string, pid: number | undefined): SpawnTurnOutcome {
+  if (typeof pid === 'number') {
+    guardedWriteFile(join(forgeRoot, '_logs'), [logDirName, 'turn.pid'], `${pid}\n`);
+    return { ok: true, spawned: true };
   }
-  try {
-    guardedWriteFileExclusive(logsRoot, [logDirName, 'turn.pid'], CLAIMING_PLACEHOLDER);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== 'EEXIST') throw err;
-    // Lost a cross-process race for the just-emptied slot — name whoever won it.
-    throw new DispatchInFlight(readClaimedPid(logsRoot, logDirName) ?? -1, ownershipMark);
-  }
-}
-
-/** Release a claim this call made, after its own spawn attempt failed — so a
- *  routine spawn error (a bad argv, a missing CLI) never permanently bricks
- *  the run id the way a silently-kept stale claim would. */
-function releaseDispatchSlot(forgeRoot: string, logDirName: string): void {
-  guardedUnlink(join(forgeRoot, '_logs'), [logDirName, 'turn.pid']);
+  releaseDispatchSlot(forgeRoot, logDirName);
+  console.error(`finalizeSpawnedTurn: spawn returned no pid for ${logDirName} — refusing to report a started turn`);
+  return { ok: false, error: 'spawn returned no pid — refusing to report a started turn' };
 }
 
 export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
@@ -243,7 +194,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
   // try/catch below (see claimDispatchSlot's own doc) so a caller that
   // doesn't explicitly handle it sees a loud, real failure instead of this
   // helper silently no-opping into a route's 200.
-  claimDispatchSlot(forgeRoot, logDirName, sessionId);
+  claimDispatchSlot(forgeRoot, logDirName, sessionId, isTurnAlive);
   try {
     const logDir = join(forgeRoot, '_logs', logDirName);
     mkdirSync(logDir, { recursive: true });
@@ -259,15 +210,8 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     // (packages/sessions/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
     // live turn, and the lifecycle derivation can tell "re-run in flight"
     // from "crashed" (isTurnAlive additionally proves ownership via the
-    // sessionId in the process's own argv above). Same logDir, same guard
-    // posture as stderr.log; best-effort like the rest of this helper. This
-    // OVERWRITES the claim's placeholder with the real pid — safe without
-    // its own exclusive-create because claimDispatchSlot already proved
-    // this call is the sole owner of the slot.
-    if (typeof proc.pid === 'number') {
-      guardedWriteFile(join(forgeRoot, '_logs'), [logDirName, 'turn.pid'], `${proc.pid}\n`);
-    }
-    return { ok: true, spawned: true };
+    // sessionId in the process's own argv above).
+    return finalizeSpawnedTurn(forgeRoot, logDirName, proc.pid);
   } catch (err) {
     // Row 206 — release the claim on a routine spawn failure (see
     // releaseDispatchSlot's doc): without this, a single bad spawn would
@@ -379,7 +323,7 @@ export function spawnAgentDispatch(
   // "a spawn error never bubbles into the request" for every OTHER failure,
   // but a dispatch-in-flight refusal is the one failure every caller must
   // see, so it is thrown before entering the swallowing try.
-  claimDispatchSlot(forgeRoot, runId, runId);
+  claimDispatchSlot(forgeRoot, runId, runId, isTurnAlive);
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });
@@ -391,11 +335,11 @@ export function spawnAgentDispatch(
     // `_logs/<runId>/turn.pid` so the cancel route (`POST /api/agents/runs/
     // :runId/cancel`) can reach it. Ownership proof at kill time is the
     // runId in the child's own argv (`--run-id <runId>` — a whole element),
-    // via the same `isTurnAlive` the session cancel uses. Guarded write,
-    // best-effort like stderr.log.
-    if (typeof proc.pid === 'number') {
-      guardedWriteFile(join(forgeRoot, '_logs'), [runId, 'turn.pid'], `${proc.pid}\n`);
-    }
+    // via the same `isTurnAlive` the session cancel uses. MEDIUM-2 — no pid
+    // releases THIS claim too (`finalizeSpawnedTurn`), so a no-pid spawn
+    // never wedges the runId's slot; its `SpawnTurnOutcome` is unused here,
+    // this call's only contract is void.
+    finalizeSpawnedTurn(forgeRoot, runId, proc.pid);
     // W7-FIX-A2 (W7A2-01) — a session-bound dispatch (`--session-dir
     // <projectsRoot>/<project>/_<kind>/<sid>`, today only onboarding) records
     // its pid where the generic cancel route looks: `_logs/_<kind>-<sid>/

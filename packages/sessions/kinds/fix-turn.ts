@@ -39,7 +39,7 @@ import { hooksSpreadForAgent } from './kind-turn.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
 import { withIdleDeadline } from '@forge/agents/stream-deadline.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
-import { createLogger, type EventLogger, type Phase } from '@forge/kernel';
+import { createLogger, errorEndMetadata, type EventLogger, type Phase } from '@forge/kernel';
 
 import {
   REDACTED_THINKING_MARKER,
@@ -332,10 +332,10 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
     // brain-fix audits them.
     const { result, endMetadata } = variant.finish({ input, pre, costUsd: costUsd ?? 0, crashed: true });
     // Row 206 (forge-8vfn.8.5.56) — every run-level start gets exactly one
-    // end. This end's `metadata.status` is `'error'`: it records that the
-    // turn crashed, never that it completed — a reader checks THAT field,
-    // not the mere presence of `event_type: 'end'`, to tell a crash from a
-    // finish.
+    // end. `errorEndMetadata` marks this end `status: 'failed'`: it records
+    // that the turn crashed, never that it completed — a reader checks THAT
+    // field, not the mere presence of `event_type: 'end'`, to tell a crash
+    // from a finish.
     logger.emit({
       initiative_id: cycleId,
       parent_event_id: startEv.event_id,
@@ -348,8 +348,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       metadata: {
         ...endMetadata,
         ...unpriced(unpricedReason(err)),
-        status: 'error',
-        error: err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err),
+        ...errorEndMetadata(err),
       },
     });
     return result;

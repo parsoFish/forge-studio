@@ -47,7 +47,8 @@ import { deriveFlowKickoff } from '@forge/flows';
 import { discoverProjects } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
-import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedWriteFile, claimDispatchSlot, releaseDispatchSlot } from '@forge/kernel';
+import { isTurnAlive } from '@forge/sessions';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';
 import { validateFlow } from '@forge/flows';
@@ -130,7 +131,13 @@ export function spawnPreflightFix(
   // Harness guard: tests pin FORGE_ARCHITECT_NO_SPAWN=1 so the route is exercised
   // without launching a real SDK agent.
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  const logDir = join(forgeRoot, '_logs', `_preflight-fix-${p.runId}`);
+  const logDirName = `_preflight-fix-${p.runId}`;
+  // HIGH-1 (row 206 follow-up, forge-8vfn.8.5.56) — the SAME claim the
+  // agent-dispatch seam uses, before anything spawns. Throws
+  // DispatchInFlight; deliberately NOT caught below, so the caller (the
+  // route's own catch, mapped via `sendIfDispatchInFlight`) sees it.
+  claimDispatchSlot(forgeRoot, logDirName, p.runId, isTurnAlive);
+  const logDir = join(forgeRoot, '_logs', logDirName);
   mkdirSync(logDir, { recursive: true });
   const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
   const argv = [
@@ -138,9 +145,21 @@ export function spawnPreflightFix(
     '--project', p.project, '--clause', p.clause, '--run-id', p.runId,
     '--instruction', p.instruction, '--detail', p.detail,
   ];
-  const proc = spawn(process.execPath, argv, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
-  closeSync(stderrFd);
-  proc.unref();
+  try {
+    const proc = spawn(process.execPath, argv, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
+    closeSync(stderrFd);
+    if (typeof proc.pid !== 'number') {
+      throw new Error(`spawnPreflightFix: spawn returned no pid for run ${p.runId}`);
+    }
+    guardedWriteFile(join(forgeRoot, '_logs'), [logDirName, 'turn.pid'], `${proc.pid}\n`);
+    proc.unref();
+  } catch (err) {
+    // MEDIUM-2 — release on a routine spawn failure too, same reason as the
+    // agent-dispatch seam: a kept stale claim would permanently brick every
+    // future dispatch for this runId.
+    releaseDispatchSlot(forgeRoot, logDirName);
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------

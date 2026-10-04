@@ -48,7 +48,7 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
-import { createLogger, emitGroundFileChanges, refuseBareInitiativeRunId, type EventLogger } from '@forge/kernel';
+import { createLogger, emitGroundFileChanges, refuseBareInitiativeRunId, errorEndMetadata, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { resolveRunQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent, withSessionEndHooks } from './studio/hook-dispatch.ts';
@@ -496,7 +496,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     logger.emit({
       initiative_id: initiativeId, phase: 'orchestrator', skill: def.slug, event_type: 'end',
       input_refs: inputRefs, output_refs: [],
-      metadata: { ...baseEventMeta(), error: err instanceof Error ? `${err.constructor.name}: ${err.message}` : String(err) },
+      metadata: { ...baseEventMeta(), ...errorEndMetadata(err) },
     });
     throw err;
   }

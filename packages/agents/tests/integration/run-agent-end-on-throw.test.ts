@@ -91,6 +91,11 @@ test('runAgent: a throwing SDK stream still terminates the run-level log with ex
     const end = events.find((e) => e.event_type === 'end') as { metadata?: Record<string, unknown> } | undefined;
     const meta = end?.metadata ?? {};
     assert.match(String(meta.error), /Error: pinned stream failure/, 'the end must carry the thrown class + message');
+    // MEDIUM-4 (row 206 follow-up) — the ONE failure marker every runner's
+    // error-end shares (`errorEndMetadata`, @forge/kernel): a reader checks
+    // THIS field, never the mere presence of an `end` event, to tell a
+    // crash from a finish.
+    assert.equal(meta.status, 'failed', 'a crashed run must carry the shared failure marker');
   } finally {
     restore();
     rmSync(logsRoot, { recursive: true, force: true });

@@ -281,6 +281,7 @@ packages/kernel/config.ts readFileSync 2
 packages/kernel/contained-read.ts readFileSync 1
 packages/kernel/contained-read.ts realpathSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
+packages/kernel/dispatch-claim.ts statSync 1
 packages/kernel/forge-ref-guard-hook.ts execFileSync 1
 packages/kernel/forge-ref-guard-hook.ts existsSync 1
 packages/kernel/forge-ref-guard-hook.ts mkdirSync 1

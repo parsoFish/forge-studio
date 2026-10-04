@@ -85,7 +85,7 @@
         "unsound": [],
         "priced": false,
         "unpriced_reason": "died",
-        "status": "error",
+        "status": "failed",
         "error": "Error: pinned stream failure"
       },
       "output_refs": [],

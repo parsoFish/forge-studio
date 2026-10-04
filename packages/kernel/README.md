@@ -16,9 +16,9 @@ package above kernel — `library`, `knowledge`, `projects`, `agents`,
 `sessions`, `flows`, `stations`, `factory`, and both apps — imports it
 directly.
 
-## API (160 values)
+## API (166 values)
 
-| the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` |
+| the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` · `errorEndMetadata` |
 | the SDK tool-use fence | `toolFenceOptions` |
 | operator config (`forge.config.json`) + project starters | `loadConfig` · `defaultConfigPath` · `resolveProjectsDir` · `PROJECT_STARTERS_MANIFEST` · `projectStartersDir` · `listProjectStarters` · `describeProjectStarters` |
 | tunable caps & budgets resolved from config + env | `DEFAULT_DEV_WI_CONCURRENCY` · `DEV_WI_CONCURRENCY_CEILING` · `resolveDevWiConcurrency` · `DEFAULT_POST_MERGE_CI_TIMEOUT_MS` · `DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS` · `resolvePostMergeCiConfig` · `DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS` · `DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` · `resolveReviewLoopCaps` · `DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD` · `DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET` · `resolveTriggeredRunBudgets` · `DEFAULT_KICKOFF_COST_CEILING_USD` · `MAX_KICKOFF_COST_CEILING_USD` · `resolveDefaultKickoffCeilingUsd` |
@@ -47,6 +47,7 @@ directly.
 | bounded per-key JSON log | `readBoundedLog` · `appendBoundedLog` · `boundedLogSegments` · `truncateTail` |
 | process liveness (`/proc` pid check) | `isForgeServePid` · `isProcessRunning` |
 | the forge-repo ref guard (git's own `reference-transaction` hook, row 211) | `FORGE_REF_GUARD_HOOK_NAME` · `FORGE_REF_GUARD_MARKER_PREFIX` · `FORGE_REF_GUARD_MARKER` · `FORGE_AGENT_SPAWN_ENV` · `FORGE_AGENT_RUN_MARKER_ENV` · `forgeRefGuardHookScript` · `installForgeRefGuardHook` |
+| the dispatch claim every detached-agent spawn seam shares (row 206) | `claimDispatchSlot` · `releaseDispatchSlot` · `CLAIM_PLACEHOLDER_STALE_MS` · `newRunStamp` · `randomRunSuffix` |
 
 ### Types (45)
 
