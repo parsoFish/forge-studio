@@ -284,7 +284,7 @@ export function RunControls({
           data-outcome-control="stop"
           style={{ fontSize: 12, color: 'var(--faint)' }}
         >
-          Stop requested — the run halts at its next clean boundary; the worktree and branch are kept.
+          Stop requested — the run stops at its next clean boundary; the worktree and branch are kept.
         </span>
       )}
 

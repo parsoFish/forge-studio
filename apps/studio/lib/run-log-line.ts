@@ -89,7 +89,7 @@ function isFailedEnd(event: EventLogEntry): boolean {
 }
 
 /** Row 207 — an operator-stopped cycle attempt ends `{ status: 'stopped',
- *  error }` (`cycle.ts`): a halt the operator asked for, not a crash, and
+ *  error }` (`cycle.ts`): a stop the operator asked for, not a crash, and
  *  never a clean end either. */
 function isStoppedEnd(event: EventLogEntry): boolean {
   return event.metadata?.['status'] === 'stopped';

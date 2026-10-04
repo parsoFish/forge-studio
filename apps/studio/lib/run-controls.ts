@@ -52,7 +52,7 @@ const RUNNING_CONTROLS: RunControl[] = [
     // the cost ceiling already halts at — ADR 028 amendment). Gated: no live
     // agent to signal, so this moves the manifest to failed/ directly.
     detail:
-      'Halts at the next clean boundary (or immediately if gated). The worktree and ' +
+      'Stops at the next clean boundary (or immediately if gated). The worktree and ' +
       'branch are kept — resumable.',
     destructive: false,
   },

@@ -208,7 +208,7 @@ export function KbDrainPanel({
     }
     setCancelMsg(r.mode === 'forced'
       ? 'run was dead (no heartbeat) — terminated directly'
-      : 'stop requested — the run halts after its current turn');
+      : 'stop requested — the run stops after its current turn');
     setPollNonce((n) => n + 1);
   }, [kbId, cancelArmed]);
 
