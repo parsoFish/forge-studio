@@ -31,6 +31,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { readHalt } from '@forge/kernel';
 import { parseManifest } from './manifest.ts';
 import { operatorStopPath } from './operator-stop.ts';
 
@@ -132,6 +133,7 @@ function clearOperatorStopFlag(filename: string, paths: QueuePaths): void {
  * even if the rename itself then fails.
  */
 export function claim(filename: string, paths = getPaths()): string | null {
+  if (readHalt(paths.root) !== null) return null; // the emergency halt (ADR 011): nothing new starts
   const from = join(paths.pending, filename);
   const to = join(paths.inFlight, filename);
   clearOperatorStopFlag(filename, paths);
