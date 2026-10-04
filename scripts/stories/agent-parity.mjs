@@ -82,8 +82,47 @@ function isPricingOnlyEnd(row) {
 }
 
 /**
+ * Rows this rule will even consider a run-level `start`/`end` boundary,
+ * before any kind-specific narrowing — never a hook's own pair (its skill
+ * starts `hook:`) or a pricing row (`emitTurnCostRow`/`emitTurnEndedUnpricedRow`,
+ * a boolean `metadata.priced`, never a lifecycle boundary), and never
+ * anything other than `event_type: 'start'|'end'` — a `file_change`/`log`/
+ * `tool_use` row is never a boundary regardless of what it carries in
+ * `phase`. Shared by `classifyChannelDir`'s multi-phase test and by
+ * `runLevelRows` below so the two can never disagree about which rows count.
+ */
+function runLevelCandidateRows(rows) {
+  return (rows ?? []).filter(
+    (r) =>
+      (r?.event_type === 'start' || r?.event_type === 'end') &&
+      !isHookSkill(r?.skill) &&
+      !isPricingOnlyEnd(r),
+  );
+}
+
+/**
  * Classify one channel directory from its own basename and rows. Pure and
  * total: every input lands in exactly one of the four kinds below.
+ *
+ * DIR-NAME SHAPE IS TESTED FIRST, not the multi-phase test. Row 206
+ * follow-on, measured on a real capture
+ * (`_demo-2026-10-04T07-46-43-3602d1ce`, `_1.0/reports/m7-e-r206-parity-replay.md`):
+ * the Studio bridge writes 5 `file_change` rows straight into a SESSION's
+ * own dir mid-turn, each stamped `phase: 'orchestrator'` beside the
+ * session's own `phase: 'demo'` rows. Testing the multi-phase shape first
+ * read that as a multi-phase `cycle` log and lost whole-channel judging for
+ * a dir that is, by its own name, a registered session kind's turn — a
+ * bridge write into someone else's dir must never be able to flip that. A
+ * dir's OWN NAME is this rule's most specific evidence of what dispatched
+ * it (the dispatcher chose that name), so a name matching one of the four
+ * named shapes below is authoritative and the multi-phase test never even
+ * runs for it. Only a dir matching NEITHER a standalone prefix nor a
+ * registered session kind falls through to the multi-phase test — and that
+ * test itself counts phases over run-level candidate rows ONLY
+ * (`runLevelCandidateRows`, `start`/`end`, minus a hook pair and a pricing
+ * row), the same restriction `runLevelRows` applies below, so a bridge
+ * `file_change`/`log` row can never contribute a phase value either, on ANY
+ * dir, named or not.
  *
  * @param {string} dirName the channel's own basename (`_agent-…`, `_bridge-…`, …)
  * @param {object[]} rows this channel's own (already-deduped) events
@@ -91,15 +130,6 @@ function isPricingOnlyEnd(row) {
  * @returns {{kind: 'standalone'|'session'|'cycle'|'excluded', detail: string}}
  */
 export function classifyChannelDir(dirName, rows, registeredSessionKindIds = new Set()) {
-  const phases = new Set(
-    (rows ?? []).map((r) => r?.phase).filter((p) => typeof p === 'string' && p !== ''),
-  );
-  // The SAME test `spend.mjs`'s `summariseRunSpend` uses for `isCycleLog` —
-  // a cycle log is the one dispatch shape that legitimately carries more than
-  // one top-level `phase` value in one dir (orchestrator + architect + …).
-  if (phases.size > 1) {
-    return { kind: 'cycle', detail: `multi-phase cycle log (${[...phases].sort().join(', ')})` };
-  }
   if (dirName.startsWith('_agent-')) return { kind: 'standalone', detail: 'runAgent dispatch' };
   if (dirName.startsWith('_preflight-fix-')) return { kind: 'standalone', detail: 'preflight-fix turn (runFixTurn)' };
   if (dirName.startsWith('_brainfix-')) return { kind: 'standalone', detail: 'brain-fix turn (runFixTurn)' };
@@ -114,6 +144,16 @@ export function classifyChannelDir(dirName, rows, registeredSessionKindIds = new
     if (isMatch && (matched === null || id.length > matched.length)) matched = id;
   }
   if (matched !== null) return { kind: 'session', detail: `session turn (kind=${matched})` };
+  // Neither a standalone prefix nor a registered session kind — the ONLY
+  // shape left that legitimately carries more than one top-level `phase`
+  // value in one dir (orchestrator + architect + …), the same test
+  // `spend.mjs`'s `summariseRunSpend` uses as `isCycleLog`.
+  const phases = new Set(
+    runLevelCandidateRows(rows).map((r) => r?.phase).filter((p) => typeof p === 'string' && p !== ''),
+  );
+  if (phases.size > 1) {
+    return { kind: 'cycle', detail: `multi-phase cycle log (${[...phases].sort().join(', ')})` };
+  }
   return { kind: 'excluded', detail: 'not a recognised agent/session/cycle channel shape' };
 }
 
@@ -123,12 +163,7 @@ export function classifyChannelDir(dirName, rows, registeredSessionKindIds = new
  * for a `session` channel, never a row lacking `metadata.phase`.
  */
 function runLevelRows(rows, kind) {
-  const base = (rows ?? []).filter(
-    (r) =>
-      (r?.event_type === 'start' || r?.event_type === 'end') &&
-      !isHookSkill(r?.skill) &&
-      !isPricingOnlyEnd(r),
-  );
+  const base = runLevelCandidateRows(rows);
   if (kind !== 'session') return base;
   return base.filter((r) => typeof r?.metadata?.phase === 'string' && r.metadata.phase !== '');
 }

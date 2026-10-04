@@ -361,3 +361,37 @@ test('row 206: the row-202 S1 capture (two starts 37 ms apart under one run id) 
   assert.equal(v.violations[0].kind, 'double-start');
   assert.deepEqual(v.violations[0].eventIds, ['EV_murpk0kk_yw2rdk4i', 'EV_murpk0ll_9owbn3t5']);
 });
+
+// Row 206 follow-on — measured:
+// _logs/_story-logs-clear/S1/2026-10-04T07-33-11-882Z/_demo-2026-10-04T07-46-43-3602d1ce.
+// A real `demo` session dir that the Studio bridge ALSO writes into mid-turn
+// (5 `file_change` rows under top-level `phase: 'orchestrator'`, beside the
+// session's own `phase: 'demo'` rows) tripped the multi-phase test — the
+// SAME test `isCycleLog` uses — before dir-name shape, so this real session
+// read as a `cycle` and lost whole-channel judging (it was judged
+// `phase::skill`, one lane per phase, so the lock turn's own start/end never
+// collided with anything the bridge wrote). Trimmed to the rows that
+// reproduce it: the session's own two turns (generating->awaiting-review,
+// locking->locked) plus two of the five bridge `file_change` rows and the
+// `demo-locked` log row (same effect with any count >= 1).
+test('row 206 follow-on: a session dir the bridge also writes into is `session`, not `cycle` — whole-channel judging applies', () => {
+  const dir = '_demo-2026-10-04T07-46-43-3602d1ce';
+  const row = (r: Record<string, unknown>) => ({
+    cycle_id: dir, initiative_id: 'demo-2026-10-04T07-46-43-3602d1ce', skill: 'demo-builder-runner', phase: 'demo', ...r,
+  });
+  const events = [
+    row({ event_id: 'EV_mutip42u_1qpfpkjk', started_at: '2026-10-04T07:46:44.070Z', event_type: 'start', metadata: { session_id: '2026-10-04T07-46-43-3602d1ce', phase: 'generating' } }),
+    row({ event_id: 'EV_mutiwvqm_4j2fvsh4', started_at: '2026-10-04T07:52:46.510Z', event_type: 'end', metadata: { session_id: '2026-10-04T07-46-43-3602d1ce', phase: 'awaiting-review' } }),
+    row({ event_id: 'EV_mutiww9i_o9vjqx2z', started_at: '2026-10-04T07:52:47.190Z', event_type: 'start', metadata: { session_id: '2026-10-04T07-46-43-3602d1ce', phase: 'locking' } }),
+    // The bridge's own rows, written into THIS session's dir — top-level
+    // `phase: 'orchestrator'`, `skill: 'bridge'`, `event_type: 'file_change'`
+    // (never `start`/`end`) — measured verbatim.
+    row({ event_id: 'EV_mutiwwb2_f5xtftos', started_at: '2026-10-04T07:52:47.202Z', phase: 'orchestrator', skill: 'bridge', event_type: 'file_change' }),
+    row({ event_id: 'EV_mutiwwb2_p9ebl0tn', started_at: '2026-10-04T07:52:47.202Z', phase: 'orchestrator', skill: 'bridge', event_type: 'file_change' }),
+    row({ event_id: 'EV_mutiwwb2_r2afu25b', started_at: '2026-10-04T07:52:47.246Z', event_type: 'log', message: 'demo-locked (generation 1)' }),
+    row({ event_id: 'EV_mutiwwc7_galw5zxt', started_at: '2026-10-04T07:52:47.287Z', event_type: 'end', metadata: { session_id: '2026-10-04T07-46-43-3602d1ce', phase: 'locked' } }),
+  ];
+  const v = channelParityVerdict(dir, events, { registeredSessionKindIds: SESSION_KINDS });
+  assert.equal(v.kind, 'session', JSON.stringify({ kind: v.kind, detail: v.detail }));
+  assert.equal(v.ok, true, JSON.stringify(v.violations));
+});
