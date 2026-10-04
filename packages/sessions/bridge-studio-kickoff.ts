@@ -30,7 +30,7 @@ import type { ModelTier } from '@forge/agents';
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
-import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, sendIfDispatchInFlight, KB_ID_RE, SAFE_ID_RE } from '@forge/kernel';
+import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, sendIfDispatchRefused, KB_ID_RE, SAFE_ID_RE } from '@forge/kernel';
 import { isSafeRunId } from '@forge/kernel';
 import { guardedReadDir, guardedWriteFile } from '@forge/kernel';
 import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
@@ -398,7 +398,7 @@ export async function handleKickoffRoutes(
       // practice (claimDispatchSlot never finds a live holder for a brand
       // new id), but every route that calls the seam maps the refusal the
       // same way regardless.
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -529,7 +529,7 @@ export async function handleKickoffRoutes(
     } catch (err) {
       // Row 206 — same reasoning as the authoring start route above: a fresh
       // sessionId makes this unreachable today, mapped the same way anyway.
-      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }

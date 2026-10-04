@@ -32,7 +32,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, sendIfDispatchInFlight } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, sendIfDispatchRefused } from '@forge/kernel';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import {
@@ -499,7 +499,7 @@ export async function handleStudioAffordanceRoutes(
     // Row 206 (forge-8vfn.8.5.56) — a DispatchInFlight from ctx.spawnAgentTurn
     // (thrown by one of the per-kind arms above, e.g. a REVISE verdict
     // re-spawning a turn) maps to 409 naming the holder, not a generic 500.
-    if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: sanitizeError(err) }, origin);
     return true;
   }
 }

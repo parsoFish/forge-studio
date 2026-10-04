@@ -89,19 +89,38 @@ export class DispatchInFlight extends Error {
 }
 
 /**
+ * Thrown by the dispatch claim while the one emergency halt (ADR 011) is on:
+ * nothing new starts. `since` is the halt record's timestamp, or `null` when
+ * the record is unreadable (an unreadable record reads as halted).
+ */
+export class Halted extends Error {
+  readonly since: string | null;
+  constructor(since: string | null) {
+    super(`the emergency halt is on${since === null ? '' : ` since ${since}`} — nothing new starts until it is released`);
+    this.name = 'Halted';
+    this.since = since;
+  }
+}
+
+/**
  * The ONE place a caught dispatch refusal becomes an HTTP response — every
  * route that calls the agent-dispatch seam shares this instead of copying an
  * `instanceof DispatchInFlight` branch into its own catch block (row 206's
  * "one shared helper, not per-route copies"). Writes the 409 and returns
- * `true` when `err` is a `DispatchInFlight`; otherwise writes nothing and
+ * `true` when `err` is a `DispatchInFlight` (409 naming the holder) or
+ * `Halted` (409 `{ error: 'halted', since }`); otherwise writes nothing and
  * returns `false`, so the caller's own catch-all (its existing 500) still
  * runs unchanged for every other error:
  *
  *   } catch (err) {
- *     if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+ *     if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
  *   }
  */
-export function sendIfDispatchInFlight(res: ServerResponse, err: unknown, origin = 'null'): boolean {
+export function sendIfDispatchRefused(res: ServerResponse, err: unknown, origin = 'null'): boolean {
+  if (err instanceof Halted) {
+    sendJson(res, 409, { error: 'halted', since: err.since }, origin);
+    return true;
+  }
   if (!(err instanceof DispatchInFlight)) return false;
   sendJson(res, 409, { error: err.message, holderPid: err.holderPid, runId: err.runId }, origin);
   return true;

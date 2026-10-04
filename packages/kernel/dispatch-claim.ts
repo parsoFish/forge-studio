@@ -21,7 +21,8 @@ import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile, guardedWriteFileExclusive, guardedUnlink } from './path-guard.ts';
-import { DispatchInFlight } from './http-envelope.ts';
+import { DispatchInFlight, Halted } from './http-envelope.ts';
+import { readHalt, forgeQueueRoot } from './halt.ts';
 
 /** Timestamp + short random suffix (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): ms
  *  precision plus 4 base36 chars so two dispatches minted in the same
@@ -219,9 +220,13 @@ export type ClaimDispatchSlotOpts = {
  * with no `await` before the caller's own `spawn()` — a single-threaded
  * bridge can never interleave between this claim and the spawn it guards.
  *
+ * While the emergency halt is on (`<forgeRoot>/_queue/halt.json`, ADR 011) the
+ * claim throws `Halted` before it writes anything: a refused dispatch leaves
+ * the session dir byte-identical.
+ *
  * A live turn already holding the slot throws `DispatchInFlight` naming the
  * holder pid, BEFORE anything spawns — never swallowed; every caller's route
- * maps it to HTTP 409 via `sendIfDispatchInFlight`. "Live" (row 206 follow-
+ * maps it to HTTP 409 via `sendIfDispatchRefused`. "Live" (row 206 follow-
  * up, m7-e-r206-fixgate-s1 capture) means `isAlive(existingPid, ownershipMark)`
  * AND the holder has NOT already written its own run-level `end`
  * (`holderHasEnded`) — a turn writes `end` and then takes a moment to exit,
@@ -255,6 +260,8 @@ export function claimDispatchSlot(
   isAlive: (pid: number, ownershipMark: string) => boolean,
   opts: ClaimDispatchSlotOpts = {},
 ): void {
+  const halt = readHalt(forgeQueueRoot(forgeRoot));
+  if (halt !== null) throw new Halted(halt.since);
   const sessionTurnShape = opts.sessionTurnShape ?? false;
   const logsRoot = join(forgeRoot, '_logs');
   const existingPid = readClaimedPid(logsRoot, logDirName);

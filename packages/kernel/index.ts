@@ -25,6 +25,8 @@ export * from './config.ts';
 export * from './gh-identity.ts';
 /** First-run scaffolding: the `_queue/`, `_worktrees/`, `_logs/` layout. */
 export * from './init.ts';
+/** The one emergency halt record (ADR 011): `<queueRoot>/halt.json`. */
+export * from './halt.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
 export { safeReadFileInSession } from './contained-read.ts';
