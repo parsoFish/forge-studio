@@ -168,6 +168,54 @@ test('POST /api/architect/rerun on an unknown session → 404', async () => {
   assert.equal(res.status, 404);
 });
 
+// ---------------------------------------------------------------------------
+// Row 206 (forge-8vfn.8.5.56) — the dispatch-site sweep's phase gate: rerun
+// spawns only for a session NOT at a terminal phase. A session already at a
+// TERMINAL phase has nothing left to re-run.
+// ---------------------------------------------------------------------------
+
+test('row 206: POST /api/architect/rerun on a TERMINAL-phase ("committed") session → 409, no mutation', async () => {
+  const sid5 = '2026-05-29T19-00-00';
+  const dir5 = sessionDir(sid5);
+  mkdirSync(dir5, { recursive: true });
+  writeFileSync(
+    join(dir5, 'status.json'),
+    JSON.stringify({
+      session_id: sid5, project: 'demo', project_repo_path: dir5,
+      phase: 'committed', round: 3, idea: 'done', updated_at: new Date().toISOString(),
+    }),
+  );
+  const res = await fetch(`${url}/api/architect/rerun`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', sessionId: sid5 }),
+  });
+  assert.equal(res.status, 409);
+  const body = await res.json() as { error: string };
+  assert.match(body.error, /committed/);
+  const status = JSON.parse(readFileSync(join(dir5, 'status.json'), 'utf8'));
+  assert.equal(status.phase, 'committed', 'a refused rerun must not mutate the terminal session');
+});
+
+test('row 206: POST /api/architect/rerun on a TERMINAL-phase ("rejected") session → 409', async () => {
+  const sid6 = '2026-05-29T20-00-00';
+  const dir6 = sessionDir(sid6);
+  mkdirSync(dir6, { recursive: true });
+  writeFileSync(
+    join(dir6, 'status.json'),
+    JSON.stringify({
+      session_id: sid6, project: 'demo', project_repo_path: dir6,
+      phase: 'rejected', round: 1, idea: 'nope', updated_at: new Date().toISOString(),
+    }),
+  );
+  const res = await fetch(`${url}/api/architect/rerun`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', sessionId: sid6 }),
+  });
+  assert.equal(res.status, 409);
+});
+
 test('POST /api/architect/rerun: FORGE_DRY_BRIDGE=1 alone suppresses the spawn (explicit marker, no log dir)', async () => {
   const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   const priorDryBridge = process.env.FORGE_DRY_BRIDGE;

@@ -50,16 +50,21 @@ const ARMS = [
   // The two that already have the fix — included so this gate proves it is
   // asserting something real rather than a property every arm happens to have.
   {
+    // Row 206 sweep (forge-8vfn.8.5.56): `/api/instructions/brief` is
+    // deleted and `/start` is now the LAST arm in this file, so the end
+    // marker is the function's own close rather than a sibling handler.
     kind: 'instructions',
     file: 'bridge-studio-instructions.ts',
     startMarker: "url === '/api/instructions/start'",
-    endMarker: "url === '/api/instructions/brief'",
+    endMarker: 'return false;',
   },
   {
+    // Row 206 sweep: `/api/demo-builder/brief` is deleted; `/lock` is now
+    // the next arm after `/start`.
     kind: 'demo-builder',
     file: 'bridge-studio-demo.ts',
     startMarker: "url === '/api/demo-builder/start'",
-    endMarker: "url === '/api/demo-builder/brief'",
+    endMarker: "url === '/api/demo-builder/lock'",
   },
 ] as const;
 

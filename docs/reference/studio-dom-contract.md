@@ -4464,10 +4464,9 @@ is what this contract reads — but it cannot be the only distinguisher.
   `affordance.phase`); demo derives it from its own `briefing` row the same
   way, via `handleDemoBrief`. The Send button no longer requires non-empty
   text (an earlier revision of this panel disabled it until text was
-  entered) — a briefing note is genuinely optional (the bespoke `POST
-  /api/instructions/brief` / `POST /api/demo-builder/brief` routes it
-  replaces always accepted an empty brief), and an empty interview answer
-  is harmless (the agent can re-ask); the same rule applies to every phase
+  entered) — a briefing note is genuinely optional (an empty brief is
+  accepted the same way an empty interview answer is), and an empty
+  interview answer is harmless (the agent can re-ask); the same rule applies to every phase
   and kind, with no per-phase or per-kind branch in this component. `verdict` →
   `[data-action="verdict-approve"]` + `[data-action="verdict-reject"]`,
   rendered from the server-derived `meta.verdicts` only. **W7-C2
@@ -4821,8 +4820,9 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`POST /api/demo-builder/start`) — so a session opened here could never get
   the agent started; it gained `{phase: briefing, step: noop, awaits:
   questions}`, rendering as the generic question-form box, and
-  `packages/sessions/kinds/demo-builder.ts` gained `handleDemoBrief`, mirroring
-  `POST /api/demo-builder/brief`. `ActivityLog` (the shared bottom drawer,
+  `packages/sessions/kinds/demo-builder.ts`'s `handleDemoBrief` is the one
+  write path for it, writing `prompt.md` and advancing `briefing` ->
+  `generating`. `ActivityLog` (the shared bottom drawer,
   `[data-component="activity-drawer"]`) is wired generically into
   `SessionInteractivePanel`, gated on `!terminal` (W6-B8) — W6-B10 originally
   added a SECOND, separate gate (`showActivityLog`, true whenever every

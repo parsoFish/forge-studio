@@ -67,6 +67,46 @@ export function sanitizeError(err: unknown): string {
   return String(err).replace(/\/[^\s:,'"]+/g, '[path]');
 }
 
+/**
+ * Row 206 (forge-8vfn.8.5.56) — thrown by the agent-dispatch seam
+ * (`spawnAgentTurn`/`spawnAgentDispatch`, `apps/forge/bridge-agent-dispatch.ts`)
+ * when a dispatch for the same run/session id is already in flight: one
+ * operator action must mint exactly one run-level `start`, never two
+ * concurrent turns racing the same run id's `turn.pid`. `holderPid` is the
+ * pid that already holds the slot (or `-1` when a cross-process race means
+ * the real holder pid isn't known yet — see the seam's own doc), so every
+ * caught instance can name it back to the operator.
+ */
+export class DispatchInFlight extends Error {
+  readonly holderPid: number;
+  readonly runId: string;
+  constructor(holderPid: number, runId: string) {
+    super(`a turn is already in flight for "${runId}" (pid ${holderPid}) — refusing a second dispatch for the same run`);
+    this.name = 'DispatchInFlight';
+    this.holderPid = holderPid;
+    this.runId = runId;
+  }
+}
+
+/**
+ * The ONE place a caught dispatch refusal becomes an HTTP response — every
+ * route that calls the agent-dispatch seam shares this instead of copying an
+ * `instanceof DispatchInFlight` branch into its own catch block (row 206's
+ * "one shared helper, not per-route copies"). Writes the 409 and returns
+ * `true` when `err` is a `DispatchInFlight`; otherwise writes nothing and
+ * returns `false`, so the caller's own catch-all (its existing 500) still
+ * runs unchanged for every other error:
+ *
+ *   } catch (err) {
+ *     if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+ *   }
+ */
+export function sendIfDispatchInFlight(res: ServerResponse, err: unknown, origin = 'null'): boolean {
+  if (!(err instanceof DispatchInFlight)) return false;
+  sendJson(res, 409, { error: err.message, holderPid: err.holderPid, runId: err.runId }, origin);
+  return true;
+}
+
 /** Strip the query-string from a URL string. */
 export function pathOnly(rawUrl: string): string {
   const idx = rawUrl.indexOf('?');

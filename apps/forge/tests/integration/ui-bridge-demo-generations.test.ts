@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
 
 import { startBridge } from '../../ui-bridge.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 
@@ -144,6 +145,9 @@ function rawPostBody(rawPath: string, bodyText: string, timeoutMs = 10000): Prom
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-demo-gen-'));
   mkdirSync(repoDir(), { recursive: true });
+  // Row 206 — /lock's phase gate fails closed without a real registry.
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), readFileSync(join(FORGE_ROOT, 'studio', 'session-kinds.yaml'), 'utf8'));
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
 });
 
@@ -185,6 +189,8 @@ test('R4-16 AT-24: POST /lock persists a well-formed "generation" to status.json
   assert.equal(status2, 200);
   assert.ok(!('selectedGeneration' in readDemoStatus(sid2)), 'omitting "generation" must never invent a selectedGeneration on status.json');
 });
+
+// Row 206's registry-fails-closed pin: `ui-bridge-demo-lock-registry-fail-closed.test.ts`.
 
 for (const bad of [0, -1, 1.5, '1']) {
   test(`R4-16 AT-25: POST /lock with generation=${JSON.stringify(bad)} → 400, naming the offending value, and status.json is NOT mutated`, async () => {
@@ -449,11 +455,9 @@ test('R4-16 AT-42: filename=".." (raw %2E%2E, bypassing client-side dot-segment 
 // the module (`spawnAgentTurn` itself is not exported), so per the brief's
 // own instruction this assertion is OMITTED rather than invented; the file
 // content assertion below is the real, observable proof of the fix.
+// Row 206 — `/lock` is this family's one forge-ui-called mutating route.
 const DEMO_MUTATING_ROUTES: Array<{ path: string; extraBody?: Record<string, unknown> }> = [
-  { path: '/api/demo-builder/brief', extraBody: { brief: 'Malicious brief.' } },
-  { path: '/api/demo-builder/feedback', extraBody: { feedback: 'Malicious feedback.' } },
   { path: '/api/demo-builder/lock', extraBody: { generation: 1 } },
-  { path: '/api/demo-builder/abandon' },
 ];
 
 function outsideDirForTraversal(): string {
@@ -507,29 +511,22 @@ test('R4-16 AT-45: charset rejection — POST /lock with project failing PROJECT
   assert.ok(String(json.error ?? '').includes('Bad Project'), `error must name the offending project value, got: ${JSON.stringify(json)}`);
 });
 
-test('R4-16 AT-46: charset rejection — POST /brief with sessionId failing SAFE_ID_RE (embedded "/") → 400, naming the offending value', async () => {
+test('R4-16 AT-46: charset rejection — POST /lock with sessionId failing SAFE_ID_RE (embedded "/") → 400, naming the offending value', async () => {
   const maliciousSessionId = 'sid/with/slashes';
-  const { status, json } = await post('/api/demo-builder/brief', { project: 'demo', sessionId: maliciousSessionId, brief: 'x' });
+  const { status, json } = await post('/api/demo-builder/lock', { project: 'demo', sessionId: maliciousSessionId, generation: 1 });
   assert.equal(status, 400, `a sessionId containing "/" must be rejected with 400, got ${status}`);
   assert.ok(String(json.error ?? '').includes(maliciousSessionId), `error must name the offending sessionId value, got: ${JSON.stringify(json)}`);
 });
 
-// Positive control — GREEN today, not a defect pin (mirrors AT-24/AT-46's
-// precedent in the sibling pins): the fix must reject the escaping/invalid
-// shapes above WITHOUT breaking the legitimate flow. Exercises all 5 routes
-// end-to-end (start → brief → feedback → lock, plus a second session for
-// abandon) with valid project/sessionId throughout.
-test('R4-16 AT-47 (positive control, green today): all 5 demo-builder routes still succeed end-to-end with a valid project + sessionId', async () => {
+// Positive control — GREEN today: `start` and `lock` are this family's own
+// write routes; `lock` requires `awaiting-review` (its own phase gate),
+// seeded directly here exactly as AT-24 does.
+test('R4-16 AT-47 (positive control, green today): the surviving demo-builder routes (start, lock) still succeed end-to-end with a valid project + sessionId', async () => {
   const started = await post('/api/demo-builder/start', { project: 'demo' });
   assert.equal(started.status, 200);
   const sid = started.json.sessionId as string;
-  assert.equal((await post('/api/demo-builder/brief', { project: 'demo', sessionId: sid, brief: 'Dark and minimal.' })).status, 200);
-  assert.equal((await post('/api/demo-builder/feedback', { project: 'demo', sessionId: sid, feedback: 'Bigger diff.' })).status, 200);
+  patchDemoStatus(sid, { phase: 'awaiting-review' });
   assert.equal((await post('/api/demo-builder/lock', { project: 'demo', sessionId: sid })).status, 200);
-
-  const started2 = await post('/api/demo-builder/start', { project: 'demo' });
-  const sid2 = started2.json.sessionId as string;
-  assert.equal((await post('/api/demo-builder/abandon', { project: 'demo', sessionId: sid2 })).status, 200);
 });
 
 // ---------------------------------------------------------------------------

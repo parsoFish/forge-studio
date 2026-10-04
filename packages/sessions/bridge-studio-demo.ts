@@ -23,8 +23,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { allowedOrigin, sanitizeError, sendJson, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
-import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
+import { allowedOrigin, sanitizeError, sendJson, sendIfDispatchInFlight, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
+import { guardedFile, guardedReadDir, guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 
 import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-session-store.ts';
 import { GENERATIONS_DIRNAME } from './kinds/demo-session-store.ts';
@@ -32,6 +32,8 @@ import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-s
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import { listDemoSessions } from './bridge-studio-session-index.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';
+import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import {
   deriveRowLifecycle,
   invalidGenerationProjectReason,
@@ -422,90 +424,23 @@ export async function handleDemoRoutes(
     return true;
   }
 
-  // POST /api/demo-builder/brief {project, sessionId, brief} — record the
-  // operator's look-and-feel / change-notes and kick off the agent
-  // (briefing → generating).
-  if (method === 'POST' && url === '/api/demo-builder/brief') {
-    try {
-      const body = (await ctx.readBody()) as { project?: string; sessionId?: string; brief?: string; targetElement?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — dirOutcome.ok above proved the DIR contained;
-      // route each leaf (prompt.md, status.json) through the guarded leaf
-      // siblings so the leaf itself is contained too (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const brief = body.brief ?? '';
-      // `targetElement` narrows the turn to one demo element (per-element iteration);
-      // omit/empty to compose the full demo.
-      const targetElement = typeof body.targetElement === 'string' && body.targetElement ? body.targetElement : status.targetElement;
-      if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
-        guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
-          ...status, phase: 'generating', iteration: 1, prompt: brief,
-          ...(targetElement ? { targetElement } : {}),
-        }) === null
-      ) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/brief', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/demo-builder/feedback {project, sessionId, feedback} — record the
-  // operator's feedback + re-generate (iteration + 1).
-  if (method === 'POST' && url === '/api/demo-builder/feedback') {
-    try {
-      const body = (await ctx.readBody()) as { project?: string; sessionId?: string; feedback?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — route each leaf (feedback.md, status.json)
-      // through the guarded leaf siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback ?? '') === null ||
-        guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: status.iteration + 1 }) === null
-      ) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/feedback', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
+  // `/api/demo-builder/{brief,feedback,abandon}` — DELETED (row 206 sweep,
+  // forge-8vfn.8.5.56). Measured unused: `demoBuilderBrief`/
+  // `demoBuilderFeedback`/`demoBuilderAbandon` (`apps/studio/lib/bridge-client-interviews.ts`)
+  // have no caller anywhere in `apps/studio` — every demo-builder affordance
+  // the UI actually drives (briefing, feedback, abandon) now POSTs through
+  // the generic `question-form`/`verdict` affordance (`postSessionAffordance`,
+  // `packages/sessions/kinds/demo-builder.ts`'s `handleDemoBrief`/
+  // `handleDemoVerdict`, phase-gated via `deriveSessionAffordances`). These
+  // three arms spawned unconditionally with no phase gate at all — a
+  // dispatch a ruling had already moved elsewhere, still spawning.
+  //
+  // `/api/demo-builder/lock` SURVIVES: `demoBuilderLock` IS still called
+  // (`apps/studio/app/sessions/[kind]/[sessionId]/page.tsx` and
+  // `GenerationGallery.tsx`), so it keeps spawning but now through the SAME
+  // phase gate its generic twin's verdict-approve already enforces — read
+  // from the shared `deriveSessionAffordances` derivation, not a hand-kept
+  // second copy of "which phase may lock".
 
   // POST /api/demo-builder/lock {project, sessionId, generation?} — lock the
   // current demo in. R4-16: an optional `generation` names which snapshot to
@@ -536,6 +471,27 @@ export async function handleDemoRoutes(
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
+      // Row 206 (forge-8vfn.8.5.56) — this arm spawns only from a phase
+      // whose row derives a `verdict` affordance for this kind (today:
+      // `awaiting-review` — `studio/session-kinds.yaml`), via the SAME
+      // derivation the generic twin's own verdict-approve write gates on,
+      // not a second, hand-kept "awaiting-review" literal. FAILS CLOSED:
+      // a registry that cannot load is answered 500, naming the load
+      // error — this gate never falls through to "allow" on an
+      // undeterminable phase.
+      let demoDescriptor: SessionKindDescriptor | undefined;
+      try {
+        demoDescriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'demo');
+      } catch (err) {
+        sendJson(res, 500, { error: `demo-builder lock: the session-kinds registry failed to load — refusing rather than guessing the phase gate: ${sanitizeError(err)}` }, origin);
+        return true;
+      }
+      const verdictCurrentlyAvailable = demoDescriptor !== undefined
+        && deriveSessionAffordances(demoDescriptor, status.phase).some((a) => a.kind === 'verdict');
+      if (!verdictCurrentlyAvailable) {
+        sendJson(res, 409, { error: `session is not awaiting review (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
+        return true;
+      }
       if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
         ...status,
         phase: 'locking',
@@ -548,44 +504,11 @@ export async function handleDemoRoutes(
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
-
-  // POST /api/demo-builder/abandon {project, sessionId} — abandon the session.
-  if (method === 'POST' && url === '/api/demo-builder/abandon') {
-    try {
-      const body = (await ctx.readBody()) as { project?: string; sessionId?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — status.json read+write through the guarded leaf
-      // siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/abandon', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }  return false;
+  return false;
 }
 
 /** R4-16 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>

@@ -83,42 +83,11 @@ test('POST /api/instructions/start defaults mode=edit when an AGENTS.md exists',
   }
 });
 
-test('POST /api/instructions/brief records notes + transitions briefing → interviewing', async () => {
-  const started = await post('/api/instructions/start', { project: 'demo' });
-  const sid = started.json.sessionId as string;
-  const { status } = await post('/api/instructions/brief', { project: 'demo', sessionId: sid, brief: 'Keep it short; document the lint gate.' });
-  assert.equal(status, 200);
-  const st = readInstrStatus(sid);
-  assert.equal(st.phase, 'interviewing', 'agent is now kicked off');
-  assert.equal(st.prompt, 'Keep it short; document the lint gate.');
-});
-
-// W6-B9 reviewer fix (parity): this bespoke route now caps `brief` at the
-// SAME MAX_ANSWER_FIELD_BYTES the generic `briefing-question-form`
-// affordance's equivalent field already caps at
-// (cli/bridge-studio-affordances.ts) — both write the identical
-// prompt.md/status.prompt target.
-test('POST /api/instructions/brief with a brief over 8KB -> 400 naming the cap, nothing written (phase stays briefing)', async () => {
-  const started = await post('/api/instructions/start', { project: 'demo' });
-  const sid = started.json.sessionId as string;
-  const huge = 'x'.repeat(9 * 1024);
-  const { status, json } = await post('/api/instructions/brief', { project: 'demo', sessionId: sid, brief: huge });
-  assert.equal(status, 400);
-  assert.match(String(json.error), /8192|8\s*KB|byte/i);
-  const st = readInstrStatus(sid);
-  assert.equal(st.phase, 'briefing', 'a rejected brief must not advance the phase');
-  assert.equal(st.prompt, '', 'a rejected brief must not be written to status.prompt');
-});
-
-test('POST /api/instructions/brief with a brief exactly at the 8KB cap still succeeds — the cap must not false-reject a legitimate boundary value', async () => {
-  const started = await post('/api/instructions/start', { project: 'demo' });
-  const sid = started.json.sessionId as string;
-  const exactly8kb = 'x'.repeat(8 * 1024);
-  const { status } = await post('/api/instructions/brief', { project: 'demo', sessionId: sid, brief: exactly8kb });
-  assert.equal(status, 200);
-  const st = readInstrStatus(sid);
-  assert.equal(st.phase, 'interviewing');
-});
+// `POST /api/instructions/brief` is DELETED (row 206 sweep, forge-8vfn.8.5.56
+// — no forge-ui caller; every instructions briefing now POSTs through the
+// generic question-form affordance). Its three tests here (brief kicks off
+// the agent; the 8KB cap; the boundary value) moved with the behaviour to
+// `packages/sessions/kinds/instructions.ts`'s own test coverage.
 
 // --- ADR-043 §3 amendment (wave-6 kickoff model-tier seam) -----------------
 
@@ -206,15 +175,10 @@ test('demo sessions surface no fragments, and there is no fragment route', async
   assert.doesNotMatch(await frag.text(), /cli fragment/);
 });
 
-test('POST /api/demo-builder/brief transitions briefing → generating', async () => {
-  const started = await post('/api/demo-builder/start', { project: 'demo' });
-  const sid = started.json.sessionId as string;
-  const { status } = await post('/api/demo-builder/brief', { project: 'demo', sessionId: sid, brief: 'Dark, minimal, show the diff prominently.' });
-  assert.equal(status, 200);
-  const st = readDemoStatus(sid);
-  assert.equal(st.phase, 'generating');
-  assert.equal(st.prompt, 'Dark, minimal, show the diff prominently.');
-});
+// `POST /api/demo-builder/brief` is DELETED (row 206 sweep,
+// forge-8vfn.8.5.56 — no forge-ui caller; every demo-builder briefing now
+// POSTs through the generic question-form affordance,
+// `packages/sessions/kinds/demo-builder.ts`'s `handleDemoBrief`).
 
 test('start does not 400 on a missing project (only project is required)', async () => {
   const { status } = await post('/api/instructions/start', {});

@@ -336,148 +336,15 @@ test('(RED) POST /api/instructions/start with a "../.." project writes status.js
   assert.ok(is4xx(status), `a traversal project must be rejected 4xx — got ${status}: ${text}`);
 });
 
-// --- brief : project traversal + sessionId traversal ------------------------
-
-test('(RED) POST /api/instructions/brief with a "../.." project writes prompt.md OUTSIDE projectsRoot', async () => {
-  const outside = newOutsideDir('sec04-instr-brief-project-outside-');
-  const rel = relative(projectsRoot, outside);
-  const victimDir = join(outside, '_instructions', 'sess-instr-brief');
-  plantStatusJson(victimDir, { session_id: 'sess-instr-brief', project: 'irrelevant', project_repo_path: victimDir, phase: 'briefing', round: 1, prompt: '' });
-  assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
-  assert.equal(existsSync(join(victimDir, 'prompt.md')), false, 'precondition: no prompt.md yet');
-
-  const { status, text } = await postJson('/api/instructions/brief', {
-    project: rel,
-    sessionId: 'sess-instr-brief',
-    brief: 'PWNED-INSTR-BRIEF-e55b1',
-  });
-
-  assert.equal(
-    existsSync(join(victimDir, 'prompt.md')),
-    false,
-    `a "../.." project must NOT let instructions/brief write prompt.md out of root — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a traversal project must be rejected 4xx — got ${status}: ${text}`);
-});
-
-test('(RED) POST /api/instructions/brief with a valid project but "../.." sessionId writes prompt.md OUTSIDE projectsRoot', async () => {
-  const outside = newOutsideDir('sec04-instr-brief-sid-outside-');
-  const victimDir = join(outside, 'sess-instr-brief-sid');
-  plantStatusJson(victimDir, { session_id: 'x', project: 'legit', project_repo_path: victimDir, phase: 'briefing', round: 1, prompt: '' });
-  const sid = relative(join(projectsRoot, 'legit', '_instructions'), victimDir);
-  assert.equal(sid.split(sep)[0], '..', 'sanity: sessionId must step outside');
-  assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
-  assert.equal(existsSync(join(victimDir, 'prompt.md')), false, 'precondition: no prompt.md yet');
-
-  const { status, text } = await postJson('/api/instructions/brief', {
-    project: 'legit',
-    sessionId: sid,
-    brief: 'PWNED-INSTR-BRIEF-SID-f66c2',
-  });
-
-  assert.equal(
-    existsSync(join(victimDir, 'prompt.md')),
-    false,
-    `a "../.." sessionId (real project) must NOT let instructions/brief write out of root — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a traversal sessionId must be rejected 4xx — got ${status}: ${text}`);
-});
-
-// --- answer : project traversal + sessionId traversal -----------------------
-
-test('(RED) POST /api/instructions/answer with a "../.." project writes answers.json OUTSIDE projectsRoot', async () => {
-  const outside = newOutsideDir('sec04-instr-answer-project-outside-');
-  const rel = relative(projectsRoot, outside);
-  const victimDir = join(outside, '_instructions', 'sess-instr-answer');
-  plantStatusJson(victimDir, { session_id: 'sess-instr-answer', project: 'irrelevant', project_repo_path: victimDir, phase: 'awaiting-answers', round: 1, prompt: '' });
-  assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
-  assert.equal(existsSync(join(victimDir, 'answers.json')), false, 'precondition: no answers.json yet');
-
-  const { status, text } = await postJson('/api/instructions/answer', {
-    project: rel,
-    sessionId: 'sess-instr-answer',
-    answers: [{ question: 'q', answer: 'PWNED-INSTR-ANSWER-a77d3' }],
-  });
-
-  assert.equal(
-    existsSync(join(victimDir, 'answers.json')),
-    false,
-    `a "../.." project must NOT let instructions/answer write answers.json out of root — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a traversal project must be rejected 4xx — got ${status}: ${text}`);
-});
-
-test('(RED) POST /api/instructions/answer with a valid project but "../.." sessionId writes answers.json OUTSIDE projectsRoot', async () => {
-  const outside = newOutsideDir('sec04-instr-answer-sid-outside-');
-  const victimDir = join(outside, 'sess-instr-answer-sid');
-  plantStatusJson(victimDir, { session_id: 'x', project: 'legit', project_repo_path: victimDir, phase: 'awaiting-answers', round: 1, prompt: '' });
-  const sid = relative(join(projectsRoot, 'legit', '_instructions'), victimDir);
-  assert.equal(sid.split(sep)[0], '..', 'sanity: sessionId must step outside');
-  assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
-  assert.equal(existsSync(join(victimDir, 'answers.json')), false, 'precondition: no answers.json yet');
-
-  const { status, text } = await postJson('/api/instructions/answer', {
-    project: 'legit',
-    sessionId: sid,
-    answers: [{ question: 'q', answer: 'PWNED-INSTR-ANSWER-SID-b88e4' }],
-  });
-
-  assert.equal(
-    existsSync(join(victimDir, 'answers.json')),
-    false,
-    `a "../.." sessionId (real project) must NOT let instructions/answer write out of root — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a traversal sessionId must be rejected 4xx — got ${status}: ${text}`);
-});
-
-// --- verdict (revise → feedback.md) : project traversal + sessionId traversal ---
-
-test('(RED) POST /api/instructions/verdict (revise) with a "../.." project writes feedback.md OUTSIDE projectsRoot', async () => {
-  const outside = newOutsideDir('sec04-instr-verdict-project-outside-');
-  const rel = relative(projectsRoot, outside);
-  const victimDir = join(outside, '_instructions', 'sess-instr-verdict');
-  plantStatusJson(victimDir, { session_id: 'sess-instr-verdict', project: 'irrelevant', project_repo_path: victimDir, phase: 'awaiting-verdict', round: 1, prompt: '' });
-  assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
-  assert.equal(existsSync(join(victimDir, 'feedback.md')), false, 'precondition: no feedback.md yet');
-
-  const { status, text } = await postJson('/api/instructions/verdict', {
-    project: rel,
-    sessionId: 'sess-instr-verdict',
-    kind: 'revise',
-    feedback: 'PWNED-INSTR-VERDICT-c99f5',
-  });
-
-  assert.equal(
-    existsSync(join(victimDir, 'feedback.md')),
-    false,
-    `a "../.." project must NOT let instructions/verdict write feedback.md out of root — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a traversal project must be rejected 4xx — got ${status}: ${text}`);
-});
-
-test('(RED) POST /api/instructions/verdict (revise) with a valid project but "../.." sessionId writes feedback.md OUTSIDE projectsRoot', async () => {
-  const outside = newOutsideDir('sec04-instr-verdict-sid-outside-');
-  const victimDir = join(outside, 'sess-instr-verdict-sid');
-  plantStatusJson(victimDir, { session_id: 'x', project: 'legit', project_repo_path: victimDir, phase: 'awaiting-verdict', round: 1, prompt: '' });
-  const sid = relative(join(projectsRoot, 'legit', '_instructions'), victimDir);
-  assert.equal(sid.split(sep)[0], '..', 'sanity: sessionId must step outside');
-  assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
-  assert.equal(existsSync(join(victimDir, 'feedback.md')), false, 'precondition: no feedback.md yet');
-
-  const { status, text } = await postJson('/api/instructions/verdict', {
-    project: 'legit',
-    sessionId: sid,
-    kind: 'revise',
-    feedback: 'PWNED-INSTR-VERDICT-SID-d00a6',
-  });
-
-  assert.equal(
-    existsSync(join(victimDir, 'feedback.md')),
-    false,
-    `a "../.." sessionId (real project) must NOT let instructions/verdict write out of root — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a traversal sessionId must be rejected 4xx — got ${status}: ${text}`);
-});
+// --- brief / answer / verdict -----------------------------------------------
+//
+// Row 206 (forge-8vfn.8.5.56) — the generic question-form/verdict affordance
+// route is the one write surface for instructions' briefing, interview and
+// verdict phases; no forge-ui caller reaches `/api/instructions/{brief,
+// answer,verdict}`, so no route exists here for a project-traversal or
+// sessionId-traversal pin to exercise. The generic affordance route's OWN
+// containment is covered by `packages/sessions/tests/` (SEC-04 leaf/dir pins
+// on `kinds/instructions.ts`).
 
 // --- file GET : self-defeating startsWith, arbitrary filename ---------------
 

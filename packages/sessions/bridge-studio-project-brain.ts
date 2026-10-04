@@ -15,7 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
-import { allowedOrigin, sendJson } from '@forge/kernel';
+import { allowedOrigin, sendJson, sendIfDispatchInFlight } from '@forge/kernel';
 import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
@@ -220,6 +220,18 @@ export async function handleProjectBrainRoutes(
       if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
+      // Row 206 (forge-8vfn.8.5.56) — this arm spawns only from the
+      // `briefing` phase, so a stale/duplicate brief press after the
+      // session has already moved past it (the first brief already
+      // transitioned it to `analyzing` or beyond) is refused rather than
+      // re-transitioning+re-spawning. The phase gate reads the SAME
+      // `LEGACY_SESSION_AWAITS_PHASES['project-brain']` table this kind's
+      // lifecycle derivation already uses (`briefing` -> `questions`) — not a
+      // second, hand-kept copy of which phase this write belongs to.
+      if (status.phase !== 'briefing') {
+        sendJson(res, 409, { error: `session is not awaiting a brief (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
+        return true;
+      }
       if (
         guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], body.brief ?? '') === null ||
         guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs, { ...status, phase: 'analyzing', prompt: body.brief ?? '' }) === null
@@ -230,7 +242,9 @@ export async function handleProjectBrainRoutes(
       ctx.spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
-    } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
+    } catch (err) {
+      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+    }
     return true;
   }
   if (method === 'POST' && (url === '/api/project-brain/approve' || url === '/api/project-brain/abandon')) {
@@ -245,6 +259,20 @@ export async function handleProjectBrainRoutes(
       if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
+      // Row 206 — ONLY `approve` spawns (the line below, inside `if
+      // (approve)`), so only `approve` carries row 206's exposure: a
+      // stale/duplicate approve press after the session has already moved
+      // past `awaiting-review` must not re-transition+re-spawn, gated via
+      // the SAME `LEGACY_SESSION_AWAITS_PHASES['project-brain']` table brief's
+      // gate above reads (`awaiting-review` -> `verdict`). `abandon` never
+      // spawns and keeps its existing, wider contract unchanged — callable
+      // from any non-terminal phase (e.g. `briefing` too, the fixture
+      // `ui-bridge-project-brain.test.ts`'s "abandon transitions the session
+      // to abandoned" test already pins).
+      if (approve && status.phase !== 'awaiting-review') {
+        sendJson(res, 409, { error: `session is not awaiting review (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
+        return true;
+      }
       if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs, { ...status, phase: approve ? 'committing' : 'abandoned' }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
@@ -253,7 +281,9 @@ export async function handleProjectBrainRoutes(
       ctx.broadcastProjectBrainChanged();
       // Only approve spawns — abandon is exempt-local and carries no marker.
       sendJson(res, 200, { ok: true, ...(approve ? ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/approve', body.sessionId) : {}) }, origin);
-    } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
+    } catch (err) {
+      if (!sendIfDispatchInFlight(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+    }
     return true;
   }  return false;
 }

@@ -62,9 +62,15 @@ after(async () => {
   else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
 });
 
+// Row 206 sweep (forge-8vfn.8.5.56) — retargeted from `/api/instructions/
+// brief`, which is deleted (no forge-ui caller). `/api/project-brain/brief`
+// has the SAME shape (project/sessionId/brief, writes status at `briefing`)
+// and is still a real, spawning bespoke route — its own new phase gate
+// (same PR) requires exactly the `briefing` phase this fixture already
+// seeds, so it does not interfere with the boundary this test pins.
 test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn attempted', async () => {
   const realSessionId = 'sess1';
-  const dir = join(forgeRoot, 'projects', PROJECT, '_instructions', realSessionId);
+  const dir = join(forgeRoot, 'projects', PROJECT, '_project-brain', realSessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -73,7 +79,6 @@ test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn
       project: PROJECT,
       project_repo_path: dir,
       phase: 'briefing',
-      mode: 'init',
       round: 1,
       prompt: '',
       updated_at: new Date().toISOString(),
@@ -85,7 +90,7 @@ test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn
   // is itself an unsafe, multi-segment id `isSafeRunId` must reject.
   const unsafeSessionId = `${realSessionId}/../${realSessionId}`;
 
-  const res = await fetch(`${bridgeUrl}/api/instructions/brief`, {
+  const res = await fetch(`${bridgeUrl}/api/project-brain/brief`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
     body: JSON.stringify({ project: PROJECT, sessionId: unsafeSessionId, brief: 'x' }),
@@ -93,16 +98,16 @@ test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn
   const json = await res.json();
   // SEC-04 (bd forge-ebj): the `<real>/../<real>` sessionId is an
   // escape-and-return shape — a `/`-bearing id that round-trips in-root. It is
-  // now REFUSED at the /api/instructions/brief route boundary by the
+  // REFUSED at the /api/project-brain/brief route boundary by the
   // per-segment identity guard (4xx), BEFORE spawnAgentTurn is reached, rather
   // than accepted at 200 with only isSafeRunId blocking the spawn. The
   // security outcome this test asserts — no spawn dir for an unsafe id — is
-  // preserved, now guaranteed by the earlier, stronger boundary rejection.
+  // preserved, guaranteed by the earlier, stronger boundary rejection.
   assert.ok(res.status >= 400 && res.status < 500, `expected a 4xx boundary rejection, got ${res.status}: ${JSON.stringify(json)}`);
 
   const logsEntries = existsSync(join(forgeRoot, '_logs')) ? readdirSync(join(forgeRoot, '_logs')) : [];
   assert.ok(
-    !logsEntries.some((e) => e.startsWith('_instructions-')),
-    `expected no _instructions-* dir under _logs/ for an unsafe sessionId, found: ${JSON.stringify(logsEntries)}`,
+    !logsEntries.some((e) => e.startsWith('_project-brain-')),
+    `expected no _project-brain-* dir under _logs/ for an unsafe sessionId, found: ${JSON.stringify(logsEntries)}`,
   );
 });

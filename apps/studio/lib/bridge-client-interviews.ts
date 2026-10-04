@@ -314,7 +314,11 @@ export async function listDemoHistory(project: string): Promise<DemoHistoryEntry
 /**
  * Open a new demo session in phase 'briefing' (does NOT spawn the agent).
  * `mode: 'update'` carries the existing locked demo as context; `'create'` builds one.
- * The operator reviews on the briefing screen, then kicks off via {@link demoBuilderBrief}.
+ * The operator reviews on the briefing screen, then kicks off via the generic
+ * `question-form` affordance the `briefing` phase derives (W6-B9,
+ * `postSessionAffordance('demo', sessionId, 'briefing-question-form', ...)`,
+ * `@/lib/session-client`) — the one kickoff path this client exposes (row
+ * 206, forge-8vfn.8.5.56: `/api/demo-builder/brief` has no forge-ui caller).
  */
 export async function startDemoBuilder(input: {
   project: string;
@@ -336,17 +340,6 @@ export async function startDemoBuilder(input: {
     sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined,
     mode: (r.data?.mode === 'create' || r.data?.mode === 'update') ? r.data.mode : undefined,
   };
-}
-
-/** Record briefing notes and kick off the demo agent (briefing → generating). */
-export async function demoBuilderBrief(input: {
-  project: string;
-  sessionId: string;
-  brief: string;
-  /** Override/narrow the per-element iteration target for this run. */
-  targetElement?: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/demo-builder/brief', input);
 }
 
 // --- R1-3b — agentic project-brain builder ----------------------------------
@@ -478,13 +471,10 @@ export async function listDemoElements(): Promise<DemoElementSummary[]> {
   return body.elements ?? [];
 }
 
-export async function demoBuilderFeedback(input: {
-  project: string;
-  sessionId: string;
-  feedback: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/demo-builder/feedback', input);
-}
+// Every demo-builder revise POSTs through the generic `verdict` affordance
+// (`awaiting-review-verdict`) — this client carries no separate feedback
+// wrapper for it (row 206, forge-8vfn.8.5.56: `/api/demo-builder/feedback`
+// has no forge-ui caller).
 
 export async function demoBuilderLock(input: {
   project: string;
@@ -497,12 +487,9 @@ export async function demoBuilderLock(input: {
   return bridgePost('/api/demo-builder/lock', input);
 }
 
-export async function demoBuilderAbandon(input: {
-  project: string;
-  sessionId: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/demo-builder/abandon', input);
-}
+// Abandon rides the same generic `verdict` affordance — this client carries
+// no separate abandon wrapper (row 206, forge-8vfn.8.5.56:
+// `/api/demo-builder/abandon` has no forge-ui caller).
 
 // ---- Reflection (the third human moment, in-UI) -------------------------
 

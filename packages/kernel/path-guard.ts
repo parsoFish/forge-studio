@@ -114,7 +114,7 @@
  */
 
 import { join, relative, sep, dirname } from 'node:path';
-import { lstatSync, realpathSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync } from 'node:fs';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 
 export interface PathGuardOk {
   ok: true;
@@ -625,6 +625,49 @@ export function guardedWriteFile(
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, data);
   return p;
+}
+
+/**
+ * Row 206 (forge-8vfn.8.5.56) — like `guardedWriteFile`, but the leaf must
+ * NOT already exist: the create is `O_CREAT|O_EXCL` (the 'wx' flag), atomic
+ * even across OS processes, so two processes racing to claim the same
+ * not-yet-existing leaf can never both believe they won. Returns the written
+ * path on success, `null` on containment rejection (nothing written — same
+ * as `guardedWriteFile`), and RE-THROWS the raw `EEXIST` error when the leaf
+ * is already there, so a caller can tell "rejected" (`null`) apart from
+ * "someone already claimed it" (thrown) and react to each differently —
+ * `guardedWriteFile`'s silent overwrite is exactly the behaviour this
+ * function exists to avoid for a claim-once primitive.
+ */
+export function guardedWriteFileExclusive(
+  root: string,
+  segments: readonly string[],
+  data: string,
+): string | null {
+  const p = guardedFile(root, segments, 'write');
+  if (p === null) return null;
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, data, { flag: 'wx' });
+  return p;
+}
+
+/**
+ * Row 206 (forge-8vfn.8.5.56) — ergonomic remove: guard `<root>/
+ * <segments...>` (leaf included) then unlink it. A no-op, not an error, when
+ * it is already absent or the path is rejected (same no-oracle collapse as
+ * `guardedReadFile`: a rejected path and an absent-but-contained one are
+ * indistinguishable to the caller). Returns `true` iff a file was actually
+ * removed.
+ */
+export function guardedUnlink(root: string, segments: readonly string[]): boolean {
+  const p = guardedFile(root, segments, 'write');
+  if (p === null) return false;
+  try {
+    unlinkSync(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

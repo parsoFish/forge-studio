@@ -2,20 +2,17 @@
  * bridge-studio-instructions.ts — the instructions session kind's
  * `/api/instructions/*` routes, carved out of `apps/forge/ui-bridge.ts` (M4 §4 step 2).
  *
- * Same shape and the same rules as `bridge-studio-architect.ts`: the six arms
- * are VERBATIM, the only edits are `readJson(req)` → `ctx.readBody()`
- * (ruling 30), the shared helpers now imported from
- * `bridge-studio-session-helpers.ts`, and the host's spawn/serve surface
- * arriving through the injected context.
+ * Three arms: `GET /sessions`, `GET /file/...` and `POST /start`. The
+ * generic question-form/verdict affordance route
+ * (`/api/studio/sessions/:kind/:id/:affordance`) is the one write surface
+ * for briefing, the interview round and the verdict (row 206,
+ * forge-8vfn.8.5.56, `_1.0/plans/M7-E-r206-design.md` — measured at the
+ * `return false` at the bottom of this function: no forge-ui caller reaches
+ * a bespoke `/api/instructions/{brief,answer,verdict}` here).
  *
  * `listInstructionsSessions` travels with these routes rather than staying in
  * the host: after the carve its only remaining caller in `apps/forge/ui-bridge.ts` is
  * the session index collector, which is itself sessions-owned and carves too.
- *
- * A behaviour note worth carrying, because it looks like a bug and is not: the
- * verdict arm spawns a turn for EVERY verdict including `reject` — the spawn
- * sits outside the branch. That is pre-existing and is preserved exactly; a
- * carve is the wrong place to change it.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -23,14 +20,13 @@ import { readFileSync } from 'node:fs';
 
 
 import { allowedOrigin, sendJson } from '@forge/kernel';
-import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedFile, guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 
 import { readAgentInstructionsFile } from '@forge/projects';
 
 import { DRAFT_FILENAME, type InstructionsStatus } from './kinds/instructions.ts';
 import { listInstructionsSessions } from './bridge-studio-session-index.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus, type InterviewQuestion } from './session-status-io.ts';
-import { MAX_ANSWER_FIELD_BYTES } from './session-answer-limits.ts';
+import { guardedWriteSessionStatus, type InterviewQuestion } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import {
   deriveRowLifecycle,
@@ -243,164 +239,15 @@ export async function handleInstructionsRoutes(
     return true;
   }
 
-  // POST /api/instructions/brief {project, sessionId, brief} — record the
-  // operator's brief / change-notes and kick off the agent (briefing → interviewing).
-  if (method === 'POST' && url === '/api/instructions/brief') {
-    try {
-      const body = (await ctx.readBody()) as { project?: string; sessionId?: string; brief?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — the dir guard below contains the DIRECTORY,
-      // but each leaf (`status.json`, `prompt.md`) was then raw-appended and
-      // read/written through `join(dir, leaf)`, which FOLLOWS a symlinked leaf.
-      // Route every leaf — request ids as their OWN segments under the trusted
-      // projectsRoot, leaf included — through the guarded siblings so a
-      // symlinked/hardlinked `status.json`/`prompt.md` inside a real session
-      // dir is refused (read ⇒ null ⇒ 404; write ⇒ null ⇒ 400, nothing written).
-      const dirSegs = [body.project, '_instructions', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
-      if (!dir) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const status = guardedReadSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const brief = body.brief ?? '';
-      // W6-B9 reviewer fix (parity): the generic `briefing-question-form`
-      // affordance's equivalent field (`handleInstructionsBrief`,
-      // cli/bridge-studio-affordances.ts) already caps at
-      // MAX_ANSWER_FIELD_BYTES — this bespoke route writes the SAME
-      // prompt.md/status.prompt target and must cap identically, one shared
-      // constant, not two hand-kept limits (one bounded, one not).
-      const briefBytes = Buffer.byteLength(brief, 'utf8');
-      if (briefBytes > MAX_ANSWER_FIELD_BYTES) {
-        sendJson(res, 400, { error: `brief is ${briefBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
-        return true;
-      }
-      if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
-        guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
-      ) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
-      ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/brief', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/instructions/answer {project, sessionId, answers} — append an
-  // interview round and re-spawn a turn.
-  if (method === 'POST' && url === '/api/instructions/answer') {
-    try {
-      const body = (await ctx.readBody()) as {
-        project?: string;
-        sessionId?: string;
-        answers?: { question: string; answer: string }[];
-      };
-      if (!body.project || !body.sessionId || !Array.isArray(body.answers)) {
-        sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — guard the request-derived session dir, and
-      // route every leaf (status.json, answers.json) through the guarded leaf
-      // siblings so a symlinked leaf inside a real dir is refused, not followed.
-      const dirSegs = [body.project, '_instructions', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
-      if (!dir) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const status = guardedReadSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const priorRaw = guardedReadFile(ctx.projectsRoot, [...dirSegs, 'answers.json']);
-      const prior = (priorRaw !== null ? ctx.safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
-      const round = prior.length + 1;
-      if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
-        guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
-      ) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
-      ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true, round, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/answer', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/instructions/verdict {project, sessionId, kind, feedback?} —
-  // approve → finalizing; revise → write feedback.md + drafting; reject → rejected.
-  if (method === 'POST' && url === '/api/instructions/verdict') {
-    try {
-      const body = (await ctx.readBody()) as {
-        project?: string;
-        sessionId?: string;
-        kind?: 'approve' | 'revise' | 'reject';
-        feedback?: string;
-      };
-      if (!body.project || !body.sessionId || !body.kind) {
-        sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — guard the dir, and route each leaf (status.json,
-      // feedback.md) through the guarded leaf siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_instructions', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
-      if (!dir) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const status = guardedReadSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      let wrote: string | null;
-      if (body.kind === 'approve') {
-        wrote = guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'finalizing' });
-      } else if (body.kind === 'revise') {
-        // W7-C2 T1 review (A12) — parity with the generic route: an EMPTY
-        // revise is refused here too. `body.feedback ?? ''` used to accept
-        // one, so the bespoke surface re-ran the drafting turn with no
-        // guidance (which regenerates the same draft) where the generic
-        // route 400s — two routes onto the same on-disk state disagreeing
-        // about the same rule.
-        if (typeof body.feedback !== 'string' || body.feedback.trim().length === 0) {
-          sendJson(res, 400, { error: `feedback is required for kind "revise" — say what to change, got ${JSON.stringify(body.feedback)}` }, origin);
-          return true;
-        }
-        const wroteFeedback = guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback);
-        wrote = wroteFeedback === null ? null : guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'drafting' });
-      } else {
-        wrote = guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'rejected' });
-      }
-      if (wrote === null) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
-      ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/verdict', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
+  // Row 206 (forge-8vfn.8.5.56) — every instructions affordance POSTs
+  // through the generic `question-form`/`verdict` affordance
+  // (`postSessionAffordance`, `packages/sessions/kinds/instructions.ts`'s
+  // `handleInstructionsBrief`/`handleInstructionsAnswer`/`handleInstructionsVerdict`,
+  // phase-gated via `deriveSessionAffordances`) — the one dispatching write
+  // path for `/api/instructions/*`. Measured: no forge-ui caller reaches a
+  // bespoke `brief`/`answer`/`verdict` arm here
+  // (`apps/studio/lib/bridge-client-interviews.ts`'s own "W6-B9" comment
+  // names `postSessionAffordance` as `SessionInstructionsPanel`'s successor
+  // for every one of these writes).
   return false;
 }

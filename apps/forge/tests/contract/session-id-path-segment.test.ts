@@ -212,14 +212,14 @@ describe('7.6.47 — a session id that becomes a path segment is validated at th
         post('/api/architect/answer', { project: PROJECT, sessionId: sid, answers: [] }));
     });
 
-    test(`POST /api/instructions/brief refuses ${label}`, async () => {
-      await refusesAndCreatesNothing(`instructions/brief sid=${String(sid)}`, () =>
-        post('/api/instructions/brief', { project: PROJECT, sessionId: sid, brief: 'x' }));
-    });
+    // The generic affordance route (row 206, forge-8vfn.8.5.56) is the one
+    // write surface for instructions briefing; its own bogus-sessionId
+    // coverage (the first test in this loop) covers that kind. No forge-ui
+    // caller reaches `POST /api/instructions/brief` or `POST /api/demo-builder/brief`.
 
-    test(`POST /api/demo-builder/brief refuses ${label}`, async () => {
-      await refusesAndCreatesNothing(`demo-builder/brief sid=${String(sid)}`, () =>
-        post('/api/demo-builder/brief', { project: PROJECT, sessionId: sid, brief: 'x' }));
+    test(`POST /api/demo-builder/lock refuses ${label}`, async () => {
+      await refusesAndCreatesNothing(`demo-builder/lock sid=${String(sid)}`, () =>
+        post('/api/demo-builder/lock', { project: PROJECT, sessionId: sid }));
     });
 
     test(`POST /api/project-brain/brief refuses ${label}`, async () => {

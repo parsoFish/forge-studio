@@ -162,23 +162,17 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'applyPlanVerdict → spawnArchitectTurn — marker on approve/revise (reject never spawns); no RouteEntry — still an if-chain arm' },
   { method: 'POST', route: '/api/runs/:id/gates/plan', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'same handler as /api/plan-verdict (applyPlanVerdict); no RouteEntry — still an if-chain arm' },
-  { method: 'POST', route: '/api/instructions/brief', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
-  { method: 'POST', route: '/api/instructions/answer', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
-  { method: 'POST', route: '/api/instructions/verdict', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  // Row 206 (forge-8vfn.8.5.56) — the generic question-form/verdict
+  // affordance route (`/api/studio/sessions/:kind/:id/:affordance`) is the
+  // one dispatching write surface for instructions' briefing/answer/verdict
+  // and for demo-builder's briefing/feedback/abandon; its own dry-bridge
+  // classification lives at that route's table entry, not as a separate row
+  // per kind here.
   { method: 'POST', route: '/api/project-brain/brief', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnProjectBrainTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/project-brain/approve', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnProjectBrainTurn — marker on approve (the shared abandon branch never spawns)' },
-  { method: 'POST', route: '/api/demo-builder/brief', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
-  { method: 'POST', route: '/api/demo-builder/feedback', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/demo-builder/lock', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
-  { method: 'POST', route: '/api/demo-builder/abandon', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-agent', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnPreflightFix — marker on the user-tier spawn branch (auto/agent-tier branches never spawn)' },

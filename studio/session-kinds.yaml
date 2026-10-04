@@ -66,12 +66,13 @@
       # (operator supplies free text -> phase advances -> agent spawns), just
       # a different on-disk target (`prompt.md`, not `answers.json`) and
       # transition source (`briefing`, not an interview round). Dispatched by
-      # `handleInstructionsBrief` (cli/bridge-studio-affordances.ts),
+      # `handleInstructionsBrief` (packages/sessions/kinds/instructions.ts),
       # phase-selected off this SAME `question-form` affordance id alongside
-      # `handleInstructionsAnswer` — mirrors `POST /api/instructions/brief`
-      # (cli/ui-bridge.ts:3275), which stays live as a bespoke, un-migrated
-      # route (no remaining frontend caller after this batch, but a real,
-      # independently-tested bridge surface, not removed by this initiative).
+      # `handleInstructionsAnswer`. The bespoke `POST /api/instructions/brief`
+      # this mirrored is DELETED (row 206 sweep, forge-8vfn.8.5.56 — no
+      # remaining frontend caller, and by then no remaining reason to keep a
+      # second route doing the same write) — this generic affordance is now
+      # the only write path for this phase.
       - { phase: briefing, step: noop, awaits: questions, next: interviewing }
       # orchestrator/instructions-runner.ts:18, runInterviewStep (agent turn,
       # orchestrator/instructions-runner.ts:310) — branches (needs input ->

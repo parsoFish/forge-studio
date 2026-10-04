@@ -51,14 +51,12 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
-  existsSync,
   symlinkSync,
   lstatSync,
 } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../ui-bridge.ts';
 import { runInstructionsTurn } from '@forge/sessions';
 import type { QueryFn } from '@forge/sessions';
 
@@ -68,12 +66,8 @@ function tmp(prefix: string): string {
 
 let forgeRoot: string;
 let projectsRoot: string;
-let bridgeUrl: string;
-let closeBridge: () => Promise<void>;
 const outsideDirs: string[] = [];
 let symlinksUnavailable = false;
-
-const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' } as const;
 
 /** A scratch dir OUTSIDE projectsRoot AND forgeRoot (sibling under tmpdir) —
  *  any byte-change here proves an out-of-root write; any disclosure a read. */
@@ -83,29 +77,16 @@ function newOutsideDir(prefix: string): string {
   return d;
 }
 
-async function postJson(path: string, body: unknown): Promise<{ status: number; text: string }> {
-  const res = await fetch(`${bridgeUrl}${path}`, { method: 'POST', headers: CSRF, body: JSON.stringify(body) });
-  return { status: res.status, text: await res.text() };
-}
-
 /** A never-invoked query stub — the terminal/rejected phases exercised here
  *  never call the LLM; if one ever does, this throws loudly rather than hang. */
 const noopQuery: QueryFn = () => {
   throw new Error('queryFn must not be called for a terminal/rejected turn');
 };
 
-function is4xx(status: number): boolean {
-  return status >= 400 && status < 500;
-}
-
-before(async () => {
+before(() => {
   forgeRoot = tmp('sec04-leaf-forge-');
   projectsRoot = join(forgeRoot, 'projects');
   mkdirSync(projectsRoot, { recursive: true });
-  mkdirSync(join(forgeRoot, '_queue', 'pending'), { recursive: true });
-  mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
-  mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
-  mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
 
   // A real, legitimately-shaped in-root project — the guarded base every leaf
   // vector plants its session dir under.
@@ -119,16 +100,9 @@ before(async () => {
   }
   rmSync(join(projectsRoot, '__symlink_probe__'), { force: true });
   rmSync(probe, { recursive: true, force: true });
-
-  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
-  process.env.FORGE_DRY_BRIDGE = '1';
-  const result = await startBridge({ forgeRoot, port: 0 });
-  bridgeUrl = result.url;
-  closeBridge = result.close;
 });
 
-after(async () => {
-  if (closeBridge) await closeBridge();
+after(() => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
   for (const d of outsideDirs) rmSync(d, { recursive: true, force: true });
 });
@@ -163,72 +137,24 @@ function plantGuardedDirWithSymlinkedStatus(sessionId: string, victimStatusPath:
 // Positive controls (mandatory) — MUST pass before AND after any fix.
 // ---------------------------------------------------------------------------
 
-test('positive control: instructions/brief on a real in-root session (real status.json) succeeds and stays in root', async () => {
-  const start = await postJson('/api/instructions/start', { project: 'legit' });
-  assert.equal(start.status, 200, `legit instructions/start must succeed — got ${start.status}: ${start.text}`);
-  const sid = (JSON.parse(start.text) as { sessionId?: string }).sessionId!;
-  assert.ok(sid, 'expected a sessionId');
-  const dir = join(projectsRoot, 'legit', '_instructions', sid);
-  assert.ok(existsSync(join(dir, 'status.json')) && !lstatSync(join(dir, 'status.json')).isSymbolicLink(),
-    'precondition: a real (non-symlink) status.json exists');
-
-  const brief = await postJson('/api/instructions/brief', { project: 'legit', sessionId: sid, brief: 'a real brief' });
-  assert.equal(brief.status, 200, `legit brief must succeed — got ${brief.status}: ${brief.text}`);
-  assert.ok(existsSync(join(dir, 'prompt.md')), 'the brief must write prompt.md inside the real in-root session dir');
-});
-
 // ===========================================================================
-// ROUTE leg — POST /api/instructions/brief
+// ROUTE leg — no route to pin (row 206, forge-8vfn.8.5.56)
+//
+// The generic question-form affordance route is the one write surface for
+// the instructions briefing phase; no forge-ui caller reaches
+// `/api/instructions/brief`, so there is no bespoke route here for a
+// leaf-symlink pin to exercise. Pinning this shape at a DIFFERENT bespoke
+// write route (project-brain/brief, architect/answer, demo-builder/lock)
+// would conflate two different protections: every one of those routes
+// carries its OWN phase gate (this same sweep), and the READ leg's victim
+// is deliberately planted at a TERMINAL phase — exactly the shape a phase
+// gate also refuses, for an unrelated reason, making a retargeted test pass
+// regardless of whether the leaf-symlink fix exists. The RUNNER leg below
+// exercises the identical shared mechanism (`readSessionStatus`/
+// `writeSessionStatus`, `packages/sessions/interactive-session.ts`) directly,
+// with no route or phase gate in the way, and is the honest pin for this
+// defect class.
 // ===========================================================================
-
-test('(RED) POST /api/instructions/brief writes through a symlinked status.json leaf, overwriting an out-of-root victim', async (t) => {
-  if (skipIfNoSymlinks(t)) return;
-  const outside = newOutsideDir('sec04-leaf-brief-write-outside-');
-  const victim = join(outside, 'victim-status.json');
-  // A valid InstructionsStatus so readSessionStatus returns non-null and the
-  // route proceeds all the way to writeSessionStatus (the overwrite).
-  const original = JSON.stringify({
-    session_id: 'VICTIM', project: 'attacker', project_repo_path: outside,
-    phase: 'briefing', round: 1, prompt: 'ORIGINAL-VICTIM-BYTES-brief-a11ce',
-  });
-  writeFileSync(victim, original);
-  const before = readFileSync(victim);
-
-  plantGuardedDirWithSymlinkedStatus('sess-brief-leaf-write', victim);
-
-  const { status, text } = await postJson('/api/instructions/brief', {
-    project: 'legit', sessionId: 'sess-brief-leaf-write', brief: 'PWNED-BRIEF-LEAF-b22df',
-  });
-
-  assert.ok(
-    readFileSync(victim).equals(before),
-    `writeSessionStatus followed the symlinked status.json leaf and overwrote an out-of-root victim — status ${status}: ${text}`,
-  );
-  assert.ok(is4xx(status), `a symlinked-leaf session must be refused 4xx — got ${status}: ${text}`);
-});
-
-test('(RED) POST /api/instructions/brief reads through a symlinked status.json leaf (out-of-root disclosure drives the turn)', async (t) => {
-  if (skipIfNoSymlinks(t)) return;
-  const outside = newOutsideDir('sec04-leaf-brief-read-outside-');
-  const victim = join(outside, 'victim-status.json');
-  // A terminal phase: a CONTAINED route (leaf guarded) 404s before it can read
-  // this at all. Today the route reads it, finds a valid status, and returns 200
-  // — the 200 is proof it read the out-of-root leaf.
-  writeFileSync(victim, JSON.stringify({
-    session_id: 'VICTIM', project: 'attacker', project_repo_path: outside,
-    phase: 'committed', round: 1, prompt: '',
-  }));
-  plantGuardedDirWithSymlinkedStatus('sess-brief-leaf-read', victim);
-
-  const { status, text } = await postJson('/api/instructions/brief', {
-    project: 'legit', sessionId: 'sess-brief-leaf-read', brief: 'PWNED-BRIEF-READ-c33ef',
-  });
-
-  assert.ok(
-    is4xx(status),
-    `brief must not resolve a symlinked status.json leaf to an out-of-root read — a 200 proves it read the escaped status.json — status ${status}: ${text}`,
-  );
-});
 
 // ===========================================================================
 // RUNNER leg — runInstructionsTurn

@@ -660,8 +660,10 @@ export async function handleInstructionsAnswer(
 // question-form — instructions' PRE-interview briefing checkpoint
 // (`briefing-question-form`, the phase `POST /api/instructions/start` lands
 // EVERY new session in — apps/forge/ui-bridge.ts:3193-3197 — without spawning the
-// agent). Mirrors `POST /api/instructions/brief` (apps/forge/ui-bridge.ts:3275):
-// writes `prompt.md` (NOT `answers.json` — a different on-disk target from
+// agent). Mirrored the bespoke `POST /api/instructions/brief`, now deleted
+// (row 206 sweep, forge-8vfn.8.5.56 — no forge-ui caller; this is the only
+// write path for this phase today): writes `prompt.md` (NOT `answers.json`
+// — a different on-disk target from
 // `handleInstructionsAnswer` above) and sets `status.prompt`/`round: 1`/
 // `phase: 'interviewing'`, then spawns the same turn.
 // ---------------------------------------------------------------------------

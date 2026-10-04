@@ -311,7 +311,9 @@ function runLockStep(args: {
 
 // ---------------------------------------------------------------------------
 // question-form — demo (the briefing phase: operator brief -> generating).
-// Mirrors `POST /api/demo-builder/brief` (`apps/forge/ui-bridge.ts:4623`). W6-B10 —
+// Mirrored the bespoke `POST /api/demo-builder/brief` at W6-B10 (that route
+// is now deleted — row 206 sweep, forge-8vfn.8.5.56, no forge-ui caller —
+// this is the only write path for this phase today). W6-B10 —
 // added alongside `studio/session-kinds.yaml`'s new `briefing` row (that
 // file's own comment explains why the row was missing until now: every demo
 // session is minted straight into `briefing`, so without this handler a

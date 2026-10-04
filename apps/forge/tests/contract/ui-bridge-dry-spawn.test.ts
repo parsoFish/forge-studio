@@ -2,12 +2,15 @@
  * R5-01-F1 — table-driven coverage of the stub-actions SPAWN families under
  * FORGE_DRY_BRIDGE=1 **alone** (FORGE_ARCHITECT_NO_SPAWN deliberately unset).
  *
- * The five spawn-helper families (architect / plan-verdict, instructions,
- * project-brain, demo-builder, preflight fix-agent) are classified
- * `stub-actions`: the route's session bookkeeping proceeds exactly as under
- * NO_SPAWN today, but the skipped agent turn is EXPLICIT — the 200 body gains
- * `dryBridge: { skipped: ['agent-turn'] }` and one `dry-bridge.skip` JSONL
- * event fires per suppressed turn. Never silent.
+ * The spawn-helper families (architect / plan-verdict, project-brain,
+ * demo-builder, preflight fix-agent) are classified `stub-actions`: the
+ * route's session bookkeeping proceeds exactly as under NO_SPAWN today, but
+ * the skipped agent turn is EXPLICIT — the 200 body gains `dryBridge: {
+ * skipped: ['agent-turn'] }` and one `dry-bridge.skip` JSONL event fires per
+ * suppressed turn. Never silent. (`instructions` dropped out of this list —
+ * row 206 sweep, forge-8vfn.8.5.56 — its one spawning bespoke route,
+ * `/api/instructions/brief`, is deleted; the kind's dry-bridge coverage now
+ * lives entirely on the generic question-form affordance.)
  *
  * Safety note: with NO_SPAWN unset, a broken guard would exec
  * `node orchestrator/cli.ts …` with cwd = this tmp forgeRoot — where no
@@ -193,17 +196,10 @@ const FAMILIES: Array<{
       return { status, json, logDirName: `_architect-${sid}` };
     },
   },
-  {
-    family: 'instructions (spawnInstructionsTurn)',
-    eventRoute: '/api/instructions/brief',
-    drive: async () => {
-      const start = await post('/api/instructions/start', { project: PROJECT });
-      assert.equal(start.status, 200, JSON.stringify(start.json));
-      assert.equal(start.json.dryBridge, undefined, 'exempt-local start must NOT carry a marker');
-      const { status, json } = await post('/api/instructions/brief', { project: PROJECT, sessionId: start.json.sessionId, brief: 'x' });
-      return { status, json, logDirName: `_instructions-${start.json.sessionId}` };
-    },
-  },
+  // `instructions (spawnInstructionsTurn)` via `/api/instructions/brief` is
+  // DELETED (row 206 sweep, forge-8vfn.8.5.56 — no forge-ui caller; every
+  // instructions briefing now POSTs through the generic question-form
+  // affordance, which has its own dry-bridge coverage).
   {
     family: 'project-brain (spawnProjectBrainTurn)',
     eventRoute: '/api/project-brain/brief',
@@ -216,14 +212,23 @@ const FAMILIES: Array<{
     },
   },
   {
+    // Row 206 sweep — `/brief` is deleted (no forge-ui caller); `/lock` is
+    // the one surviving demo-builder spawn route, so it carries this
+    // family's dry-bridge coverage now. `/lock` requires `awaiting-review`
+    // (its own new phase gate, same PR), seeded directly via fs — mirrors
+    // `ui-bridge-demo-generations.test.ts`'s own `patchDemoStatus` idiom.
     family: 'demo-builder (spawnDemoBuilderTurn)',
-    eventRoute: '/api/demo-builder/brief',
+    eventRoute: '/api/demo-builder/lock',
     drive: async () => {
       const start = await post('/api/demo-builder/start', { project: PROJECT });
       assert.equal(start.status, 200, JSON.stringify(start.json));
       assert.equal(start.json.dryBridge, undefined, 'exempt-local start must NOT carry a marker');
-      const { status, json } = await post('/api/demo-builder/brief', { project: PROJECT, sessionId: start.json.sessionId, brief: 'x' });
-      return { status, json, logDirName: `_demo-${start.json.sessionId}` };
+      const sessionId = start.json.sessionId as string;
+      const statusPath = join(forgeRoot, 'projects', PROJECT, '_demo', sessionId, 'status.json');
+      const current = JSON.parse(readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+      writeFileSync(statusPath, JSON.stringify({ ...current, phase: 'awaiting-review' }));
+      const { status, json } = await post('/api/demo-builder/lock', { project: PROJECT, sessionId });
+      return { status, json, logDirName: `_demo-${sessionId}` };
     },
   },
   {

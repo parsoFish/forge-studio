@@ -216,27 +216,10 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       dryClassification: 'exempt-local',
       handler: instr,
     },
-    {
-      method: 'POST',
-      path: '/api/instructions/brief',
-      matches: (url) => pathOf(url) === '/api/instructions/brief',
-      dryClassification: 'stub-actions',
-      handler: instr,
-    },
-    {
-      method: 'POST',
-      path: '/api/instructions/answer',
-      matches: (url) => pathOf(url) === '/api/instructions/answer',
-      dryClassification: 'stub-actions',
-      handler: instr,
-    },
-    {
-      method: 'POST',
-      path: '/api/instructions/verdict',
-      matches: (url) => pathOf(url) === '/api/instructions/verdict',
-      dryClassification: 'stub-actions',
-      handler: instr,
-    },
+    // Row 206 (forge-8vfn.8.5.56) — the generic question-form/verdict
+    // affordance route is the one dispatching write surface for
+    // `/api/instructions/{brief,answer,verdict}`; no forge-ui caller reaches
+    // a bespoke table entry for any of the three.
     {
       method: 'GET',
       path: '/api/project-brain/sessions',
@@ -368,31 +351,15 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       dryClassification: 'exempt-local',
       handler: demo,
     },
-    {
-      method: 'POST',
-      path: '/api/demo-builder/brief',
-      matches: (url) => pathOf(url) === '/api/demo-builder/brief',
-      dryClassification: 'stub-actions',
-      handler: demo,
-    },
-    {
-      method: 'POST',
-      path: '/api/demo-builder/feedback',
-      matches: (url) => pathOf(url) === '/api/demo-builder/feedback',
-      dryClassification: 'stub-actions',
-      handler: demo,
-    },
+    // Row 206 (forge-8vfn.8.5.56) — the generic question-form/verdict
+    // affordance route is the one dispatching write surface for
+    // demo-builder's brief/feedback/abandon; no forge-ui caller reaches a
+    // bespoke table entry for any of the three. `/lock` keeps its own table
+    // entry below — forge-ui calls it directly.
     {
       method: 'POST',
       path: '/api/demo-builder/lock',
       matches: (url) => pathOf(url) === '/api/demo-builder/lock',
-      dryClassification: 'stub-actions',
-      handler: demo,
-    },
-    {
-      method: 'POST',
-      path: '/api/demo-builder/abandon',
-      matches: (url) => pathOf(url) === '/api/demo-builder/abandon',
       dryClassification: 'stub-actions',
       handler: demo,
     },
