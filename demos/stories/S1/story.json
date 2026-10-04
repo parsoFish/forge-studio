@@ -400,14 +400,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardRunId": "_agent-onboarding-agent-2026-10-03T22-11-00-424-r3jk",
-        "sessionId": "2026-10-03T22-11-00-2c964789"
+        "onboardRunId": "_agent-onboarding-agent-2026-10-04T00-16-10-274-v9f6",
+        "sessionId": "2026-10-04T00-16-10-249f172f"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-run-id": "_agent-onboarding-agent-2026-10-03T22-11-00-424-r3jk",
-        "onboard-session-id": "2026-10-03T22-11-00-2c964789",
+        "onboard-run-id": "_agent-onboarding-agent-2026-10-04T00-16-10-274-v9f6",
+        "onboard-session-id": "2026-10-04T00-16-10-249f172f",
         "onboard-attaching": "false"
       },
       "expect": {
@@ -469,12 +469,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "demoSessionId": "2026-10-03T22-19-05-fa35eb0d"
+        "demoSessionId": "2026-10-04T00-22-23-4ac451ae"
       },
       "data": {
         "action": "view-demo-session",
         "stage-detail-stage": "demo",
-        "demo-session-id": "2026-10-03T22-19-05-fa35eb0d"
+        "demo-session-id": "2026-10-04T00-22-23-4ac451ae"
       },
       "expect": {
         "stage-detail-stage": "demo",
@@ -531,13 +531,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-03T22-22-44-d64781e8"
+        "architectSessionId": "2026-10-04T00-27-08-039e26d6"
       },
       "data": {
         "page": "projects",
         "project-id": "story-s1",
         "section": "new-idea",
-        "architect-session-id": "2026-10-03T22-22-44-d64781e8"
+        "architect-session-id": "2026-10-04T00-27-08-039e26d6"
       },
       "expect": {
         "page": "projects",
@@ -572,19 +572,19 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 2035058,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-11-00-424-r3jk",
-        "reason": "pid 2035058: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2850882,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-04T00-16-10-274-v9f6",
+        "reason": "pid 2850882: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 2209161,
-        "dir": "_logs/_architect-2026-10-03T22-22-44-d64781e8",
-        "reason": "pid 2209161: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 3020710,
+        "dir": "_logs/_architect-2026-10-04T00-27-08-039e26d6",
+        "reason": "pid 3020710: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 2112827,
-        "dir": "_logs/_demo-2026-10-03T22-19-05-fa35eb0d",
-        "reason": "pid 2112827: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2922356,
+        "dir": "_logs/_demo-2026-10-04T00-22-23-4ac451ae",
+        "reason": "pid 2922356: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -598,9 +598,9 @@
       "ok": true,
       "claimed": [
         {
-          "path": "_queue/failed/INIT-2026-10-03-overlay-team-lint.md",
-          "state": "failed",
-          "reason": "created_at 2026-10-03T22:35:34.379Z falls inside this run"
+          "path": "_queue/pending/INIT-2026-10-04-overlay-team-grant-lint.md",
+          "state": "pending",
+          "reason": "created_at 2026-10-04T00:39:15.717Z falls inside this run"
         }
       ],
       "left": [],
@@ -608,11 +608,11 @@
       "failed": [],
       "lines": [
         "[stories] queue claim: done/ holds 0",
-        "[stories] queue claim: failed/ holds 1 — INIT-2026-10-03-overlay-team-lint.md",
-        "[stories] queue claim: CLAIMED _queue/failed/INIT-2026-10-03-overlay-team-lint.md — created_at 2026-10-03T22:35:34.379Z falls inside this run; captured to demos/stories/S1/queue-claim/failed before removal",
+        "[stories] queue claim: failed/ holds 0",
         "[stories] queue claim: in-flight/ holds 0",
         "[stories] queue claim: merged/ holds 0",
-        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: pending/ holds 1 — INIT-2026-10-04-overlay-team-grant-lint.md",
+        "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-04-overlay-team-grant-lint.md — created_at 2026-10-04T00:39:15.717Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
@@ -627,11 +627,11 @@
       "[stories] trailing sweep removed brain/projects/story-s1",
       "[stories] trailing sweep KEPT projects/story-s1 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
-      "[stories] queue claim: failed/ holds 1 — INIT-2026-10-03-overlay-team-lint.md",
-      "[stories] queue claim: CLAIMED _queue/failed/INIT-2026-10-03-overlay-team-lint.md — created_at 2026-10-03T22:35:34.379Z falls inside this run; captured to demos/stories/S1/queue-claim/failed before removal",
+      "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
       "[stories] queue claim: merged/ holds 0",
-      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: pending/ holds 1 — INIT-2026-10-04-overlay-team-grant-lint.md",
+      "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-10-04-overlay-team-grant-lint.md — created_at 2026-10-04T00:39:15.717Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
       "[stories] queue claim: ready-for-review/ holds 0"
     ]
   },
@@ -645,14 +645,14 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 5.433272400000001,
+    "usd": 5.4088978999999995,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "b2e962731741406954700203c16fd4c10d221001",
+    "sha": "261162397fe8830785bd6b7acfb62c2bcfe73d91",
     "dirty": false
   },
   "storyDigest": "5c0722d1ea6c598d"
