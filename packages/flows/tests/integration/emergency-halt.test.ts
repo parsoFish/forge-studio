@@ -89,7 +89,7 @@ test('serve --once under halt (non-default queue root): claims nothing, logs onc
   try {
     writeFileSync(join(paths.pending, 'INIT-2026-10-04-halt-probe.md'), MANIFEST);
     writeHalt(paths.root, 'operator');
-    await serve({ mode: 'once', phaseWiring: WIRING, queueRoot: paths.root, worktreesRoot: join(dir, '_worktrees') });
+    await serve({ mode: 'once', phaseWiring: WIRING, queueRoot: paths.root, worktreesRoot: join(dir, '_worktrees'), logsRoot: join(dir, '_logs') });
     cap.restore();
     assert.deepEqual(listPending(paths), ['INIT-2026-10-04-halt-probe.md']);
     assert.equal(cap.lines.filter((l) => l.includes('emergency halt on since')).length, 1);
@@ -104,7 +104,7 @@ test('serve --once without a halt claims the pending item (control)', async () =
   const cap = captureLogs();
   try {
     writeFileSync(join(paths.pending, 'INIT-2026-10-04-halt-probe.md'), MANIFEST);
-    await serve({ mode: 'once', phaseWiring: WIRING, queueRoot: paths.root, worktreesRoot: join(dir, '_worktrees') });
+    await serve({ mode: 'once', phaseWiring: WIRING, queueRoot: paths.root, worktreesRoot: join(dir, '_worktrees'), logsRoot: join(dir, '_logs') });
     cap.restore();
     assert.deepEqual(listPending(paths), [], 'claimed (left pending/)');
   } finally {
@@ -122,7 +122,7 @@ test('serve forever: a pending item stays pending under halt, an in-flight item 
     writeFileSync(join(paths.inFlight, 'INIT-2026-10-04-running.md.heartbeat'), '');
     writeFileSync(join(paths.pending, 'INIT-2026-10-04-halt-probe.md'), MANIFEST);
     writeHalt(paths.root, 'operator');
-    const done = serve({ mode: 'forever', phaseWiring: WIRING, queueRoot: paths.root, worktreesRoot: join(dir, '_worktrees'), pollIntervalMs: 40 });
+    const done = serve({ mode: 'forever', phaseWiring: WIRING, queueRoot: paths.root, worktreesRoot: join(dir, '_worktrees'), logsRoot: join(dir, '_logs'), pollIntervalMs: 40 });
     await sleep(400);
     assert.deepEqual(listPending(paths), ['INIT-2026-10-04-halt-probe.md'], 'pending stays pending across many polls');
     assert.ok(existsSync(join(paths.inFlight, 'INIT-2026-10-04-running.md')), 'the in-flight item is not touched');

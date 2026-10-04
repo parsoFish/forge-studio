@@ -212,7 +212,7 @@ export async function runOne(
   manifestPath: string,
   filename: string,
   // logsRoot (forge-8vfn.8.1.10): ABSOLUTE; omitted ⇒ `<forgeRoot>/_logs`.
-  cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig; logsRoot?: string },
+  cfg: Required<Omit<SchedulerConfig, 'notify' | 'logsRoot'>> & { notify: NotifyConfig; logsRoot?: string },
   tee: ((entry: EventLogEntry) => void) | undefined,
   wiring: PhaseWiring,
 ): Promise<void> {

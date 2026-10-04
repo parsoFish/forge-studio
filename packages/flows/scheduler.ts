@@ -35,6 +35,7 @@ import { createHaltWatch } from './halt-watch.ts';
 
 export type SchedulerConfig = {
   queueRoot?: string;
+  logsRoot?: string; // ABSOLUTE `_logs` root for claimed runs (runOne); omitted ⇒ `<forgeRoot>/_logs`
   worktreesRoot?: string; // where git worktrees live
   maxConcurrentInitiatives?: number;
   heartbeatIntervalMs?: number;
@@ -48,7 +49,7 @@ export type SchedulerConfig = {
   recoverIntervalMs?: number;
 };
 
-const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs' | 'queueRoot'>> & {
+const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs' | 'queueRoot' | 'logsRoot'>> & {
   recoverIntervalMs: number;
 } = {
   worktreesRoot: '_worktrees',
