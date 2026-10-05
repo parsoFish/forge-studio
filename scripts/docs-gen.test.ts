@@ -7,7 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProjectConfig } from '../packages/projects/project-config.ts';
 // @ts-ignore -- plain .mjs module
-import { SOURCES, renderProjectJson, generate } from './docs-gen.mjs';
+import { SOURCES, renderProjectJson, renderCli, generate, stalePages, runCli } from './docs-gen.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'docs-gen.mjs');
 const PAGE = 'apps/docs/src/content/docs/reference/project-json.md';
@@ -46,11 +46,16 @@ const FIXTURE = {
   },
 };
 
+const cliSource = (word: string) =>
+  `console.log(process.argv.slice(2).join(' ') === '--help' ? 'top ${word}' : 'studio ${word}');\n`;
+
 function root(): string {
   const dir = mkdtempSync(join(tmpdir(), 'docs-gen-'));
   mkdirSync(join(dir, 'docs/schemas'), { recursive: true });
   mkdirSync(join(dir, 'apps/docs/src/content/docs/reference'), { recursive: true });
   writeFileSync(join(dir, SCHEMA), JSON.stringify(FIXTURE, null, 2) + '\n');
+  mkdirSync(join(dir, 'apps/forge'), { recursive: true });
+  writeFileSync(join(dir, 'apps/forge/cli.ts'), cliSource('one'));
   return dir;
 }
 const run = (args: string[]) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
@@ -146,4 +151,56 @@ test('limits state the refused key and the blocked env names', () => {
   const md = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', PAGE), 'utf8');
   assert.match(md, /`testProcess\.acceptance` refuses the key `required`/);
   assert.match(md, /`PATH`, `HOME`, `SHELL`/);
+});
+
+const CLI_PAGE = 'apps/docs/src/content/docs/reference/cli.md';
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+const cliRoot = (_word: string) => root();
+
+test('the CLI page is a source entry that names cli.ts', () => {
+  const s = SOURCES.find((x: { out: string }) => x.out === CLI_PAGE);
+  assert.equal(s?.source, 'apps/forge/cli.ts');
+});
+
+test('the CLI page holds each help block verbatim under its command heading', () => {
+  const md: string = renderCli((args: string[]) => (args[0] === '--help' ? 'TOP HELP\n' : 'STUDIO HELP\n'));
+  assert.match(md, /covers: \[apps\/forge\/cli\.ts\]\ngenerated_from: apps\/forge\/cli\.ts\n---\n<!-- .*node scripts\/docs-gen\.mjs/);
+  assert.match(md, /## forge\n\n```text\nTOP HELP\n```/);
+  assert.match(md, /## forge studio\n\n```text\nSTUDIO HELP\n```/);
+  assert.ok(md.endsWith('\n') && !md.endsWith('\n\n'));
+});
+
+test('the committed CLI page matches the current help output', () => {
+  const page = readFileSync(join(REPO_ROOT, CLI_PAGE), 'utf8');
+  assert.equal(page, renderCli((args: string[]) => runCli(REPO_ROOT, args)));
+});
+
+test('the help text carries no retired narration', () => {
+  const help: string = runCli(REPO_ROOT, ['--help']) + runCli(REPO_ROOT, ['studio', '--help']);
+  assert.doesNotMatch(help, /DEC-\d|S9|example-factory|take over any previous/);
+});
+
+test('changing the help text makes --check exit 1', () => {
+  const dir = cliRoot('one');
+  try {
+    assert.equal(run(['--root', dir]).status, 0);
+    assert.equal(run(['--root', dir, '--check']).status, 0);
+    writeFileSync(
+      join(dir, 'apps/forge/cli.ts'),
+      readFileSync(join(dir, 'apps/forge/cli.ts'), 'utf8').replaceAll('one', 'two'),
+    );
+    const r = run(['--root', dir, '--check']);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /reference\/cli\.md/);
+    assert.doesNotMatch(r.stderr, /project-json\.md/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an injected help runner is what --check compares against', () => {
+  const dir = cliRoot('one');
+  try {
+    run(['--root', dir]);
+    assert.deepEqual(stalePages(dir, { run: () => 'other\n' }), [CLI_PAGE]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

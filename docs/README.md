@@ -50,7 +50,6 @@ not how to get there or why.
 
 | Page | What it covers |
 |---|---|
-| [CLI reference](./reference/cli.md) | The `forge --help` output plus the CLI verbs beyond Studio (`serve`, `preflight`, `brain lint`/`index`, phase entry points) — Studio is the sole operator surface; this documents the rest. |
 | [Project contract](./reference/project-contract.md) | The forge↔project contract every managed project must satisfy: the Studio object fields, the C1–C10 operational clauses, the gate-script template (with the errexit-exempt trap it closes), and the enforcement table. |
 | [Studio DOM contract](./reference/studio-dom-contract.md) | The per-route `data-*` attribute contract every Studio page mirrors its load-bearing state into, so automation (Playwright today) drives a page by reading structured DOM state rather than scraping rendered text. |
 | [Extension seams](./reference/extension-seams.md) | The pluggable points forge exposes for adding capability — RuntimeAdapter, KbBackend and Flow, each a registry with its own conformance-test admission gate, plus the skill/agent registration point. |
