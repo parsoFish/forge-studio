@@ -1,6 +1,5 @@
 {
   "files": {
-    "CLAUDE.md": 21,
     "docs/reference/request-path-sinks.md": 1,
     "docs/roadmaps/archive/R1-contract-componentry.md": 55,
     "docs/roadmaps/archive/R2-runnable-componentry.md": 61,
@@ -22,5 +21,5 @@
     "scripts/check-stale-path-citations.mjs": 1,
     "scripts/check-stale-path-citations.test.ts": 1
   },
-  "total": 468
+  "total": 447
 }
