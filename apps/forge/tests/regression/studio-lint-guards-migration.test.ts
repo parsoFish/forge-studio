@@ -1,6 +1,6 @@
 /**
  * MIGRATION ACCEPTANCE TESTS (must be RED on today's code) — A3 and part of
- * C4 of the SPEC §1 `composition.hooks` → `composition.guards`
+ * C4 of the PR #76 (SPEC §1) `composition.hooks` → `composition.guards`
  * rename, both driven through the REAL `forge studio lint` entry point
  * (`runStudioLint`, `apps/forge/studio-lint.ts`) rather than a hand-rolled lint —
  * co-located here (not in `orchestrator/studio/`) because both need that
