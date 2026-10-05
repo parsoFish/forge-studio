@@ -58,11 +58,7 @@ alternatives, the trade-offs, the reasoning a reference page has no room for.
 
 | Page | What it covers |
 |---|---|
-| [Architecture](./explanation/architecture.md) | Why the workspace is nine packages and two apps rather than the old flat `orchestrator/`/`cli/` split, and how the dependency-graph boundary lint enforces it. |
-| [The request-path security model](./explanation/security-model.md) | Why forge treats request-derived filesystem paths as a closed, enumerated class rather than a bug fixed opportunistically when found — the escape-shape catalogue and the ratchet that keeps the enumeration true. |
-| [The example factory](./explanation/example-factory.md) | What each station of the shipped develop factory does — brain, architect, plan, build, integrate, review, verdict, reflect — and how each is known to fail, in one page instead of five because the factory is data, not framework. |
-| [Licensing](./explanation/licensing.md) | What AGPL-3.0-or-later means in practice for an operator running forge as a service. |
-| [Community registry](./explanation/community-registry.md) | Who writes `studio/community/registry.yaml`, how writes reach git, and the commit policy that keeps the operator, not forge, holding the git identity. |
+| [How forge works](../apps/docs/src/content/docs/how-forge-works.md) | The factory, flow, station and gate model, and how work moves through the example develop factory. |
 
 ---
 

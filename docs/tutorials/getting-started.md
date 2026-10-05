@@ -151,7 +151,7 @@ fields are in the initiative's manifest, which the PLAN shows at the plan gate.
 
 **The interview is optional.** A precise idea can go straight to a PLAN with no
 interview rounds. The PLAN may arrive with findings from the advisory
-completeness critic ([the example factory](../explanation/example-factory.md));
+completeness critic ([the example factory](../../apps/docs/src/content/docs/how-forge-works.md));
 approve the plan as it stands, or revise it with feedback that addresses them.
 
 Approving queues an initiative; `forge serve` claims and plans it into work

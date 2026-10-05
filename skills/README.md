@@ -1,6 +1,6 @@
 # Skills
 
-> **Scope 2 — cycles / agents / flows** ([repo map](../docs/explanation/architecture.md)). Every "agent" in forge is a Claude Code skill. See SPEC §1.
+> **Scope 2 — cycles / agents / flows** ([repo map](../ARCHITECTURE.md)). Every "agent" in forge is a Claude Code skill. See SPEC §1.
 
 ## How to use
 

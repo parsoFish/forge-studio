@@ -687,7 +687,7 @@ real data-table dispatch and a second, gated implementation behind it).
 ### Licensing
 
 - Forge is distributed under **AGPL-3.0-or-later**. See
-  [docs/explanation/licensing.md](docs/explanation/licensing.md) for what
+  [ARCHITECTURE.md](ARCHITECTURE.md) for what
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 
