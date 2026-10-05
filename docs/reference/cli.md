@@ -1,7 +1,7 @@
 # Forge CLI reference
 
 > Committed equivalent of `forge --help`. Forge Studio (the bridge/UI,
-> [ADR 031](../decisions/031-studio-consolidation.md)) is the **sole operator
+> [D-12](../../DECISIONS.md)) is the **sole operator
 > surface**; the CLI is scaffolding, the unattended daemon, and phase/skill entry
 > points. Regenerate this page from `forge --help` whenever the surface changes.
 
@@ -28,7 +28,7 @@ recovery (cycle / enqueue / metrics / review / report / log / requeue) now live 
 UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
 Run `forge studio` and drive everything from the browser.
 
-For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see docs/decisions/.
+For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see [DECISIONS.md](../../DECISIONS.md).
 ```
 
 ## Other verbs (daemon, scaffolding, phase entry points)
@@ -40,7 +40,7 @@ phase invocation — not day-to-day operator commands.
 | Verb | Purpose |
 |---|---|
 | `forge serve [--once]` | Run the unattended scheduler in the foreground (the daemon). `--once` drains a single claim and exits — CI/headless. |
-| `forge preflight <project>` | Check a managed project against the forge↔project contract ([ADR 034](../decisions/034-studio-aligned-contract.md)). |
+| `forge preflight <project>` | Check a managed project against the forge↔project contract ([SPEC §6](../../SPEC.md)). |
 | `forge brain lint` | Structural integrity checks on `brain/` (exit non-zero on errors). |
 | `forge brain index [--write]` | Regenerate `brain/INDEX.md` from the filesystem (`--write` persists it). |
 | `forge architect` | Architect-phase entry point (the interactive ideation runner). |

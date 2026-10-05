@@ -2,13 +2,13 @@
 
 > A construction platform for agentic software factories — for one operator running a portfolio of projects.
 
-**forge-studio** is a small set of composable primitives — agents, skills, flows, knowledge and gates — that one operator assembles into a purpose-built delivery pipeline for any codebase. A **factory** is one assembled, running pipeline; forge-studio is the kit you build factories with, and **Forge Studio** is the one operator surface you build, run and watch them from. It ships **one deletable example factory, the develop flow** (idea → plan → build → review → merge → reflect), to prove the primitives out of the box: evidence the kit works, not the product itself ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), [ADR 048](./docs/decisions/048-deletable-example-factory.md)). It is SWE-focused by explicit choice, and built for the **single technical operator running many side projects**.
+**forge-studio** is a small set of composable primitives — agents, skills, flows, knowledge and gates — that one operator assembles into a purpose-built delivery pipeline for any codebase. A **factory** is one assembled, running pipeline; forge-studio is the kit you build factories with, and **Forge Studio** is the one operator surface you build, run and watch them from. It ships **one deletable example factory, the develop flow** (idea → plan → build → review → merge → reflect), to prove the primitives out of the box: evidence the kit works, not the product itself ([D-32](./DECISIONS.md)). It is SWE-focused by explicit choice, and built for the **single technical operator running many side projects**.
 
 Three properties make it one kit rather than a bag of scripts:
 
-- **Factories are data.** A factory's flow is a `FlowDef` — stations and gates declared in YAML — walked by one generic flow engine through a node-executor registry ([ADR 028](./docs/decisions/028-flow-engine.md)). You see the pipeline, change the pipeline, run the pipeline. A second factory is built from data plus one enumerated seam entry, with no platform edits; deleting the example package leaves the platform running, and CI proves it.
-- **Gates live in the code.** A factory declares where it stops for a human, and those stops are structural, not advisory: there is **no auto-approve code path anywhere**, so a factory cannot accidentally skip its operator. Every interactive stop is a session kind with a finalizer ([ADR 043](./docs/decisions/043-generic-interactive-surface.md)) — gates you can *read*, not just trust.
-- **Knowledge compounds.** Reflections are distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planning agents query *before* designing the next piece of work, across every project.
+- **Factories are data.** A factory's flow is a `FlowDef` — stations and gates declared in YAML — walked by one generic flow engine through a node-executor registry ([SPEC §2](./SPEC.md)). You see the pipeline, change the pipeline, run the pipeline. A second factory is built from data plus one enumerated seam entry, with no platform edits; deleting the example package leaves the platform running, and CI proves it.
+- **Gates live in the code.** A factory declares where it stops for a human, and those stops are structural, not advisory: there is **no auto-approve code path anywhere**, so a factory cannot accidentally skip its operator. Every interactive stop is a session kind with a finalizer ([SPEC §5](./SPEC.md)) — gates you can *read*, not just trust.
+- **Knowledge compounds.** Reflections are distilled into a human-navigable engineering wiki ([SPEC §4](./SPEC.md), three scoped graphs) that planning agents query *before* designing the next piece of work, across every project.
 
 Full competitive analysis and the strategic frame: [`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`](./brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md).
 
@@ -24,15 +24,15 @@ There are two layers to the differentiation, and keeping them distinct matters.
 
 **Over time — modularity-as-subsumption (§3).** forge-studio's objects are declarative data over swappable seams, so it can **absorb the best point-solution in each sub-domain — turning competitors into components** — instead of out-building them. The seams are real and used in production; the **runtime-adapter** seam carries a second implementation behind it:
 
-| Seam | Live | Second implementation (seam-proven) | ADR |
+| Seam | Live | Second implementation (seam-proven) | Contract |
 |---|---|---|---|
-| Runtime / model | Claude Agent SDK | Gemini, Aider adapters | [029](./docs/decisions/029-runtime-adapters.md) |
-| Flow engine | node-executor registry | any node type as a data-table entry | [028](./docs/decisions/028-flow-engine.md) |
-| Knowledge backend | filesystem brain (`FilesystemKbBackend`) | seam present; filesystem-only today | [027](./docs/decisions/027-studio-object-model.md) |
+| Runtime / model | Claude Agent SDK | Gemini, Aider adapters | [SPEC §1](./SPEC.md) |
+| Flow engine | node-executor registry | any node type as a data-table entry | [SPEC §2](./SPEC.md) |
+| Knowledge backend | filesystem brain (`FilesystemKbBackend`) | seam present; filesystem-only today | [D-09](./DECISIONS.md) |
 
 A standing conformance suite (`packages/agents/tests/contract/conformance.test.ts`) runs every registered runtime adapter, the second implementations included, through the same contract — "competitors → components" made mechanically true, not just asserted.
 
-**Honest caveats (do not skip — see §3.4 + [ADR 032](./docs/decisions/032-subsumption-proof.md)).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under **steerable, gated, knowledge-compounding** factories for a **portfolio** operator. Today the **runtime-adapter** seam is the one with a shipped second implementation (the KB seam is filesystem-only — `FilesystemKbBackend` — and the flow engine is registry-driven). The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
+**Honest caveats (do not skip — see §3.4).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under **steerable, gated, knowledge-compounding** factories for a **portfolio** operator. Today the **runtime-adapter** seam is the one with a shipped second implementation (the KB seam is filesystem-only — `FilesystemKbBackend` — and the flow engine is registry-driven). The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
 
 ## Quickstart
 
@@ -112,7 +112,7 @@ The platform is nine ranked packages and two apps, their allow-graph enforced by
 |---|---|---|
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | — | Narrative architecture |
 | [`PRINCIPLES.md`](./PRINCIPLES.md) | — | The five principles that gate every decision |
-| [`docs/`](./docs/) | — | Docs — [repo map](./docs/explanation/architecture.md), ADRs, phase docs, guides |
+| [`docs/`](./docs/) | — | Docs — [repo map](./docs/explanation/architecture.md), decisions, phase docs, guides |
 | [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← stations ← factory` |
 | [`apps/forge/`](./apps/forge/) | 1 | The assembly — `forge` CLI entry, the UI bridge and its routes, assembly-side bindings |
 | [`apps/studio/`](./apps/studio/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
@@ -123,7 +123,7 @@ The platform is nine ranked packages and two apps, their allow-graph enforced by
 
 ## Extending Forge
 
-Forge grows by plugging components into its seams, not by forking the core. To add a runtime/model, implement `RuntimeAdapter` in `packages/agents/_adapters/<sdk>/index.ts`, pass the conformance suite (`packages/agents/_adapters/conformance.ts`), register it in `packages/agents/_adapters/registry.ts`, and add it to `studio/catalog.yaml`. KB backends ([ADR 027](./docs/decisions/027-studio-object-model.md)) and flow node executors ([ADR 028](./docs/decisions/028-flow-engine.md)) follow the same implement-the-interface-then-register pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and the per-seam extension recipes.
+Forge grows by plugging components into its seams, not by forking the core. To add a runtime/model, implement `RuntimeAdapter` in `packages/agents/_adapters/<sdk>/index.ts`, pass the conformance suite (`packages/agents/_adapters/conformance.ts`), register it in `packages/agents/_adapters/registry.ts`, and add it to `studio/catalog.yaml`. KB backends ([D-09](./DECISIONS.md)) and flow node executors ([SPEC §2](./SPEC.md)) follow the same implement-the-interface-then-register pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and the per-seam extension recipes.
 
 ## License
 

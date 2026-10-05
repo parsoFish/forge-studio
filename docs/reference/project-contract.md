@@ -3,12 +3,12 @@
 > **What this is.** The complete set of properties a project must expose for
 > forge to develop it unattended — authored in Studio, enforced by preflight,
 > and checked in the UI before any flow run. This document is the single source
-> of truth; the *decision* is [ADR-034](../decisions/034-studio-aligned-contract.md)
-> (extends [ADR-017](../decisions/017-forge-project-contract.md)), the *preflight
+> of truth; the *decision* is [SPEC §6](../../SPEC.md)
+> (extends [SPEC §6](../../SPEC.md)), the *preflight
 > enforcement* is [`packages/projects/preflight.ts`](../../packages/projects/preflight.ts), and the *UI readiness
 > surface* is
 > [`apps/studio/components/studio/project-builder/ContractReadiness.tsx`](../../apps/studio/components/studio/project-builder/ContractReadiness.tsx).
-> Last aligned to [ADR-035](../decisions/035-forge-owned-central-artifacts.md) (accepted 2026-06-20, amended 2026-06-23): Brain 3 and durable cycle history now live centrally in the forge repo.
+> Last aligned to [SPEC §4](../../SPEC.md): Brain 3 and durable cycle history now live centrally in the forge repo.
 >
 > **2026-07-24 (R1-03-F1):** the flat gate keys (`quality_gate_cmd`, `ci_gate`,
 > `ci_fix_cmd`, `ci_gate_unset_env`, `acceptance_gate`) became the typed
@@ -116,7 +116,7 @@ steps leaves the reviewer approving blind.
 ### skills (required: ≥ 1 bound skill slug)
 
 Skill slugs bound to this project. Forge uses bound skills as the palette when
-generating agent prompts and when the flow engine selects tools. Since ADR 024
+generating agent prompts and when the flow engine selects tools. Since SPEC §1
 item 90, a declared skill is not just a preflight-checked fact: `loadDeclaredSkills`
 reads every one's `SKILL.md` (project-local or forge-wide) and both spawn builders
 (`runAgent`'s one-shot path, the dev-loop's per-WI Ralph) fold the text into the
@@ -169,7 +169,7 @@ onboarding and preflight-write flows rather than a named UI control) merges that
 one branch into the default branch — **no CI**,
 since these are forge-controlled, non-structural files — and pushes to origin so
 cycles branching from `origin/main` (and GitHub) see the configuration. Forge's
-own central artifacts (Brain 3 `brain/projects/<name>/`, ADR 035) are NOT project
+own central artifacts (Brain 3 `brain/projects/<name>/`, SPEC §4) are NOT project
 files and do not flow through this transaction.
 
 ### C1 — A truthful, discriminating done-signal *(HARD)*
@@ -218,7 +218,7 @@ to `cmd` (bead forge-mfv5.3.6):
   Precedence is the WI's own gate, then the filled template, then `cmd`. The
   template never overrides a gate the planner wrote — the same
   fill-only-what-is-omitted rule as the deterministic injector of
-  [ADR 037](../decisions/037-compiled-wi-contracts.md) (decision item 2; it may
+  [D-17](../../DECISIONS.md) (it may
   add, never override), so no ADR amendment was needed.
 - **`{package}`:** the common directory of the work item's `files_in_scope` ∪
   `creates`, repo-relative. A `dir/` entry is that directory; a `*` glob
@@ -404,12 +404,12 @@ already-tracked files.
 
 A `roadmap.md` at the project root **and** the project's Brain 3 profile — the
 **central** `brain/projects/<name>/profile.md` in the forge repo, **not** inside
-the project repo (per [ADR-035](../decisions/035-forge-owned-central-artifacts.md)) —
+the project repo (per [SPEC §4](../../SPEC.md)) —
 must both exist. Without these the planner hallucinates plans for a project it
 doesn't understand.
 
 `artifactRoot` (default `"."`) no longer governs Brain 3 or history — per
-[ADR-035](../decisions/035-forge-owned-central-artifacts.md) both are forge-owned
+[SPEC §4](../../SPEC.md) both are forge-owned
 and central; it now scopes only the in-repo in-PR demo and project skills. See the
 Artifact Layout section below.
 
@@ -454,7 +454,7 @@ Three structural seams in `.forge/project.json`, all nested under the typed
 **`testProcess.acceptance: { match, requiresEnv }`** — the project declares
 the tier; whether an initiative must prove itself on it is its change class's
 `acceptance` column in the class table (`packages/factory/class-profiles.ts`,
-ADR 051 decision 2 as amended, bead forge-mfv5.3.5): `required` for `code`,
+D-34, bead forge-mfv5.3.5): `required` for `code`,
 `config` and `infra`, `advisory` for `docs`. For a `required` class the PM
 phase hard-fails unless ≥ 1 emitted WI has a `quality_gate_cmd` token matching
 `match`. An `advisory` class is not forced to carry a live-acceptance WI.
@@ -733,7 +733,7 @@ field-level source of truth is `docs/schemas/project-config.schema.json`.
 
 Brain 3 and durable cycle history are **forge-owned and central** — they live in
 the forge repo, **not** the project repo (per
-[ADR-035](../decisions/035-forge-owned-central-artifacts.md)):
+[SPEC §4](../../SPEC.md)):
 
 - **`brain/projects/<name>/`** — Brain 3: the project's knowledge base
   (`profile.md`, `themes/`, the KB graph) in the central forge repo. Read by
@@ -778,7 +778,7 @@ contract config C2 requires **not** be ignored (see C2 above).
 
 Every initiative leaves a **durable record** — plan, verdict, and an archived
 demo — that is **forge-owned**, written to `_logs/<cycleId>/artifacts/` in the
-forge repo (per [ADR-035](../decisions/035-forge-owned-central-artifacts.md)). The
+forge repo (per [SPEC §4](../../SPEC.md)). The
 only history artifact that commits to the *project* repo is the per-cycle in-PR
 demo the demo-agent writes at `<artifactRoot>/history/<id>/demo/`:
 
@@ -799,7 +799,7 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 ## The merge-boundary full-suite gate (relocation spec — ENFORCED, R4-10-F2)
 
 > **ENFORCED as of R4-10-F2 (2026-08-02).** The operator verdict is recorded in
-> the [ADR-036 amendment](../decisions/036-orchestrator-owned-gate-execution.md)
+> the [D-15](../../DECISIONS.md)
 > (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
 > (`packages/flows/cycle-helpers.ts`) runs the full-suite gate at the develop
 > flow's merge boundary — inside the integrate band (`execIntegrate`, in
@@ -821,7 +821,7 @@ that guarantee executes; it does not redesign the guarantee itself.
 — today's project `quality_gate_cmd` run
 against the post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
 orchestrator-executed band at the develop flow's merge boundary (not an agent
-node), per [ADR-036](../decisions/036-orchestrator-owned-gate-execution.md)'s rule
+node), per [D-15](../../DECISIONS.md)'s rule
 that agents judge and the orchestrator executes. It is keyed off the **new
 `testProcess` contract object** ([R1-03-F1](../roadmaps/archive/R1-contract-componentry.md),
 introduced in this same PR; `.forge/project.json`, loader in
@@ -849,7 +849,7 @@ live, not a fossil.
 
 **Unattended remediation.** A red merge-boundary baseline re-dispatches the
 develop agent with scoped fix work items compiled from
-`.forge/last-gate-failure.md` — the same capability ADR-026 already
+`.forge/last-gate-failure.md` — the same capability D-20 already
 provided, successor-specified as `R4-10-F2`
 (`docs/roadmaps/archive/R4-ootb-suite.md`). Remediation is bounded by the flow's shared
 remediation cap (R4-10-F1's shared round/total-fix cap, config home per
@@ -939,9 +939,9 @@ contract gap instead.
 
 ## See also
 
-- [ADR-034](../decisions/034-studio-aligned-contract.md) — the decision recording
-  the Studio-aligned unification (extends ADR-017).
-- [ADR-017](../decisions/017-forge-project-contract.md) — the original contract
+- [SPEC §6](../../SPEC.md) — the decision recording
+  the Studio-aligned unification (extends SPEC §6).
+- [SPEC §6](../../SPEC.md) — the original contract
   decision (trafficGame arc, C1–C6 derivation).
 - [`packages/projects/preflight.ts`](../../packages/projects/preflight.ts) — the operational-clause enforcement.
 - [`packages/projects/project-config.ts`](../../packages/projects/project-config.ts) — the

@@ -8,7 +8,7 @@ A factory built on forge picks up claimable work the moment it is claimable, `fo
 
 ## (c) A user-settable global spend budget that pulls the brake
 
-- One number the operator sets for the whole factory (not per initiative — initiative budgets size the planner and halt nothing, [ADR 024](../decisions/024-phases-as-subagents-invoking-skills.md) lineage). When cumulative spend **approaches** it, the halt fires: no new claims, running jobs finish.
+- One number the operator sets for the whole factory (not per initiative — initiative budgets size the planner and halt nothing, [SPEC §1](../../SPEC.md) lineage). When cumulative spend **approaches** it, the halt fires: no new claims, running jobs finish.
 - "Approaches" means a threshold below the number, chosen from (e) below, so the drain itself does not overshoot the budget.
 - The number is visible where spend is visible (the Studio cost surfaces already price every priced turn; unpriced turns carry their upper bound since row 193b).
 - Open: whether the budget is per calendar window, per campaign, or lifetime; whether reaching it is an error state or a normal end.
@@ -27,7 +27,7 @@ A factory built on forge picks up claimable work the moment it is claimable, `fo
 
 ## (f) CLI versus UI
 
-- The operator's standing view: having both a UI and a CLI that can run all functionality is weight. Studio is the one product ([ADR 031](../decisions/031-studio-consolidation.md)); `forge serve` runs under Studio's supervision.
+- The operator's standing view: having both a UI and a CLI that can run all functionality is weight. Studio is the one product ([D-12](../../DECISIONS.md)); `forge serve` runs under Studio's supervision.
 - Intent: a keep/remove inventory of every `forge` subcommand, each tagged with the Studio surface that replaces it or the reason it stays (operator-less environments, CI, the stranger's first run). Removal lands as its own initiative after the inventory is agreed.
 - Open: which subcommands the stories and the stranger run still depend on.
 

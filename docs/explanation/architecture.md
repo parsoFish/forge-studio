@@ -3,7 +3,7 @@
 Forge-studio is one Node process, one npm workspace, no build step. This page
 explains the shape that workspace takes today and why it takes that shape —
 for the machinery itself (what each package exports), read the package's own
-`README.md`; for the decision record, read [ADR 046](../decisions/046-package-layout-and-boundary-lint.md)
+`README.md`; for the decision record, read [D-29](../../DECISIONS.md)
 and the design spec's [§3 "Target structure"](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md).
 
 ## Why this isn't "three scopes" any more
@@ -12,7 +12,7 @@ Earlier revisions of this page described the tree as three scopes —
 framework, cycle content, managed projects — sharing one flat `orchestrator/`
 (56k lines) and `cli/` (40k lines) with no enforced boundary between them.
 That description is retired, not renamed: `orchestrator/` and `cli/` as
-production trees are gone (M3, [ADR 046](../decisions/046-package-layout-and-boundary-lint.md)).
+production trees are gone (M3, [D-29](../../DECISIONS.md)).
 The three-scope *rule* — framework never special-cases a project, cycle
 content never assumes one, projects never reach into the framework — is
 still true, but it's no longer enforced by convention over a handful of flat
@@ -32,16 +32,16 @@ with its own `package.json`, its own `tsconfig.json`, and its own test tier.
 | `@forge/knowledge` | `KbBackend`, brain paths/index/lint/fix/drain, the theme-frontmatter contract |
 | `@forge/projects` | The forge↔project contract: config, preflight stages, create, repo transactions |
 | `@forge/agents` | Running **one** agent: dispatch, band guards, the Ralph loop, the runtime-adapter registry |
-| `@forge/sessions` | The [ADR 043](../decisions/043-generic-interactive-surface.md) interactive spine — session kinds, `turnSpec`, transcript, lifecycle |
+| `@forge/sessions` | The [SPEC §5](../../SPEC.md) interactive spine — session kinds, `turnSpec`, transcript, lifecycle |
 | `@forge/flows` | Running **one** flow: the `FlowDef` walker, scheduler, queue state machine, manifest, git/PR/work-item mechanics |
-| `@forge/factory` | The shipped develop factory, as data — see [`example-factory.md`](./example-factory.md). **Deletable**: removing it leaves `forge studio` bootable, proven by CI ([ADR 048](../decisions/048-deletable-example-factory.md)) |
+| `@forge/factory` | The shipped develop factory, as data — see [`example-factory.md`](./example-factory.md). **Deletable**: removing it leaves `forge studio` bootable, proven by CI ([D-32](../../DECISIONS.md)) |
 | `apps/forge` | The assembly: the `forge` CLI, the UI bridge, and every binding that wires a package's routes into the running process |
 | `apps/studio` | Forge Studio, the Next.js operator UI (`forge studio`) — an HTTP-only consumer of `apps/forge`'s bridge |
 
 Cross-cutting, not packages: `skills/` (the agent surface every package's
 agents compose), `studio/` (flow, agent and KB **definitions as data** —
-[ADR 027](../decisions/027-studio-object-model.md)), `brain/` (the three
-scoped knowledge graphs — [ADR 018](../decisions/018-three-brain-model.md)),
+[D-09](../../DECISIONS.md)), `brain/` (the three
+scoped knowledge graphs — [SPEC §4](../../SPEC.md)),
 `projects/` (the managed projects forge develops, gitignored), and `docs/`
 (this tree).
 

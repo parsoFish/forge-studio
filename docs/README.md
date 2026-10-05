@@ -13,7 +13,7 @@ which question you have, then go straight to that quadrant:
 - Want to know *why* forge is built this way? **Explanation.**
 
 Every page here describes the **current state**. History is not narrated in
-these pages — it lives in git, in the ADRs (`decisions/`), and in the brain
+these pages — it lives in git, in `DECISIONS.md` (and the retiring `decisions/` records), and in the brain
 (`brain/forge-dev/themes/`, `brain/cycles/themes/`).
 
 ---
@@ -79,8 +79,8 @@ alternatives, the trade-offs, the reasoning a reference page has no room for.
 Four areas sit outside Diátaxis on purpose — they are records, plans and
 machine-readable contracts, not usage docs:
 
-- **[Decisions](./decisions/README.md)** — one ADR per load-bearing choice,
-  plus the retirement ledger. If a change conflicts with an ADR, the ADR is
+- **[Decisions](../DECISIONS.md)** — one row per load-bearing choice and
+  rejected alternative. If a change conflicts with a row, the row is
   updated first, with rationale.
 - **[Roadmaps](./roadmaps/README.md)** — [`1.0.md`](./roadmaps/1.0.md) is the
   single roadmap driving all current forge work; its companion

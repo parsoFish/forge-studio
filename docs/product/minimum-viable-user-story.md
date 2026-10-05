@@ -1,7 +1,7 @@
 # Minimum Viable User Story (MVUS) — the shipped OOTB suite (Scope 2)
 
-> **Canonical vision for the shipped OOTB suite (Scope 2)** (re-scoped 2026-07-17,
-> [ADR 038](../decisions/038-north-star-platform-and-ootb.md)). This document defines the
+> **Canonical vision for the shipped OOTB suite (Scope 2)** (re-scoped 2026-07-17).
+> This document defines the
 > **example develop factory** — forge's shipped, out-of-the-box agents and flows — as **one user
 > journey**. It is the timeless grounding every **Scope-2 (OOTB)** component is judged
 > against. It does not describe Scope 1 (the modular platform/engine/seams that runs
@@ -118,7 +118,7 @@ Capabilities the journey **promotes to load-bearing** (regardless of prior class
 - **Rich HTML demo** with assessed-intent + evaluated-output + **human-watchable visual demonstration**
   (incl. CLI-behaviour video) for any component shape.
 - **Review feedback → work item → send-back into the develop flow**, looping until accept
-  (ADR-026 built the original single-phase mechanism; post-Q3-B the send-back re-enters the demo agent +
+  (D-20 built the original single-phase mechanism; post-Q3-B the send-back re-enters the demo agent +
   adversarial review agent stage, with the merge-boundary gate orchestrator-owned — see §3,
   amended 2026-07-17).
 - **Release final-loop**: draft changelog → operator approves the release → release-finalize → forge merges → CI tags/publishes (contract C10).

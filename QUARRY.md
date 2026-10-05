@@ -7,7 +7,7 @@ file in the same PR.
 
 **Scope.** Every production file under `orchestrator/`, `cli/`, `loops/`,
 `skills/`, `packages/` and `apps/forge/` — code (`.ts .tsx .mjs .js .cjs`) plus the `SKILL.md` agent definitions,
-which are production artifacts ([ADR 024](docs/decisions/024-phases-as-subagents-invoking-skills.md):
+which are production artifacts ([SPEC §1](./SPEC.md):
 the `SKILL.md` **is** the agent), in either discovery-root shape SEAM F1
 (`packages/kernel/discovery-roots.ts`, operator ruling item 81) makes real: the
 top-level `skills/<slug>/SKILL.md` and a package's own
@@ -22,7 +22,7 @@ it — neither counted nor owned by `check-owner.mjs`.
 **Owner** is one of the nine packages plus the two apps named by
 [`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md) §0 and §4 M2, and described in the
 blueprint spec
-[§3](docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md). ADR 046
+[§3](docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md). D-29
 ratifies that layout and is **proposed, not yet accepted** — it is parked at the
 operator gate H5 (`1.0.md` §5), so this file cites the roadmap and the spec,
 which are on `main`, rather than an ADR that is not. **Disposition** is how the
@@ -560,7 +560,7 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 140 |
-| packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (ADR 046 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
+| packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
 | packages/factory/demo.ts | factory | verbatim | 420 |
 | packages/flows/index.ts | flows | verbatim | 132 |
@@ -592,7 +592,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/process-liveness.ts | kernel | rewritten | 124 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
 | packages/kernel/forge-ref-guard-hook.ts | kernel | rewritten | 238 **New file, row 211 (forge-8vfn.8.5.47):** the `reference-transaction` git hook script + its idempotent installer, replacing row 208's PreToolUse Bash-command fence (`forge-repo-git-fence.ts`/`repo-identity.ts`, both deleted by this same change) after it misfired on a project commit it misparsed. Asks git's own ref-moving machinery instead, from inside git itself. |
 | packages/kernel/per-work-item-row.ts | kernel | rewritten | 19 **New file, row 207 (forge-8vfn.8.5.57):** `isPerWorkItemRow` — the one predicate run-model derivation and the story harness's run-end parity share to keep per-work-item rows out of run-level pairing. |
-| packages/kernel/halt.ts | kernel | rewritten | 69 **New file, row 207 (forge-8vfn.8.5.57):** the one emergency halt record `<forgeRoot>/_queue/halt.json` (ADR 011) — `forgeQueueRoot`/`haltPath`/`readHalt`/`writeHalt`/`releaseHalt`; kernel so the queue claim (flows) and the dispatch claim (kernel) read the same file. |
+| packages/kernel/halt.ts | kernel | rewritten | 69 **New file, row 207 (forge-8vfn.8.5.57):** the one emergency halt record `<forgeRoot>/_queue/halt.json` (D-03) — `forgeQueueRoot`/`haltPath`/`readHalt`/`writeHalt`/`releaseHalt`; kernel so the queue claim (flows) and the dispatch claim (kernel) read the same file. |
 | packages/kernel/dispatch-claim.ts | kernel | rewritten | 319 **New file, row 206 (forge-8vfn.8.5.56):** `claimDispatchSlot`/`releaseDispatchSlot` + `newRunStamp`/`randomRunSuffix`, the ONE on-disk dispatch claim `apps/forge/bridge-agent-dispatch.ts`, `apps/forge/bridge-studio-writes.ts` and `@forge/knowledge`'s `spawnBrainFix` all share, so no rank-1-or-above package copies it. `isAlive` is an injected parameter (kernel is rank 1; the real `isTurnAlive` is rank 4). |
 | packages/knowledge/index.ts | knowledge | verbatim | 112 |
 | packages/library/index.ts | library | verbatim | 115 |

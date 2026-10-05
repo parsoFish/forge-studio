@@ -9,7 +9,7 @@
   "properties": {
     "testProcess": {
       "type": "object",
-      "description": "R1-03-F1: the typed test-process contract object — the single JSON source of the project's gate fields, superseding the flat quality_gate_cmd/ci_gate/ci_fix_cmd/ci_gate_unset_env/acceptance_gate keys (now rejected fail-closed with a migration message — no permanent dual-shape shim). Declares the TWO-TIER GATE MODEL: `local` is the fast per-WI gate the developer-loop runs every iteration (contract C1); `ci` is the full CI delivery net run once, before a PR opens, as the final merge tier (C1b); `acceptance` is the optional live-acceptance tier for external-resource projects whose behaviour can only be verified against a live system (C7). Each sub-object accepts an optional `timeoutMs` per ADR-036's precedence: the project-declared value overrides the built-in default, but the operator's per-run FORGE_*_TIMEOUT_MS env var still wins over both. The authoritative types are TestProcess/TestProcessLocal/TestProcessCi/TestProcessAcceptance in orchestrator/project-config.ts.",
+      "description": "R1-03-F1: the typed test-process contract object — the single JSON source of the project's gate fields, superseding the flat quality_gate_cmd/ci_gate/ci_fix_cmd/ci_gate_unset_env/acceptance_gate keys (now rejected fail-closed with a migration message — no permanent dual-shape shim). Declares the TWO-TIER GATE MODEL: `local` is the fast per-WI gate the developer-loop runs every iteration (contract C1); `ci` is the full CI delivery net run once, before a PR opens, as the final merge tier (C1b); `acceptance` is the optional live-acceptance tier for external-resource projects whose behaviour can only be verified against a live system (C7). Each sub-object accepts an optional `timeoutMs` per D-15's precedence: the project-declared value overrides the built-in default, but the operator's per-run FORGE_*_TIMEOUT_MS env var still wins over both. The authoritative types are TestProcess/TestProcessLocal/TestProcessCi/TestProcessAcceptance in orchestrator/project-config.ts.",
       "additionalProperties": false,
       "properties": {
         "local": {
@@ -65,7 +65,7 @@
         },
         "acceptance": {
           "type": "object",
-          "description": "The live-acceptance tier (contract C7). For external-resource projects whose behaviour can only be proven against a live system, `local` stays fast/creds-free/deterministic while `acceptance` declares the tier. Whether an initiative must prove itself on it is its change class's `acceptance` column (ADR 051 decision 2 as amended, bead forge-mfv5.3.5): for a `required` class the PM must emit a live-acceptance work item and the dev-loop enforces `requiresEnv`; an `advisory` class (docs) is not forced. A `required` key here is retired and refused at load. Optional — absent ⇒ no check.",
+          "description": "The live-acceptance tier (contract C7). For external-resource projects whose behaviour can only be proven against a live system, `local` stays fast/creds-free/deterministic while `acceptance` declares the tier. Whether an initiative must prove itself on it is its change class's `acceptance` column (D-34, bead forge-mfv5.3.5): for a `required` class the PM must emit a live-acceptance work item and the dev-loop enforces `requiresEnv`; an `advisory` class (docs) is not forced. A `required` key here is retired and refused at load. Optional — absent ⇒ no check.",
           "required": ["match"],
           "additionalProperties": false,
           "properties": {
@@ -137,7 +137,7 @@
     },
     "artifactRoot": {
       "type": "string",
-      "description": "A project-root-relative subdirectory (default '.') scoping the only forge artifacts committed in the project repo — the per-cycle in-PR demo (<artifactRoot>/history/<id>/demo) and project-action skills (<artifactRoot>/skills/). Per ADR 035, Brain 3 and durable history are forge-owned and central in the forge repo (brain/projects/<name>/ and _logs/<cycleId>/artifacts/), not governed by artifactRoot. Must be a clean relative path (no leading slash, no '..'). Optional."
+      "description": "A project-root-relative subdirectory (default '.') scoping the only forge artifacts committed in the project repo — the per-cycle in-PR demo (<artifactRoot>/history/<id>/demo) and project-action skills (<artifactRoot>/skills/). Per SPEC §4, Brain 3 and durable history are forge-owned and central in the forge repo (brain/projects/<name>/ and _logs/<cycleId>/artifacts/), not governed by artifactRoot. Must be a clean relative path (no leading slash, no '..'). Optional."
     },
     "logging": {
       "type": "object",

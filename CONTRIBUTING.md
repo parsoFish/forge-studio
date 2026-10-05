@@ -27,7 +27,7 @@ Run the story suite if you touch `apps/studio/` or any Studio surface:
 npm run stories        # headless operator stories (video + DOM assertions + how-to docs)
 ```
 
-`npm run verify:cycle` is the real-money regression harness (ADR-022). It runs a live cycle against a managed project. This is operator-gated — do not run it in automated CI.
+`npm run verify:cycle` is the real-money regression harness (D-08). It runs a live cycle against a managed project. This is operator-gated — do not run it in automated CI.
 
 ## Commits
 
@@ -37,7 +37,7 @@ Conventional commits, no exceptions:
 feat: add gemini runtime adapter behind the runtime seam
 fix: unifier exits non-zero when no WI branches found
 refactor: extract cycle helpers to cycle-helpers.ts
-docs: extend ADR-029 with Gemini realization gap
+docs: extend SPEC §1 with Gemini realization gap
 test: add aider adapter conformance suite
 chore: update @google/genai to 0.7
 ```
@@ -48,9 +48,9 @@ No AI-attribution lines (`Co-authored-by: …`) in commit messages.
 
 Each PR touches one seam, one fix, or one phase. Stacked PRs are fine; squash-merge on stacked PRs is not (the lesson lives in `brain/forge-dev/`).
 
-## The ADR rule
+## The decision rule
 
-If your change conflicts with or supersedes a decision in `docs/decisions/`, **update the ADR first** — rationale required — before changing the code. ADRs are load-bearing; a code change that contradicts one without updating it will be sent back.
+If your change conflicts with or supersedes a decision in `DECISIONS.md` or `SPEC.md`, **update that row first** — rationale required — before changing the code. Those rows are load-bearing; a code change that contradicts one without updating it will be sent back.
 
 ## Extension points
 
@@ -65,4 +65,4 @@ Read that guide before starting extension work.
 
 ## Where to ask
 
-Open an issue or start a discussion in the repo. For architectural questions that touch an ADR, reference the ADR number.
+Open an issue or start a discussion in the repo. For architectural questions that touch a decision, reference its `D-xx` id.

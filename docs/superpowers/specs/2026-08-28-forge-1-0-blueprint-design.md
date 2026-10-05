@@ -29,9 +29,9 @@ Three candidate strategies were authored independently and judged adversarially 
 
 **Positioning.** Forge is a construction platform for agentic software factories: a small set of composable primitives — agents, skills, flows, knowledge, and gates — that let one operator assemble a lightweight, purpose-built delivery pipeline for any codebase. It ships one working example, the develop flow, to prove the primitives out of the box — evidence the kit works, not the product itself.
 
-**Vocabulary (use consistently in docs, UI, code):** Factory (one assembled, running pipeline; the OOTB develop flow *is a* factory built on forge) · Flow (ordered path of stations; `FlowDef`, ADR 028) · Station (a step where an agent or gate acts) · Gate (human or automated approval between stations) · Agent (worker executing a station; `PhaseAgentSpec`, ADR 024; session kinds, ADR 043) · Skill (reusable instruction/tool unit) · Brain in-product, Knowledge outward (`KbBackend`, ADR 018).
+**Vocabulary (use consistently in docs, UI, code):** Factory (one assembled, running pipeline; the OOTB develop flow *is a* factory built on forge) · Flow (ordered path of stations; `FlowDef`, SPEC §2) · Station (a step where an agent or gate acts) · Gate (human or automated approval between stations) · Agent (worker executing a station; `PhaseAgentSpec`, SPEC §1; session kinds, SPEC §5) · Skill (reusable instruction/tool unit) · Brain in-product, Knowledge outward (`KbBackend`, SPEC §4).
 
-**Enforcement.** A `check-identity` lint fails CI on `unifier|ideas machine|forge v2|zep` in any current-state doc, skill or README from Phase 0. ADR 038 is amended (new ADR 048) from "platform + ideas machine" to "platform + example factory". The rename to one name lands once, in Phase 7.
+**Enforcement.** A `check-identity` lint fails CI on `unifier|ideas machine|forge v2|zep` in any current-state doc, skill or README from Phase 0. The platform framing is amended (D-32) from "platform + ideas machine" to "platform + example factory". The rename to one name lands once, in Phase 7.
 
 ## 3. Target structure
 
@@ -43,13 +43,13 @@ forge/
 ├── packages/
 │   ├── contracts/        @forge/contracts — browser-safe types + consts only (~0.3k). The ONLY package apps/studio may import.
 │   ├── kernel/           @forge/kernel   — logging + event types, event-cost (the one cost rule), config/layout, path guards,
-│   │                                       generic studio object-model loader, ADR-045 resolveRoot. Cap ~3k of new logic.
+│   │                                       generic studio object-model loader, resolveRoot. Cap ~3k of new logic.
 │   ├── library/          @forge/library  — skills, hooks, connections, templates, seeds, community: author → scan → approve → list.
 │   ├── knowledge/        @forge/knowledge — KbBackend, brain paths/index/lint/fix/drain/consolidate, theme-frontmatter contract.
 │   ├── projects/         @forge/projects — project contract: config, preflight C1–C10, contract stages, create, repo-tx.
 │   ├── agents/           @forge/agents   — run ONE agent: run-agent, dispatch, band guards, Ralph runner + stop-conditions,
 │   │                                       adapter registry, failure-classifier, per-spawn runtime (skill-path, hook-dispatch, connection gate).
-│   ├── sessions/         @forge/sessions — the ADR-043 interactive spine: session kinds, turnSpec, transcript, lifecycle, finalizers.
+│   ├── sessions/         @forge/sessions — the SPEC §5 interactive spine: session kinds, turnSpec, transcript, lifecycle, finalizers.
 │   ├── flows/            @forge/flows    — flow-runner (against a PhaseExecutor port), scheduler, daemon, queue state machine, manifest,
 │   │                                       triggers, run-model, finalize-merged, git/PR/WI mechanics (pr, worktree, work-item, fix-work-items).
 │   └── factory/          @forge/factory  — THE example: six phase agents + SKILL.mds + studio/flows/* + artifact templates + class→gate table.
@@ -58,7 +58,7 @@ forge/
 │   ├── forge/            CLI router + bridge host (≤800 lines): origin/CSRF/JSON envelope, WS, health, daemon wiring
 │   │                     flows.runFlow(…, factory.EXECUTOR); assembles each package's routes.ts table.
 │   └── studio/           = forge-ui, git mv, HTTP-only consumer.
-├── studio/  (tracked operator registry, data) · _local/ (gitignored operator root, ADR 045) · tests/e2e/ (journeys + verify-cycle)
+├── studio/  (tracked operator registry, data) · _local/ (gitignored operator root) · tests/e2e/ (journeys + verify-cycle)
 └── docs/    Diátaxis ≤25 files + decisions/ (append-only) + roadmaps/1.0.md
 ```
 
@@ -68,7 +68,7 @@ forge/
 contracts ← kernel ← { library, knowledge, projects } ← agents ← sessions ← flows ← factory ← apps/{forge, studio}
 apps/studio imports contracts only.  packages never import orchestrator/ cli/ loops/.
 legacy imports a package only via orchestrator/_pkg/<pkg>.ts (one greppable shim per package, deleted at cutover).
-additive-only edits to contracts/kernel from any lane, disclosed in the PR title (ADR 042 rule, per package).
+additive-only edits to contracts/kernel from any lane, disclosed in the PR title (per package).
 edges to break during porting: knowledge→sessions (7), projects→sessions (5), library→sessions (5) — all via the bespoke runners.
 ```
 
@@ -85,8 +85,8 @@ edges to break during porting: knowledge→sessions (7), projects→sessions (5)
 | forge-flows | agree, widened | + eleven orphaned flows files (finalize-merged, run-model, daemon, requeue…) and the git/PR/WI mechanics (`pr.ts`, `work-item.ts`, worktree, wi-merge-back, closure, fix-work-items). |
 | forge-library | agree, carved | Per-spawn runtime (`skill-path`, `hook-dispatch`, `connection-run-gate`) → agents. Plugin-host isolation applies here only. |
 | forge-knowledge | agree, carved | Reflector → factory. `KbBackend` has one implementation and the planner read bypasses it: Phase 4 routes the read through it and adds a conformance test, or the plural is dropped. |
-| forge-config / workspace | split | Queue → flows; logging → kernel; trust ledgers → library; project-side `.forge/` → projects; remainder (config, layout, `_local/` resolution) = kernel. "Move project artifacts forge-side" is a new ADR after 1.0, not part of this restructure (ADR 035 already moved knowledge, history and contract central). |
-| forge-assistant | agree spine, split runners | `sessions` = the ADR-043 spine. The seven bespoke runners are ported onto it as session kinds that own their own composition (brain: a spine dissolves shared plumbing, not identity). |
+| forge-config / workspace | split | Queue → flows; logging → kernel; trust ledgers → library; project-side `.forge/` → projects; remainder (config, layout, `_local/` resolution) = kernel. "Move project artifacts forge-side" is a new ADR after 1.0, not part of this restructure (SPEC §4 already moved knowledge, history and contract central). |
+| forge-assistant | agree spine, split runners | `sessions` = the SPEC §5 spine. The seven bespoke runners are ported onto it as session kinds that own their own composition (brain: a spine dissolves shared plumbing, not identity). |
 | forge-projects | agree, trimmed | project-brain-* → knowledge; preflight-fix-runner → a session kind. Per-project-type handling is a new seam, deferred. |
 
 ## 4. Weight
@@ -112,7 +112,7 @@ architect ─plan─▶ plan ─work-items─▶ build ─branch─▶ integrate
 2. Typed `acceptance_criteria:` in manifest frontmatter (`{given, when, then}`), shared by architect, PM, review and PLAN.html; retires `extractGwtBlocks`.
 3. Lane check at the plan gate: a body that prescribes WI sizing or `quality_gate_cmd` is flagged. `creates:` under a gitignored path is a PM validation error.
 4. `integrate` is an orchestrator band: boundary commit, sync invariant, empty-branch guard, class-selected merge-boundary gate that **fails loud** on a config error, capture where the class says so, a *derived* DEMO.md / PR body from the AC table + gate evidence + diffstat. No `demo.json` authoring retries, no Jaccard coverage, no `fix-proposals.json`.
-5. One review agent: today's adversarial-review plus the per-AC verdict and the Why/What/How paragraph; read-only, no execution tools (ADR 036 stands); `demo-fix` folds into `review-fix`.
+5. One review agent: today's adversarial-review plus the per-AC verdict and the Why/What/How paragraph; read-only, no execution tools (D-15 stands); `demo-fix` folds into `review-fix`.
 6. Gates are orchestrator verbs, never agent-authored scripts; `quality_gate_cmd` must be project tooling or a repo-committed `scripts/gates/*`; ship `forge gate docs` (sections / forbidden token with word boundaries / link check).
 7. Cost: `CostTracker` adopts the `event-cost.ts` restatement rule and checks per WI; architect cost is threaded into the cycle.
 8. Architect → develop, one-to-many: the manifest declares class and target flow; a flow registers the manifest classes it accepts; the plan gate checks the pair.
@@ -128,13 +128,13 @@ Phases 0–3 are serial (~11 sessions); three-wide parallelism opens at Phase 4.
 |---|---|---|---|
 | **0 Prove the tail, or decide it is unproven** | 3–4 (+ ~$60) | Fix in place: CostTracker triple-count → event-cost rule + per-WI check; merge-gate `ok:true` on config error → park needs-operator; demo-agent contract residue after #68; harness `:425` (post-merge tests pass without a merge) and the `--project mdtoc` default. gitpulse `testProcess` migration onto `main` + push; preflight on main. Free host disk to ≥ 20 GB. `verify:cycle --project gitpulse`, bound 3 runs. Open the betterado docs branch as a manual PR. Gzip the real traces. Land `check-identity`. Write four brain themes (cost restatement; merge-gate fail-open; agent-authored gates = self-grading; class-blind gates). | A 2026-09 manifest in `_queue/done/`, `gh pr view` MERGED on gitpulse, a new Brain-3 theme — **or** a recorded decision that the tail is rewritten in Phase 5, pulled forward. |
 | **1 Delete weight in place** | 2 | Git recipe; `demos/verify`; `mockups/` after extraction; docs retire list; `graphify-out`, `zep.env`; journey collapse plan written. | Checkout ≤ 300 MB; ≤ 15 branches; one worktree; docs index truthful; identity lint green. |
-| **2 Skeleton, contracts, kernel, written contracts** | 3–4, serial | Workspaces; ten empty packages; dependency-cruiser ratchet; `check-owner.mjs`; populate contracts + kernel (quarried, capped); `git mv forge-ui apps/studio`; **SPEC.md** (six ≤1-page contracts: Agent, Station, Artifact, Knowledge, Session, Project — transcribed from ADR-named seams); **QUARRY.md** (every prod file → owner + verbatim/pruned/rewritten/deleted + LOC); ADR 046. | Legacy suites green; boundary lint green with a baselined count; kernel builds standalone. |
+| **2 Skeleton, contracts, kernel, written contracts** | 3–4, serial | Workspaces; ten empty packages; dependency-cruiser ratchet; `check-owner.mjs`; populate contracts + kernel (quarried, capped); `git mv forge-ui apps/studio`; **SPEC.md** (six ≤1-page contracts: Agent, Station, Artifact, Knowledge, Session, Project — transcribed from ADR-named seams); **QUARRY.md** (every prod file → owner + verbatim/pruned/rewritten/deleted + LOC); D-29. | Legacy suites green; boundary lint green with a baselined count; kernel builds standalone. |
 | **2.5 Cut the two ports on the legacy tree** | 1–2 | `PhaseExecutor`/`registerBand`; `ProjectGate`; break `cycle ↔ cycle-helpers ↔ flow-runner` and `run-model ↔ run-model-derive`. | Second real merge through the port; spawn-capture goldens byte-identical; those cycles at zero. |
 | **3 Big-bang move** | 2, solo | `git mv` to QUARRY.md owners; cross-package imports rewritten in a separate commit; zero content edits. | Phase-0 oracle re-passes; every file has one owner; baseline recorded. |
 | **4 Package lanes** | 6 lanes × 2–3, 3-wide | Order: knowledge, projects, library → sessions → agents → flows. Per lane: carve routes into `routes.ts` → carve-outs → split > 800 → re-bucket tests → README (API) + design.md (ADRs) → `contract.test.ts`. Sessions lane ports the seven runners. Bridge host shrinks to ≤ 800 lines. | Per package: standalone build, contract test green, unit+integration < 60 s, zero violations. Phase: third real merge. |
-| **5 Factory v2** | 7–9 (+ ~$100), concurrent with 4 | §5 in full; ADR 048 (deletable OOTB package; amends 038) and ADR 051 (change-class + typed ACs); operator authors the class→gate table. | A code initiative merges on gitpulse **and** the betterado docs initiative merges through the docs path in one session at ≤ $12 with zero PM retries; Studio shows a reflect theme from run N read by the planner in run N+1. |
+| **5 Factory v2** | 7–9 (+ ~$100), concurrent with 4 | §5 in full; D-32 (deletable OOTB package) and D-34 (change-class + typed ACs); operator authors the class→gate table. | A code initiative merges on gitpulse **and** the betterado docs initiative merges through the docs path in one session at ≤ $12 with zero PM retries; Studio shows a reflect theme from run N read by the planner in run N+1. |
 | **6 Distil** | 5–6, three lanes | Tests re-bucketed; duplicates collapsed; regression tier seeded; docs to the ≤25 tree; brain sweep + tags; journeys 6–8 in CI; demos re-recorded for those only. | `orchestrator/`, `cli/`, `loops/`, `forge-ui/` gone; CI = per-package tiers + boundary lint + journeys; fourth real merge, driven from Studio. |
-| **7 Prove the platform, cut 1.0** | 3–4 | A second factory (e.g. `forge-docs`) built from data + `registerFactory` only, run to merge on gitpulse; CI test "delete `packages/factory`, studio still boots"; the identity rename; ADRs 046–051 accepted; CHANGELOG 1.0.0; tag. | The §7 definition checked line by line with evidence links. |
+| **7 Prove the platform, cut 1.0** | 3–4 | A second factory (e.g. `forge-docs`) built from data + `registerFactory` only, run to merge on gitpulse; CI test "delete `packages/factory`, studio still boots"; the identity rename; the 1.0 decision rows accepted; CHANGELOG 1.0.0; tag. | The §7 definition checked line by line with evidence links. |
 
 Estimate: 40–47 agent sessions, ~15 operator hours, ~$250 harness spend, ~6 weeks at wave cadence.
 
@@ -175,7 +175,7 @@ Estimate: 40–47 agent sessions, ~15 operator hours, ~$250 harness spend, ~6 we
 - Per-project-type handling in `projects` — a new seam after 1.0.
 - A second `KbBackend` implementation — not required; the seam must be real (read routed through it + conformance test) or the plural dropped.
 - Packaging as an npm artifact (R8-01), relicensing, hosted Studio.
-- Non-SWE connectors (ADR 038 stance unchanged).
+- Non-SWE connectors (stance unchanged).
 
 ## 11. Sources
 
