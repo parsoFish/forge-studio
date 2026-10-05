@@ -4,21 +4,21 @@ Forge is a construction platform for agentic software factories. Six seams carry
 everything it does; everything else is machinery in service of one of them.
 
 This file states each seam as a contract: what the thing IS, what is guaranteed
-about it, and what is forbidden. Each contract is transcribed from the ADR that
-ratified the seam — the ADR carries the argument, this file carries the
-obligation — and each ends by naming the test that holds it.
+about it, and what is forbidden. Each contract ends by naming the tests that
+hold it; a clause no test holds is marked `review`. Decisions that are not seam
+contracts live in [DECISIONS.md](./DECISIONS.md).
 
-A contract here is binding on every package. A change to one is an ADR
-amendment, not an edit to this file.
+A contract here is binding on every package. A change that conflicts with one
+updates this file in the same PR as the code, with the operator's approval.
 
-| # | Seam | Ratifying ADRs | Owner package |
-|---|---|---|---|
-| 1 | [Agent](#1-agent) | [024](docs/decisions/024-phases-as-subagents-invoking-skills.md), [003](docs/decisions/003-skills-not-self-baked-agents.md), [039](docs/decisions/039-ships-as-artifact.md) | `@forge/agents` |
-| 2 | [Station](#2-station) | [028](docs/decisions/028-flow-engine.md), [036](docs/decisions/036-orchestrator-owned-gate-execution.md) | `@forge/flows` |
-| 3 | [Artifact](#3-artifact) | [007](docs/decisions/007-markdown-artifact-flow.md), [008](docs/decisions/008-jsonl-event-log.md) | `@forge/kernel` |
-| 4 | [Knowledge](#4-knowledge) | [018](docs/decisions/018-three-brain-model.md), [010](docs/decisions/010-brain-first.md), [035](docs/decisions/035-forge-owned-central-artifacts.md) | `@forge/knowledge` |
-| 5 | [Session](#5-session) | [043](docs/decisions/043-generic-interactive-surface.md), [027](docs/decisions/027-studio-object-model.md) | `@forge/sessions` |
-| 6 | [Project](#6-project) | [017](docs/decisions/017-forge-project-contract.md), [034](docs/decisions/034-studio-aligned-contract.md) | `@forge/projects` |
+| # | Seam | Owner package |
+|---|---|---|
+| 1 | [Agent](#1-agent) | `@forge/agents` |
+| 2 | [Station](#2-station) | `@forge/flows` |
+| 3 | [Artifact](#3-artifact) | `@forge/kernel` |
+| 4 | [Knowledge](#4-knowledge) | `@forge/knowledge` |
+| 5 | [Session](#5-session) | `@forge/sessions` |
+| 6 | [Project](#6-project) | `@forge/projects` |
 
 ---
 
@@ -26,7 +26,7 @@ amendment, not an edit to this file.
 
 **An agent is a definition, not a code path.** A `SKILL.md` — persona, model
 tier, and the allow-list of skills and tools it may use — IS the agent
-([ADR 024](docs/decisions/024-phases-as-subagents-invoking-skills.md) §1). The
+. The
 platform bakes execution machinery only: executors, gates, budgets, guards.
 
 ### Guarantees
@@ -34,19 +34,24 @@ platform bakes execution machinery only: executors, gates, budgets, guards.
 - **One primitive runs every agent.** `runAgent` spawns from the definition.
   There is no privileged agent: an agent forge ships is Scope-2 data on the
   Scope-1 primitive, identical in kind to one an operator authors
-  ([ADR 039](docs/decisions/039-ships-as-artifact.md) §1).
+ .
 - **Fresh context per spawn.** An agent inherits neither its caller's reasoning
-  nor a prior agent's (ADR 024 §2). The caller binds the run — which worktree,
+  nor a prior agent's. The caller binds the run — which worktree,
   which run id, which artifacts — and composes no prompt.
 - **Dispatch is by declared data.** `runtime.loopStrategy` selects the execution
   path (`one-shot` → a single stream call; `ralph` → the iterate-until-done
   loop). The two strategies are two code paths chosen by a declared field, never
-  by which agent it happens to be (ADR 039 §2).
+  by which agent it happens to be.
 - **Budgets are declared numbers.** `budgets.maxTurns`, `maxBudgetUsd`,
   `maxBudgetUsdShare`, `wedgeKillMs` resolve generically. A cost cap is never a
-  constant hand-coded per agent (ADR 039 §2).
+  constant hand-coded per agent.
 - **Capabilities are composed, not restated.** Shared capabilities are skills the
-  agent invokes; a capability lives in one skill, not once per agent (ADR 024 §1).
+  agent invokes; a capability lives in one skill, not once per agent.
+- **The runtime is swappable.** Spawns go through the pinned SDK query or the
+  runtime-adapter registry, and every adapter passes the conformance suite.
+- **Every spawn site honours bound hooks.** A file that can spawn an agent wires
+  hook dispatch or carries a named exemption; a hook bound to an agent is never
+  shown as carried while it cannot fire.
 - **Guards are a closed vocabulary.** `composition.guards` resolves against a
   frozen set; an unknown guard is rejected naming the offending value and the
   allowed set.
@@ -55,11 +60,16 @@ platform bakes execution machinery only: executors, gates, budgets, guards.
 
 - Special-casing an agent by name or slug anywhere outside `@forge/factory`. A
   phase still special-cased by name is a migration not yet done, not an
-  exception (ADR 039 §1).
+  exception.
 - Authoring prompt intent outside the agent definition.
 - A spawn that emits no structured event to the JSONL event log.
 
-**enforced by: `packages/agents/contract.test.ts`**
+**enforced by:** `packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts` ·
+`packages/agents/tests/contract/conformance.test.ts` ·
+`packages/agents/tests/contract/hook-dispatch-coverage.test.ts` ·
+`packages/agents/tests/contract/skill-md-fidelity.test.ts` ·
+`packages/stations/tests/contract/band-def-generalisation.test.ts`; prompt intent
+outside the definition and per-name special-casing: `review`.
 
 ---
 
@@ -67,68 +77,75 @@ platform bakes execution machinery only: executors, gates, budgets, guards.
 
 **A station is a node in a flow definition, executed by a runner that knows
 nothing about which agent it is running.** `FlowDefinition` is data; the runner
-interprets it ([ADR 028](docs/decisions/028-flow-engine.md) §1).
+interprets it.
 
 ### Guarantees
 
 - **Three node kinds, no more.** `static` (spawn the node's agent, verify its
   gate), `fanOut` (multiplicity resolved at runtime from a named upstream
   artifact, one worktree per item, `depends_on` DAG respected), `gate` (park the
-  run, surface the artifact, wait on the verdict endpoint) — ADR 028 §1.
+  run, surface the artifact, wait on the verdict endpoint).
 - **The runner holds the port, not the phases.** A station is executed through
   `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }`. The runner imports no
-  phase (`1.0.md` §4 M2 Lane B). The injectable seam this replaced is
-  [ADR 028](docs/decisions/028-flow-engine.md), amended 2026-08-31 to name
-  `createPhaseExecutor({ overrides })` instead of the deleted
-  `FlowRunArgs.nodeExecutors`.
+  phase; overrides are injected through `createPhaseExecutor({ overrides })`.
 - **A run is derived, never stored.** The run view is aggregated from queue
   state, manifest, `events.jsonl` and the artifacts directory. Read-only; there
-  is no second write path for run state (ADR 028 §3).
+  is no second write path for run state.
 - **Budgets and safety live in the runner.** Flow `costCeilingUsd` warns at 70%
   and stops at a clean node boundary at 100%, never mid-write. Per-node
   `wedgeKillMs` kills through a concurrent timer, emits `phase.wedge-killed`, and
-  classifies the node resumable (ADR 028 §4).
+  classifies the node resumable.
 - **Gates are server-verified.** Approval and send-back arrive through the gate
-  endpoint. **No auto-approve code path exists** (ADR 028 §9).
+  endpoint. **No auto-approve code path exists**.
 - **Definitions are immutable while running.** A flow with in-flight runs is
   read-only; saving creates version *n+1*, used by new runs only. The runtime
-  never modifies a definition (ADR 028 §6).
+  never modifies a definition.
 - **A claim refuses** a project that is not contract-ready, an invalid or locked
-  flow, or a zero-gate non-disposable flow (ADR 028 §8).
+  flow, or a zero-gate non-disposable flow.
 
 ### Forbidden
 
 - A hardcoded station sequence beside the flow engine. No parallel old and new
-  implementations survive a cutover (ADR 028 §2).
+  implementations survive a cutover.
 - A gate that reports no checks counting as a pass. Never merge on absence of red.
 - Resuming a node not flagged `resumable`.
 
-**enforced by: `packages/flows/contract.test.ts`**
+**enforced by:** `packages/flows/tests/integration/claim-validator.test.ts` ·
+`packages/flows/tests/unit/cost-ceiling-binds.test.ts` ·
+`packages/flows/tests/unit/flow-budgets.test.ts`; no auto-approve path, definition
+immutability and the three node kinds: `review`.
 
 ---
 
 ## 3. Artifact
 
 **Every piece of inter-station data is markdown with YAML frontmatter, in a known
-location, greppable** ([ADR 007](docs/decisions/007-markdown-artifact-flow.md)).
+location, greppable**.
 The event log is its machine-readable twin
-([ADR 008](docs/decisions/008-jsonl-event-log.md)).
+.
 
 ### Guarantees
 
 - **One shape.** Markdown body plus optional YAML frontmatter declaring type,
   owner, dependencies and status. Frontmatter is parsed with one library; an
-  artifact is emitted by a direct file write (ADR 007).
+  artifact is emitted by a direct file write.
 - **One location per kind.** Project artifacts live in the project's repo, run
   state under `_queue/`, durable knowledge under `brain/`. A reader finds an
-  artifact by its kind, never by search (ADR 007).
+  artifact by its kind, never by search.
 - **Human-editable at every boundary.** The operator can intervene by editing the
-  file. An artifact format a human cannot edit is not an artifact (ADR 007).
+  file. An artifact format a human cannot edit is not an artifact.
 - **Greppable.** `grep -r 'work_item_id: WI-42'` is a supported way to find one.
   A binary, a database row and a JSON blob nobody can read are all failures of
   this clause.
 - **Every station transition emits a JSONL event** carrying the flow-node id in
-  its `phase` field (ADR 008; ADR 028 §3 widens the enum to string).
+  its `phase` field.
+- **A work item is markdown with validated frontmatter.** Its id matches the one
+  `WORK_ITEM_ID_PATTERN` in `@forge/contracts`; it carries at least one
+  acceptance criterion and at least one worktree-relative `files_in_scope`, and
+  `depends_on` is acyclic. A second copy of the id pattern is a defect.
+- **Acceptance criteria are typed.** They are `{given, when, then}` frontmatter
+  shared by every reader; a criterion that does not parse is an error, never an
+  absence.
 - **Cost is computed in one place.** One rule turns stream usage into a cost;
   no second cost arithmetic exists anywhere.
 
@@ -138,28 +155,33 @@ The event log is its machine-readable twin
 - A skill invocation that logs no structured event to the JSONL event log.
 - A second source of truth for a run's state beside the derived view.
 
-**enforced by: `packages/kernel/contract.test.ts`**
+**enforced by:** `packages/kernel/tests/unit/logging.test.ts` ·
+`packages/flows/tests/integration/work-item.test.ts` ·
+`packages/sessions/tests/unit/architect-plan.test.ts`; greppability and one cost
+rule: `review`.
 
 ---
 
 ## 4. Knowledge
 
 **Knowledge is three scoped graphs of markdown themes, read before planning and
-written only by reflection** ([ADR 018](docs/decisions/018-three-brain-model.md),
-[ADR 010](docs/decisions/010-brain-first.md)).
+written only by reflection**.
 
 ### Guarantees
 
 - **Three scopes, fixed.** Brain 1 `brain/forge-dev/` (forge engineering) ·
   Brain 2 `brain/cycles/` (cross-cycle patterns, archives under `_raw/`) ·
   Brain 3 `brain/projects/<name>/themes/` — per project, held centrally in the
-  forge repo ([ADR 035](docs/decisions/035-forge-owned-central-artifacts.md)
-  reverses ADR 018's location, not its scoping).
+  forge repo.
 - **Planners and reflectors read first.** A planner or reflector that does not
-  query the brain before producing its plan must not ship (ADR 010 as amended).
+  query the brain before producing its plan must not ship.
 - **Dev-loop and reviewer do not read Brains 1 and 2.** The planner has already
   encoded every relevant convention into the work items, which are the single
   source of intent. Brain 3 is advisory to them.
+- **Reviewer grants are band-scoped.** A non-project knowledge base reaches the
+  reviewer only through a `review-band` flow binding, and never reaches the
+  dev-loop. Ingest happens only through reflection; Studio sessions edit a
+  knowledge base's structure, never ingest into it.
 - **A theme is markdown with a frontmatter contract** — the same artifact shape
   as §3, with keywords and related-theme links that keep the graph connected.
 - **One backend seam.** Every **per-knowledge-base** read and write goes through
@@ -175,34 +197,40 @@ written only by reflection** ([ADR 018](docs/decisions/018-three-brain-model.md)
 - A knowledge write from anywhere but reflection or an operator-driven drain.
 - A second knowledge store beside the three graphs.
 
-**enforced by: `packages/knowledge/contract.test.ts`**
+**enforced by:** `packages/knowledge/tests/regression/kb-read-policy-guard.test.ts` ·
+`packages/knowledge/tests/contract/kb-backend-conformance.test.ts` ·
+`packages/sessions/tests/contract/no-direct-brain-dir-resolution.test.ts` ·
+`packages/knowledge/tests/unit/brain-paths.test.ts` ·
+`scripts/check-kb-ingest-affordance.mjs`; planner and reflector brain reads: `review`.
 
 ---
 
 ## 5. Session
 
 **A session is an interactive surface authored as data and driven by one generic
-runner** ([ADR 043](docs/decisions/043-generic-interactive-surface.md)).
+runner**.
 
 ### Guarantees
 
 - **One descriptor, one runner.** A session kind is a row of yaml — id, agent,
   title, stages, artifact kind, and a `turnSpec` phase table. `runInteractiveTurn`
   reads `status.phase`, looks up the phase row, runs the declared step, and
-  advances to `next`. There is no per-kind runner (ADR 043 §§1–2).
+  advances to `next`. There is no per-kind runner.
 - **Closed vocabularies with total lookups.** `style`, `step`, finalizer id and
   schema id each resolve against a deep-frozen vocabulary; an unknown value is
-  rejected naming the offending value **and** the allowed set (ADR 043 §1).
+  rejected naming the offending value **and** the allowed set.
 - **Loading is structural; validation is semantic.** `loadSessionKinds` parses
   and validates nothing semantic; all semantic enforcement lives in
-  `validateSessionKinds` (ADR 043 §1).
+  `validateSessionKinds`.
 - **Affordances are derived, never authored.** A structured interview phase
   yields a question form; an `awaiting-*` phase yields a verdict affordance; a
   staging `writes:` yields a staged-file review. One authored field; the surface
-  falls out of it (ADR 043 §1).
+  falls out of it.
 - **One containment root per kind.** `turnSpec.kindDir` is the single containment
   segment; every write resolves under it and a path that escapes it is refused
-  (ADR 043 §1).
+ .
+- **`cancelled` is sticky.** It is the one reserved terminal phase every kind
+  shares; no status write moves a cancelled session to another phase.
 - **A transcript is an artifact.** It obeys §3.
 
 ### Forbidden
@@ -211,48 +239,53 @@ runner** ([ADR 043](docs/decisions/043-generic-interactive-surface.md)).
 - An affordance authored per kind instead of derived from the phase table.
 - A finalizer that writes outside its kind's containment root.
 
-**enforced by: `packages/sessions/contract.test.ts`**
+**enforced by:** `packages/sessions/tests/contract/session-kinds-vocab.test.ts` ·
+`packages/sessions/tests/contract/session-kinds-affordances.test.ts` ·
+`packages/sessions/tests/contract/session-kinds-containment.test.ts` ·
+`packages/sessions/tests/regression/session-kinds-kinddir-kernel-predicate.test.ts` ·
+`packages/sessions/tests/regression/interactive-session-cancel-sticky.test.ts`.
 
 ---
 
 ## 6. Project
 
 **A project earns unattended development by satisfying a written, checkable
-contract** ([ADR 017](docs/decisions/017-forge-project-contract.md),
-[ADR 034](docs/decisions/034-studio-aligned-contract.md)).
+contract**.
 
 ### Guarantees
 
 - **Two faces, one verdict.** Face A is the authoring object — north star,
   instructions, demo process, bound skills, bound knowledge. Face B is the
-  operational preflight — the C-clauses. A project is flow-ready only when both
-  pass; readiness is one boolean, computed in one place (ADR 034 §1).
+  operational preflight — the C-clauses. Studio shows a project as flow-ready
+  only when both pass. The claim gate enforces Face B (the hard preflight
+  clauses); Face A is an authoring-time gate shown in Studio.
+- **The hard set is C1 (gate command), C2 (scratch hygiene), C4 (architecture
+  context), DEPS and SKILLS.** Every other clause is advisory.
 - **Hard clauses decline, advisory clauses warn.** A hard clause failure makes
   forge refuse the run, naming the clause. An advisory clause never flips the
   verdict, because its check is heuristic, unprovable by inspection, or owned by
-  forge rather than the project (ADR 017).
+  forge rather than the project.
 - **The preflight is pure.** `runPreflight()` returns a structured report; the
   caller renders it, writes a `preflight.verdict` event, and sets the exit code —
-  so an unattended caller can gate on it (ADR 017).
+  so an unattended caller can gate on it.
 - **Checks use git truth, not file text.** Scratch hygiene is checked with
   `git ls-files` and `git check-ignore`, because a `.gitignore` entry is a no-op
-  on an already-tracked file (ADR 017 C2).
+  on an already-tracked file.
 - **The gate is structural, never executed.** The preflight asserts a quality-gate
-  command exists and is plausibly fast; it does not run it (ADR 017 C1).
+  command exists and is plausibly fast; it does not run it.
 - **Flows reach the preflight through a port.** `ProjectGate { runPreflight }` is
-  injected; a flow does not import the project package (`1.0.md` §4 M2 Lane B).
-  [ADR 036](docs/decisions/036-orchestrator-owned-gate-execution.md), amended
-  2026-08-31, records what that costs: its principle holds — the orchestrator
-  runs the gate, the agent never self-certifies — but its stronger claim, that
-  the ABSENCE of an injection seam is what makes the gate unfakeable, does not.
-  Exactly one production caller wires the real preflight.
+  injected; a flow does not import the project package. Exactly one production
+  caller wires the real preflight; the orchestrator runs the gate and the agent
+  never certifies its own result (DECISIONS D-15).
 
 ### Forbidden
 
 - Starting a run for a project whose hard clauses fail.
-- A readiness signal computed in a second place, or surfaced without being
-  enforced.
+- A readiness signal computed in a second place.
 - Auto-generating the operator's agent-instruction file. The clause requires a
-  human-authored file's presence and nothing else (ADR 017 C8).
+  human-authored file's presence and nothing else.
 
-**enforced by: `packages/projects/contract.test.ts`**
+**enforced by:** `packages/projects/tests/integration/preflight-gate.test.ts` ·
+`packages/projects/tests/integration/preflight-repo.test.ts` ·
+`packages/projects/tests/integration/preflight-instructions.test.ts`; Face A
+readiness in Studio: `review`.
