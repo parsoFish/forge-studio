@@ -272,6 +272,9 @@ packages/flows/worktree.ts rmSync 1
 packages/kernel/case-folding-probe.ts statSync 2
 packages/kernel/case-folding-probe.ts unlinkSync 1
 packages/kernel/case-folding-probe.ts writeFileSync 1
+packages/kernel/checkpoint-command.ts existsSync 2
+packages/kernel/checkpoint-command.ts readFileSync 1
+packages/kernel/checkpoint-command.ts realpathSync 2
 packages/kernel/claude-cli-path.ts statSync 1
 packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1

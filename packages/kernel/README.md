@@ -16,7 +16,7 @@ package above kernel — `library`, `knowledge`, `projects`, `agents`,
 `sessions`, `flows`, `stations`, `factory`, and both apps — imports it
 directly.
 
-## API (166 values)
+## API (167 values)
 
 | the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` · `errorEndMetadata` · `endStartOnThrow` · `isPerWorkItemRow` |
 | the SDK tool-use fence | `toolFenceOptions` |
@@ -30,6 +30,7 @@ directly.
 | where a session dir lives: under the logs root, never in the ground | `SESSIONS_DIRNAME` · `ARCHITECT_KIND_DIR` · `sessionDirSegments` · `sessionKindSegments` · `resolveSessionDir` |
 | the session/project-dir realpath-guarded single-file read | `safeReadFileInSession` |
 | case-folding probe (duplicate-target detection) | `CaseFoldingProbeError` · `detectVolumeCaseFolding` |
+| resolving a demo checkpoint command's head (PATH, then a contained package.json bin entry) | `resolveCheckpointHead` |
 | guarded scan (bounded mtime + tail reads) | `guardedMtime` · `selectRecentEntries` · `guardedReadFileTail` |
 | the studio validator Finding shape | `err` · `flag` |
 | station + band ports (SPEC.md §2) | `createBandRegistry` |

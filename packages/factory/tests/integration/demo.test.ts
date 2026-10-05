@@ -127,7 +127,8 @@ test('imageToDataUri: returns null for oversized file', () => {
 import { captureCommandOutput } from '../../demo.ts';
 import { tmpdir as _tmpdir } from 'node:os';
 import { mkdtempSync as _mkdtemp, rmSync as _rm } from 'node:fs';
-import { join as _join } from 'node:path';
+import { join as _join, dirname } from 'node:path';
+import { mkdirSync } from 'node:fs';
 
 test('captureCommandOutput: captures real stdout of a command run in the worktree', () => {
   const dir = _mkdtemp(_join(_tmpdir(), 'demo-cmd-'));
@@ -143,6 +144,40 @@ test('captureCommandOutput: a missing binary is captured as output, never thrown
     const out = captureCommandOutput(dir, 'definitely-not-a-real-binary-xyz arg');
     assert.match(out, /did not run|capture failed/);
   } finally { _rm(dir, { recursive: true, force: true }); }
+});
+
+// forge-8vfn.30.9 — a bare head declared in package.json "bin" runs from the worktree.
+test('captureCommandOutput: a bare command declared in package.json bin (not on PATH) runs its contained target', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-bin-'));
+  const savedPath = process.env.PATH;
+  try {
+    mkdirSync(_join(dir, 'dist'), { recursive: true });
+    writeFileSync(_join(dir, 'dist', 'cli.js'), "console.log('bin-marker:' + process.argv.slice(2).join(','))\n");
+    writeFileSync(_join(dir, 'package.json'), JSON.stringify({ name: 'gp', bin: { gp: './dist/cli.js' } }));
+    process.env.PATH = _join(dir, 'no-such-dir');
+    assert.match(captureCommandOutput(dir, 'gp --since 7d'), /bin-marker:--since,7d/);
+  } finally {
+    process.env.PATH = savedPath;
+    _rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('captureCommandOutput: a declared bin escaping the worktree is not run', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-bin-'));
+  const savedPath = process.env.PATH;
+  try {
+    writeFileSync(_join(dirname(dir), 'escape-marker.js'), "console.log('ESCAPED')\n");
+    writeFileSync(_join(dir, 'package.json'), JSON.stringify({ name: 'x', bin: { gp: '../escape-marker.js' } }));
+    process.env.PATH = _join(dir, 'no-such-dir');
+    const out = captureCommandOutput(dir, 'gp');
+    assert.doesNotMatch(out, /ESCAPED/);
+    assert.match(out, /did not run/);
+    assert.match(out, /outside the worktree/);
+  } finally {
+    process.env.PATH = savedPath;
+    _rm(_join(dirname(dir), 'escape-marker.js'), { force: true });
+    _rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('captureCommandOutput: oversize output is truncated', () => {
