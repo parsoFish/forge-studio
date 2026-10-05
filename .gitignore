@@ -152,6 +152,9 @@ secrets.env
 !.claude/skills/immutable-gates/
 !.claude/skills/adversarial-containment-review/
 !.claude/skills/security-review/
+!.claude/skills/docs-write/
+!.claude/skills/distil-decision/
+!.claude/agents/
 *.swp
 *.swo
 *~
