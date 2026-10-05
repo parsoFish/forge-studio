@@ -24,8 +24,15 @@ const run = (args: string[], env: Record<string, string> = {}) => {
   return { status: r.status, stderr: r.stderr ?? '', ms: Date.now() - t0 };
 };
 
-const alive = (pid: number) => {
-  try { process.kill(pid, 0); return true; } catch { return false; }
+// A SIGKILLed orphan is a zombie until init reaps it, and kill(pid, 0) still
+// succeeds on a zombie — so "survived" means running (not Z) after a bounded wait.
+const running = (pid: number) => {
+  try { return !/^\d+ \(.*\) Z /.test(readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { return false; }
+};
+const survivesBound = (pid: number, ms = 3000) => {
+  const end = Date.now() + ms;
+  while (running(pid) && Date.now() < end) spawnSync('sleep', ['0.05']);
+  return running(pid);
 };
 
 describe('gate-step-timeout.sh', () => {
@@ -41,7 +48,7 @@ describe('gate-step-timeout.sh', () => {
       assert.match(lines[0], /^TIMEOUT after 1s: sh -c /);
       const pid = Number(readFileSync(pidfile, 'utf8').trim());
       assert.ok(pid > 1);
-      assert.equal(alive(pid), false, `step child ${pid} survived the timeout`);
+      assert.equal(survivesBound(pid), false, `step child ${pid} survived the timeout`);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
