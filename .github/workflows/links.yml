@@ -1,0 +1,22 @@
+name: Docs external links
+
+# External links rot on someone else's schedule, so they are checked weekly and
+# on demand rather than on every PR. Internal links are checked by the build.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  lychee:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check external links in the docs site source
+        uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          args: --no-progress --exclude-path apps/docs/dist "apps/docs/src/**/*.md" "apps/docs/src/**/*.astro"
+          fail: true

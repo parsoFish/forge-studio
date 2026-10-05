@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' promises the future. Document what ships; plans go on the roadmap."
+level: error
+ignorecase: true
+# "planned" is not listed: it is a run and plan state the product shows.
+tokens:
+  - will be
+  - coming soon

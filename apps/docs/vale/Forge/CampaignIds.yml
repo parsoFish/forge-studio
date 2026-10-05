@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' is a milestone or bead id. Campaign ids never appear on published pages."
+level: error
+nonword: true
+tokens:
+  - '\bM\d+-[A-Z0-9]'
+  - '\bforge-[a-z]{0,3}\d[a-z0-9]{0,3}(?:\.\d+)*\b'

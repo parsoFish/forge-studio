@@ -1,0 +1,10 @@
+extends: existence
+message: "'%s' narrates history. Describe the current state; git and the changelog hold history."
+level: error
+ignorecase: true
+tokens:
+  - previously
+  - used to
+  - moved from
+  - no longer
+  - as of 20\d\d

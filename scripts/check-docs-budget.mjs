@@ -8,8 +8,11 @@
  * ceiling. The report exists to surface the pages that are heavy, not to
  * reward length.
  *
- * REPORT-ONLY for now: `--report` always exits 0 whatever it finds. A later
- * workstream decides whether it becomes blocking.
+ * Two modes. `--report` always exits 0 and covers the legacy docs/ tree too.
+ * `--strict` judges the published site only (apps/docs/src/content): it exits
+ * 1 when a page is over its type's ceiling or when there are more than
+ * MAX_HANDWRITTEN_GUIDES hand-written guides (generated how-tos, which carry
+ * `generated_from:`, do not count). CI runs `--strict`.
  *
  * What counts as a word: prose only. Frontmatter, fenced and indented code,
  * GFM tables, MDX import/export lines, HTML/MDX tags (their inner text stays),
@@ -17,10 +20,11 @@
  * counts as one word. A word is a run of non-whitespace holding at least one
  * letter or digit, so a lone `-` or an em dash is not a word.
  *
- * Usage: node scripts/check-docs-budget.mjs --report [--root <dir>]
- *   root defaults to the repo. Walks docs/**\/*.md and
- *   apps/docs/src/content/**\/*.{md,mdx}.
- * Exit: 0 report printed · 1 a page was unreadable · 2 bad usage.
+ * Usage: node scripts/check-docs-budget.mjs --report|--strict [--root <dir>]
+ *   root defaults to the repo. --report walks docs/**\/*.md and
+ *   apps/docs/src/content/**\/*.{md,mdx}; --strict walks the second only.
+ * Exit: 0 report printed (and, under --strict, every site page within budget) ·
+ *   1 a page was unreadable, or --strict found a breach · 2 bad usage.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -34,6 +38,11 @@ export const CEILINGS = Object.freeze({
   explanation: 2000,
   landing: 600,
 });
+
+/** R22: at most this many hand-written guides on the published site. */
+export const MAX_HANDWRITTEN_GUIDES = 20;
+
+const SITE_CONTENT = 'apps/docs/src/content';
 
 const PAGE_TYPES = ['guide', 'how-to', 'reference', 'explanation', 'landing', 'tutorial'];
 
@@ -166,24 +175,37 @@ function walk(dir, exts, out = []) {
   return out;
 }
 
+/** The --strict verdict: one line per breach, empty when the site is within budget. */
+export function strictBreaches(pages) {
+  const breaches = [];
+  for (const r of buildReport(pages).over100) {
+    breaches.push(`${r.path}: ${r.words} words, ceiling ${r.ceiling} for ${r.type}`);
+  }
+  const handwrittenGuides = pages.filter((p) => p.type === 'guide' && !p.generated).length;
+  if (handwrittenGuides > MAX_HANDWRITTEN_GUIDES) {
+    breaches.push(`${handwrittenGuides} hand-written guides, cap ${MAX_HANDWRITTEN_GUIDES}`);
+  }
+  return breaches;
+}
+
 function usage() {
-  process.stderr.write('usage: node scripts/check-docs-budget.mjs --report [--root <dir>]\n');
+  process.stderr.write('usage: node scripts/check-docs-budget.mjs --report|--strict [--root <dir>]\n');
   process.exitCode = 2;
 }
 
 function main(argv) {
-  let report = false;
+  let mode = null;
   let root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--report') report = true;
+    if ((argv[i] === '--report' || argv[i] === '--strict') && mode === null) mode = argv[i].slice(2);
     else if (argv[i] === '--root' && argv[i + 1] !== undefined) root = resolve(argv[++i]);
     else return usage();
   }
-  if (!report) return usage();
+  if (mode === null) return usage();
 
   const files = [
-    ...walk(join(root, 'docs'), ['.md']),
-    ...walk(join(root, 'apps/docs/src/content'), ['.md', '.mdx']),
+    ...(mode === 'report' ? walk(join(root, 'docs'), ['.md']) : []),
+    ...walk(join(root, SITE_CONTENT), ['.md', '.mdx']),
   ];
   const pages = [];
   for (const file of files) {
@@ -191,7 +213,13 @@ function main(argv) {
     try {
       if (!statSync(file).isFile()) continue;
       const src = readFileSync(file, 'utf8');
-      pages.push({ path: rel, type: pageType(rel, splitFrontmatter(src).frontmatter), words: countWords(src) });
+      const { frontmatter } = splitFrontmatter(src);
+      pages.push({
+        path: rel,
+        type: pageType(rel, frontmatter),
+        words: countWords(src),
+        generated: Boolean(frontmatter.generated_from),
+      });
     } catch (e) {
       process.stderr.write(`check-docs-budget: cannot read ${rel}: ${e.message}\n`);
       process.exitCode = 1;
@@ -216,6 +244,16 @@ function main(argv) {
   list('above 70% of ceiling:', rep.over70);
   list('above ceiling:', rep.over100);
   process.stdout.write(lines.join('\n') + '\n');
+
+  if (mode !== 'strict') return;
+  const breaches = strictBreaches(pages);
+  if (breaches.length > 0) {
+    process.stderr.write(`check-docs-budget: FAIL (${breaches.length}) — split the page by task or move detail to reference; never raise a ceiling\n`);
+    for (const b of breaches) process.stderr.write(`  ✗ ${b}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(`check-docs-budget: PASS — ${pages.length} site pages within their ceilings\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

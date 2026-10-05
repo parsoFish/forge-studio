@@ -8,6 +8,20 @@ paths:
 The published site is for people using forge. Agent-dev material (SPEC,
 DECISIONS, QUARRY, `dev/`) never goes here.
 
+## Where pages live
+
+| path | holds |
+|---|---|
+| `apps/docs/src/content/docs/guides/` | hand-written guides |
+| `apps/docs/src/content/docs/guides/how-to/` | generated how-tos (never hand-edited) |
+| `apps/docs/src/content/docs/reference/` | reference pages |
+| `apps/docs/src/content/docs/how-forge-works.md` | the one explanation page |
+| `apps/docs/src/pages/index.astro` | the landing page |
+| `apps/docs/public/media/stories/` | story frames used by the how-tos |
+
+Check a change with `npm run build --workspace=docs` (schema, links),
+`node scripts/check-docs-budget.mjs --strict` and `vale apps/docs/src/content/docs`.
+
 ## Page types and word ceilings
 
 | type | ceiling (prose words) |

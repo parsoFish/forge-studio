@@ -211,3 +211,7 @@ _1.0
 # permanent blob (46 MB / 150 files after one milestone). Frames, story.json and the generated
 # doc ARE deterministic and stay tracked — operator ruling 2026-08-30, amends 1.0.md §3.
 demos/stories/**/*.webm
+
+# Vale packages fetched by `vale sync` (.vale.ini Packages) — not source.
+apps/docs/vale/Google/
+apps/docs/vale/write-good/
