@@ -83,5 +83,5 @@ test('D-34: the new rule does not displace the two D-18 creates rules it sits be
     [fixture({ creates: undefined, verification_artifact: undefined })],
     () => true,
   );
-  assert.ok(noCreates.some((e) => e.includes('creates is required (ADR 037)')), 'the mandatory-with-escape rule still fires');
+  assert.ok(noCreates.some((e) => e.includes('creates is required (D-18)')), 'the mandatory-with-escape rule still fires');
 });

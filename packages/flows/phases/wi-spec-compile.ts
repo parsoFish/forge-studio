@@ -60,7 +60,7 @@ export type InjectedClause = {
   action: 'append' | 'replace';
 };
 
-const COMPILED_SECTION_HEADER = '## Compiled constraints (project & brain, ADR 037)';
+const COMPILED_SECTION_HEADER = '## Compiled constraints (project & brain, D-17)';
 
 /**
  * Idempotency anchors key on the clause's stable `id` (NOT its source
@@ -220,7 +220,7 @@ export function validateCompiledWorkItemSet(
       typeof item.verification_artifact === 'string' && item.verification_artifact.length > 0;
     if (!hasCreates && !hasVerificationArtifact) {
       errors.push(
-        `${item.work_item_id}: creates is required (ADR 037) unless verification_artifact is set — ` +
+        `${item.work_item_id}: creates is required (D-18) unless verification_artifact is set — ` +
           `pure-modification WIs must declare verification_artifact as the creates: escape`,
       );
     }

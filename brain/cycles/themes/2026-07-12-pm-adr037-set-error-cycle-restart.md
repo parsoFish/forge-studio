@@ -29,7 +29,7 @@ Orchestrator emitted:
 pm.work-item-emitted (WI-3)
 pm.spec-lint (0 flagged)
 pm.graph-emitted
-ERROR: WI-3: creates is required (ADR 037) unless verification_artifact is set
+ERROR: WI-3: creates is required (D-18) unless verification_artifact is set
 cycle.start (restart)
 ```
 

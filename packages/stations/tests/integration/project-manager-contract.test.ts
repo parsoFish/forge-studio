@@ -289,7 +289,7 @@ test(
       );
       assert.match(
         wi2Body,
-        /## Compiled constraints \(project & brain, ADR 037\)/,
+        /## Compiled constraints \(project & brain, D-17\)/,
         'the revise-added WI must carry its compiled forge:constraint clause',
       );
       assert.match(
@@ -714,7 +714,7 @@ test('D-17: valid constraint block is injected through the full PM pass into the
 
     for (const wiId of ['WI-1', 'WI-2']) {
       const onDisk = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wiId}.md`), 'utf8');
-      assert.match(onDisk, /## Compiled constraints \(project & brain, ADR 037\)/);
+      assert.match(onDisk, /## Compiled constraints \(project & brain, D-17\)/);
       assert.match(onDisk, /Always run gofmt before committing\./);
       assert.match(onDisk, /<!-- forge:compiled clause="go-conventions" -->/);
     }
@@ -737,7 +737,7 @@ test('D-17: WI with neither creates nor verification_artifact → compileErrors 
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1', omitCreates: true }]);
     await assert.rejects(
       () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }),
-      /project-manager phase failed:[\s\S]*creates is required \(ADR 037\)/,
+      /project-manager phase failed:[\s\S]*creates is required \(D-18\)/,
     );
 
     const events = readEvents(h.logger);

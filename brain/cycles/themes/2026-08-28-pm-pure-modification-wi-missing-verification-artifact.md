@@ -27,7 +27,7 @@ updated_at: 2026-08-28T12:30:00.000Z
 The PM decomposed the `--no-merges` initiative into 3 WIs. WI-1 and WI-2 created new test files (`creates: [test/no-merges.test.ts]`, `creates: [test/no-merges-cli.test.ts]`). WI-3 only modified existing files (`test/acceptance/run.ts`, `README.md`) and declared neither `creates` nor `verification_artifact`. `pm.spec-lint` passed (0 flagged). But the D-17 set-validator fired at `pm.graph-emitted` time:
 
 ```
-project-manager phase failed: set errors: WI-3: creates is required (ADR 037) unless
+project-manager phase failed: set errors: WI-3: creates is required (D-18) unless
 verification_artifact is set — pure-modification WIs must declare verification_artifact
 as the creates: escape
 ```
@@ -44,7 +44,7 @@ The PM must declare `verification_artifact` for any WI that modifies files witho
 
 - `pm.spec-lint` reports 0 flagged
 - `pm.graph-emitted` fires
-- Immediately followed by `project-manager phase failed: set errors: WI-N: creates is required (ADR 037)`
+- Immediately followed by `project-manager phase failed: set errors: WI-N: creates is required (D-18)`
 - Then `failure_classification` with `recoverable: false`
 - Then `cycle.start` ~10s later (automatic restart)
 

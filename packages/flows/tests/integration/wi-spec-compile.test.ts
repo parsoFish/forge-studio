@@ -86,7 +86,7 @@ test('validateCompiledWorkItemSet: neither creates nor verification_artifact →
   const items = [fixture({ work_item_id: 'WI-9', creates: undefined, verification_artifact: undefined })];
   const errors = validateCompiledWorkItemSet(items);
   assert.equal(errors.length, 1);
-  assert.match(errors[0]!, /WI-9: creates is required \(ADR 037\)/);
+  assert.match(errors[0]!, /WI-9: creates is required \(D-18\)/);
   assert.match(errors[0]!, /verification_artifact/);
 });
 
@@ -134,7 +134,7 @@ test('injectConstraintClauses: matching "all" clause injected verbatim into body
       startLine: 5,
       action: 'append',
     });
-    assert.match(updated[0]!.body, /## Compiled constraints \(project & brain, ADR 037\)/);
+    assert.match(updated[0]!.body, /## Compiled constraints \(project & brain, D-17\)/);
     assert.match(updated[0]!.body, /Standing note: keep functions small\./);
     assert.match(updated[0]!.body, /<!-- forge:compiled clause="standing-note" -->/);
     assert.match(updated[0]!.body, /<!-- \/forge:compiled clause="standing-note" -->/);
@@ -578,7 +578,7 @@ test('compileWorkItemSpecs: folds creates-mandatory violations into compileError
     });
 
     assert.equal(result.compileErrors.length, 1);
-    assert.match(result.compileErrors[0]!, /WI-1: creates is required \(ADR 037\)/);
+    assert.match(result.compileErrors[0]!, /WI-1: creates is required \(D-18\)/);
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(workItemsDir, { recursive: true, force: true });
