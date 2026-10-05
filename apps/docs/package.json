@@ -1,0 +1,25 @@
+{
+  "name": "docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "forge's published documentation site (Astro + Starlight).",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "typecheck": "astro sync && tsc --noEmit -p .",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.5",
+    "astro": "7.3.5",
+    "starlight-links-validator": "0.26.0",
+    "starlight-llms-txt": "0.12.0",
+    "starlight-page-actions": "0.7.1",
+    "starlight-sidebar-topics": "0.9.0"
+  }
+}

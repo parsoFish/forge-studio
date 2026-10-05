@@ -1,0 +1,8 @@
+---
+// Footer line: when the page was last checked against the product, and who owns it.
+// The route middleware sets `lastUpdated` from `last_verified` on every content page.
+const { lastUpdated, entry } = Astro.locals.starlightRoute;
+const checked = lastUpdated?.toISOString().slice(0, 10);
+---
+
+{checked && <p>Last verified <time datetime={checked}>{checked}</time> · Owner: {entry.data.owner}</p>}
