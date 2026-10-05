@@ -20,7 +20,7 @@ import { reqString, optString, stringArray, oneOf } from '@forge/kernel';
 import type { ArtifactTemplate, DemoElementDefinition, InstructionSeed } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
-// Artifact templates — studio/artifact-templates/<id>.md (gray-matter, ADR-027 amendment).
+// Artifact templates — studio/artifact-templates/<id>.md (gray-matter, D-09).
 // ---------------------------------------------------------------------------
 
 export function loadArtifactTemplate(mdPath: string): ArtifactTemplate {

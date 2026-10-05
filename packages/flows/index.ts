@@ -25,7 +25,7 @@
  */
 
 
-// ---- Run one flow — the Station engine (SPEC.md §2, ADR 028) ---------------
+// ---- Run one flow — the Station engine (SPEC.md §2, SPEC §2) ---------------
 export { type FlowRunArgs, flowPathForId, resolveNodeKind, runFlow } from './flow-runner.ts';
 export { type NodeExecContext, type NodeRunState } from './flow-node-context.ts';
 export { type NodeKind } from './flow-node-kind.ts';

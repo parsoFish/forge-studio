@@ -27,7 +27,7 @@ export type LoggingConfig = {
  * `quality_gate_cmd` targets the live acceptance suite. `match` is the
  * substring (any argv token contains it) that identifies such a gate; when
  * the initiative's change class `requires` the tier (the class table's
- * `acceptance` column, ADR 051 decision 2 as amended, bead forge-mfv5.3.5)
+ * `acceptance` column, D-35, bead forge-mfv5.3.5)
  * the PM phase hard-fails the cycle if no emitted WI carries a matching gate. The live test then runs as that WI's own per-WI
  * gate during the dev-loop (with TF_ACC + creds from the serve env).
  */
@@ -57,7 +57,7 @@ export type AcceptanceGateConfig = {
  * `ProjectConfig`'s flat accessors below are DERIVED from it so the ~20
  * consumers (gate runners, PM acceptance enforcement, preflight, bridge/UI)
  * read on unchanged. Each process takes an optional `timeoutMs` inheriting
- * ADR-036's semantics: the FORGE_*_TIMEOUT_MS env vars (per-run operator
+ * D-15's semantics: the FORGE_*_TIMEOUT_MS env vars (per-run operator
  * override) still win over a declared timeout, which wins over the default.
  */
 export type TestProcessLocal = {
@@ -156,7 +156,7 @@ export type ProjectConfig = {
   /**
    * Project-root-relative subdirectory under which a project keeps its
    * committed in-repo forge DEMO machinery (e.g. `"forge"` →
-   * `forge/history/<id>/demo/`). Since ADR 035, Brain 3, development history,
+   * `forge/history/<id>/demo/`). Since SPEC §4, Brain 3, development history,
    * and the contract are **forge-owned and central** (in the forge repo, not
    * here) — `artifactRoot` no longer governs them (nor ever scoped skills:
    * those live at the fixed `.forge/skills/<id>/` path). It now only scopes

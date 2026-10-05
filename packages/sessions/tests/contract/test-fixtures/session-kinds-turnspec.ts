@@ -9,7 +9,7 @@
 
 import { baseDescriptor, type FixtureDescriptor } from './session-kinds-core.ts';
 
-/** The exact ADR-043 §1 worked example (kindDir: _authoring, style: agent,
+/** The exact SPEC §5 worked example (kindDir: _authoring, style: agent,
  *  4-phase table) — the POSITIVE control every negative probe below is a
  *  one-field mutation of. */
 export function wellFormedTurnSpec(): Record<string, unknown> {

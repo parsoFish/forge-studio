@@ -90,7 +90,7 @@ test('the example develop flow declares the STATION node id "integrate", not "de
     `studio/flows/forge-develop/flow.yaml must declare a node with id "integrate" — got node ids: ${flow.nodes.map((n) => n.id).join(', ')}`,
   );
   assert.equal(integrateNode!.agent, 'demo-agent', 'the integrate node keeps the demo-agent skill as its declared dispatch');
-  assert.equal(integrateNode!.resumable, true, 'the integrate node is still the resume target (ADR-019/R4-10-F6)');
+  assert.equal(integrateNode!.resumable, true, 'the integrate node is still the resume target (D-06/R4-10-F6)');
   assert.ok(
     !flow.nodes.some((n) => n.id === 'demo'),
     'no node may be named "demo" any more — the STATION identity moved to "integrate"',

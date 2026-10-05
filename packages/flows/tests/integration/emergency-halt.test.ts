@@ -1,5 +1,5 @@
 /**
- * The one emergency halt (ADR 011) at the queue claim seams: `claim()`, the
+ * The one emergency halt (D-03) at the queue claim seams: `claim()`, the
  * scheduler tick (`--once` and forever), the drain sweep, and the halt log
  * watcher. The record is `<queueRoot>/halt.json`; kernel and flows read the
  * same file.

@@ -19,7 +19,7 @@
  *     files itself.
  *   - NEVER composes `brain-ingest` and carries no ingest affordance of any
  *     kind (operator decision 3: ingest stays reflection-only —
- *     docs/decisions/010-brain-first.md line 22).
+ *     SPEC §4).
  *
  * `discoverRuntimeAgentIds` itself is a private (non-exported) function in
  * packages/sessions/studio/session-kinds.ts. Rather than modify production code

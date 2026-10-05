@@ -1,7 +1,7 @@
 import type { AcceptanceGateConfig } from '@forge/projects';
 
 /**
- * The live-acceptance env guard's one decision (ADR 051 decision 2 as amended,
+ * The live-acceptance env guard's one decision (D-34,
  * bead forge-mfv5.3.5). When this WI's gate targets the project's
  * live-acceptance suite (its `match`), the gate must run with the tier's
  * `requiresEnv` set — else the runner SKIPS and the gate false-passes (the

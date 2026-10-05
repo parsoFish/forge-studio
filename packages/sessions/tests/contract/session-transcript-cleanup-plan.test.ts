@@ -26,7 +26,7 @@ import { REAL_CLEANUP_PLAN_MD, REAL_DANGLING_TARGET_RELATIVE, REAL_FINDING_DANGL
 // e.g. the R4-22/interactive-runner suite's "MY CALL" convention): the
 // caller-supplied parameter is named `cleanupFindings` on
 // deriveSessionArtifact's input object — this name is NOT dictated anywhere
-// in ADR-043 or the task brief; if the implementer picks a different name,
+// in SPEC §5 or the task brief; if the implementer picks a different name,
 // update the calls below to match (the BEHAVIOUR these tests pin — a
 // caller-supplied findings list, DERIVED joins, a throw when absent — is the
 // load-bearing contract, not this exact identifier).

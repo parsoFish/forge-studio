@@ -38,7 +38,7 @@ function asChangeClass(factory: InstalledFactory, value: string): string {
   if (!factory.isChangeClass(value)) {
     throw new Error(
       value === ''
-        ? 'band dispatch: the initiative declares no `class` — the change class selects the review lenses (ADR 051) and has no default'
+        ? 'band dispatch: the initiative declares no `class` — the change class selects the review lenses (D-34) and has no default'
         : `band dispatch: "${value}" is not a change class the installed factory knows — no lens profile can be selected for it`,
     );
   }
@@ -49,7 +49,7 @@ export const bandAgentDeps: BandAgentDeps = {
   queuePaths: getPaths,
   parseInitiativeManifest: parseManifest,
   runPipeline: async ({ input, logger, queryFn, agentDef }) => {
-    // ADR 048: the band pipeline IS the example. Resolved here rather than
+    // D-33: the band pipeline IS the example. Resolved here rather than
     // imported, and its absence refuses loudly — a band dispatch with no
     // pipeline to dispatch to must never look like a completed review.
     const factory = await resolveInstalledFactory();

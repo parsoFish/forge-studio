@@ -7,7 +7,7 @@ import { createKb, deriveKbBandOptions, fetchStudioFlows, fetchStudioProjects } 
 import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
-// New knowledge base — create form (ADR-033 / J6; R1-01 binding contract).
+// New knowledge base — create form (J6; R1-01 binding contract).
 // Required: name + a binding to the flow OR project the KB belongs to. `unique`
 // is reserved for the shipped forge-dev KB (exactly one is lint-enforced), so
 // it is not offered here. Description optional.

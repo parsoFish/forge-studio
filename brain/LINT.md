@@ -9,7 +9,7 @@
 1. **Frontmatter present and valid.**
    - Required fields: `title`, `description`, `category`, `created_at`, `updated_at`.
    - `category` must be one of: `pattern`, `antipattern`, `decision`, `operation`, `reference`.
-2. **Indexed in exactly one category index.** Each category lives in its owning sub-wiki (three-brain model, ADR 018): `pattern`/`antipattern`/`operation` themes live in `cycles/` and index into `cycles/{patterns,antipatterns,operations}.md`; `decision`/`reference` themes live in `forge-dev/` and index into `forge-dev/{decisions,reference}.md`. A theme must appear once on its category index and not on any other.
+2. **Indexed in exactly one category index.** Each category lives in its owning sub-wiki (three-brain model, SPEC §4): `pattern`/`antipattern`/`operation` themes live in `cycles/` and index into `cycles/{patterns,antipatterns,operations}.md`; `decision`/`reference` themes live in `forge-dev/` and index into `forge-dev/{decisions,reference}.md`. A theme must appear once on its category index and not on any other.
 3. **Body length ≤ 60 lines.** Soft cap; warn at 60, error at 100. Counts **body lines only** (post-frontmatter) — YAML frontmatter is structured metadata and doesn't count against the prose cap. (`description` participates in brain-query relevance via the one-liner on the category index; `keywords` drives `checkDuplicateThemes`' Jaccard comparison and is a search-term aid for the human/agent reading a theme — it is not yet wired into brain-query retrieval.) Long pages should be split.
 4. **No source link broken.** Every link target must exist (`checkSourceLinks`).
 5. **No orphan.** Every theme page must be reachable from `INDEX.md` via category indexes.
@@ -33,8 +33,8 @@
 ### Per-project brains (Brain 3)
 
 Project brains are **forge-owned and central**, at `brain/projects/<name>/`
-([ADR 035](../docs/decisions/035-forge-owned-central-artifacts.md), which
-reversed ADR 018's in-repo location so the reflector can write one post-merge
+(SPEC §4, which
+reversed the earlier in-repo location so the reflector can write one post-merge
 without an open project worktree). They are part of this repo and are linted
 by `forge brain lint` like any other brain. Each carries its own category
 indexes + `themes/` and follows the same theme-page discipline, with two

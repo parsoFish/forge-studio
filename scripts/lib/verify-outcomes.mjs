@@ -13,7 +13,7 @@
  * be the harness ground (docs/roadmaps/1.0.md §0 global constraint); the
  * default ground is `gitpulse`, an independent repo.
  *
- * `buildOutcomeChecks` is the ADR 022 + S9 outcome-check list, moved verbatim
+ * `buildOutcomeChecks` is the D-08 + S9 outcome-check list, moved verbatim
  * out of `verify-cycle.mjs`'s `assessOutcomes` (same row names, same order,
  * same detail wording) with one behavioural change: the `'project tests
  * green post-merge'` row used to pass on `tests.ok` alone, independent of
@@ -98,7 +98,7 @@ export function resolveReflectWaitDeadlineMs(approvedAtMs) {
  */
 
 /**
- * Build the ADR 022 + S9 outcome-check list: outcome-only assertions (merge /
+ * Build the D-08 + S9 outcome-check list: outcome-only assertions (merge /
  * dev-loop / tests / cost / reflect-writes-brain), plus an optional
  * live-evidence check for live-resource projects and an optional
  * release-evidence check when the project declares `releaseProcess`.

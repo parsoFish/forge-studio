@@ -37,7 +37,7 @@ import type { GateProfile } from '../class-profile-port.ts';
  */
 export type GateEvidenceRow = MergeGateEvidence;
 
-/** One work item's typed acceptance criterion (ADR 051), carried through
+/** One work item's typed acceptance criterion (SPEC §3), carried through
  *  intact rather than pre-flattened — the derivation renders it, so the same
  *  line can never drift between the demo model and the PR body. */
 export type AcceptanceCriterionInput = {
@@ -56,7 +56,7 @@ export type DerivedDemoInput = {
   headSha: string;
   changedFiles: readonly string[];
   workItems: readonly { id: string; title: string; status: string }[];
-  /** The typed acceptance criteria (ADR 051) — untouched by the reader; this
+  /** The typed acceptance criteria (SPEC §3) — untouched by the reader; this
    *  module renders each to its one demo.json / PR-body line. */
   acceptanceCriteria: readonly AcceptanceCriterionInput[];
   gateEvidence: readonly GateEvidenceRow[];

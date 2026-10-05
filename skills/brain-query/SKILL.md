@@ -15,7 +15,7 @@ Answer a question against the brain wiki, citing source files. Log
 unanswered or low-confidence queries as **gaps** for `brain-ingest` to
 address.
 
-This skill is invoked **first** by every other skill, per [ADR 010](../../docs/decisions/010-brain-first.md).
+This skill is invoked **first** by every other skill, per SPEC §4.
 
 ## Scope routing
 
@@ -23,10 +23,10 @@ This skill is invoked **first** by every other skill, per [ADR 010](../../docs/d
 |---|---|
 | `forge-dev` | `brain/forge-dev/themes/` + category indexes |
 | `cycles` | `brain/cycles/themes/` + category indexes |
-| `project` | `brain/projects/<name>/themes/` + `profile.md` (forge repo, ADR 035) |
+| `project` | `brain/projects/<name>/themes/` + `profile.md` (forge repo, SPEC §4) |
 | `all` | union of all three (emit a scope-missing warning) |
 
-**Role defaults** (the calling skill or orchestrator should supply these; who reads which brain is CLAUDE.md's brain-read policy, ADR 010):
+**Role defaults** (the calling skill or orchestrator should supply these; who reads which brain is CLAUDE.md's brain-read policy, SPEC §4):
 
 | Role | Default scope |
 |---|---|

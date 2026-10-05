@@ -1,5 +1,5 @@
 /**
- * Constraint-block parser (ADR 037 decision item 1 — wi-spec-compiler).
+ * Constraint-block parser (D-17 — wi-spec-compiler).
  *
  * `profile.md` and a project's Brain-3 theme files can carry machine-readable
  * clauses: HTML-comment-delimited blocks tagged with a MANDATORY stable `id:`
@@ -15,7 +15,7 @@
  * re-injecting, and an edited clause body is detected + replaced in place.
  * A missing id, or a duplicate id within one source file (checked here) or
  * across a project's sources (checked in `loadProjectConstraintBlocks`), is
- * a loud parse error. This refines ADR 037's original position-keyed
+ * a loud parse error. This refines D-17's original position-keyed
  * (`sourceFile:startLine`) anchor convention, which duplicated injected
  * clauses on any line shift.
  *
@@ -28,9 +28,9 @@
  *
  * Parse errors are LOUD: a malformed selector or an unterminated/nested/
  * stray block throws an explicit `Error` naming the source file + line.
- * Silently skipping a malformed clause is exactly the failure mode ADR 037
+ * Silently skipping a malformed clause is exactly the failure mode D-17
  * exists to close (a constraint present in the brain that never reaches a
- * WI body) — see `docs/decisions/037-compiled-wi-contracts.md`.
+ * WI body).
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -211,7 +211,7 @@ function fieldMatches(value: unknown, glob: string): boolean {
  * Load every constraint block from a project's declared sources: `profile.md`
  * (single file, best-effort — a project without one contributes no blocks)
  * plus every `*.md` file directly under its Brain-3 themes dir
- * (`brain/projects/<project>/themes/`, ADR 018/035), read in sorted filename
+ * (`brain/projects/<project>/themes/`, SPEC §4), read in sorted filename
  * order for determinism. Missing sources are NOT an error (a project may not
  * have onboarded constraint blocks yet); a malformed block inside a source
  * that DOES exist always is (see `parseConstraintBlocks`), and so is a

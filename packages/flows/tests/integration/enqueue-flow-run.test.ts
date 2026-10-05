@@ -1,5 +1,5 @@
 /**
- * Tests for packages/flows/enqueue-flow-run.ts (R2-04-F1 / ADR-041).
+ * Tests for packages/flows/enqueue-flow-run.ts (R2-04-F1 / D-23).
  *
  * The generic per-flow claimable enqueue: locate an initiative's manifest
  * across the queue, guard the states a run must never disturb, repoint it at
@@ -311,7 +311,7 @@ test('7.6.132: an ABSENT flow id on a ready-for-review manifest is not runnable'
 });
 
 // ---------------------------------------------------------------------------
-// Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+// Seam F6 half 1 (D-34, spec §5 item 8, bead forge-8vfn.6.10.15):
 // "the pair is checked before spend" — this door refuses a manifest class the
 // target flow does not accept, BEFORE the manifest is repointed/written.
 // ---------------------------------------------------------------------------

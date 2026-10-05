@@ -41,11 +41,11 @@ test('THE RUN-3 LINES: a PM error + a cycle error are both reported, verbatim', 
       phase: 'orchestrator',
       skill: 'cycle',
       event_type: 'error',
-      message: 'project-manager phase failed: set errors: WI-3: creates is required (ADR 037) unless verification_artifact is set',
+      message: 'project-manager phase failed: set errors: WI-3: creates is required (D-18) unless verification_artifact is set',
     }),
   ]);
   assert.equal(r.errors.length, 2);
-  assert.ok(r.errors.some((e) => /creates is required \(ADR 037\)/.test(e)),
+  assert.ok(r.errors.some((e) => /creates is required \(D-18\)/.test(e)),
     'the caller must be able to print WHY the cycle refused, not just that it did');
   assert.ok(r.errors.some((e) => /subtype=success/.test(e)),
     'the agent-turn-says-success line is evidence and must not be swallowed');

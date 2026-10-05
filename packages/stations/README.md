@@ -1,6 +1,6 @@
 # `@forge/stations`
 
-The station executor and every band it dispatches (ADR 028): the phase table a
+The station executor and every band it dispatches (SPEC §2): the phase table a
 flow runner is handed, and the orchestrator-band implementations behind it — the
 project-manager pass, the developer loop, integrate, adversarial-review, the
 reflector and release-finalize. This is the platform's execution machinery.

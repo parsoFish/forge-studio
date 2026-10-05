@@ -1,5 +1,5 @@
 /**
- * Aider adapter conformance + unit tests (M8-A, ADR 029).
+ * Aider adapter conformance + unit tests (M8-A, SPEC §1).
  *
  * Runs WITHOUT live creds and WITHOUT the aider binary: every aider subprocess
  * is replaced by an injected `AiderRunner` fake (the adapter's mock seam,

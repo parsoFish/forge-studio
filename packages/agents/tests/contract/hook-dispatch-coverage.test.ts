@@ -20,7 +20,7 @@
  * every real spawn site either imports `pinnedSdkQuery`/`pinnedStreamQuery` as
  * a VALUE, or reaches the SDK indirectly through the adapter registry
  * (`getAdapter(id).query(...)` / `getAdapter(id).createAgent(...)` —
- * `loops/_adapters/registry.ts`, ADR 029's seam), or imports one of the adapter
+ * `loops/_adapters/registry.ts`, SPEC §1's seam), or imports one of the adapter
  * OBJECTS directly (`claudeAdapter.query` IS `pinnedSdkQuery` re-exported —
  * `loops/_adapters/claude/index.ts:20,28`). So "imports the pinned query as a
  * value, OR calls getAdapter(, OR value-imports a `<runtime>Adapter` object" is

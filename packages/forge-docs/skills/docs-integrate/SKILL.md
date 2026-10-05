@@ -27,7 +27,7 @@ budgets: {maxTurns: 1, maxBudgetUsd: 0}
 ## What this is, honestly
 
 This SKILL.md is **not a running agent** — it is forge-docs's OWN declaration
-carrier for the `integrate-band` guard (seam F4, ADR-039: a band station now
+carrier for the `integrate-band` guard (seam F4, SPEC §1: a band station now
 spawns under the executing node's own def, never a hardcoded canonical
 slug), so the second factory's `integrate` node resolves to a SKILL.md
 *inside `packages/forge-docs`* rather than borrowing

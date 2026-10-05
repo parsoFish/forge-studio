@@ -39,9 +39,9 @@ Each entry on this index is one line:
 
 ### Auto-linked (re-file under a curated heading when convenient)
 
-- [`2026-07-12-pm-adr037-set-error-cycle-restart`](./themes/2026-07-12-pm-adr037-set-error-cycle-restart.md) — When PM emits a WI without `creates` or `verification_artifact` (ADR 037), the orchestrator classifies it terminal/non-recoverable and restarts the full cycle — costing a wasted PM run instead of an in-place correction.
+- [`2026-07-12-pm-adr037-set-error-cycle-restart`](./themes/2026-07-12-pm-adr037-set-error-cycle-restart.md) — When PM emits a WI without `creates` or `verification_artifact` (D-17), the orchestrator classifies it terminal/non-recoverable and restarts the full cycle — costing a wasted PM run instead of an in-place correction.
 
-- [`2026-08-28-pm-pure-modification-wi-missing-verification-artifact`](./themes/2026-08-28-pm-pure-modification-wi-missing-verification-artifact.md) — PM emits pure-modification WI without `verification_artifact`; spec-lint passes but ADR-037 set-validator fires at graph-emit time, classifying cycle terminal/non-recoverable and forcing a restart (~$0.79, ~3 min wasted).
+- [`2026-08-28-pm-pure-modification-wi-missing-verification-artifact`](./themes/2026-08-28-pm-pure-modification-wi-missing-verification-artifact.md) — PM emits pure-modification WI without `verification_artifact`; spec-lint passes but D-17 set-validator fires at graph-emit time, classifying cycle terminal/non-recoverable and forcing a restart (~$0.79, ~3 min wasted).
 
 - [`2026-07-11-last-gate-failure-untracked-merge-conflict`](./themes/2026-07-11-last-gate-failure-untracked-merge-conflict.md) — The untracked .forge/last-gate-failure.md file in the worktree blocks the WI fan-in merge, triggering dev-loop.merge-conflict-requeue and discarding the WI's work — a variant of the stale-last-gate-failure antipattern.
 

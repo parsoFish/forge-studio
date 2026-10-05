@@ -160,7 +160,7 @@ project's roadmap in Studio: press **Start development** on the initiative's
 card. The develop run then goes autonomously — plan → change → verify →
 package — fanning work out across parallel work items.
 
-The **UI is the sole operator surface** ([ADR 031](../decisions/031-studio-consolidation.md))
+The **UI is the sole operator surface** ([D-12](../../DECISIONS.md))
 — author + run a cycle, review/approve, and recover stuck initiatives all from
 `forge studio`; the Recovery screen replaces the old `review`/`requeue` verbs, and new
 runs go through the architect flow or `POST /api/initiatives`. The only operator CLI

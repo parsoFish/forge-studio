@@ -1,5 +1,5 @@
 /**
- * The unattended scheduler (ADR 011): `serve`'s daemon loop + admission.
+ * The unattended scheduler (D-04): `serve`'s daemon loop + admission.
  * Size split across this file + scheduler-sweeps.ts + scheduler-run-one.ts — see design.md.
  */
 
@@ -44,7 +44,7 @@ export type SchedulerConfig = {
   pollIntervalMs?: number;
   /**
    * F-08: how often to re-run the crash-recovery sweep in forever mode.
-   * Defaults to 5 minutes (per ADR 012). Ignored in `once` mode.
+   * Defaults to 5 minutes (per D-05). Ignored in `once` mode.
    */
   recoverIntervalMs?: number;
 };
@@ -57,7 +57,7 @@ const DEFAULTS: Required<Omit<SchedulerConfig, 'notify' | 'recoverIntervalMs' | 
   heartbeatIntervalMs: 30_000,
   staleHeartbeatMs: 5 * 60_000,
   pollIntervalMs: 5_000,
-  // F-08 / ADR 012: periodic crash-recovery sweep (forever-mode only).
+  // F-08 / D-05: periodic crash-recovery sweep (forever-mode only).
   recoverIntervalMs: 5 * 60_000,
 };
 
@@ -118,12 +118,12 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // F-W5-7: at startup, finalize any ready-for-review cycle whose PR was merged
   // while the daemon was down (operator merged, nothing re-confirmed it).
   await runFinalizeSweep(opts.phaseWiring);
-  // ADR 026: at startup, drain any review work-items appended while the daemon
+  // D-20: at startup, drain any review work-items appended while the daemon
   // was down (the operator sent back; the cycle must re-run them in place).
   await runDrainSweep(opts.phaseWiring, cfg.queueRoot);
   // Stage C: dispatch any flow-trigger run-requests staged while down.
   runFlowTriggerSweep();
-  // R2-04 (ADR-041): arm the cron triggers declared across studio/flows/*.
+  // R2-04 (D-23): arm the cron triggers declared across studio/flows/*.
   runCronSync();
 
   const inFlight = new Map<string, Promise<void>>();
@@ -143,7 +143,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   const haltWatch = createHaltWatch(cfg.queueRoot, { log: (l) => console.log(l), now: () => Date.now() });
 
   const tick = async (): Promise<boolean> => {
-    // The emergency halt (ADR 011): claim nothing; in-flight work is untouched.
+    // The emergency halt (D-03): claim nothing; in-flight work is untouched.
     if (haltWatch()) return inFlight.size > 0;
     while (inFlight.size < cfg.maxConcurrentInitiatives) {
       const pending = listPending(getPaths(cfg.queueRoot));
@@ -239,14 +239,14 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
       }, 60_000)
     : null;
 
-  // F-08 / ADR 012: periodic crash-recovery sweep. The startup sweep above
+  // F-08 / D-05: periodic crash-recovery sweep. The startup sweep above
   // catches state from prior crashes; this catches mid-run loss (a worktree
   // that vanishes, a heartbeat that goes stale because runOne is wedged).
   // Cleared at shutdown so the process can exit cleanly.
   const recoverTimer = setInterval(() => {
     void runRecoverySweep(cfg);
     // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
-    // then (ADR 026) drain any review work-items appended since the last sweep.
+    // then (D-20) drain any review work-items appended since the last sweep.
     void runFinalizeSweep(opts.phaseWiring).then(() => runDrainSweep(opts.phaseWiring, cfg.queueRoot)).then(() => runCronSync());
     // Stage C: dispatch any flow-trigger run-requests (on:complete chaining).
     runFlowTriggerSweep();
@@ -376,7 +376,7 @@ export type {
   AutoRetryDecision,
 } from './scheduler-dispatch.ts';
 
-// ADR-028 §8 (M3-6): re-export claim validator + version-seam utilities
+// SPEC §2 (M3-6): re-export claim validator + version-seam utilities
 // so tests can import them from the scheduler module without reaching into
 // the implementation detail.
 export { validateClaimable, isNonTerminalRefused, clearPendingRefusalLog, clearAllPendingRefusalLogs } from './claim-validator.ts';

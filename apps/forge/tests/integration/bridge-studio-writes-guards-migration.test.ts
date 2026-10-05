@@ -1,5 +1,5 @@
 /**
- * MIGRATION ACCEPTANCE TEST — E1 of the ADR-027-amendment-#2
+ * MIGRATION ACCEPTANCE TEST — E1 of the SPEC §1
  * `composition.hooks` → `composition.guards` rename: the agent save/round-trip
  * path in `apps/forge/bridge-studio-writes.ts` (~L379, now maps `guards`) must
  * preserve `composition.guards` through a PUT /api/studio/agents/:slug

@@ -1,24 +1,24 @@
 /**
- * In-UI architect runner (ADR 020).
+ * In-UI architect runner (R-05).
  *
  * The architect used to be an interactive Claude-Code skill the operator ran in
  * their own terminal session (`/forge-architect`), driving `AskUserQuestion`.
- * ADR 020 moves it into the forge UI as a server-side, operator-driven,
+ * R-05 moves it into the forge UI as a server-side, operator-driven,
  * file-checkpointed runner. This module is that runner's brain: a bounded,
  * Ralph-style **turn** that reads the session-dir state, advances ONE step via a
  * `status.json` cursor, and exits. Operator think-time happens *between* turns
  * (the bridge re-spawns a turn on each operator action), so there is no
- * long-lived blocked session and the flow is crash-resumable (ADR 012).
+ * long-lived blocked session and the flow is crash-resumable (D-05).
  *
  * Interactivity is **file-based handoff** — the same pattern the reflector uses
  * (`questions.json` ↔ `answers.json`), NOT SDK `canUseTool` interception (which
  * is an allow/deny permission gate and cannot return the operator's answer as a
- * tool result). See ADR 020 for the full rationale.
+ * tool result). See R-05 for the full rationale.
  *
  * The LLM call sits behind an injectable `queryFn` seam (the `runCouncil`
  * pattern) so every turn is unit-testable without a live LLM. The prompt is
  * composed from `skills/architect/SKILL.md` (not re-baked in TS) so prompt
- * changes stay content changes — ADR 003 is preserved.
+ * changes stay content changes — SPEC §1 is preserved.
  *
  * State machine (`status.json.phase`):
  *
@@ -77,7 +77,7 @@ const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 // Turn entry point
 // ---------------------------------------------------------------------------
 
-// ADR-039: this is the architect's bespoke turn spawn — it deliberately stays
+// SPEC §1: this is the architect's bespoke turn spawn — it deliberately stays
 // outside flow-runner's node-executor registry (never resolveNodeKind /
 // PHASE_EXECUTOR_KINDS / execAgent). The architect is intentionally
 // out-of-cycle (ARCHITECTURE.md §2) — an interactive, file-checkpointed
@@ -160,7 +160,7 @@ export const architectKind: SessionKindVariant<
   preamble: architectPreamble,
 
   steps: {
-    // The interview and its two exits, then the explore -> draft chain. ADR 043
+    // The interview and its two exits, then the explore -> draft chain. SPEC §5
     // reserved architect as the branching-control-flow case and this is why:
     // one turn may run the interview, then exploration, then the draft, and
     // which of those happen depends on the agent's own answer plus the round

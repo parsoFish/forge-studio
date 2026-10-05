@@ -1,5 +1,5 @@
 /**
- * halt-watch.ts — the serve loop's view of the one emergency halt (ADR 011).
+ * halt-watch.ts — the serve loop's view of the one emergency halt (D-03).
  *
  * `createHaltWatch` returns one function the tick calls; it reads the record
  * from disk on every call (no cache) and logs only on a transition into halt,

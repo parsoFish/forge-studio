@@ -2,7 +2,7 @@
 
 /**
  * Interactive reflection gate — the third human moment, folded into the unified
- * /artifact viewer (M7-3, ADR-031). Renders the reflector's Stage-2 questions
+ * /artifact viewer (M7-3, D-12). Renders the reflector's Stage-2 questions
  * (`user-questions.json`) and writes the operator's answers to `user-feedback.md`,
  * which the reflector consumes.
  *

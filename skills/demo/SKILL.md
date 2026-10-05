@@ -27,7 +27,7 @@ forge-mfv5.2.8). Nothing is generated from it: the operator declares it (the
 Studio demo-builder session writes it on lock, `skills/demo-design` teaches how
 to author it), and it says what evidence to produce. This skill defines the
 contract that evidence satisfies — the structured artefact from
-[ADR 021](../../docs/decisions/021-local-review-and-unified-demo.md).
+D-07.
 
 ## Required first action
 
@@ -64,7 +64,7 @@ pass `--dir`. It must carry:
 - **Prefer REAL captured output over a prose note.** For a CLI tool, set `command` to
   the exact argv whose stdout IS the evidence (e.g. `node dist/cli.js churn .`); leave
   `beforeOutput`/`afterOutput` empty — the **orchestrator** runs `forge demo capture`
-  after the agent's iteration (ADR 036), executing the command on `main` (before) AND
+  after the agent's iteration (D-15), executing the command on `main` (before) AND
   the branch HEAD (after) and back-filling the REAL terminal output, rendered
   side-by-side. The agent authors WHAT to capture; forge produces the evidence —
   hand-written `beforeOutput`/`afterOutput` for a command checkpoint is overwritten by
@@ -170,7 +170,7 @@ collapses them gracefully when absent, but their absence means a less useful dem
 3. **Derive the artefact:** `Bash forge demo render <initiative-id>` → writes
    `DEMO.md` from the JSON. **Never hand-write `DEMO.md`** — it is derived, so
    the PR artefact and the UI render stay identical.
-4. **Real before/after evidence is captured by the ORCHESTRATOR** (ADR 036 —
+4. **Real before/after evidence is captured by the ORCHESTRATOR** (D-15 —
    orchestrator-owned gate execution). After the agent's iteration, forge itself
    spawns `forge demo capture <initiative-id>` in the worktree: for checkpoints
    with a `command`, it captures the REAL stdout on `main` vs the branch HEAD
@@ -230,7 +230,7 @@ A project's `demoProcess` capture steps produce one of these evidence forms base
   block ("what changed and why it's correct"). Use `summary` bullets for the
   rationale. `apiDiff` to show any changed API/config surface.
 
-## Media capture (the optional, best-effort step — orchestrator-run, ADR 036)
+## Media capture (the optional, best-effort step — orchestrator-run, D-15)
 
 For projects with a renderable UI, `forge demo capture <initiative-id>`
 (orchestrator-run, never the agent) materialises two git worktrees (baseline

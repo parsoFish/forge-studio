@@ -1,5 +1,5 @@
 /**
- * flow-artifacts.ts — runtime half of the ADR-027 artifact contracts.
+ * flow-artifacts.ts — runtime half of the D-09 artifact contracts.
  *
  * The lint-time half (`validateArtifactRef`) proves every `FlowEdge.artifact`
  * resolves to a registered template. This is the RUNTIME half:
@@ -139,7 +139,7 @@ export type VerdictRecord = {
   decidedBy: 'operator' | 'merge';
   rationale?: string;
   acceptanceCriteria?: unknown[]; // the send-back fix-WI ACs, as the UI submitted them
-  /** ADR 040: which send-back round this verdict opened (send-back records only). */
+  /** D-20: which send-back round this verdict opened (send-back records only). */
   round?: number;
   at: string;
   /**
@@ -224,7 +224,7 @@ export type ReviewFinding = {
  * review agent, which cannot run anything and did not build the branch, is the
  * one that judges whether a criterion is met. `evidence` is prose pointing at
  * what the reviewer READ — it is a claim the operator weighs at the verdict
- * gate, never a gate by itself (ADR 021).
+ * gate, never a gate by itself (D-07).
  */
 export type AcEvaluation = {
   criterion: string;
@@ -277,7 +277,7 @@ function blank(v: unknown): boolean {
  * profile, and the criteria are the ones the pipeline injected into the prompt.
  *
  * Checking AC coverage by exact set membership is the point of typed acceptance
- * criteria (ADR 051). What it replaces is a token-overlap similarity with a 0.8
+ * criteria (D-34). What it replaces is a token-overlap similarity with a 0.8
  * threshold, which answered "does this look like the same sentence" when the
  * question was "is this the same criterion".
  */

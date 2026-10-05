@@ -1,5 +1,5 @@
 /**
- * The one emergency halt — Studio half (ADR 011): nav control, global banner,
+ * The one emergency halt — Studio half (D-03): nav control, global banner,
  * notice, queued tone, wire parsing, and the 409 `halted` message. Row 207
  * (forge-8vfn.8.5.57).
  */

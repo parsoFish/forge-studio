@@ -1,5 +1,5 @@
 /**
- * forge-8vfn.2.16 — the ADR-035 central move of trafficGame's Brain 3 lost
+ * forge-8vfn.2.16 — the SPEC §4 central move of trafficGame's Brain 3 lost
  * `related_themes` edges and a Sources citation.
  *
  * M1's class-10 dry-run compared `projects/trafficGame/brain/themes/` (the

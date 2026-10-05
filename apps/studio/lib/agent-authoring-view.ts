@@ -116,7 +116,7 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
       strategy: rt.strategy ?? 'fixed',
       model: rt.model ?? null,
       range: (rt.range ?? []).slice(),
-      // R4-01-F2: loopStrategy is load-bearing declared dispatch (ADR-039).
+      // R4-01-F2: loopStrategy is load-bearing declared dispatch (SPEC §1).
       loopStrategy: rt.loopStrategy,
     },
     brainAccess: raw.brainAccess ?? 'none',
@@ -142,7 +142,7 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
  *  create flag on an edit would 409 every save of an existing agent).
  *
  *  forge-hoq: `allowedTools`/`disallowedTools` ride on EVERY save, not just
- *  edits — these are SKILL.md-authored, read-only in the builder UI (ADR-027
+ *  edits — these are SKILL.md-authored, read-only in the builder UI (D-09
  *  A4: not surfaced for editing), but "not editable" is a UI choice and
  *  "not preserved" is data loss. Before this fix the PUT body omitted both
  *  fields entirely, so a brand-new agent minted from a fenced starter

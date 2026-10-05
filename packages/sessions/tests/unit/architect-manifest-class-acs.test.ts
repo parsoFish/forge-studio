@@ -1,5 +1,5 @@
 /**
- * ADR 051 acceptance — `buildManifest` REFUSES a draft that omits the change
+ * D-34 acceptance — `buildManifest` REFUSES a draft that omits the change
  * class or malforms a criterion, instead of degrading the way `title` does.
  *
  * WHY THE CONTRAST MATTERS, and what each test kills. `buildManifest` reads its
@@ -10,7 +10,7 @@
  * criterion nobody parsed is one review cannot return a verdict on. The wrong
  * implementation these tests kill is the tempting one — default the class to
  * `code` and skip the criteria that do not parse — which is exactly the
- * declared-data-fails-open shape ADR 051 exists to close.
+ * declared-data-fails-open shape D-34 exists to close.
  */
 
 import { test } from 'node:test';
@@ -44,30 +44,30 @@ function draft(overrides: Partial<DraftInitiative> = {}): DraftInitiative {
 
 const build = (d: DraftInitiative) => buildManifest(d, STATUS, '2026-09-05', '2026-09-05T00:00:00.000Z');
 
-test('ADR 051: a well-formed draft carries its class and criteria onto the manifest', () => {
+test('D-34: a well-formed draft carries its class and criteria onto the manifest', () => {
   const m = build(draft());
   assert.equal(m.class, 'code');
   assert.deepEqual(m.acceptance_criteria, [{ given: 'the CLI', when: '--flag is passed', then: 'it is honoured' }]);
 });
 
-test('ADR 051: a draft with NO class is refused, and the message names the initiative and what arrived — kills "default to code"', () => {
+test('D-34: a draft with NO class is refused, and the message names the initiative and what arrived — kills "default to code"', () => {
   const d = draft();
   delete (d as { class?: unknown }).class;
   assert.throws(() => build(d), /architect draft "add-a-flag": class must be one of code \| docs \| config \| infra, got undefined/);
 });
 
-test('ADR 051: a draft with an unknown class is refused rather than coerced — kills "any string is a class"', () => {
+test('D-34: a draft with an unknown class is refused rather than coerced — kills "any string is a class"', () => {
   assert.throws(
     () => build(draft({ class: 'chore' as unknown as DraftInitiative['class'] })),
     /class must be one of .*got "chore"/,
   );
 });
 
-test('ADR 051: a draft with NO criteria is refused — an initiative review cannot judge is not a plan', () => {
+test('D-34: a draft with NO criteria is refused — an initiative review cannot judge is not a plan', () => {
   assert.throws(() => build(draft({ acceptance_criteria: [] })), /acceptance_criteria must be a non-empty list/);
 });
 
-test('ADR 051: a malformed criterion is refused BY INDEX — kills "skip the ones that do not parse"', () => {
+test('D-34: a malformed criterion is refused BY INDEX — kills "skip the ones that do not parse"', () => {
   assert.throws(
     () => build(draft({
       acceptance_criteria: [
@@ -79,7 +79,7 @@ test('ADR 051: a malformed criterion is refused BY INDEX — kills "skip the one
   );
 });
 
-test('ADR 051: an EMPTY when survives — a criterion may be a state assertion with no trigger', () => {
+test('D-34: an EMPTY when survives — a criterion may be a state assertion with no trigger', () => {
   const m = build(draft({ acceptance_criteria: [{ given: 'roadmap.md exists', when: '', then: 'it names the follow-on' }] }));
   assert.equal(m.acceptance_criteria[0]?.when, '');
 });

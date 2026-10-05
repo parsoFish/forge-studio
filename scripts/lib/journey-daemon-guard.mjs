@@ -79,7 +79,7 @@ export async function assertNoLiveDaemon(forgeRoot) {
       ? readdirSync(dir).filter((f) => f.endsWith('.md')).map((f) => `${q}/${f}`)
       : [];
   });
-  // R2-04 (ADR-041): staged flow-run requests are dispatch fuel — a live drain
+  // R2-04 (D-23): staged flow-run requests are dispatch fuel — a live drain
   // would claim them exactly like stray manifests (cron/webhook fires from a
   // prior run must not leak into a journey's seeded state).
   const flowRunsDir = join(forgeRoot, '_queue', 'flow-runs');

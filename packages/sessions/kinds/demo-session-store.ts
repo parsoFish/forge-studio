@@ -124,7 +124,7 @@ export type DemoBuilderStatus = {
    */
   selectedGeneration?: number;
   /**
-   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * SPEC §5 (2026-08-15, wave-6 kickoff model-tier seam): an
    * operator-chosen model tier, validated by the bridge's `/api/demo-builder/
    * start` route against `demoBuilderAgentSpec` (now `strategy:range` — see
    * the SKILL.md runtime block) before it is ever persisted here. Absent ⇒

@@ -1,12 +1,12 @@
 /**
  * The `project-brain` session kind — a registered step-handler variant
- * (ADR 043 as amended 2026-09-03, M4 ruling 60).
+ * (SPEC §5).
  *
  * Operator feedback R1-3b (2026-06-27) replaced the index-only "build project
  * brain" stub with a real agentic evaluation: an agent reads the managed
  * project from scratch and authors a draft set of theme pages into a session
  * staging dir; the operator reviews them; on approval the themes are committed
- * into the project's central brain (`brain/projects/<name>/`, ADR-035) and the
+ * into the project's central brain (`brain/projects/<name>/`, SPEC §4) and the
  * index is regenerated.
  *
  * This file holds ONLY that identity — the phase set, the agent spec, the two
@@ -74,7 +74,7 @@ export type ProjectBrainStatus = {
   kb_id?: string;
   kb_binding?: KbBinding;
   /**
-   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * SPEC §5 (2026-08-15, wave-6 kickoff model-tier seam): an
    * operator-chosen model tier, validated by the bridge's
    * `/api/project-brain/start` route against `projectBrainAgentSpec`
    * (`strategy:fixed`, so the only legal value is the fixed model's own

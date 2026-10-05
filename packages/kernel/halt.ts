@@ -1,5 +1,5 @@
 /**
- * halt.ts — the one emergency halt record (ADR 011).
+ * halt.ts — the one emergency halt record (D-03).
  *
  * `<queueRoot>/halt.json` (`{ since, actor }`) present means halted, absent
  * means not. Every check reads the file, so the halt holds across a Studio

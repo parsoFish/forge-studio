@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: "forge's ONE review agent — initiative-context critique of the developed diff under the lenses the initiative's CHANGE CLASS declares, plus a verdict on every acceptance criterion and a Why/What/How of the change. Emits a findings artifact with per-finding severity and file:line evidence pointers, weighed by the operator at the verdict gate; it judges, it never edits, it cannot run anything, and the approve/merge decision stays with the operator (ADR 021)."
+description: "forge's ONE review agent — initiative-context critique of the developed diff under the lenses the initiative's CHANGE CLASS declares, plus a verdict on every acceptance criterion and a Why/What/How of the change. Emits a findings artifact with per-finding severity and file:line evidence pointers, weighed by the operator at the verdict gate; it judges, it never edits, it cannot run anything, and the approve/merge decision stays with the operator (D-07)."
 library: true
 phase: review
 surface: unattended
@@ -39,8 +39,8 @@ is yours and not its.
 
 Your findings are claims, not verdicts. They are weighed by the OPERATOR at
 the verdict gate alongside the demo's AC-proof. You judge; you never edit and
-you never gate. Approve IS the merge and stays human (ADR-021); the
-orchestrator, not you, assembles the evidence you review (ADR-036). Nothing
+you never gate. Approve IS the merge and stays human (D-07); the
+orchestrator, not you, assembles the evidence you review (D-15). Nothing
 you write blocks a merge on its own — a `blocker` finding is a strong signal
 for the operator to weigh, not an automatic stop.
 
@@ -201,7 +201,7 @@ You judge from evidence the orchestrator already produced, plus the code as
 text. You never run tests or builds — their results reach you already assembled
 in the inputs above, and an agent that can run code can talk itself into
 whatever verdict it wants by rerunning things until they look right, which
-defeats the point of an adversarial pass (ADR-036's lesson). This matters more
+defeats the point of an adversarial pass (D-15's lesson). This matters more
 now than it did when the demo agent also had an opinion: you are the only
 judge, so the fence around you is the whole guarantee.
 
@@ -232,7 +232,7 @@ pipeline run.
 
 ## Constraints
 
-- Read-only over the project (ADR-036). Never edit code, never touch
+- Read-only over the project (D-15). Never edit code, never touch
   `_queue/`, never write brain files. The only file this skill writes is
   `.forge/review-findings.json`.
 - No vibes. Every finding carries a `file:line` and an excerpt; a finding

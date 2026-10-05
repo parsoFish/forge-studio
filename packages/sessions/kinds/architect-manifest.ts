@@ -51,7 +51,7 @@ export function buildManifest(
   // enforces (`runStructured` casts raw model output), so a missing/non-string
   // title degrades to the fallback chain rather than throwing out of drafting.
   const title = (typeof d.title === 'string' ? d.title : '').trim();
-  // ADR 051 — these two DO NOT degrade the way `title` does, and the contrast
+  // D-34 — these two DO NOT degrade the way `title` does, and the contrast
   // is the point. A missing title costs a nicer label; a missing class or a
   // malformed criterion costs the gates the work is judged by and the verdict
   // review can return, so `runStructured`'s unchecked cast is refused here
@@ -83,7 +83,7 @@ export function buildManifest(
 
 const DRAFT_CHANGE_CLASSES = ['code', 'docs', 'config', 'infra'] as const;
 
-/** ADR 051 — the draft's class, or a loud refusal naming what the model sent. */
+/** D-34 — the draft's class, or a loud refusal naming what the model sent. */
 function requireChangeClass(d: DraftInitiative, slug: string): InitiativeManifest['class'] {
   const raw = (d as { class?: unknown }).class;
   if (typeof raw === 'string' && (DRAFT_CHANGE_CLASSES as readonly string[]).includes(raw)) {
@@ -95,7 +95,7 @@ function requireChangeClass(d: DraftInitiative, slug: string): InitiativeManifes
 }
 
 /**
- * ADR 051 — the draft's typed criteria, or a loud refusal naming the ENTRY that
+ * SPEC §3 — the draft's typed criteria, or a loud refusal naming the ENTRY that
  * failed. An empty list is refused too: an architect-authored initiative that
  * states no criteria has nothing for review to return a verdict on, which is
  * the silent-absence failure this field exists to end.

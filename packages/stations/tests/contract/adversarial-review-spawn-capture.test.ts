@@ -37,7 +37,7 @@
  *    NOT stable across separate bootstrap runs and must be normalized for the
  *    fixture to compare equal on every re-run.
  *
- * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * Fixture-move note (SPEC §1 R3-03 amendment, `composition.hooks` →
  * `composition.guards`, 2026-08-04): `adversarial-review.json` moved by
  * exactly one byte — `hook` → `guard` at a single site — because
  * `adversarial-review-binding.ts` reads the canonical `adversarial-review`
@@ -228,7 +228,7 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
     ]);
     assertMatchesJsonSnapshot(FIXTURE_PATH, normalized);
 
-    // ── The tool fence, proven BY EXECUTION (ADR 036, spec §5 item 5) ────────
+    // ── The tool fence, proven BY EXECUTION (D-15, spec §5 item 5) ────────
     //
     // Not by reading `skills/adversarial-review/SKILL.md`, and not by calling
     // the declaration guard: both answer "what does the file say". This asserts

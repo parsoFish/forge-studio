@@ -1,5 +1,5 @@
 /**
- * R2-04-F3 (ADR-041) — the prompt-isolation boundary (OWASP LLM01).
+ * R2-04-F3 (D-24) — the prompt-isolation boundary (OWASP LLM01).
  *
  * The injection fixtures elsewhere prove external free text is confined to the
  * `trigger-payload.json` ARTIFACT. This test proves the complementary half the

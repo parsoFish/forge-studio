@@ -1,9 +1,9 @@
 /**
- * ADR 051 decision 4 / ruling 229 half B — the plan gate's class rule.
+ * D-36 / ruling 229 half B — the plan gate's class rule.
  *
  * WHICH WRONG IMPLEMENTATION EACH TEST KILLS is named per case. Two matter most:
  * a rule that fires without a table installed would make the PLATFORM enforce
- * the example's policy (ADR 048 says a deleted factory takes its policy with
+ * the example's policy (D-32 says a deleted factory takes its policy with
  * it), and a rule that treats an unknown class as forbidden would refuse plans
  * on a table that never spoke to them.
  */
@@ -38,7 +38,7 @@ test('a three-criterion code initiative is fine — the rule is about ONE, not a
 });
 
 test('with NO lookup installed the rule does not fire — kills "the platform enforces the example factory\'s policy"', () => {
-  // ADR 048: deleting `packages/factory` takes its policy with it. A plan gate
+  // D-32: deleting `packages/factory` takes its policy with it. A plan gate
   // that still refused on a class profile would make the example undeletable in
   // everything but name.
   assert.deepEqual(planGateClassRefusals([CODE_SINGLE], undefined), []);

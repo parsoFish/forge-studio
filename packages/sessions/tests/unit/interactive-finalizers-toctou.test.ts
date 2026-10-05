@@ -262,7 +262,7 @@ test(
 //
 // Pin round 3's P2/P3 imported a new `STAGING_DIRNAME` export from
 // interactive-finalizers.ts. That demands new production surface under
-// `orchestrator/`, which this project's ADR-042 cap makes operator-ask-first
+// `orchestrator/`, which this project's D-31 cap makes operator-ask-first
 // (not one of the three ratified boundaries: `cli/` routes, additive-optional
 // fields, or a pure function with an explicit error contract). This round
 // closes the SAME defect class WITHOUT that export: a source-text RATCHET
@@ -299,7 +299,7 @@ test(
 // finalizer's hardcoded literal entirely: `copyStagingToLibrary` now reads
 // `FinalizerContext.stagingDirName`, threaded from the AUTHORED
 // `stagingDirName` field on the `authoring` kind's `committing` turnSpec
-// phase row (`studio/session-kinds.yaml`, ADR-043 amendment 2026-09-25) —
+// phase row (`studio/session-kinds.yaml`, SPEC §5) —
 // there is no longer a second production TEXT LITERAL to regex-extract from
 // interactive-finalizers.ts (see this ratchet's own prior-round doc comment
 // on `FINALIZER_STAGING_SITES` for why removing a now-vacuous site,

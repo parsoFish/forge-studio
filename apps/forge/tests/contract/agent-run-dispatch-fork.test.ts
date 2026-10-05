@@ -263,7 +263,7 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
 // reaching its call sites (COMMON §15.70), on the one test written to catch a
 // silent routing change.
 //
-// ADR-043 says that switch is INTENTIONAL — it is precisely how each runner
+// SPEC §5 says that switch is INTENTIONAL — it is precisely how each runner
 // migrates in batch E. The danger is that it can also happen BY ACCIDENT, and
 // the review established by inspection that nothing would catch it:
 // `packages/sessions/tests/regression/interactive-runners-golden.test.ts` imports the four turn
@@ -301,7 +301,7 @@ test('R4-22 WI-5, AT-7 (standing invariant): no bespoke dispatch id in the REAL 
     [],
     `session-kind(s) ${hijacked.join(', ')} share an id with a bespoke dispatch row AND declare a turnSpec, so ` +
       `cmdAgentRun's fork now routes them to the generic spine and their bespoke runner is DEAD CODE. If this is a ` +
-      `deliberate batch-E migration (ADR-043), that is fine — but it must be explicit: migrate the runner, retire its ` +
+      `deliberate batch-E migration (SPEC §5), that is fine — but it must be explicit: migrate the runner, retire its ` +
       `dispatch row, and update this invariant in the same PR. If you did not intend to change routing, remove ` +
       `the turnSpec. The golden-capture suite CANNOT catch this: it calls the four turn functions directly and never ` +
       `exercises the fork.`,

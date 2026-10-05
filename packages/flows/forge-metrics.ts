@@ -201,7 +201,7 @@ function renderHeader(args: {
   // header) so both flows keep their shared vocabulary while staying
   // distinguishable. Read straight off the manifest already in hand — no
   // separate events.jsonl thread needed (`InitiativeManifest.flow_id`,
-  // ADR 028 / J5).
+  // SPEC §2 / J5).
   const flowIdSuffix = args.manifest?.flow_id ? ` (flow: \`${args.manifest.flow_id}\`)` : '';
   const lines: string[] = [
     `# Cycle Report — ${titleLine}`,

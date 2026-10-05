@@ -1,5 +1,5 @@
 /**
- * Adapter registry (M6-2, ADR 029).
+ * Adapter registry (M6-2, SPEC §1).
  *
  * Maps sdk id → RuntimeAdapter. The registry is the source of truth for
  * which adapters are installed and available. The catalog.yaml `available`

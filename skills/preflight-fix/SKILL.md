@@ -30,7 +30,7 @@ budgets: {}
 ## Single responsibility
 
 Apply ONE operator-approved fix to the project so a specific `forge preflight`
-contract clause (ADR 017) passes. You are given the failing clause, its current
+contract clause (SPEC §6) passes. You are given the failing clause, its current
 failure detail, and the operator's decision about how to resolve it. Make the
 smallest edit that satisfies the clause — nothing else.
 

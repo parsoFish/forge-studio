@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for cli/bridge-studio-affordances.ts (W6-B4 — the generic
- * session-affordance WRITE endpoint, ADR-043 2026-08-15 amendment §1):
+ * session-affordance WRITE endpoint, SPEC §5):
  *
  *   POST /api/studio/sessions/:kind/:sessionId/:affordance
  *

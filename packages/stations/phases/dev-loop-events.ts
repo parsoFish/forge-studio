@@ -90,7 +90,7 @@ export function emitGateEvent(
   parentEventId: string,
   workItemId: string,
   info: GateRunInfo,
-  // ADR 026: a code-fix UWI runs in the unifier phase wearing the dev role —
+  // D-20: a code-fix UWI runs in the unifier phase wearing the dev role —
   // attribute its gate events to `unifier` so post-mortems don't mis-file them
   // under developer-loop. Defaults to the dev-loop's own phase/skill.
   attr: { phase: 'developer-loop' | 'unifier'; skill: string } = { phase: 'developer-loop', skill: 'developer-ralph' },

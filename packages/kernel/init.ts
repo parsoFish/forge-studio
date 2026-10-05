@@ -1,5 +1,5 @@
 /**
- * `forge init` — first-run scaffolding (ADR-033, J1).
+ * `forge init` — first-run scaffolding (J1).
  *
  * Brings a fresh checkout to a runnable state without the operator having to
  * know forge's internal layout: writes a minimal `forge.config.json` if absent,

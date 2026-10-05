@@ -5,7 +5,7 @@
  * death mid-WI, gate timeout, lint-lock contention — G3/N9) and whose
  * worktree + branch still carry committed work must NOT be wiped back to a
  * fresh-from-main re-run. The requeue resumes from the preserved state
- * instead, mirroring the ADR-019 resume machinery:
+ * instead, mirroring the D-06 resume machinery:
  *   - all WIs complete  → `resume_from: integrate` (R4-10-F6 marker; the post-develop
  *                          band re-runs at the integrate node, no WI rebuilt)
  *   - some WIs pending  → preserve the worktree with NO marker; the

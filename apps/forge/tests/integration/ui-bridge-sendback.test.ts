@@ -1,5 +1,5 @@
 /**
- * POST /api/verdict `send-back` — ADR-040 rewrite (R4-08-F2).
+ * POST /api/verdict `send-back` — D-20 rewrite (R4-08-F2).
  *
  * The send-back branch no longer appends a terminal-re-prep UWI pair; it
  * compiles the operator's feedback into ONE ordinary work item (`origin:

@@ -1,7 +1,7 @@
 /**
  * `deriveSessionAffordances` — the READ-half affordance view.
  *
- * ADR-043 §1 "affordances are derived, not authored", plus the 2026-08-15
+ * SPEC §5 "affordances are derived, not authored", plus the 2026-08-15
  * wave-6 amendment §1: the shell read route computes `affordances[]`
  * server-side from the phase table, and the client renders what it is handed
  * and never re-derives.
@@ -23,7 +23,7 @@ export type SessionAffordanceKind = 'question-form' | 'verdict' | 'staged-review
  *  (no functions, no class instances) — the bridge threads this straight onto
  *  the wire (packages/sessions/bridge-studio-sessions.ts), and B6's UI renders each `kind`
  *  with its own component; it never re-derives from the phase table itself
- *  (the "derived, not authored" discipline, ADR-043 §1). */
+ *  (the "derived, not authored" discipline, SPEC §5). */
 export type SessionAffordance = {
   /** Stable within one call — `${phase}-${kind}` — never a UUID, so the same
    *  phase/kind pair always yields the same id (usable as a React key with no
@@ -60,13 +60,13 @@ export type SessionAffordance = {
  * Derives the operator-facing affordance view for `currentPhase`, from
  * WHICHEVER phase table the descriptor carries — `turnSpec.phases` (a real
  * dispatchable kind) or `panel.phases` (a legacy kind's read-only twin,
- * ADR-043 2026-08-15 amendment §2). A descriptor with NEITHER (architect,
+ * SPEC §5). A descriptor with NEITHER (architect,
  * permanently bespoke per amendment §4) yields `[]` — the honest "this kind
  * has no derivable affordances" answer, never a guess. `validateSessionKinds`
  * already guarantees a descriptor never carries both, so there is no
  * ambiguity about which table to read.
  *
- * Mapping (ADR-043 §1's "affordances are derived, not authored" clause):
+ * Mapping (SPEC §5's "affordances are derived, not authored" clause):
  *   - no row matches `currentPhase`     → `[]` (unknown/undeclared phase —
  *     fail closed, never fabricate an affordance for a phase the table
  *     doesn't name)

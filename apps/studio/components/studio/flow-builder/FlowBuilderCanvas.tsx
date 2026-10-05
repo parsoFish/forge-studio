@@ -14,7 +14,7 @@
  *   - data-*: data-flow-node/data-node-id/data-agent-ref per node,
  *             canvas wrapper data-node-count/data-edge-count
  *
- * Position handling (ADR-033 / J3): a node's persisted {x,y} is honoured on
+ * Position handling (J3): a node's persisted {x,y} is honoured on
  * load; nodes without a saved position are autolaid-out (Kahn sort, COL_W=200,
  * ROW_H=120). On save, the current canvas positions are written back so a
  * hand-arranged flow survives a reload.

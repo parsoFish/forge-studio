@@ -1,5 +1,5 @@
 /**
- * The project-contract report shape (ADR 017, ADR 034 — SPEC.md §6 Project).
+ * The project-contract report shape (SPEC.md §6 Project).
  *
  * These four types are pure data. They live here rather than beside the
  * preflight implementation because the `ProjectGate` port declares them and a

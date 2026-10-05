@@ -1,5 +1,5 @@
 /**
- * M7-E row 205 (ADR 011/031) — `GET /api/health` folds in the live `forge
+ * M7-E row 205 (D-12) — `GET /api/health` folds in the live `forge
  * serve` supervisor's read-only status as `serve`. The bridge never creates a
  * supervisor itself (`runWatch` does, after the bridge is already listening,
  * via the injected `getServeStatus` getter) — these tests pin the response

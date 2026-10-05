@@ -30,7 +30,7 @@ Close the learning loop. After an initiative is merged, run the four-stage retro
 
 ## Operator handoff (the example factory's reflection gate)
 
-The reflection gate on Studio's unified **`/artifact`** viewer is the operator surface ([ADR 031](../../docs/decisions/031-studio-consolidation.md)): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. In **interactive** mode (the default) the feedback is supplied by a human. In **automated** mode (R4-09-F3, selected by the trigger's `mode: automated`) there is no human: the reflector infers each answer from the cycle logs / demo / diff and self-answers with `inferred: true` provenance — the per-cycle brief's Stage 2/3 tells you which mode you are in and exactly what to write.
+The reflection gate on Studio's unified **`/artifact`** viewer is the operator surface (D-12): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. In **interactive** mode (the default) the feedback is supplied by a human. In **automated** mode (R4-09-F3, selected by the trigger's `mode: automated`) there is no human: the reflector infers each answer from the cycle logs / demo / diff and self-answers with `inferred: true` provenance — the per-cycle brief's Stage 2/3 tells you which mode you are in and exactly what to write.
 
 **Reads:** `_logs/<id>/user-questions.json` (≤4 entries; `[]` if none written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
 
@@ -38,7 +38,7 @@ The reflection gate on Studio's unified **`/artifact`** viewer is the operator s
 
 ## Required first action
 
-Invoke `brain-query` BEFORE writing anything (ADR 010). First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `brain/projects/<project>/...` paths — at minimum `brain/projects/<project>/profile.md` and any prior `brain/projects/<project>/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
+Invoke `brain-query` BEFORE writing anything (SPEC §4). First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `brain/projects/<project>/...` paths — at minimum `brain/projects/<project>/profile.md` and any prior `brain/projects/<project>/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
 
 ## Inputs
 
@@ -51,7 +51,7 @@ Invoke `brain-query` BEFORE writing anything (ADR 010). First tool calls MUST be
 ## Outputs
 
 - `_logs/<cycle-id>/retro.md` — three sections: `## Self-reflection`, `## User questions`, `## User feedback`.
-- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category`, `keywords` (flow-style list of 5–10 lowercase search terms — feeds brain-query slug/one-liner matching and the contradiction lint), `created_at`, `updated_at`, and `related_themes` (flow-style list of sibling theme slugs — see Stage 4 linking; `[]` only if genuinely standalone). `keywords` and `related_themes` are mandatory, not best-effort: a prior reflector run dropped both and never indexed its themes, costing a 132-theme brain all of its theme↔theme edges (ADR 018). Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`, and — when `related_themes` is non-empty — a `## See also` section mirroring it as `[[slug]] — why` bullets. This matches the canonical format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md).
+- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category`, `keywords` (flow-style list of 5–10 lowercase search terms — feeds brain-query slug/one-liner matching and the contradiction lint), `created_at`, `updated_at`, and `related_themes` (flow-style list of sibling theme slugs — see Stage 4 linking; `[]` only if genuinely standalone). `keywords` and `related_themes` are mandatory, not best-effort: a prior reflector run dropped both and never indexed its themes, costing a 132-theme brain all of its theme↔theme edges (SPEC §4). Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`, and — when `related_themes` is non-empty — a `## See also` section mirroring it as `[[slug]] — why` bullets. This matches the canonical format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md).
 - `brain/cycles/_raw/<cycle-id>.md` (cycle log archived). Required frontmatter (write these placeholder values exactly — the orchestrator post-processes to compute `retention` and populate `cited_by`; do NOT compute these yourself):
   ```yaml
   ---
@@ -137,7 +137,7 @@ Progress rows you append to `_logs/<cycle-id>/events.jsonl` are `event_type: "lo
 
 ### Stage 4 — Brain writes (unattended)
 
-10. For each notable Stage-1 observation, write a theme file **scoped to the right brain** (Q5-B — route by the lesson's SUBJECT, per the three-brain model, ADR 018). Two routing decisions apply, in order:
+10. For each notable Stage-1 observation, write a theme file **scoped to the right brain** (Q5-B — route by the lesson's SUBJECT, per the three-brain model, SPEC §4). Two routing decisions apply, in order:
 
     **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → its **project KB** `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
 

@@ -1,7 +1,7 @@
 /**
  * JSONL event-log writer. One log file per cycle: _logs/<cycle-id>/events.jsonl.
  * Append-only, line-buffered. The single source of truth for everything that
- * happened during a cycle (per ADR 008).
+ * happened during a cycle (per SPEC §3).
  */
 
 import { appendFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ export type Phase =
   // under `reflection` — the OOTB reflector's cycle-spine phase — so those
   // sessions' cost and activity were billed to phases that never ran them.
   // Each value matches the session KIND id (studio/session-kinds.yaml) and
-  // the skill's own SKILL.md frontmatter phase, which ADR-024 makes the
+  // the skill's own SKILL.md frontmatter phase, which SPEC §1 makes the
   // single source of intent. The cycle spine ignores these; session logs are
   // per-session, not cycle logs.
   | 'instructions'

@@ -12,7 +12,7 @@
  * F1 `runAgent` primitive. The interactive-runner *convergence* stays deferred
  * — this is the additive generic dispatch surface only.
  *
- * ADR-036 preserved by construction: runs NO gate/CI — it only spawns the
+ * D-15 preserved by construction: runs NO gate/CI — it only spawns the
  * agent via `runAgent` and reports what happened. Harness safety (dry-bridge /
  * no-spawn suppression) is enforced inside `runAgent`.
  */
@@ -108,9 +108,9 @@ export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]):
 }
 
 /*
- * ADR-043 §4's mirror `resolveInteractiveAgent` used to live here. R4-23 (bead
+ * SPEC §5's mirror `resolveInteractiveAgent` used to live here. R4-23 (bead
  * forge-4y7) DELETED it: from the day it landed it had zero production callers
- * — only its own throw strings and its tests referenced it — and ADR-042's cap
+ * — only its own throw strings and its tests referenced it — and D-31's cap
  * forbids dead exported orchestrator surface. The two preconditions R4-22 named
  * for wiring it are still undischarged AND are not dischargeable here:
  * `skills/architect/SKILL.md` declares no `surface:` at all and
@@ -118,7 +118,7 @@ export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]):
  * interactive-only host would refuse two of the four session kinds it was meant
  * to admit; and `AGENT_RUNNERS`' keys (`architect`, `instructions`,
  * `demo-builder`, `project-brain`) are session-kind ids, not agent slugs, so
- * there is no 1:1 roster lookup to perform in the first place. See the ADR-043
+ * there is no 1:1 roster lookup to perform in the first place. See the SPEC §5
  * amendment. `resolveDispatchableAgent` above — which HAS production callers and
  * enforces the boundary that actually matters — is left byte-for-byte untouched,
  * exactly as §4 requires, and its complement pin now asserts the same property

@@ -42,7 +42,7 @@ export type CycleDataContext = {
 const LEGACY_ROOT_ARTIFACT = 'pr-description.md';
 
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
- *  PLAN/DEMO pages render in the operator's browser (ADR 020 + Phase E); all
+ *  PLAN/DEMO pages render in the operator's browser (Phase E); all
  *  else stays `text/plain`. Module-private and, by convention enforced in
  *  `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
  *  this file), callable ONLY from `servedFileHeaders` below — every route
@@ -246,7 +246,7 @@ export async function handleCycleDataRoutes(
     }
     return true;
   }
-  // historical: Feature #9: single work-item definition for the hex-detail drawer (ADR 031 removed it). Serves
+  // historical: Feature #9: single work-item definition for the hex-detail drawer (D-12 removed it). Serves
   // the on-disk WI snapshot the PM emitted — preferring the immutable cycle
   // snapshot (`_logs/<cycleId>/work-items-snapshot/<wiId>.md`), falling back to
   // the live worktree spec (`_worktrees/<initiativeId>/.forge/work-items/<wiId>.md`)

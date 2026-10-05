@@ -1,5 +1,5 @@
 /**
- * ADR 051 decision 5 — the `git check-ignore` half, against a REAL repository.
+ * D-34 — the `git check-ignore` half, against a REAL repository.
  *
  * The pure rule lives in `validateCompiledWorkItemSet` and is tested there with
  * an injected predicate. What can only be tested here is whether the predicate
@@ -29,7 +29,7 @@ function repoWithGitignore(body: string): { dir: string; guard: { forgeRoot: str
   return { dir, guard: { forgeRoot: root, projectsRoot, initiativeId: 'INIT-2026-09-05-x' } };
 }
 
-test('ADR 051: a creates path under a gitignored directory is reported ignored — kills "the check-ignore call is decorative"', () => {
+test('D-34: a creates path under a gitignored directory is reported ignored — kills "the check-ignore call is decorative"', () => {
   const { dir, guard } = repoWithGitignore('_scratch/\n*.log\n');
   try {
     const ignored = gitIgnoredPaths(dir, ['_scratch/notes.md', 'src/index.ts', 'run.log'], guard);
@@ -40,7 +40,7 @@ test('ADR 051: a creates path under a gitignored directory is reported ignored �
   }
 });
 
-test('ADR 051: the whole set costs ONE git call — the answer is the same for 1 path and for many', () => {
+test('D-34: the whole set costs ONE git call — the answer is the same for 1 path and for many', () => {
   const { dir, guard } = repoWithGitignore('build/\n');
   try {
     // Not an assertion about process count (which the test cannot see) but
@@ -58,7 +58,7 @@ test('ADR 051: the whole set costs ONE git call — the answer is the same for 1
   }
 });
 
-test('ADR 051: inside the projects root but NOT a repository, the set is EMPTY — the rule declines rather than accusing', () => {
+test('D-34: inside the projects root but NOT a repository, the set is EMPTY — the rule declines rather than accusing', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-ignored-creates-norepo-'));
   const projectsRoot = join(root, 'projects');
   const dir = join(projectsRoot, 'demo');
@@ -71,7 +71,7 @@ test('ADR 051: inside the projects root but NOT a repository, the set is EMPTY �
   }
 });
 
-test('ADR 051: an UNCONTAINED worktree root spawns nothing — the containment guard decides whether git runs at all', () => {
+test('D-34: an UNCONTAINED worktree root spawns nothing — the containment guard decides whether git runs at all', () => {
   // The subject is the sink's own guard, not git: a root outside the projects
   // root (and outside <forgeRoot>/_worktrees/<initiativeId>) must yield the
   // empty set even though it IS a real repository whose .gitignore would
@@ -91,7 +91,7 @@ test('ADR 051: an UNCONTAINED worktree root spawns nothing — the containment g
   }
 });
 
-test('ADR 051: an empty list asks git nothing and answers empty', () => {
+test('D-34: an empty list asks git nothing and answers empty', () => {
   const { dir, guard } = repoWithGitignore('x\n');
   try {
     assert.deepEqual([...gitIgnoredPaths(dir, [], guard)], []);

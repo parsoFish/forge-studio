@@ -10,7 +10,7 @@ import { SLUG_RE } from '@forge/kernel';
 import { REPO_ROOT, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from '../../../../packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts';
 
 // ===========================================================================
-// AT-R422-1 .. AT-R422-10 — R4-22 WI-1, ADR-043: the additive-optional
+// AT-R422-1 .. AT-R422-10 — R4-22 WI-1, SPEC §5: the additive-optional
 // `turnSpec` field. See the file header for the pinned shape, the frozen
 // registries, and why these tests use a DYNAMIC import.
 // ===========================================================================
@@ -123,7 +123,7 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
 });
 
 describe('validateSessionKinds — turnSpec positive control + additive-optionality (AT-R422-5, AT-R422-9)', () => {
-  it('AT-R422-9: the well-formed ADR-043 §1 authoring turnSpec validates CLEAN — zero turnspec-* findings (POSITIVE CONTROL: without this, AT-R422-1..4 could all pass for the wrong reason — an implementation that rejects every turnSpec unconditionally)', () => {
+  it('AT-R422-9: the well-formed SPEC §5 authoring turnSpec validates CLEAN — zero turnspec-* findings (POSITIVE CONTROL: without this, AT-R422-1..4 could all pass for the wrong reason — an implementation that rejects every turnSpec unconditionally)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     writeSessionKindsYaml(root, [turnSpecDescriptor(wellFormedTurnSpec())]);
@@ -139,7 +139,7 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
   // so the OLD assertion ("exactly 5, none with turnSpec") is stale on its
   // own terms (verified: it fails at branch base today, `6 !== 5`, BEFORE
   // this edit — a pre-existing broken pin from the rebase, not something WI-1
-  // introduces). D1 makes "authoring" WI-1's own turnSpec consumer (ADR-043
+  // introduces). D1 makes "authoring" WI-1's own turnSpec consumer (SPEC §5
   // §1's worked example IS this descriptor) — the additive-optionality
   // guarantee this AT exists to pin now has ONE declared exception, not zero.
   //
@@ -148,7 +148,7 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
   // NEW assertion: descs.length === 6; every descriptor OTHER than
   // "authoring" still has turnSpec === undefined (the additive-optionality
   // guarantee stays intact for the other 5 — NOT weakened by this edit);
-  // "authoring" carries a turnSpec that deep-equals ADR-043 §1's exact table
+  // "authoring" carries a turnSpec that deep-equals SPEC §5's exact table
   // (the same `wellFormedTurnSpec()` fixture this file's own AT-R422-9
   // positive control already uses), and validateSessionKinds emits zero
   // turnspec-* findings scoped to session-kind:authoring specifically (a
@@ -162,8 +162,8 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
   // matches the ratified table) for the ONE kind D1 explicitly wires it onto.
   //
   // UPDATED AGAIN (R4-19-F2, this edit): commit 9342825f landed "kb-cleanup"
-  // as ADR-043's SECOND turnSpec consumer (the commit message's own words:
-  // "ADR-043 consumer #2") — so the "authoring is the ONE declared
+  // as SPEC §5's SECOND turnSpec consumer (the commit message's own words:
+  // "SPEC §5 consumer #2") — so the "authoring is the ONE declared
   // exception" framing above is now stale on its own terms, same failure
   // shape as the R4-21-phase-2 rebase note directly above it: descs.length
   // is 7, not 6, and the turnSpec-less loop must also skip "kb-cleanup" or
@@ -189,11 +189,11 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
     }
 
     const authoring = byId(descs, 'authoring');
-    assert.ok(authoring.turnSpec, 'expected the real "authoring" descriptor to carry a turnSpec (D1 — ADR-043 §1 verbatim)');
+    assert.ok(authoring.turnSpec, 'expected the real "authoring" descriptor to carry a turnSpec (D1 — SPEC §5 verbatim)');
     assert.deepEqual(
       authoring.turnSpec,
       wellFormedTurnSpec(),
-      `authoring's real turnSpec must deep-equal ADR-043 §1's exact 4-phase table (kindDir:_authoring, style:agent, analyzing→awaiting-review→committing→committed), got: ${JSON.stringify(authoring.turnSpec)}`,
+      `authoring's real turnSpec must deep-equal SPEC §5's exact 4-phase table (kindDir:_authoring, style:agent, analyzing→awaiting-review→committing→committed), got: ${JSON.stringify(authoring.turnSpec)}`,
     );
 
     const findings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:authoring');
@@ -207,7 +207,7 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
     // so this AT's assertion is not silently defeated by an unrelated edit
     // to that other block's local fixture).
     const kbCleanup = byId(descs, 'kb-cleanup');
-    assert.ok(kbCleanup.turnSpec, 'expected the real "kb-cleanup" descriptor to carry a turnSpec (R4-19-F2 — ADR-043 consumer #2)');
+    assert.ok(kbCleanup.turnSpec, 'expected the real "kb-cleanup" descriptor to carry a turnSpec (R4-19-F2 — SPEC §5 consumer #2)');
     assert.deepEqual(
       kbCleanup.turnSpec,
       {
@@ -343,7 +343,7 @@ describe('the real production call path — forge studio lint (AT-R422-10, Rulin
 // ===========================================================================
 
 describe('validateSessionKinds — turnSpec.kindDir must be a safe single path segment (AT-R422-11, AT-R422-12)', () => {
-  it('AT-R422-11: turnSpec.kindDir that is NOT a safe single path segment → error naming the offending value, for every shape a reviewer confirmed slips through today (kills an implementation that never validates kindDir\'s shape at all — reviewer-confirmed by EXECUTION: kindDir: ".." and kindDir: "a/b" both loaded clean with ZERO findings against the real module. ADR-043 §1 names kindDir verbatim as "the ONE containment segment" — it becomes `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic runner (docs/decisions/043-generic-interactive-surface.md:47), the SEC-04 guard root. This is the single most important gap in the whole review: an unvalidated kindDir is a path-traversal primitive one lint pass away from being wired to a real filesystem write.)', () => {
+  it('AT-R422-11: turnSpec.kindDir that is NOT a safe single path segment → error naming the offending value, for every shape a reviewer confirmed slips through today (kills an implementation that never validates kindDir\'s shape at all — reviewer-confirmed by EXECUTION: kindDir: ".." and kindDir: "a/b" both loaded clean with ZERO findings against the real module. SPEC §5 names kindDir verbatim as "the ONE containment segment" — it becomes `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic runner SPEC §5), the SEC-04 guard root. This is the single most important gap in the whole review: an unvalidated kindDir is a path-traversal primitive one lint pass away from being wired to a real filesystem write.)', () => {
     const badKindDirs = [
       '..',
       'a/b',

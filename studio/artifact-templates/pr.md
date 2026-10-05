@@ -17,7 +17,7 @@ schema:
 # PR artifact contract
 
 The self-contained, demo-embedded pull request: a PR description plus the demo artifact
-(`demo.json` → `DEMO.md`, ADR 021 schema; DEMO.html retired in F4), validated by `validateDemoModel` in the
+(`demo.json` → `DEMO.md`, D-07 schema; DEMO.html retired in F4), validated by `validateDemoModel` in the
 `pr_self_contained` gate. `acceptanceCriteria[]` is the list the initiative was decomposed against —
 the evidence a human reviewer approves against.
 

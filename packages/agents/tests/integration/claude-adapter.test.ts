@@ -1,5 +1,5 @@
 /**
- * Tests for the Claude reference adapter (M6-1, ADR 029).
+ * Tests for the Claude reference adapter (M6-1, SPEC §1).
  *
  * Verifies:
  *   1. claudeAdapter satisfies the RuntimeAdapter interface (id, available,

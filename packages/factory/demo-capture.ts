@@ -12,7 +12,7 @@
  * no ffmpeg, no image library).
  *
  * Errors are explicit and typed (`DemoRecordError`), never swallowed here.
- * ADR 021's best-effort media contract lives at the CALL SITE (the capture
+ * D-07's best-effort media contract lives at the CALL SITE (the capture
  * loop in demo.ts logs and continues) — this module always tells the truth
  * about whether a recording actually happened.
  */
@@ -33,7 +33,7 @@ const FILMSTRIP_COLUMNS = 4;
 const FILMSTRIP_COL_WIDTH = 320;
 
 /** A launch/record failure. Media capture is best-effort ONLY at the caller
- *  (ADR 021) — this class never swallows; it names what failed. */
+ *  (D-07) — this class never swallows; it names what failed. */
 export class DemoRecordError extends Error {
   constructor(message: string, cause?: unknown) {
     super(message, cause === undefined ? undefined : { cause });

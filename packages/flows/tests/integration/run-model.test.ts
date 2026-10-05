@@ -412,7 +412,7 @@ test('aggregateRun: gate names the node actually reached, not a hardcoded "revie
     const initId = 'INIT-2026-01-01-custom-gate';
     const cycleId = '2026-01-01T01-30-00_INIT-2026-01-01-custom-gate';
 
-    // A user-authored flow (ADR-028) whose gate node is named 'human-check',
+    // A user-authored flow (SPEC §2) whose gate node is named 'human-check',
     // not 'review' — eventToNodeId falls back to the phase as its own node
     // id since 'human-check' isn't in the seed-flow mapping.
     const manifestPath = writeManifest(root, 'ready-for-review', initId, { cycle_id: cycleId, flow_id: 'my-second-flow' });
@@ -1090,7 +1090,7 @@ test('buildNodeMapping: missing studio/ falls back to hardcoded table; aggregate
   }
 });
 
-test('ADR 028 / J5: a run carries the flow_id from its manifest (else unknown, post-S8)', () => {
+test('SPEC §2 / J5: a run carries the flow_id from its manifest (else unknown, post-S8)', () => {
   const root = makeTmp();
   try {
     // Pre-S8 manifest (no flow_id) → 'unknown' (the forge-cycle default was
@@ -1174,7 +1174,7 @@ test('Phase 4/2: a failed WI emits dev-loop.discarded (not delivered) — its de
   }
 });
 
-test('ADR 028 / J5: a custom-flow run surfaces phase statuses on self-named nodes', () => {
+test('SPEC §2 / J5: a custom-flow run surfaces phase statuses on self-named nodes', () => {
   const root = makeTmp();
   try {
     const initId = 'INIT-2026-01-01-authored-run';

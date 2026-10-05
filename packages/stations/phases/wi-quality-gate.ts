@@ -113,7 +113,7 @@ export function wiPackageDir(paths: readonly string[]): string | null {
  * forge-mfv5.3.6 (operator ruling 2026-09-12) — the ONE place a WI's effective
  * gate is decided: the WI's own `quality_gate_cmd` > the project's
  * `testProcess.local.perWorkItem` template filled with `wiPackageDir(files_in_scope
- * ∪ creates)` > the project-wide gate. Following ADR 037's injector, the
+ * ∪ creates)` > the project-wide gate. Following the D-17 injector, the
  * template only fills an OMITTED field and never overrides the plan agent's
  * own gate; with no common directory it is never widened to the repo root —
  * the project-wide gate runs and `templateSkipped` names why, for the caller

@@ -5,7 +5,7 @@
  * `data-demo-region` sections of the demo, and the operator's approve / send-back
  * verdict is DERIVED over them: any blocking, unresolved comment ⇒ send-back,
  * with each concern mapped to a GIVEN/WHEN/THEN acceptance criterion that the
- * existing `/api/verdict` send-back drain consumes in place (ADR-026 — no sibling
+ * existing `/api/verdict` send-back drain consumes in place (D-20 — no sibling
  * cycle). No comments / only resolved-or-non-blocking comments ⇒ approve.
  *
  * Persistence is a single JSON sidecar at `_logs/<cycleId>/review-comments.json`

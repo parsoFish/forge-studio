@@ -1,7 +1,7 @@
 /**
  * The prose migration itself — a CONTRACT between two files that must agree.
  *
- * ADR 024's thesis is that SKILL.md is the single source of an agent's
+ * SPEC §1's thesis is that SKILL.md is the single source of an agent's
  * instructions. These assertions read the real
  * `packages/sessions/kinds/instructions.ts` and the real
  * `skills/instructions-creator/SKILL.md` off disk and compare them, which is

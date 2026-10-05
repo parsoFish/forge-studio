@@ -2,7 +2,7 @@
  * phase-wiring.ts — the three things a cycle needs from whatever factory is
  * installed, declared in flows' own vocabulary.
  *
- * WHY it is a port rather than an import is [ADR 048](../../docs/decisions/048-deletable-example-factory.md):
+ * WHY it is a port rather than an import is D-32:
  * no package imports `@forge/factory`, so deleting the example package leaves
  * the platform running. The assembly binds it once, in
  * `apps/forge/factory-wiring.ts`.
@@ -44,7 +44,7 @@ export type PhaseWiring = {
    * so it belongs to the factory and arrives here rather than by import.
    * `@forge/factory`'s `runReflector` is the shipped one.
    *
-   * `def` (seam F4, operator item 81/ADR-039 generalisation): the `on: merged`
+   * `def` (seam F4, operator item 81/SPEC §1 generalisation): the `on: merged`
    * target's own resolved agent def — `finalize-merged.ts`'s
    * `resolveMergeAgentHandler` already loads it to read the band guard, and
    * threads the SAME def through here rather than always running the

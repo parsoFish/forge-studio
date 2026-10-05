@@ -1,6 +1,6 @@
 /**
  * W7-A3 (sessions-kinds-08/12, artifact-plan-22/23, flows-23); M7-E row 205
- * (ADR 011/031) — DOM contract pins for `ArchitectCommittedView`
+ * (D-12) — DOM contract pins for `ArchitectCommittedView`
  * (`components/studio/session/ArchitectCommittedView.tsx`), the shared
  * post-approve panel rendered by BOTH the architect session page (committed
  * phase) and the /artifact plan payoff.

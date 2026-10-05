@@ -40,7 +40,7 @@ export const CATEGORY_TO_INDEX_FILE: Record<string, string> = {
 };
 
 /**
- * Which brain sub-wiki owns each theme category (three-brain model, ADR 018).
+ * Which brain sub-wiki owns each theme category (three-brain model, SPEC §4).
  * Cycle-derived knowledge (patterns/antipatterns/operations) lives in Brain 2
  * (`cycles/`); forge-engineering knowledge (decisions/reference) lives in
  * Brain 1 (`forge-dev/`). Both the theme files and their category index sit in
@@ -163,7 +163,7 @@ export function checkIndexSync(forgeRoot: string): Finding[] {
  * Project-brain (Brain 3) category-index sync. Mirrors checkIndexSync, but each
  * project brain (`brain/projects/<name>/`) resolves its category indexes in its
  * OWN dir (patterns.md / antipatterns.md / decisions.md / reference.md), not the
- * forge sub-wikis. ADR 035 made project brains forge-owned central, so lint now
+ * forge sub-wikis. SPEC §4 made project brains forge-owned central, so lint now
  * covers them. Flag severity — advisory, never gates.
  */
 export function checkProjectBrainIndexes(forgeRoot: string): Finding[] {
@@ -281,7 +281,7 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
     const expectedSubdir = CATEGORY_TO_BRAIN_SUBDIR[cat];
     if (!expectedSubdir) continue;
 
-    // category→sub-wiki routing is an ADR 018 convention over the two FORGE
+    // category→sub-wiki routing is a SPEC §4 convention over the two FORGE
     // sub-wikis only. A Brain 3 or operator-KB theme keeps its own category in
     // its own brain, so it is exempt — the same exemption `lintThemeFiles` has
     // always applied, now stated once in `isForgeTheme`.

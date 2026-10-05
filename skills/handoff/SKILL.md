@@ -35,4 +35,4 @@ strings, and paths byte-faithfully.
 ## Sources
 
 Matt Pocock — "Handoff" / obra/superpowers. Adapted to forge's worktree + resume model
-(ADR 019; complements `superpowers:strategic-compact`).
+(D-06; complements `superpowers:strategic-compact`).

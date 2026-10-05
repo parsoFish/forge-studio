@@ -84,7 +84,7 @@ distribution:
   software has with a proprietary OS, driver, or cloud SDK the user installs
   separately.
 - The SDK is reached through the `RuntimeAdapter` seam
-  (`packages/agents/_adapters/`, [ADR 029](../decisions/029-runtime-adapters.md)),
+  (`packages/agents/_adapters/`, [SPEC §1](../../SPEC.md)),
   and that seam exists precisely so the runtime substrate is swappable for an
   OSS alternative — it's what keeps Forge from being permanently hard-bound
   to one proprietary component.

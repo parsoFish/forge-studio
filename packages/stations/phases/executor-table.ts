@@ -31,7 +31,7 @@ export type NodeExecutor = (ctx: ExecContext) => Promise<void>;
 
 /**
  * Run a phase fn under optional wedge detection. When wedgeKillMs is set
- * (wedgeDetector.active), races the fn against the wedge timer (AND, ADR 028
+ * (wedgeDetector.active), races the fn against the wedge timer (AND, SPEC §2
  * amendment/ruling 1774, the operator-stop flag — the SAME race, so a live PM
  * or dev-loop turn is cancelled through the identical AbortController) and
  * emits phase.wedge-killed on kill; otherwise calls it with an undefined
@@ -91,7 +91,7 @@ function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
 }
 
 /** pm: skip + rebase on a SKIPPING resume ('integrate' crash recovery,
- *  ADR-019; 'develop' fix-loop re-entry, ADR-040) — but 'plan' (row 157,
+ *  D-06; 'develop' fix-loop re-entry, D-20) — but 'plan' (row 157,
  *  ruling 1873: a PM-phase acceptance-gate failure) rebases and STILL RUNS,
  *  because the PM is the phase that failed and must re-decompose; otherwise
  *  (no marker) run the project manager as a normal fresh pass. This branch is
@@ -129,7 +129,7 @@ const execPm: NodeExecutor = async (ctx) => {
 
 /**
  * dev: the per-WI developer loop. The post-develop band (integrate → adversarial-review)
- * are their own nodes. On a `resumeFrom: 'integrate'` run (ADR-019 crash recovery),
+ * are their own nodes. On a `resumeFrom: 'integrate'` run (D-06 crash recovery),
  * runDeveloperLoop self-no-ops the per-WI work (toRun=[]) and STILL emits the
  * dev-loop start/end{resumed:true} events — so the dev hex resolves to complete and
  * the `integrate` node (declared `resumable`) is the resume target. We do NOT
@@ -143,7 +143,7 @@ const execDev: NodeExecutor = async (ctx) => {
 };
 
 /**
- * integrate (the `integrate-band`, ADR-039) — the INTEGRATE band of spec §5 item 4.
+ * integrate (the `integrate-band`, SPEC §1) — the INTEGRATE band of spec §5 item 4.
  *
  * Boundary commit, sync invariant, empty-branch guard, the merge-boundary gate
  * that fails loud on a config error, and then `runIntegrate`, which DERIVES the
@@ -163,7 +163,7 @@ const execDev: NodeExecutor = async (ctx) => {
  *
  * Row 122 (bead forge-8vfn.8.1.55): on a `resumeFrom: 'pr-open'` run (an
  * environment failure classified specifically at the review node's PR-open
- * call, ADR 019 amendment) this band SKIPS entirely — it already succeeded
+ * call, D-06 amendment) this band SKIPS entirely — it already succeeded
  * before PR-open failed, and its artifacts (demo.json, DEMO.md,
  * .forge/pr-description.md) already sit in the preserved worktree. Re-running
  * it would re-derive a bundle that is already correct, at the cost of a full
@@ -317,10 +317,10 @@ const execIntegrate: NodeExecutor = async (ctx) => {
 };
 
 /**
- * adversarial-review (the `review-band`, ADR-039): the R4-08 critique pipeline
+ * adversarial-review (the `review-band`, SPEC §1): the R4-08 critique pipeline
  * — assemble the diff, critique across four lenses, persist the
  * `review-findings` artifact for the verdict gate. Finding CONTENT is an
- * operator signal weighed at the verdict (ADR-021), never an auto-block; but a
+ * operator signal weighed at the verdict (D-07), never an auto-block; but a
  * pipeline FAILURE produced NO findings, so it fails loud (symmetric with the
  * integrate delivery gate) rather than open a PR the operator would review blind.
  *
@@ -385,7 +385,7 @@ const execReview: NodeExecutor = async (ctx) => {
 };
 
 /**
- * The `reflection-close` band (R4-01-F2, ADR-039) — formerly the dedicated
+ * The `reflection-close` band (R4-01-F2, SPEC §1) — formerly the dedicated
  * `reflect` NodeKind's executor, now selected by the reflector def's declared
  * `composition.guards` entry instead of a privileged executor enum. Semantics
  * unchanged: runs only when the closure confirmed a merge (G10), records a
@@ -434,19 +434,19 @@ const execReflect: NodeExecutor = async (ctx) => {
 };
 
 /**
- * onboard-preflight (the `onboard-preflight` band, R4-18/ADR-039): the
+ * onboard-preflight (the `onboard-preflight` band, R4-18/SPEC §1): the
  * `gate: contract` node of an onboard-shaped flow (authorable — the OOTB
  * wrapper was retired in W7-C1). Runs the REAL forge↔project
  * contract preflight (`runPreflight`, `packages/projects/preflight.ts`) DIRECTLY,
  * orchestrator-side — mirrors `execIntegrate`'s shape (start event, do the real
  * work, end event carrying `status`) but spawns NO agent at all.
  *
- * ADR-036: the orchestrator runs gates, the agent never self-certifies. That
+ * D-15: the orchestrator runs gates, the agent never self-certifies. That
  * half is intact — no agent is spawned and no `deps.run*` call decides the
  * verdict. The OTHER half changed in M2-B and the change is not silent: the
  * preflight now arrives through the injected `ProjectGate` port
  * (`ctx.projectGate`), because SPEC.md §6 and `docs/roadmaps/1.0.md` §4 M2
- * Lane B require that a flow not import the project package. ADR 036 was
+ * Lane B require that a flow not import the project package. D-15 was
  * AMENDED for this (2026-08-31, operator ruling): its principle holds, and its
  * stronger claim — that the ABSENCE of an injection seam is what makes this
  * gate unfakeable — is retired there rather than left to rot. What guards it
@@ -565,7 +565,7 @@ function buildAgentPrompt(def: AgentDefinition, ctx: NodeExecContext): string {
 }
 
 /**
- * R2-04-F3 (ADR-041, known-gaps §8 rider): the ONLY trigger-derived content a
+ * R2-04-F3 (D-23, known-gaps §8 rider): the ONLY trigger-derived content a
  * prompt may carry — one line of strict-validated tokens (kind/provider/event
  * enums + a REPO_RE-revalidated repo). Free-text payload fields (commit
  * messages, release bodies) NEVER reach prompt assembly — agents read the
@@ -592,10 +592,10 @@ export function triggeredRunContextLine(input: CycleInput): string | null {
 /**
  * agent: the generic F1 runAgent path (R2-01-F2, AC #1). Resolves ONLY when
  * `resolveNodeKind` picked 'agent' — a real roster def with no declared
- * `executor` (R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect' onto declared dispatch;
+ * `executor` (R4-01-F2/SPEC §1 retired 'pm'/'dev'/'reflect' onto declared dispatch;
  * R4-01-F4 retired the last one, 'unifier' — no phase executors remain). No gate, no
  * runWithWedge (runAgent takes no AbortSignal — abort-chaining is R2-03-F4's
- * job; wedge budgets are inert in production regardless, ADR-036 forbids the
+ * job; wedge budgets are inert in production regardless, D-15 forbids the
  * primitive running its own gate).
  */
 const execAgent: NodeExecutor = async (ctx) => {
@@ -606,7 +606,7 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
-  // ADR-039 (seam F4): a declared band guard routes to its band, which loads
+  // SPEC §1 (seam F4): a declared band guard routes to its band, which loads
   // THIS declaring def's own SKILL.md — never a hardcoded canonical slug.
   const bandGuard = resolveBandGuard(def);
   if (bandGuard) {
@@ -619,7 +619,7 @@ const execAgent: NodeExecutor = async (ctx) => {
     return band(ctx);
   }
 
-  // ADR-039 (seam F4): a declared ralph loop routes to the dev-loop pipeline,
+  // SPEC §1 (seam F4): a declared ralph loop routes to the dev-loop pipeline,
   // which now spawns under THIS declaring def, not a hardcoded canonical one.
   if (def.runtime.loopStrategy === 'ralph') {
     return execDev(ctx);
@@ -656,7 +656,7 @@ const execAgent: NodeExecutor = async (ctx) => {
 /**
  * Default executor per node kind. The dispatch loop resolves a node's kind via
  * resolveNodeKind() and looks it up here — no switch. Register or replace one
- * through `createPhaseExecutor({ overrides })`: that is where ADR 028's
+ * through `createPhaseExecutor({ overrides })`: that is where SPEC §2
  * injectable seam moved when the runner stopped holding the table.
  */
 const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
@@ -667,7 +667,7 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
 };
 
 /**
- * Band-guard id → executor (ADR-039). The KEY is declared data (a
+ * Band-guard id → executor (SPEC §1). The KEY is declared data (a
  * `composition.guards` entry on the agent's SKILL.md); the executors are the
  * same orchestrator-band implementations the retired phase-executor rows
  * carried. `wi-contract` is registered ahead of the PM's own migration in

@@ -1,8 +1,8 @@
 /**
- * The step-handler variant driver — ADR 043 as amended 2026-09-03 (M4 ruling
+ * The step-handler variant driver — SPEC §5 (M4 ruling
  * 60).
  *
- * ADR 043's original plan was that every bespoke runner would eventually
+ * SPEC §5's original plan was that every bespoke runner would eventually
  * become DATA: a `turnSpec` phase table the generic `runInteractiveTurn`
  * walks. Measured against the code (M4 sessions PARK 2, recorded in the ADR's
  * 2026-09-03 amendment) that is not reachable inside M4 — `style: structured`
@@ -39,7 +39,7 @@
  * spec they compose, what each step writes, and what the turn returns. That is
  * the line ruling 60 drew — "a spine dissolves shared plumbing, not identity".
  *
- * This is deliberately NOT the ADR-043 machinery: no registries are opened, no
+ * This is deliberately NOT the SPEC §5 machinery: no registries are opened, no
  * per-kind hooks are added to the generic builder, no `style:` is implemented.
  * That work is bead `forge-8vfn.6.6` (M5), which carries the five blockers as
  * its acceptance list.
@@ -252,7 +252,7 @@ export type SessionKindVariant<
    * planner brain-first mandate on every turn regardless of phase.
    *
    * THESE TWO HOOKS ARE THE WHOLE BUDGET (M4 ruling 78). Ruling 60 chose to
-   * dissolve plumbing and keep identity; it did NOT authorise the ADR-043
+   * dissolve plumbing and keep identity; it did NOT authorise the SPEC §5
    * machinery. A hook added to this shared driver for one kind is that
    * machinery arriving through the back door, so a kind wanting a third gets
    * its own entry point instead, and its PR says so.

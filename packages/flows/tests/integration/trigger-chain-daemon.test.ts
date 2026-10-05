@@ -1,5 +1,5 @@
 /**
- * R2-04-F1 (ADR-041) — daemon-level chain integration.
+ * R2-04-F1 (D-23) — daemon-level chain integration.
  *
  * The per-seam unit tests inject a fake `startFlowRun`, so the WIRING between
  * the staged request, the REAL default dispatch (`enqueueFlowRun`), and the

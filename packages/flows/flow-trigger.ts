@@ -1,5 +1,5 @@
 /**
- * R2-04 (ADR-041) — the typed trigger-kind registry + generic, declaration-driven
+ * R2-04 (D-23) — the typed trigger-kind registry + generic, declaration-driven
  * trigger firing.
  *
  * A flow declares zero or more `triggers: [{ on, target, …per-kind config }]` in
@@ -26,7 +26,7 @@ import type { TriggerKindId } from '@forge/contracts';
 import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-requests.ts';
 
 /**
- * The trigger-kind registry (ADR-041): rows-as-data, one per `on:` vocabulary
+ * The trigger-kind registry (D-23): rows-as-data, one per `on:` vocabulary
  * member. `origin: 'ootb'` rows are domain events the OOTB suite contributes
  * (never platform literals); `status: 'reserved'` rows are vocabulary-reserved
  * — `parseFlowTrigger` accepts them so nobody squats different semantics on
@@ -64,7 +64,7 @@ export type FlowTriggerEvent = (typeof FLOW_TRIGGER_EVENTS)[number];
 /**
  * The `on:` kinds that resolve via a `webhook:` config block sharing the SAME
  * `POST /api/hooks/:hookId` receiver (R2-08-F3: `pr-merged` / `issue-raised`
- * are their OWN `on:` values — ADR-027's amendment — never a sub-event under
+ * are their OWN `on:` values — D-10's amendment — never a sub-event under
  * `on: webhook`, but they reuse the existing receiver and config shape). ONE
  * definition — `bridge-hooks.ts` (route resolution) and
  * `packages/flows/studio/validate-triggers.ts` (webhook-config validation) both import this
@@ -92,8 +92,8 @@ export type FireFlowTriggersDeps = {
    * point, `packages/flows/flow-run-requests.ts`). `finalize-merged.ts`'s
    * inline `on: merged` dispatch is the motivating case — it never stages a
    * `FlowRunRequest`, so without this the drain's scope check simply never
-   * ran for it (the exact gap the R2-08 addendum,
-   * docs/decisions/027-studio-object-model.md, worked around by making
+   * ran for it (the exact gap the R2-08 addendum
+   * worked around by making
    * `projects:` unauthorable on `on: merged` — withdrawn now that this
    * choke point exists). Both this and the drain call the SAME
    * `decideTriggerProjectScope` predicate — one implementation of the rule.
@@ -171,7 +171,7 @@ export type FireAgentCompleteTriggersOpts = {
  * source agent that just completed a standalone run. Firing STAGES a
  * claimable flow-run request via `stageFlowRunRequest` — this function never
  * dispatches; dispatch stays exclusively in the guarded daemon sweep
- * (`drainFlowRunRequests`, ADR-041 §3).
+ * (`drainFlowRunRequests`, D-23).
  *
  * Matching is strict identity (`===`), never prefix/substring/case-insensitive
  * — `agent: 'developer'` must not fire for a completed slug of
@@ -208,7 +208,7 @@ export async function fireAgentCompleteTriggers(
           createdAt,
           // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
           ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
-          // Seam F6 half 1 (ADR 051 decision 4): the trigger's own `class:`
+          // Seam F6 half 1 (D-34): the trigger's own `class:`
           // declaration — needed by mint-triggered-initiative.ts when the
           // target flow accepts more than one manifest class.
           ...(trigger.class !== undefined ? { triggerClass: trigger.class } : {}),

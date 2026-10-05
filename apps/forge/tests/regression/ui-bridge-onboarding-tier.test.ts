@@ -7,7 +7,7 @@
  * S9 beat 11 asserts that kickoff renders `data-model-tier-picker="range"`; it
  * rendered `fixed`, because `skills/onboarding-agent/SKILL.md` declared
  * `strategy: fixed` and there was no envelope to offer. The fix is the SKILL
- * edit ADR 043's own rationale named ("widening it is a SKILL.md edit rather
+ * edit SPEC §5's own rationale named ("widening it is a SKILL.md edit rather
  * than a UI decision"), and THIS route is what that widened envelope has to
  * survive: a tier chosen on the form is worth nothing if the route drops it,
  * and worse than nothing if the route accepts one the agent's skill forbids.

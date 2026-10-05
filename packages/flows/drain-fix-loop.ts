@@ -1,10 +1,10 @@
 /**
- * ADR 040 — drain a ready-for-review cycle's pending fix work-items in place.
+ * D-20 — drain a ready-for-review cycle's pending fix work-items in place.
  *
  * A review send-back compiles fix WIs onto the initiative's own
  * `.forge/work-items/` queue (`fix-work-items.ts`, via the verdict handler) and
  * stamps `resume_from: 'develop'`. This module is the consumer: a scheduler
- * sweep (sibling of `finalize-merged`, replacing the ADR-026
+ * sweep (sibling of `finalize-merged`, replacing the D-20
  * `drain-unifier-items` sweep) that, for each `ready-for-review/` manifest with
  * PENDING fix WIs and an UNMERGED PR, re-claims the manifest threading the SAME
  * `cycle_id` (mechanism B) and re-enters `runCycle({ resumeFrom: 'develop' })`:
@@ -15,7 +15,7 @@
  * re-demo). One cycleId ⇒ one `_logs` dir ⇒ cost/status lineage + WI hexes
  * never fork.
  *
- * Mutual exclusion (ADR 040): the atomic in-flight rename is the claim; the
+ * Mutual exclusion (D-20): the atomic in-flight rename is the claim; the
  * drain skips a MERGED PR (finalize's domain — a merged PR always wins), a
  * queue with any `failed` fix WI, and a cap-exhausted park marker (both
  * operator territory — never auto-retry). The verdict-append lock is taken for
@@ -78,7 +78,7 @@ export type FixLoopDrainDeps = {
    * with `resumeFrom: 'develop'` threading the persisted `cycle_id`.
    */
   runDrainCycle?: (input: CycleInput, wiring: PhaseWiring) => Promise<{ status: string }>;
-  /** The installed factory's phase wiring (ADR 048) — threaded to `runCycle`, never imported. */
+  /** The installed factory's phase wiring (D-32) — threaded to `runCycle`, never imported. */
   phaseWiring: PhaseWiring;
   notify?: (msg: string) => void;
 };
@@ -142,7 +142,7 @@ export async function drainPendingFixWorkItems(
       if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot })) {
         throw new Error(`unsafe project_repo_path on manifest ${manifestPath}`);
       }
-      // Mechanism B (carried over from ADR 026): reuse the SAME cycle_id so the
+      // Mechanism B (carried over from D-20): reuse the SAME cycle_id so the
       // loop appends to the original `_logs` dir. resumeFrom 'develop' makes PM
       // rebase-skip while the dev-loop RUNS — prior WIs fast-exit, fix WIs build.
       // Resolved and validated HERE, at the top, deliberately: `createLogger`
@@ -201,7 +201,7 @@ export async function drainPendingFixWorkItems(
         continue;
       }
 
-      // Merge-vs-loop (ADR 040): a MERGED PR is finalize-merged's domain — the
+      // Merge-vs-loop (D-20): a MERGED PR is finalize-merged's domain — the
       // merge always wins; finalize surfaces the dropped fix WIs non-silently.
       if (await confirmMerge(worktreePath)) {
         out.push({ initiativeId, status: 'pr-merged' });

@@ -1,5 +1,5 @@
 /**
- * Flow definition validation (ADR 027, §6) — the `flow` half of what was
+ * Flow definition validation (D-09, §6) — the `flow` half of what was
  * `orchestrator/studio/validate.ts`, moved here by T1 ruling 159. The flow
  * semantics it checks already live in this package: the fan-out predicate
  * (`flow-fanout.ts`), the manifest path guard whose predicate this mirrors
@@ -115,7 +115,7 @@ export function validateFlow(
   // descriptor as of R2-02-F3): a node whose agent resolves to a real def
   // but that def is INTERACTIVE (agentCapabilityDescriptor(def).interactive)
   // and carries no declared `executor` (i.e. not the sole remaining legacy
-  // phase executor, 'unifier' — R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect'
+  // phase executor, 'unifier' — R4-01-F2/SPEC §1 retired 'pm'/'dev'/'reflect'
   // onto declared dispatch) can never be executed by the flow engine — interactive
   // agents run through the interactive-session runner, not a flow node.
   // Sourced from the same descriptor the BUILD-tab palette/drop gate reads
@@ -279,7 +279,7 @@ export function validateFlow(
     );
   }
 
-  // triggers (R2-04, ADR-041) — see checkFlowTriggers above.
+  // triggers (R2-04, D-23) — see checkFlowTriggers above.
   findings.push(...checkFlowTriggers(flow, agents, opts));
 
   return findings;
@@ -287,7 +287,7 @@ export function validateFlow(
 
 /**
  * Every FlowEdge.artifact label MUST resolve to a registered artifact template.
- * Promoted from advisory (flag) to error (R3-06/R2-05-F1): ADR-027's own
+ * Promoted from advisory (flag) to error (R3-06/R2-05-F1): D-09's own
  * amendment text pre-authorised this once all seed flows ship templates — that
  * condition is now met (all real flow edges resolve to on-disk templates;
  * `forge studio lint` on the pre-promotion base reported 0 `artifact/no-template`

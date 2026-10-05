@@ -36,7 +36,7 @@ const SKILL_PATH = skillPath('developer-ralph');
 export type DevAllowedTool = 'Read' | 'Write' | 'Edit' | 'MultiEdit' | 'Bash' | 'Grep' | 'Glob';
 export type DevDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-/** ADR 024 / M2-3 — canonical-only, TEST-facing (dev-binding.test.ts pins
+/** SPEC §1 / M2-3 — canonical-only, TEST-facing (dev-binding.test.ts pins
  *  these against the SKILL.md source). Production reads the EXECUTING def
  *  directly (`resolveDevSpawnModel`/`agentDef.allowedTools`/etc. below). */
 export const devAgentSpec = deriveAgentSpec(skillPathRelative('developer-ralph'));
@@ -256,7 +256,7 @@ export type DevToolUseSummary = {
    * Telemetry only. Per the brain-read policy the dev-loop's intent source
    * is the work item, not the brain; there is no runtime brain-first gate
    * for dev-loop (removed in F-34). Reads of the cycle's project brain
-   * (Brain 3) are permitted supplemental context (ADR 010 amendment
+   * (Brain 3) are permitted supplemental context (SPEC §4 amendment
    * 2026-05-26); a high count still flags an agent spelunking instead of
    * anchoring on the WI — useful signal, not a gate.
    */

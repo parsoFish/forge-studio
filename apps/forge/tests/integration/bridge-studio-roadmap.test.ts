@@ -122,7 +122,7 @@ before(async () => {
   );
 
   // `forge-8vfn.7.6.23` — a manifest the parser REFUSES. `class` is required
-  // (ADR-051, packages/flows/manifest.ts:117, "There is no default"), and this
+  // (D-34, packages/flows/manifest.ts:117, "There is no default"), and this
   // one omits it. Written by hand rather than through makeManifest so the
   // refusal is the fixture's whole point and cannot drift if makeManifest gains
   // a default.

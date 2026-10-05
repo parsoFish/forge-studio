@@ -1,22 +1,22 @@
 /**
  * Shared spine for operator-driven, file-checkpointed agentic sessions — the
- * architect / instructions-creator / demo-builder pattern (ADR 020).
+ * architect / instructions-creator / demo-builder pattern (R-05).
  *
  * An interactive session is a sequence of bounded **turns**: each turn reads the
  * session-dir state, advances ONE step, and exits. Operator think-time happens
  * *between* turns (the bridge re-spawns a turn on each operator action), so there
- * is no long-lived blocked session and the flow is crash-resumable (ADR 012).
+ * is no long-lived blocked session and the flow is crash-resumable (D-05).
  * Interactivity is file-based handoff (`questions.json` ↔ `answers.json`,
- * `feedback.md`), NOT SDK `canUseTool` interception — see ADR 020.
+ * `feedback.md`), NOT SDK `canUseTool` interception — see R-05.
  *
  * This module owns the parts every interactive runner shares so they aren't
  * re-implemented per runner:
  *   - `runStructuredTurn` — one SDK structured-output stream loop, guarded by an
  *     idle-deadline, throttled heartbeat, tool_use streaming, and a fenced-JSON
  *     fallback. The model + tool allow-list are parameters (each runner derives
- *     them from its own SKILL.md, ADR-024).
+ *     them from its own SKILL.md, SPEC §1).
  *   - `runAgentTurn`'s `writeRoots` fence (bead forge-eip, W6-CR-3) — see its
- *     own doc comment below for the mechanism. This is UNRELATED to ADR 020's
+ *     own doc comment below for the mechanism. This is UNRELATED to R-05's
  *     ruling above: that ruling is about never using `canUseTool` to PAUSE a
  *     turn for operator interactivity (file handoff owns that); this fence
  *     never pauses anything — it is a synchronous, silent allow/deny decided
@@ -602,7 +602,7 @@ export async function runAgentTurn(args: {
    *  or empty preserves this function's EXACT prior behaviour (no
    *  `canUseTool` at all) — every caller that does not opt in is
    *  unaffected. See `makeWriteRootCanUseTool`'s own doc comment for the
-   *  mechanism and why this does not reopen ADR 020. */
+   *  mechanism and why this does not reopen R-05. */
   writeRoots?: readonly string[];
   /** `forge-a9o9`/7.3.6 (703) — roots inside which `Read` is permitted. Fences
    *  a turn that needs SOME read to satisfy a protocol step without letting it

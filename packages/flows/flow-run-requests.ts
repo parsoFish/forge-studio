@@ -1,5 +1,5 @@
 /**
- * R2-04 (ADR-041) — claimable flow-run requests: the ONE dispatch path for
+ * R2-04 (D-23) — claimable flow-run requests: the ONE dispatch path for
  * every trigger-originated run.
  *
  * All trigger kinds converge here: `on: flow-complete` chaining (the
@@ -44,7 +44,7 @@ import type { TriggerPayload } from './trigger-payload.ts';
 export type FlowRunRequestOrigin = 'trigger' | 'cron' | 'webhook' | 'agent-complete';
 
 export type FlowRunRequest = {
-  /** What to start (ADR-041). Legacy pre-target requests are skipped loudly. */
+  /** What to start (D-23). Legacy pre-target requests are skipped loudly. */
   target: TriggerTarget;
   origin: FlowRunRequestOrigin;
   triggeredBy: string;
@@ -54,14 +54,14 @@ export type FlowRunRequest = {
   /** External kinds only: the typed, extraction-validated payload (data, not prompt text). */
   payload?: TriggerPayload;
   /**
-   * cron only (ADR-041 §2): overrun policy carried from the trigger so the
+   * cron only (D-23): overrun policy carried from the trigger so the
    * drain can enforce it at origination. Absent ⇒ `forbid` (skip minting a new
    * run while a prior triggered run of the same target flow is still active).
    * `replace` is enum-reserved (lint-blocked) — treated as `forbid` here.
    */
   concurrency?: 'allow' | 'forbid' | 'replace';
   /**
-   * R2-08-F1 (ADR-027 amendment): a snapshot of the firing trigger's OWN
+   * R2-08-F1 (D-10 amendment): a snapshot of the firing trigger's OWN
    * `projects:` declaration, carried onto the staged request — never
    * re-derived from prose at drain time. Absent ⇒ unscoped; `[]` ⇒ scoped to
    * nothing. The two states are never collapsed.
@@ -70,7 +70,7 @@ export type FlowRunRequest = {
   /**
    * R2-08-F1: the project id THIS event resolved to. `null`/absent ⇒
    * unresolved. Matched by strict identity against `projects` — never folded
-   * into a filesystem path (ADR-027 R2-08 amendment, rule 5).
+   * into a filesystem path (D-10 R2-08 amendment, rule 5).
    */
   eventProject?: string | null;
   /** R2-08-F2: the completed agent slug that staged this request (agent-complete origin only). */
@@ -109,7 +109,7 @@ export type FlowRunRequest = {
    */
   triggerKind?: string;
   /**
-   * Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the firing trigger's
+   * Seam F6 half 1 (D-34, spec §5 item 8): the firing trigger's
    * own `class:` declaration, when the flow it targets accepts more than one
    * manifest class (`mint-triggered-initiative.ts` reads this to derive the
    * minted manifest's class — see its own comment). Sourced from trusted
@@ -199,7 +199,7 @@ export type FlowRunDrainResult = {
  * `fireFlowTriggers` (packages/flows/flow-trigger.ts — the inline `on: merged`
  * path finalize-merged.ts drives) both call this SAME function. Before this
  * extraction, the logic lived inlined in `drainFlowRunRequests` only, and the
- * R2-08 addendum (docs/decisions/027-studio-object-model.md) worked around
+ * R2-08 addendum worked around
  * `on: merged` never reaching it by making `projects:` unauthorable on that
  * kind (WI forge-f9g). That exclusion is withdrawn now that this function is
  * a structural choke point every dispatch mechanism can pass through.
@@ -247,7 +247,7 @@ export type DrainFlowRunDeps = {
 /**
  * Claim + dispatch every staged flow-run request. Mirrors the scheduler's other
  * best-effort sweeps (runFinalizeSweep / runDrainSweep). A dispatched request is
- * removed; a malformed request (no target — e.g. a pre-ADR-041 straggler) is
+ * removed; a malformed request (no target — e.g. a pre-D-23 straggler) is
  * dropped loudly; a dispatch error leaves the request in place and is surfaced,
  * never silently swallowed.
  */
@@ -268,7 +268,7 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
       rmSync(path, { force: true });
       continue;
     }
-    // R2-08-F1 (ADR-027 amendment) — per-project scope, enforced at the
+    // R2-08-F1 (D-10 amendment) — per-project scope, enforced at the
     // dispatch point (rule 2: "the dispatch point is the enforcement point;
     // lint is defense in depth"), via the SINGLE extracted predicate
     // `decideTriggerProjectScope` above (forge-f9g fix, W8-A1) — this is the
@@ -303,7 +303,7 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
       rmSync(path, { force: true });
       continue;
     }
-    // ADR-041 §2 concurrency: `concurrency` is a CRON field (webhooks fire on
+    // D-23 concurrency: `concurrency` is a CRON field (webhooks fire on
     // discrete real pushes — each legitimately mints its own run, guarded
     // against same-instant id collisions in mintTriggeredInitiative). For a
     // cron origination the default `forbid` policy skips minting a fresh run
@@ -396,7 +396,7 @@ function defaultStartFlowRun(queueRoot?: string, forgeRoot?: string): (req: Flow
     }
     // Origination (cron/webhook): mint a fresh initiative for the target flow.
     // A pure queue/fs operation — the guarded scheduler claim is the only path
-    // from here to an agent spawn (ADR-041 queue-only dispatch invariant).
+    // from here to an agent spawn (D-23 queue-only dispatch invariant).
     const minted = mintTriggeredInitiative(req, {
       queueRoot,
       ...(forgeRoot ? { forgeRoot, logsRoot: join(forgeRoot, '_logs') } : {}),

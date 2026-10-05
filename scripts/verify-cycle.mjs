@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * verify-cycle — forge's REAL-CAPABILITY regression harness (ADR 022, S9 spine).
+ * verify-cycle — forge's REAL-CAPABILITY regression harness (D-08, S9 spine).
  *
  * Drives the REAL 3-stage SDLC spine end-to-end via the bridge API and asserts
  * real-cycle OUTCOMES — not synthetic rubrics — then records the run and writes a
@@ -26,7 +26,7 @@
  *      writes the central project brain. The harness WAITS for `reflector.end`
  *      before teardown (the prior harness killed the bridge mid-reflect).
  *
- * The gate assertions (ADR 022 §1 + S9):
+ * The gate assertions (D-08 + S9):
  *   1. the cycle reached merge (finalStatus `merged`/`done`, or manifest in `_queue/merged|done/`);
  *   2. the dev-loop completed N/N work items (no complete:0 / failed);
  *   3. the project's own tests are green post-merge (its .forge quality gate, else
@@ -179,7 +179,7 @@ function forgeSpawnEnv(extra = {}) {
   return env;
 }
 
-// ---- ADR 022 runner: corpus staging, repo reset, outcome assertions --------
+// ---- D-08 runner: corpus staging, repo reset, outcome assertions --------
 
 function git(repoPath, args) {
   const r = spawnSync('git', args, { cwd: repoPath, encoding: 'utf8' });
@@ -429,7 +429,7 @@ function releaseEvidence(repoPath, cycleId, releaseProcess) {
   return { present: true, reason: `finalised changelog + release.json (version ${version ?? 'n/a'})` };
 }
 
-/** Reflect-writes-central-brain gate (S8/F3/ADR-035): the reflector writes the
+/** Reflect-writes-central-brain gate (S8/F3/SPEC §4): the reflector writes the
  *  project brain to brain/projects/<project>/themes/. A merged spine run must touch
  *  (create or update) at least one theme there during this run (mtime ≥ runStartMs).
  *  This is the property the old harness left unproven — it killed the bridge before
@@ -446,7 +446,7 @@ function reflectWroteBrainTheme(project, runStartMs) {
   return { present: false, reason: `no theme in ${dir} written/updated since run start` };
 }
 
-/** The ADR 022 + S9 gate: gathers the impure inputs (event log, project test
+/** The D-08 + S9 gate: gathers the impure inputs (event log, project test
  *  suite, `_queue/done/` existence, merged demo.json, project config) and
  *  hands them to `buildOutcomeChecks` (scripts/lib/verify-outcomes.mjs), which
  *  assembles the outcome-only assertions (merge / dev-loop / tests / cost /
@@ -581,8 +581,8 @@ async function cycleStatusFromBridge(bridgeUrl, cycleId) {
 /**
  * autoApprove — the harness's deliberate, explicit approve: POSTs an 'approve'
  * verdict to the bridge's /api/verdict, the SAME surface the operator clicks
- * (M7-5 / ADR-031; its path is a strict superset of the deleted
- * `forge review --approve`). The NO-AUTO-APPROVE invariant (ADR-023) is intact —
+ * (M7-5 / D-12; its path is a strict superset of the deleted
+ * `forge review --approve`). The NO-AUTO-APPROVE invariant (D-12) is intact —
  * approval still requires an operator click or this explicit call; only the
  * transport changed. The `x-forge-csrf` header is required: the bridge 403s any
  * non-GET without it.
@@ -619,7 +619,7 @@ async function autoApprove(bridgeUrl, initiativeId) {
 
 /**
  * captureDecisionReviewEvaluation — navigate to the unified review gate
- * (/artifact?run=<cycleId>&type=verdict&mode=gate, M7-3/ADR-031), wait for the
+ * (/artifact?run=<cycleId>&type=verdict&mode=gate, M7-3/D-12), wait for the
  * demo-comparison and demo-evaluation sections, then frame.
  * Returns to the dashboard URL after the frame so subsequent navigation
  * isn't broken. Defensive: if the selectors don't appear, captures anyway
@@ -650,7 +650,7 @@ async function postSendBack(bridgeUrl, initiativeId) {
   const payload = {
     initiativeId,
     kind: 'send-back',
-    rationale: 'Automated send-back by scripts/verify-cycle.mjs --send-back: verifying the review→develop fix-loop re-run path (ADR 040). Please re-examine the implementation for any issues raised in acceptance criteria and address them.',
+    rationale: 'Automated send-back by scripts/verify-cycle.mjs --send-back: verifying the review→develop fix-loop re-run path (D-20). Please re-examine the implementation for any issues raised in acceptance criteria and address them.',
     acceptanceCriteria: [
       {
         given: 'the send-back compiles review feedback into fix work-items',
@@ -826,7 +826,7 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   if (!verdict.ok) throw new Error(`plan-verdict approve failed (${verdict.status}): ${JSON.stringify(verdict.body)}`);
 
   // The approve spawns a finalize turn (async) that promotes manifests → committed.
-  // The completeness critic (ADR 037 era, REFINEMENT-PLAN §6.3) may block the
+  // The completeness critic (D-17 era, REFINEMENT-PLAN §6.3) may block the
   // first finalize with findings and re-gate the session at awaiting-verdict;
   // the harness plays the operator's acknowledge role: log the findings and
   // re-approve exactly once (the critic is one-shot per session).
@@ -1032,7 +1032,7 @@ async function main() {
         if (status !== 'ready-for-review') continue;
         await captureFrame(page, `after-develop-${init.initiativeId}`);
 
-        // Optional send-back pass (ADR-026 in-place drain) — first initiative only.
+        // Optional send-back pass (D-20 in-place drain) — first initiative only.
         if (!sendBackDone) {
           sendBackDone = true;
           await captureDecisionReviewEvaluation(page, watch.uiUrl, init.cycleId);
@@ -1118,7 +1118,7 @@ async function main() {
     writeIndexHtml();
     log(`index → ${join(OUT_DIR, 'index.html')}`);
 
-    // ---- gate: outcome assertions (ADR 022 + S9 reflect-writes-brain) ----
+    // ---- gate: outcome assertions (D-08 + S9 reflect-writes-brain) ----
     // Per-initiative assertions (collected pre-teardown above) plus an
     // aggregate cost-ceiling check (the ceiling is per RUN; a multi-initiative
     // plan shares one budget).

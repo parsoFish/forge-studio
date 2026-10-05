@@ -1,5 +1,5 @@
 /**
- * Claude reference adapter (M6-1, ADR 029).
+ * Claude reference adapter (M6-1, SPEC §1).
  *
  * Wraps `createClaudeAgent` (packages/agents/ralph/claude-agent.ts) + the SDK's `query`
  * function into the `RuntimeAdapter` interface. This is the new public seam;
@@ -10,7 +10,7 @@
  * always received — the wrapper adds zero logic. The full existing test suite
  * (1036 tests) passes unchanged because no existing code is modified.
  *
- * Physical layout note (ADR 029 §Decision/M6-1):
+ * Physical layout note (SPEC §1 / M6-1):
  *   Logical home:   loops/_adapters/claude/  ← this file
  *   Implementation: packages/agents/ralph/claude-agent.ts  ← unchanged
  * A later refactor can move the implementation under _adapters/claude/ if

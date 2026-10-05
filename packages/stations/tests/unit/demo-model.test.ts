@@ -1,5 +1,5 @@
 /**
- * Tests for the unified structured demo model (ADR 021 / REV-4 / F4) — the
+ * Tests for the unified structured demo model (D-07 / REV-4 / F4) — the
  * schema validator + the derived DEMO.md renderer (the single demo OUTPUT;
  * DEMO.html was retired in F4). Covers the rich structured sections: summary,
  * apiDiff, testEvidence, filesChanged.

@@ -1,5 +1,5 @@
 /**
- * Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): "the manifest's class
+ * Seam F6 half 1 (D-34, spec §5 item 8): "the manifest's class
  * is one the target flow declares it accepts — a flow registers its accepted
  * classes, and the pair is checked before spend."
  *

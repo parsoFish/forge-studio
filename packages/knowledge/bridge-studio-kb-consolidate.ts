@@ -261,7 +261,7 @@ function deferToNextTick(): Promise<void> {
 }
 
 /**
- * Exported (cli-side, uncapped — ADR 042) for the R4-19-F2 DEFECT-A fix:
+ * Exported (cli-side, uncapped — D-31) for the R4-19-F2 DEFECT-A fix:
  * the kb-cleanup `apply` route (apps/forge/ui-bridge.ts) must route its own
  * `runBrainConsolidateNow` dispatch through this SAME per-kbId queue the
  * `maintenance` op=consolidate route already uses — see `runBrainConsolidateNow`'s

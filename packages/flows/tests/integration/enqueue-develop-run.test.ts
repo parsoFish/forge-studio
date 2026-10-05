@@ -27,7 +27,7 @@ function manifest(overrides: Partial<InitiativeManifest> = {}): InitiativeManife
     cost_budget_usd: 25,
     phase: 'pending',
     origin: 'architect',
-    // ADR-040 rider (known-gaps §9): the dispatch boundary requires
+    // D-20 rider (known-gaps §9): the dispatch boundary requires
     // decomposition evidence — the specs back-ref is the normal case.
     specs: ['WI-1'],
     body: '# TOC injection\n\nAdd --write in-place TOC injection.',
@@ -133,7 +133,7 @@ test('enqueueDevelopRun: a stale resume_from is cleared when re-enqueueing for a
   });
 });
 
-test('enqueueDevelopRun: no decomposition evidence → not-planned (ADR-040 rider, known-gaps §9)', () => {
+test('enqueueDevelopRun: no decomposition evidence → not-planned (D-20 rider, known-gaps §9)', () => {
   withTmp((queueRoot) => {
     const m = manifest();
     delete m.specs;

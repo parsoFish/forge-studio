@@ -67,7 +67,7 @@ export interface InstallResult {
  *  `alreadyInstalled` answer would be a laundered false success, and an
  *  overwrite would destroy an unrelated file. A NAMED class so route
  *  callers can map it to 409 (id collision) without string-matching the
- *  message — the same explicit-error-contract shape ADR-042 blesses. */
+ *  message — the same explicit-error-contract shape D-31 blesses. */
 export class SkillIdOccupiedError extends Error {}
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });

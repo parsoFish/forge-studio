@@ -1120,7 +1120,7 @@ describe('serializeFlowDefinition', () => {
     assert.deepEqual(reloadedRest, origRest);
   });
 
-  it('persists node x/y positions across serialize → load (J3 / ADR-033)', () => {
+  it('persists node x/y positions across serialize → load (J3)', () => {
     const src = loadFlowDefinition(writeFixture('flow-xy-src.yaml', FLOW_FIXTURE));
     const positioned = {
       ...src,

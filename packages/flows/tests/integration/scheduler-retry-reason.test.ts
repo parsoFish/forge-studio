@@ -45,7 +45,7 @@ function writeFailureLog(logDir: string, mode: string, recoverable: boolean): st
   return logPath;
 }
 
-test('decideAutoRetry: in-flight manifest missing `class` (ADR 051) → reason names the parse failure, not a read failure', () => {
+test('decideAutoRetry: in-flight manifest missing `class` (D-34) → reason names the parse failure, not a read failure', () => {
   const { dir, paths } = setupQueue();
   try {
     // No `class:` line — parseFullManifest throws "manifest missing required

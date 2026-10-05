@@ -44,7 +44,7 @@ subpath instead of widening `"./*"` back open).
 
 ## What it owns
 
-Three scoped graphs ([ADR 018](../../docs/decisions/018-three-brain-model.md)): forge
+Three scoped graphs (SPEC §4): forge
 engineering, cross-cycle patterns, and one graph per managed project. Every per-KB read
 and write goes through **`KbBackend`** (`kb-backend.ts`) — `SPEC.md` §4, narrowed in M4
 to a guarantee that is true and asserted rather than one enforced nowhere. Cross-brain
@@ -58,11 +58,11 @@ pins each colliding URL to the entry that must claim it.
 ## What it does not own
 
 It does not decide **who may read a brain** — that is `kb-read-policy.ts` reporting a
-violation, and the caller's business ([ADR 010](../../docs/decisions/010-brain-first.md)
+violation, and the caller's business (SPEC §4
 as amended). It does not run sessions: the drain and brain-fix runners are a sessions
 kind, and the rows that still cross that line are listed in `_1.0/handoffs.md`, not
 hidden. It does not own project artifacts
-([ADR 035](../../docs/decisions/035-forge-owned-central-artifacts.md) puts Brain 3 in
+(SPEC §4 puts Brain 3 in
 this repo, under forge's ownership, not the managed project's).
 
 ## Crash and recovery

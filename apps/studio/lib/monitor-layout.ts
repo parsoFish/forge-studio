@@ -11,7 +11,7 @@
  * assignment (see that module's header — `orchestrator/dep-levels.ts` does
  * not exist).
  *
- * Contract notes (M7-1, ADR-031):
+ * Contract notes (M7-1, D-12):
  *  - Each hex carries `hexKind` ('phase' | 'wi') so the harness can count a
  *    deterministic per-PHASE node set (filter out fanOut WI expansion) and a
  *    per-WI node set independently.

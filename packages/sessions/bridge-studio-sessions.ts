@@ -8,15 +8,15 @@
  *     → { ok, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
  *         affordances, modelTier, terminal }
  *
- * W6-B3 (ADR-043 2026-08-15 amendment §1/§2) data-contract additions:
+ * W6-B3 (SPEC §5) data-contract additions:
  *   - `affordances` — `deriveSessionAffordances(descriptor, phase)`
  *     (packages/sessions/studio/session-kinds.ts), computed server-side from
  *     whichever phase table the descriptor carries (`turnSpec` for a real
  *     dispatchable kind, `panel` for a legacy kind's read-only twin) —
- *     "derived, not authored" (ADR-043 §1): the client renders what it is
+ *     "derived, not authored" (SPEC §5): the client renders what it is
  *     handed and never re-derives. A descriptor with neither table
  *     (architect, permanently bespoke — amendment §4) always yields `[]`.
- *   - `modelTier` — the session's own kickoff-selected tier (ADR-043
+ *   - `modelTier` — the session's own kickoff-selected tier (SPEC §5
  *     2026-08-15 amendment §3), read straight off `status.json.modelTier`
  *     (W6-B5 landed the write side: every `/start` route persists
  *     `resolveKickoffModelTier`'s validated `tier` there when the operator
@@ -573,7 +573,7 @@ export async function handleStudioSessionsRoutes(
         defaultStage: descriptor.defaultStage,
         turns,
         artifact,
-        // W6-B3 (ADR-043 2026-08-15 amendment §1/§2) — the derived affordance
+        // W6-B3 (SPEC §5) — the derived affordance
         // view for the CURRENT phase; see this file's header for the full
         // contract note. Computed unconditionally (never omitted) — a kind
         // with no turnSpec/panel (architect) yields `[]`, not a missing key.
@@ -584,7 +584,7 @@ export async function handleStudioSessionsRoutes(
         // control that writes into the session dir, and there is no session dir.
         // An empty array here is the honest answer, not a suppressed one.
         affordances: legacy ? [] : attachPendingQuestions(deriveSessionAffordances(descriptor, phase), sessionDir, phase),
-        // W6-B6 (ADR-043 2026-08-15 amendment §3) — see this file's header
+        // W6-B6 (SPEC §5) — see this file's header
         // note. Read directly off the already-parsed `statusParsed`, the
         // SAME realpath-guarded read every other field on this envelope
         // comes from; never a second, unguarded status read.

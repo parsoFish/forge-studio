@@ -1,5 +1,5 @@
 /**
- * R2-04-F1 (ADR-041) — the generic per-flow claimable enqueue.
+ * R2-04-F1 (D-23) — the generic per-flow claimable enqueue.
  *
  * Generalizes the "start development" trigger (enqueue-develop-run.ts, now a
  * delegate) so ANY target flow can be enqueued from a trigger: locate the
@@ -65,7 +65,7 @@ export type EnqueueFlowRunStatus =
    */
   | 'repoint-requires-confirm'
   /**
-   * Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the manifest's
+   * Seam F6 half 1 (D-34, spec §5 item 8): the manifest's
    * `class` is not one the target flow declares in its `accepts` — refused
    * before any spend. Nothing is written; the queued manifest is untouched.
    */
@@ -106,7 +106,7 @@ export type EnqueueFlowRunResult = {
  *   `confirmRepoint` → `repoint-requires-confirm` (W8-A3 / `flows-37`).
  *   Nothing is written; the queued manifest is untouched.
  * - forge-develop only: no decomposition evidence → `not-planned`
- *   (known-gaps §9 / ADR-040 rider — see enqueue-develop-run.ts).
+ *   (known-gaps §9 / D-20 rider — see enqueue-develop-run.ts).
  * - absent / malformed ids → `not-found`.
  * - a filesystem failure while writing → `error` (message in `detail`).
  *
@@ -173,7 +173,7 @@ export function enqueueFlowRun(
     return { status: 'already-running', initiativeId, detail: 'a cycle is already in-flight' };
   }
   // A cycle of the TARGET flow parked in ready-for-review is awaiting its gate
-  // (or the ADR-040 fix-loop drain owns it) — don't enqueue a sibling. A
+  // (or the D-20 fix-loop drain owns it) — don't enqueue a sibling. A
   // different flow's manifest there is a hand-off state: runnable, fall through.
   const reviewParkedPath = join(paths.readyForReview, file);
   if (existsSync(reviewParkedPath) && manifestFlowId(reviewParkedPath) === flowId) {
@@ -218,7 +218,7 @@ export function enqueueFlowRun(
     return { status: 'not-found', initiativeId, detail: err instanceof Error ? err.message : String(err) };
   }
 
-  // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the pair is checked
+  // Seam F6 half 1 (D-34, spec §5 item 8): the pair is checked
   // BEFORE SPEND, before this initiative is ever repointed/queued — "the
   // manifest's class is one the target flow declares it accepts". ONE
   // predicate (`flowAcceptsClass`), shared with `validateClaimable`'s own
@@ -244,7 +244,7 @@ export function enqueueFlowRun(
     /* unloadable flow — validateClaimable refuses it terminally at claim time */
   }
 
-  // known-gaps §9 (defense-in-depth, closed with ADR 040) — DEVELOP-specific:
+  // known-gaps §9 (defense-in-depth, closed with D-20) — DEVELOP-specific:
   // the dev-loop hard-fails on an empty WI dir, so dispatching an undecomposed
   // initiative at forge-develop wastes a cycle. Other flows (architect, reflect,
   // operator-authored) have no decomposition precondition. The evidence sources

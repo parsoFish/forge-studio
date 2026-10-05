@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * check-kb-ingest-affordance.mjs — no-ingest-affordance RATCHET (operator
- * decision 3, 2026-08-03 — docs/decisions/010-brain-first.md line 22,
+ * decision 3, 2026-08-03 — SPEC §4 "Ingest stays reflection-only",
  * docs/roadmaps/archive/R1-contract-componentry.md lines ~213-227: "Explicit
  * negative AC (decision 3): no ingest affordance anywhere in creation or
  * maintenance ... grep-level assert no UI route/action triggers ingest").
@@ -264,7 +264,7 @@ export function runCheck({ root = FORGE_ROOT } = {}) {
     console.error(`check-kb-ingest-affordance: FAIL (${violations.length} ingest affordance${violations.length === 1 ? '' : 's'} found — forbidden, operator decision 3)`);
     for (const v of violations) console.error(`  ✗ ${v}`);
     console.error('');
-    console.error('Ingest stays reflection-only (docs/decisions/010-brain-first.md). Remove the UI action / bridge dispatch arm / stray reference, or move it into the allowed descriptor-default files.');
+    console.error('Ingest stays reflection-only (SPEC §4). Remove the UI action / bridge dispatch arm / stray reference, or move it into the allowed descriptor-default files.');
     return 1;
   }
   console.log('check-kb-ingest-affordance: PASS — no ingest affordance in forge-ui, the bridge KB routes, stray reflector-ingest/DEFAULT_KB_INGEST references, or skills/*/SKILL.md composition.skills');

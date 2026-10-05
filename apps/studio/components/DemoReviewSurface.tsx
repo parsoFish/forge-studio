@@ -7,7 +7,7 @@
  * per-AC outcome) that the reviewer anchors W3C-annotation-style comments to.
  * The verdict (approve / send-back) is DERIVED over the comments — any blocking,
  * unresolved comment ⇒ send-back, mapping each concern to a GIVEN/WHEN/THEN that
- * the ADR-026 in-place drain runs in the SAME cycle (no requeue, same cycleId).
+ * the D-20 in-place drain runs in the SAME cycle (no requeue, same cycleId).
  *
  * The derived-verdict bar preserves the `data-component="verdict-form"` contract
  * (data-form-state / data-form-kind / data-action / data-initiative-id /

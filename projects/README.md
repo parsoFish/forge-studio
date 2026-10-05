@@ -30,7 +30,7 @@ walkthrough; in short:
 
 - `<project>/.forge/` — gitignored at the project level; forge writes work-item specs and per-project scratch here. **Exception:** `.forge/project.json` + `.forge/quality_gate_cmd` are *tracked* config (force-added past the ignore).
 - `<project>/.forge/work-items/` — populated by the project-manager skill.
-- `<project>/demo/<initiative-id>/` — the structured demo (`demo.json` + derived `DEMO.md`/`DEMO.html`), authored by the developer-unifier via the `demo` skill and committed **tracked** on the branch (ADR 021; there is no `.forge/demos/` shadow).
+- `<project>/demo/<initiative-id>/` — the structured demo (`demo.json` + derived `DEMO.md`/`DEMO.html`), authored by the developer-unifier via the `demo` skill and committed **tracked** on the branch (D-07; there is no `.forge/demos/` shadow).
 
 ## Multi-project orchestration
 

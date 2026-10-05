@@ -1,5 +1,5 @@
 /**
- * The generic session-affordance WRITE endpoint (W6-B4, ADR 043's 2026-08-15
+ * The generic session-affordance WRITE endpoint (W6-B4, SPEC §5 (2026-08-15)
  * amendment §1), carved out of `cli/bridge-studio-affordances.ts` by M4 row 37.
  *
  *   POST /api/studio/sessions/:kind/:sessionId/:affordance

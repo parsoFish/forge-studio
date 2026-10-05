@@ -1,5 +1,5 @@
 /**
- * Tests for packages/flows/bridge-hooks.ts — POST /api/hooks/:hookId (R2-04, ADR-041).
+ * Tests for packages/flows/bridge-hooks.ts — POST /api/hooks/:hookId (R2-04, D-23).
  *
  * Spins up the real bridge (startBridge, mirroring apps/forge/tests/integration/ui-bridge-sendback.test.ts)
  * against a temp forgeRoot with a fixture flow declaring a webhook trigger, and

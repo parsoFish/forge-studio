@@ -1,6 +1,6 @@
 /**
  * forge-mfv5.3.7 (operator ruling 2026-09-12) — DEV-LOOP-LEVEL pin for the
- * per-WI gate's env, alongside forge-mfv5.3.5 / ADR 051 decision 2's
+ * per-WI gate's env, alongside forge-mfv5.3.5 / D-34's
  * class-independent live-acceptance guard.
  *
  * Calls `buildWiQualityGate` (`packages/stations/phases/wi-quality-gate.ts`)

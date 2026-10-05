@@ -27,12 +27,12 @@ User principle 1 (verbatim): *"Avoid hand rolling solutions at all cost if there
 
 Concrete consequences in v2:
 
-- Agent runtime → Claude Agent SDK (ADR 001).
-- Developer loop → Ralph loop pattern (ADR 002).
-- Agents themselves → Claude Code skills (ADR 003).
-- Git/PR ops → `gh` CLI + `git worktree` (ADR 006).
+- Agent runtime → Claude Agent SDK (D-01).
+- Developer loop → Ralph loop pattern (SPEC §1).
+- Agents themselves → Claude Code skills (SPEC §1).
+- Git/PR ops → `gh` CLI + `git worktree` (D-02).
 - CI → GitHub Actions.
-- Wiki rendering → Obsidian (ADR 004).
+- Wiki rendering → Obsidian (SPEC §4).
 
 Test: when reviewing a proposed addition to v2, ask "is this re-inventing X that already exists?" If yes, find X. If no X exists, *then* hand-roll — minimally, with a clear single responsibility.
 

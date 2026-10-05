@@ -1,5 +1,5 @@
 /**
- * Claim-time validation for the scheduler (ADR-028 decision 8, M3-6).
+ * Claim-time validation for the scheduler (SPEC §2, M3-6).
  *
  * validateClaimable() is called in runOne BEFORE runCycle. It refuses claims
  * for three structural reasons:
@@ -56,7 +56,7 @@ export type ClaimValidationResult =
 
 /** How long a non-terminal refusal is skipped before the next claim attempt
  *  re-checks it. Mirrors the recovery sweep's own cadence (`recoverIntervalMs`
- *  default, ADR 012) rather than inventing a second number. */
+ *  default, D-05) rather than inventing a second number. */
 export const NON_TERMINAL_RECHECK_MS = 5 * 60_000;
 
 const _pendingRefusals = new Map<string, number>(); // key -> next re-check epoch ms
@@ -122,7 +122,7 @@ function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
  * @param initiativeId     - used for the spin-guard (log once per id)
  * @param projectRepoPath  - absolute path to the managed project repo
  * @param forgeRoot        - the forge install root (for skills/ + studio/flows/)
- * @param manifestClass    - the manifest's ADR 051 `class` — checked against the
+ * @param manifestClass    - the manifest's D-34 `class` — checked against the
  *                           resolved flow's `accepts` list (seam F6 half 1, spec
  *                           §5 item 8) once the flow itself loads and validates.
  * @param flowYamlPath     - absolute path to the flow definition the manifest's
@@ -191,7 +191,7 @@ export function validateClaimable(
       };
     }
 
-    // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): "the pair is
+    // Seam F6 half 1 (D-34, spec §5 item 8): "the pair is
     // checked before spend" — EVERY claim converges here, so this is the
     // authoritative check regardless of which door (or none — a mint or a
     // direct manifest write) queued the initiative. Terminal: a class the

@@ -389,7 +389,7 @@ export async function approveKbCleanup(
 // `CheckHealthStatus`/`CheckHealthEntry` moved to packages/knowledge/kb-lint-summary.ts
 // (forge-2am); `CheckHealthEntry` is re-imported above for the `KbHealth` type
 // below. The per-KB own-theme lens that used to live here with them is gone —
-// the full-scope scan covers every theme dir (ADR 035), so there is one lens.
+// the full-scope scan covers every theme dir (SPEC §4), so there is one lens.
 
 export type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
@@ -572,7 +572,7 @@ export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (F
  *
  * Scans every direct sub-directory of brain/ (the top-level brains — cycles,
  * forge-dev) AND every sub-directory of brain/projects/ (the central per-project
- * brains, ADR 035 — gitpulse, mdtoc, …). Without the second pass, project brains
+ * brains, SPEC §4 — gitpulse, mdtoc, …). Without the second pass, project brains
  * are invisible in Studio's KB graph even though the reflector writes to them.
  *
  * Sited here (rather than beside the other list-building helpers above) so
@@ -642,7 +642,7 @@ export function loadKbDescriptors(
   };
 
   // Both containment roots — brain/<id>/kb.yaml and brain/projects/<id>/kb.yaml
-  // (ADR 035) — come from the ONE enumeration in packages/knowledge/kb-sites.ts, shared with
+  // (SPEC §4) — come from the ONE enumeration in packages/knowledge/kb-sites.ts, shared with
   // the project roster's derived `kb` field (W7-A4), so the KB roster and the
   // project↔KB pairing can never see different descriptors. Each site gets
   // the identical guarded treatment — a fix that hardens only the primary

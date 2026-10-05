@@ -3,7 +3,7 @@
  * beads, promoteToQueue must be reachable in a REAL spawn) — end-to-end
  * wiring of the manifest ports `promoteToQueue` needs
  * (`@forge/sessions/interactive-finalizers.ts`'s `QueuePorts`), through
- * `cmdAgentRun`'s ADR-043 §3 turnSpec fork.
+ * `cmdAgentRun`'s SPEC §5 turnSpec fork.
  *
  * `@forge/flows` (rank 5) sits above `packages/sessions` (rank 4) AND
  * `packages/agents` (rank 3), so neither package may import

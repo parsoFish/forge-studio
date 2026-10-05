@@ -294,8 +294,8 @@ test('missing status.json throws a clear error', async () => {
   );
 });
 
-test('ADR-024: instructionsAgentSpec derives phase, tier (sonnet), and read-only tools from SKILL.md', () => {
-  // W7-C3 review (A-M10): the frontmatter is ADR-024's single source of
+test('SPEC §1: instructionsAgentSpec derives phase, tier (sonnet), and read-only tools from SKILL.md', () => {
+  // W7-C3 review (A-M10): the frontmatter is SPEC §1's single source of
   // intent, so it must AGREE with the phase the runner emits (sessions-kinds-25);
   // it still said `architect` while every event row said `instructions`.
   assert.equal(instructionsAgentSpec.phase, 'instructions');
@@ -308,7 +308,7 @@ test('ADR-024: instructionsAgentSpec derives phase, tier (sonnet), and read-only
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// SPEC §5 (wave-6 kickoff model-tier seam)
 // ---------------------------------------------------------------------------
 
 test('status.modelTier is honored: an operator-requested "opus" reaches queryFn as options.model', async () => {

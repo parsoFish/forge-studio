@@ -1,0 +1,26 @@
+{
+  "files": {
+    "CLAUDE.md": 21,
+    "docs/reference/request-path-sinks.md": 1,
+    "docs/roadmaps/archive/R1-contract-componentry.md": 55,
+    "docs/roadmaps/archive/R2-runnable-componentry.md": 61,
+    "docs/roadmaps/archive/R3-library-componentry.md": 19,
+    "docs/roadmaps/archive/R4-ootb-suite.md": 118,
+    "docs/roadmaps/archive/R5-hardening-operability.md": 17,
+    "docs/roadmaps/archive/R6-operator-experience.md": 15,
+    "docs/roadmaps/archive/R7-verification-infrastructure.md": 2,
+    "docs/roadmaps/archive/R8-distribution-release.md": 6,
+    "docs/roadmaps/archive/README.md": 44,
+    "docs/roadmaps/archive/overview.html": 13,
+    "packages/knowledge/tests/regression/kb-read-policy-guard.test.ts": 10,
+    "scripts/check-adr-index.mjs": 9,
+    "scripts/check-adr-index.test.ts": 6,
+    "scripts/check-adr-links.mjs": 13,
+    "scripts/check-adr-links.test.ts": 48,
+    "scripts/check-docs-shape.test.ts": 2,
+    "scripts/check-identity.test.ts": 6,
+    "scripts/check-stale-path-citations.mjs": 1,
+    "scripts/check-stale-path-citations.test.ts": 1
+  },
+  "total": 468
+}

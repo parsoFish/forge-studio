@@ -3,7 +3,7 @@
  * Bead forge-8vfn.6.10.6; reworked for M7-E row 205.
  *
  * `forge studio` supervises a forever-mode `forge serve` and claims every
- * eligible pending manifest on its own (ADR 011/031) — neither harness
+ * eligible pending manifest on its own (D-12) — neither harness
  * driver (`scripts/verify-cycle.mjs`, `scripts/stories/d12-demo-runs.mjs`)
  * spawns `forge serve` itself, so there is no child process whose stdout a
  * classifier can tail. `classifyCycleEventLog` reads the SAME structured

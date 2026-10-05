@@ -62,7 +62,7 @@ export {
 // bridge crash left wedged at 'applying'. Public because its one caller
 // (apps/forge/ui-bridge.ts, called once at startup) is cross-package.
 export { releaseInterruptedKbCleanupApplies, KB_CLEANUP_KIND_DIR } from './kb-drain-store.ts';
-// The seam itself (SPEC.md §4, ADR 018): every per-KB read and write goes
+// The seam itself (SPEC.md §4): every per-KB read and write goes
 // through `KbBackend`. M7-C KN1 — `@forge/sessions` is this seam's first
 // cross-package consumer, which is what makes it a public-door export rather
 // than an internal one; `getKbBackend`'s throwing twin is not added until a

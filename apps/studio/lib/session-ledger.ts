@@ -14,7 +14,7 @@
  * it genuinely IS a standalone run and already has a row. Joining every
  * session would list that work twice and inflate the total the operator reads
  * as their spend. So this joins exactly the sessions the run host never saw —
- * `runId === null`, the ADR-043 spine ones — and leaves the rest to the row
+ * `runId === null`, the SPEC §5 spine ones — and leaves the rest to the row
  * they already have.
  */
 import type { LedgerRow } from './history-ledger';

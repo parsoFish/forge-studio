@@ -1,6 +1,6 @@
 /**
  * Seeds a freshly created project's CENTRAL Brain-3 knowledge base
- * (`brain/projects/<id>/` — ADR 035) at project-creation time, so every
+ * (`brain/projects/<id>/` — SPEC §4) at project-creation time, so every
  * managed project starts with a valid, `forge brain lint`-clean, and
  * Studio-KB-graph-visible stub (REFINEMENT-PLAN Phase 5 §8 — "creation seeds
  * it"). Without this, a newly onboarded project has no queryable Brain 3 and
@@ -17,9 +17,8 @@
  *   - `profile.md`     — the machine-readable architecture profile planners
  *                         query (docs/reference/project-contract.md clause C4),
  *                         including a documented (inert, HTML-escaped)
- *                         example of the ADR 037 `forge:constraint` block
- *                         convention so project authors learn it from day one
- *                         (docs/decisions/037-compiled-wi-contracts.md item 1).
+ *                         example of the D-17 `forge:constraint` block
+ *                         convention so project authors learn it from day one.
  *   - `themes/README.md` — explains the reflector-owned theme-page format
  *                         (mirrors `brain/cycles/themes/README.md` one level
  *                         down); keeps the otherwise-empty `themes/` dir
@@ -60,7 +59,7 @@ function buildKbYaml(projectId: string): string {
     id: projectId,
     name: `${projectId} (project)`,
     binding: { kind: 'project', ref: projectId },
-    desc: `Per-project brain for ${projectId} — themes the reflector distils from each ${projectId} cycle (ADR 035, central forge-owned).`,
+    desc: `Per-project brain for ${projectId} — themes the reflector distils from each ${projectId} cycle (SPEC §4, central forge-owned).`,
     backend: 'filesystem',
     path: '',
   });
@@ -70,7 +69,7 @@ function buildProfileMd(projectId: string, name: string): string {
   return `# ${name} — project brain (Brain 3 profile)
 
 > The project's knowledge base, read by planners and reflectors through the
-> \`KbBackend\` seam. Forge-owned + CENTRAL (ADR-035) at
+> \`KbBackend\` seam. Forge-owned + CENTRAL (SPEC §4) at
 > \`brain/projects/${projectId}/\` — NOT in the managed project's repo.
 >
 > This is a scaffold stub written at project-creation time (REFINEMENT-PLAN
@@ -93,7 +92,7 @@ work items.
 TODO — load-bearing conventions (immutability, test strategy, dependency
 policy, ...) planners must encode into every work item.
 
-## Constraint blocks (ADR 037)
+## Constraint blocks (D-17)
 
 \`profile.md\` and any file under \`themes/\` can carry a machine-readable
 clause the wi-spec-compiler injects verbatim into every matching work item's
@@ -101,7 +100,7 @@ spec. Delimit a block with an HTML comment carrying a mandatory stable \`id:\`
 and an \`applies_to:\` selector (\`all\`, or comma-joined \`wi.<field>=<glob>\` /
 \`manifest.<field>=<glob>\` AND-terms — \`*\` is the only wildcard). Example,
 shown HTML-escaped so this stub does not itself register as a live
-constraint (see \`docs/decisions/037-compiled-wi-contracts.md\` item 1):
+constraint:
 
     &lt;!-- forge:constraint id: example-constraint applies_to: all --&gt;
     Verbatim markdown injected into every matching work item's spec.

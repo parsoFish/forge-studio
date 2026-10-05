@@ -2,7 +2,7 @@
  * forge-mfv5.2.6 — a RETURNING project through the real onboarding route.
  *
  * The bead's question: a project can have a forge-owned Brain 3
- * (`brain/projects/<name>/`, ADR 035) and a real `forge/history/<initiative-id>/`
+ * (`brain/projects/<name>/`, SPEC §4) and a real `forge/history/<initiative-id>/`
  * convention from prior merged forge initiatives, while carrying NO
  * `.forge/project.json` — trafficGame is the real case named in the bead.
  * Measured on 591f75a2: `checkProjectBrainSeedContainment` /

@@ -139,7 +139,7 @@ test('R1-06 WI-3 MAJOR 1 red-pin: GET health for a project KB reports the REAL c
 
   // Verdict: the health object's lintFlags must reflect those same 3 findings
   // — PLUS 6 more, all from the ONE full-scope scan now that it walks
-  // brain/projects/<id>/themes (M1-D, ADR 035). By hand, over this fixture's 3
+  // brain/projects/<id>/themes (M1-D, SPEC §4). By hand, over this fixture's 3
   // unlisted, near-identically-titled themes:
   //   3  checkProjectBrainIndexes — not listed in the project category index
   //   3  checkOrphans             — not reachable from INDEX.md or any index
@@ -388,7 +388,7 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     assert.ok(emptyHealth, `health object must be present, got ${JSON.stringify(emptyDetail.json)}`);
     const emptyByName = new Map(emptyHealth!.checks!.map((c) => [c.check, c]));
     // A project kb with 0 theme files has nothing for any of these to inspect.
-    // The scan walks its themes/ dir now (ADR 035) but reads no file out of
+    // The scan walks its themes/ dir now (SPEC §4) but reads no file out of
     // it, so every one of them must report 'n/a' — a check that opened nothing
     // has not earned a 'pass' over an empty set.
     const FORGE_THEME_CHECKS = [
@@ -446,7 +446,7 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     // proving this is a genuine per-check computation, not every check going
     // red together. For a project brain that verdict is
     // checkProjectBrainIndexes': it resolves the index in the project's OWN
-    // dir. checkIndexSync resolves it through the ADR 018 category→sub-wiki
+    // dir. checkIndexSync resolves it through the SPEC §4 category→sub-wiki
     // routing map (pattern→brain/cycles), which governs the forge brains
     // alone, so for this KB it is honestly 'n/a' — it would otherwise look for
     // this theme in brain/cycles/patterns.md and flag every project theme in
@@ -460,7 +460,7 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
 
     // checkCategoryScope is 'n/a' even though this KB has an own theme carrying
     // `category: pattern`: the category→sub-wiki routing rule is a three-brain
-    // (ADR 018) convention that governs ONLY the forge KBs (cycles/forge-dev),
+    // (SPEC §4) convention that governs ONLY the forge KBs (cycles/forge-dev),
     // so it is NOT in LINT_THEME_FILE_CHECKS. Reporting 'pass' here would be a
     // vacuous exempt-pass (lintThemeFiles skips the routing check for non-cycles
     // /forge-dev themes anyway) and reporting 'fail' would be the false-FAIL a

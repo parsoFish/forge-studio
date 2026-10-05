@@ -2,7 +2,7 @@
  * agent-scope-guard.ts — the shared mechanical write-scope guard for one-shot
  * agent pipelines (demo-agent, adversarial-review).
  *
- * ADR-036's lesson: behavioural rules an agent can read are rules it can route
+ * D-15's lesson: behavioural rules an agent can read are rules it can route
  * around; only orchestrator-owned checks count. The guard snapshots worktree
  * state before the spawn and diffs after it; any NEW or CHANGED path outside
  * the pipeline's allowed set is a hard scope violation.

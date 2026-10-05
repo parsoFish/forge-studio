@@ -7,7 +7,7 @@
  * unconditionally; and on a fenced turn `Bash` survived the allowedTools
  * strip — so an authoring/creation-agent turn (allowed-tools includes Bash,
  * fenced = true) could `printf x > /outside/root/file` and reach the
- * filesystem. ADR-043's own 2026-08-19 §3 stated it as the residual.
+ * filesystem. SPEC §5's own 2026-08-19 §3 stated it as the residual.
  *
  * Contract pinned here (RED at branch base):
  *   1. On a fenced turn `Bash` is stripped from `allowedTools` handed to the

@@ -151,7 +151,7 @@ function eventMetadata(event: Record<string, unknown>): Record<string, unknown> 
  *
  * Deliberately NOT a mapping from terminal event shapes onto each kind's phase
  * vocabulary: that would be a second, hand-kept copy of every kind's phase table
- * living outside `studio/session-kinds.yaml`, i.e. exactly the drift ADR-043's
+ * living outside `studio/session-kinds.yaml`, i.e. exactly the drift SPEC §5's
  * "derived, not authored" rule exists to prevent. What the log literally says is
  * what the operator gets.
  *

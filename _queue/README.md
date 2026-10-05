@@ -1,6 +1,6 @@
 # `_queue/` — Initiative Queue
 
-> File-based state machine for the unattended scheduler. See [ADR 011](../docs/decisions/011-unattended-scheduler.md).
+> File-based state machine for the unattended scheduler. See D-04.
 
 ## State machine
 
@@ -60,7 +60,7 @@ Both run again on a 5-min timer while the scheduler is up.
 
 - The **architect** (via Forge Studio) emits initiative manifests into `pending/`; `POST /api/runs` on the bridge enqueues a run from the UI.
 - `forge serve [--once]` — the unattended scheduler: claims, advances, recovers.
-- Forge Studio reads `_queue/*` counts and `in-flight/*` for the live view (there is no `forge status` CLI — the UI is the operator surface, [ADR 031](../docs/decisions/031-studio-consolidation.md)).
+- Forge Studio reads `_queue/*` counts and `in-flight/*` for the live view (there is no `forge status` CLI — the UI is the operator surface, D-12).
 - The architect and reflector skills, plus the scheduler and the operator verdict gate, move manifests through the state machine as part of their normal operation.
 
 ## Hand-edit caveat

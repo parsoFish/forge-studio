@@ -1,6 +1,6 @@
 /**
- * packages/flows/run-list-cache.ts — ADR-044 P1: a keyed memo of the single run
- * derivation (docs/decisions/044-read-path-memoization.md).
+ * packages/flows/run-list-cache.ts — D-27 P1: a keyed memo of the single run
+ * derivation.
  *
  * `packages/flows/run-model.ts::listRuns` walks every `_queue/<state>/*.md`
  * manifest and re-derives its full `Run` (phase statuses/meta/work items/
@@ -8,13 +8,13 @@
  * at seed scale, but `_queue/done/` grows without bound and a terminal run's
  * derivation never changes, so at roadmap scale `GET /api/runs` re-reads and
  * re-JSON-parses hundreds of MB of already-settled event logs per request
- * (measured 507 MB, ADR-044 context).
+ * (measured 507 MB, D-27 context).
  *
  * This module adds exactly ONE thing on top: a per-manifest memory-only
  * cache keyed off the manifest's and its events.jsonl's own identity — never
- * off time, counters, or queue state alone (ADR-044 rule 2). The DERIVATION
+ * off time, counters, or queue state alone (D-27). The DERIVATION
  * itself is untouched: a cache miss calls the exact same `aggregateRun` the
- * uncached path uses (ADR-044 rule 1), so `cachedListRuns` is a
+ * uncached path uses (D-27), so `cachedListRuns` is a
  * byte-identical drop-in for `listRuns`.
  *
  * KEY ASYMMETRY (deliberate, not an oversight): the two inputs are keyed
@@ -27,7 +27,7 @@
  *     under an mtime+size key and serve stale content. Hashing a KB-scale
  *     file is trivial next to the MB-scale events.jsonl parse this cache
  *     exists to avoid, so there is no reason to accept that collision risk.
- *   - `events.jsonl` stays `mtime`+`size`. It is APPEND-ONLY (ADR-008): size
+ *   - `events.jsonl` stays `mtime`+`size`. It is APPEND-ONLY (SPEC §3): size
  *     is monotonically non-decreasing for a given cycle, so a same-second
  *     collision would require rewriting the exact same byte count in place —
  *     a shape this file is never produced in. Hashing every events.jsonl on
@@ -39,7 +39,7 @@
  * invalidation off status instead of the inputs' own identity (the thing
  * rule 2 forbids).
  *
- * Fails open on any doubt (ADR-044 rule 4): a read/stat error on the
+ * Fails open on any doubt (D-27): a read/stat error on the
  * manifest, or anything other than a confirmed-absent (`ENOENT`) events
  * file, skips the cache entirely for that one manifest and falls through to
  * the same derivation `listRuns` would have produced uncached — a memo can
@@ -74,7 +74,7 @@ import type { Run } from './run-model.ts';
 // Mirrors packages/flows/run-model.ts::listRuns's own hardcoded state list
 // (that function duplicates it too, rather than deriving from
 // packages/flows/queue.ts — there is no exported "all states" constant there).
-// ADR-042/044 forbid adding a new orchestrator export for this pass, so this
+// D-31 / D-27 forbid adding a new orchestrator export for this pass, so this
 // list is kept in sync by hand with listRuns's identical literal.
 const QUEUE_STATES: readonly QueueState[] = [
   'pending',
@@ -96,7 +96,7 @@ let statImpl: StatFn = (path) => statSync(path);
 let readImpl: ReadFn = (path) => readFileSync(path, 'utf8');
 
 /** Test-only: inject a stat implementation (e.g. one that throws for a
- *  specific path) to exercise the ADR-044 rule-4 fail-open path on the
+ *  specific path) to exercise the D-27 rule-4 fail-open path on the
  *  events.jsonl fingerprint deterministically. Pass `null` to restore the
  *  real `statSync`. */
 export function _setStatImplForTest(fn: StatFn | null): void {
@@ -104,7 +104,7 @@ export function _setStatImplForTest(fn: StatFn | null): void {
 }
 
 /** Test-only: inject a manifest-read implementation (e.g. one that throws
- *  for a specific path) to exercise the ADR-044 rule-4 fail-open path on
+ *  for a specific path) to exercise the D-27 rule-4 fail-open path on
  *  the manifest hash deterministically. Pass `null` to restore the real
  *  `readFileSync`. */
 export function _setReadImplForTest(fn: ReadFn | null): void {
@@ -157,7 +157,7 @@ type CacheKey = {
 
 type CacheEntry = { key: CacheKey; run: Run };
 
-// Memory-only, dies with the process (ADR-044 rule 3) — no snapshot file, no
+// Memory-only, dies with the process (D-27) — no snapshot file, no
 // persisted format. Keyed by manifest path, which already encodes queue
 // state + initiative id. Bounded by cachedListRuns's own end-of-pass evict
 // step below (a manifest that transitions queue state, or is deleted, drops
@@ -167,7 +167,7 @@ const cache = new Map<string, CacheEntry>();
 /** Read the manifest's raw bytes once and hash them — the manifest half of
  *  the cache key. Any read failure (ENOENT race, permission error, …) is
  *  genuine doubt about the manifest itself, signaled via `error: true` so
- *  the caller fails open unconditionally (ADR-044 rule 4); there is no
+ *  the caller fails open unconditionally (D-27); there is no
  *  "confirmed absent" state for a manifest the way there is for events.jsonl
  *  — a manifest readdirSync just enumerated failing to read is always a
  *  race or a real error, never an expected shape. */
@@ -194,7 +194,7 @@ function statOrAbsentOrError(path: string): { fp: StatFingerprint | null; error:
 }
 
 /** Mirrors packages/flows/run-model.ts's private findNewestCycleId exactly
- *  (not exported; ADR-042/044 forbid a new orchestrator export for this one
+ *  (not exported; D-31 / D-27 forbid a new orchestrator export for this one
  *  call site) — needed to resolve the SAME events.jsonl path aggregateRun
  *  will read internally, for legacy manifests that carry no cycle_id. */
 function findNewestCycleId(root: string, initiativeId: string): string | null {
@@ -279,7 +279,7 @@ function deriveFresh(args: {
     });
   } catch {
     // Same degraded-Run constructor listRuns's own per-file catch calls
-    // (packages/flows/run-model.ts::makeDegradedRun, exported per ADR-042) —
+    // (packages/flows/run-model.ts::makeDegradedRun, exported per D-31) —
     // a corrupt or unreadable manifest yields the IDENTICAL degraded shape
     // instead of a hand-duplicated twin that can drift from it.
     const initiativeId = basename(manifestPath).replace(/\.md$/, '');
@@ -309,7 +309,7 @@ function deriveOneRun(args: {
   const eventsResult = resolveEventsFingerprint(forgeRoot, queueState, manifestResult.raw);
   if (eventsResult.error) {
     // A non-ENOENT stat failure on the events file is genuine doubt — never
-    // cache it, never treat it as "absent" (ADR-044 rule 4).
+    // cache it, never treat it as "absent" (D-27).
     return deriveFresh(args);
   }
 
@@ -343,7 +343,7 @@ export function cachedListRuns(forgeRoot: string, nowMs: number): Run[] {
 
   // Build the node/flow/agent mappings ONCE for the whole pass, exactly as
   // listRuns does internally, and hand them down via aggregateRun's
-  // additive-optional params (ADR-042 disclose-not-park) so a multi-manifest
+  // additive-optional params (D-31 disclose-not-park) so a multi-manifest
   // cold pass doesn't rebuild them per manifest.
   const nodeMapping = buildNodeMapping(forgeRoot);
   const flowNodeSets = buildFlowNodeSets(forgeRoot);

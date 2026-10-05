@@ -1,6 +1,6 @@
 /**
  * authorConstraintBlocks (R4-02-F5) — the onboarding agent authors a project's
- * locked-core constraints as a LIVE `forge:constraint` block (ADR-037) in the
+ * locked-core constraints as a LIVE `forge:constraint` block (D-17) in the
  * CENTRAL profile.md, so the plan agent (R4-05-F3) injects them verbatim into
  * every matching work item's spec.
  *
@@ -13,7 +13,7 @@
  * duplicate-id block fails loudly here, not silently at the next plan run.
  *
  * When the project declares no constraints source it is a no-op (authored: []):
- * an untagged profile still compiles under the ADR-037 default.
+ * an untagged profile still compiles under the D-17 default.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';

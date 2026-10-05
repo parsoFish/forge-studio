@@ -288,7 +288,7 @@ test('AT-1 authored onboard-shaped flow: loads through the real parse path, and 
   assert.equal(
     contractCheckNode!.agent,
     'contract-check',
-    'the gate node must ALSO carry agent:"contract-check" — declared dispatch (ADR-039), no privileged executor enum',
+    'the gate node must ALSO carry agent:"contract-check" — declared dispatch (SPEC §1), no privileged executor enum',
   );
   assert.equal(contractCheckNode!.gate, 'contract');
 

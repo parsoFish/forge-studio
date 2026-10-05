@@ -123,7 +123,7 @@ export type WriteRootCanUseTool = (
 /**
  * Build the `canUseTool` callback `runAgentTurn` installs at `options.canUseTool`
  * when `writeRoots` is non-empty. Synchronous decision, no operator pause —
- * see this file's header note on why this does NOT reopen ADR 020's ruling.
+ * see this file's header note on why this does NOT reopen R-05's ruling.
  */
 // Exported for direct unit tests (interactive-session.test.ts) — the
 // integration shape (a fake `queryFn` capturing `options.canUseTool`) is

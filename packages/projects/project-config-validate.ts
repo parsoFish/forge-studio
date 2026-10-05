@@ -136,11 +136,11 @@ export function parseTestProcess(value: unknown): TestProcess {
         throw new Error('project-config: `testProcess.acceptance.match` must be a non-empty string');
       }
       // Bead forge-mfv5.3.5: the project-wide flag moved to the class table
-      // (ADR 051 decision 2 as amended). Refused by name, whatever its value —
+      // (D-35). Refused by name, whatever its value —
       // a key the loader accepted and nothing read would look honoured.
       if (a.required !== undefined) {
         throw new Error(
-          "project-config: `testProcess.acceptance.required` is retired: whether an initiative must carry a live-acceptance work item is its change class's `acceptance` column (ADR 051 decision 2) — run `forge project migrate <project-id>` to delete it",
+          "project-config: `testProcess.acceptance.required` is retired: whether an initiative must carry a live-acceptance work item is its change class's `acceptance` column (D-35) — run `forge project migrate <project-id>` to delete it",
         );
       }
       let requiresEnv: string[] | undefined;

@@ -9,7 +9,7 @@ import { SessionMinted } from '@/components/studio/session/SessionMinted';
 import type { ProjectRoster } from '@/lib/use-project-roster';
 
 /**
- * ADR 020 — the operator's entry point into the in-UI architect. This is the
+ * The operator's entry point into the in-UI architect. This is the
  * ONE architect kickoff form (W7-B6: `/architect/new` and
  * `/sessions/architect/new` both render it — the two entries converge here);
  * forge never auto-starts the architect (preserves the

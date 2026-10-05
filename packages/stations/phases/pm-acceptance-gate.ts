@@ -1,6 +1,6 @@
 /**
  * Row 157 (bead forge-8vfn.8.1.45, ruling 1873) — the acceptance-gate
- * requirement told to the PM up front (ADR 051 decision 2, ONE source shared
+ * requirement told to the PM up front (D-34, ONE source shared
  * with the post-hoc gate), and the ONE bounded revise turn a violation earns
  * before quarantine. `runPmAcceptanceRevise` only runs the bounded spawn
  * itself; `project-manager.ts` (the caller) re-reads the revised set and puts
@@ -131,7 +131,7 @@ export type CompileStageResult = {
 };
 
 /**
- * ADR 037 (wi-spec-compiler, deterministic core) + A2b's `appendStandingAcs`,
+ * D-17 (wi-spec-compiler, deterministic core) + A2b's `appendStandingAcs`,
  * composed into ONE step so it can run TWICE on the SAME terms: once over the
  * PM's own decomposition (`project-manager.ts`'s first pass), and again over
  * the revised set a row-157 acceptance-gate turn produces. Both steps are

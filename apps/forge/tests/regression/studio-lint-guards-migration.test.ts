@@ -1,6 +1,6 @@
 /**
  * MIGRATION ACCEPTANCE TESTS (must be RED on today's code) — A3 and part of
- * C4 of the ADR-027-amendment-#2 `composition.hooks` → `composition.guards`
+ * C4 of the PR #76 (SPEC §1) `composition.hooks` → `composition.guards`
  * rename, both driven through the REAL `forge studio lint` entry point
  * (`runStudioLint`, `apps/forge/studio-lint.ts`) rather than a hand-rolled lint —
  * co-located here (not in `orchestrator/studio/`) because both need that
@@ -10,7 +10,7 @@
  *
  * REDIRECT (2026-08-04 peer review): the check does NOT live in `validate.ts`
  * as a new standalone function (the first draft's `validateLegacyHooksFrontmatter`
- * proposal was rejected). It mirrors the existing ADR-027/R2-04 precedent
+ * proposal was rejected). It mirrors the existing D-09/R2-04 precedent
  * already in this codebase — `parseFlowTrigger` fails loud on a stale `flow:`
  * key, no back-compat parsing. The contract: `loadAgentDefinition`
  * (`@forge/agents`) itself THROWS when a SKILL.md's
@@ -43,8 +43,7 @@
  * silently mis-read as guards, so a hard load-time throw was the correct,
  * maximally-loud guard for that specific window.
  *
- * WHY THE RULE ENDED: ADR-027's R3-03 amendment (docs/decisions/
- * 027-studio-object-model.md) says so explicitly — item 1 deletes the field,
+ * WHY THE RULE ENDED: SPEC §1's R3-03 amendment says so explicitly — item 1 deletes the field,
  * item 2 REINTRODUCES it with the library-hook meaning. The moment
  * `composition.hooks` is valid data again, "throw on any hooks: key" is not
  * a security rule any more, it is a rule that rejects a legitimate feature.

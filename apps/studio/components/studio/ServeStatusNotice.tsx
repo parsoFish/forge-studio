@@ -1,6 +1,6 @@
 /**
  * ServeStatusNotice — the ONE read-only line for "is `forge serve` actually
- * claiming work right now" (M7-E row 205, ADR 011/031, T1 ruling 1973mq).
+ * claiming work right now" (M7-E row 205, D-12, T1 ruling 1973mq).
  *
  * `forge studio` supervises `forge serve` directly and the operator has no
  * lifecycle control over it, so this renders NO button and nothing at all

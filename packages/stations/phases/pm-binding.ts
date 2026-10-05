@@ -1,7 +1,7 @@
 /**
  * PM invocation contract — system prompt + user prompt builders.
  *
- * ADR 024: the project-manager is now a declarative `PhaseAgentSpec` — the
+ * SPEC §1: the project-manager is now a declarative `PhaseAgentSpec` — the
  * orchestrator spawns it at the tier the spec declares, and the SKILL.md is
  * the single source of PM intent. The TS here is the binding layer: which
  * model tier, which tools, and (in `renderPmUserPrompt`) the dynamic per-cycle
@@ -21,14 +21,14 @@ import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('project-manager');
 
-/** Kept only for `PM_BRAIN_ACCESS` (ADR-010 platform policy) + PM_* test constants. */
+/** Kept only for `PM_BRAIN_ACCESS` (SPEC §4 platform policy) + PM_* test constants. */
 const CANONICAL_PM_DEFINITION = loadAgentDefinition(SKILL_PATH);
 
 export type PmAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit';
 export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
 /**
- * ADR 024 / M2-3: the project-manager spec derived from SKILL.md (single
+ * SPEC §1 / M2-3: the project-manager spec derived from SKILL.md (single
  * source). The orchestrator resolves the model from the tier declared in the
  * frontmatter.
  */
@@ -46,7 +46,7 @@ export const PM_MODEL = modelForSpec(pmAgentSpec);
 /**
  * M2-3: brainAccess from the CANONICAL project-manager SKILL.md frontmatter —
  * used by the phase runner's brain-first gate (a wi-contract-band-specific
- * policy, ADR-010, that stays keyed to the canonical declaration rather than
+ * policy, SPEC §4, that stays keyed to the canonical declaration rather than
  * the executing node's own def — see F4's own report on this coupling).
  * 'mandatory' fires the gate; 'advisory' does not.
  */
@@ -216,7 +216,7 @@ export type PmUserPromptInput = {
   northStar?: string;
   /**
    * Row 157 (ruling 1873): the class profile's acceptance-gate requirement,
-   * stated up front from the SAME data the post-hoc gate reads (ADR 051
+   * stated up front from the SAME data the post-hoc gate reads (D-34
    * decision 2 — one source, not a second copy of the rule). Absent when the
    * class's acceptance column is advisory, or the project declares no
    * live-acceptance tier.
@@ -243,7 +243,7 @@ export const BRAIN_CONTEXT_SECTION_HEADER = '## Brain context (pre-fetched by fo
  * Dynamic per-cycle briefing only: the initiative id, project name, paths,
  * the inlined project context block (load-bearing — prevents tooling
  * hallucination), and the language-derived gate recipe. All static operational
- * intent lives in SKILL.md (the system prompt), per ADR 024.
+ * intent lives in SKILL.md (the system prompt), per SPEC §1.
  *
  * S8/C23 caching intent: keeping dynamic data in the USER prompt (not the
  * system prompt) ensures the system prompt stays stable across invocations
@@ -273,7 +273,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     manifestBullet,
     `- Worktree: \`${input.worktreeRelPath}\` — your current working directory. All \`files_in_scope\` paths resolve here.`,
     `- Write work items to \`.forge/work-items/WI-<n>.md\` and the graph to \`.forge/work-items/_graph.md\`.`,
-    // ON-7 / ADR 015 2026-08-23: the split suffix, stated in the invocation as
+    // ON-7 / SPEC §3 2026-08-23: the split suffix, stated in the invocation as
     // well as in the skill, because the split is decided HERE (mid-decomposition)
     // and an id the contract rejects fails the whole pass.
     '- If you split a work item because it is too large, name the halves `WI-<n>a`, `WI-<n>b` (ONE lowercase letter — `WI-4a1` / `WI-4-a` / `WI-4A` are invalid) and CHAIN them: `WI-4b` must `depends_on` `WI-4a`. Split halves share the file they were split out of, so an unchained fan-out is a hidden-coupling violation.',

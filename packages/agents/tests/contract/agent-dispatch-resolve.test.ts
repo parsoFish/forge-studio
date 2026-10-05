@@ -119,7 +119,7 @@ test('resolveDispatchableAgent: the R4-02 onboarding-agent is dispatchable (both
 
 // ---------------------------------------------------------------------------
 // TWIN-REFUSAL PIN — resolveDispatchableAgent's existing interactive refusal
-// must stay BYTE-FOR-BYTE unchanged. ADR-043 §4: "resolveDispatchableAgent
+// must stay BYTE-FOR-BYTE unchanged. SPEC §5: "resolveDispatchableAgent
 // (orchestrator/agent-dispatch.ts:81) is UNCHANGED... Softening that refusal
 // is the single change that would break the boundary this whole design rests
 // on." This is a regression lock, not a characterization test: it exists
@@ -132,7 +132,7 @@ test('resolveDispatchableAgent: the R4-02 onboarding-agent is dispatchable (both
 test('TWIN-REFUSAL PIN: resolveDispatchableAgent refuses an interactive agent with the EXACT existing message, byte-for-byte', () => {
   // Kills: ANY edit to resolveDispatchableAgent's refusal wording, phrasing,
   // punctuation, or structure — including one made in the name of "cleaning
-  // up" after ADR-043 §4's deleted mirror. The exact literal below is
+  // up" after SPEC §5's deleted mirror. The exact literal below is
   // NOT derived from the source file; it is hand-transcribed from
   // `orchestrator/agent-dispatch.ts:88-91` at pin-authoring time, so a
   // future edit to that literal breaks this test rather than silently
@@ -222,7 +222,7 @@ test('NON-DISTURBANCE PIN: resolveDispatchableAgent still ACCEPTS a normal non-i
 test('COMPLEMENT PIN: over the REAL, live-loaded roster, resolveDispatchableAgent accepts a def IFF the shared interactivity predicate says it is NOT interactive', () => {
   // R4-23 (bead forge-4y7) rewrote this pin. It used to drive the deleted
   // `resolveInteractiveAgent` mirror as the second half of the comparison;
-  // with the mirror gone (it had zero production callers — see the ADR-043
+  // with the mirror gone (it had zero production callers — see the SPEC §5
   // amendment) the SAME property is asserted directly against the one shared
   // predicate both hosts were required to use, `agentCapabilityDescriptor(
   // def).interactive`. Nothing is weakened: the pin still kills an

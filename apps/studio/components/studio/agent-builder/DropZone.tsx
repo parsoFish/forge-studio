@@ -30,7 +30,7 @@ const ZONE_HINTS: Record<Kind, string> = {
   tool:  'drag tools here — CLIs and runtimes it can invoke',
   mcp:   'drag MCP servers here — structured data & action channels',
   guard: 'drag guards here — at minimum attach event-log for observability',
-  // Distinct vocabulary from guards on purpose (ADR-027 R3-03 amendment):
+  // Distinct vocabulary from guards on purpose (SPEC §1 R3-03 amendment):
   // composition.hooks holds library hook ids, composition.guards holds the
   // fixed platform dispatch-key set — they must never merge here either.
   hook:  'drag hooks here — lifecycle scripts this agent carries',

@@ -1,5 +1,5 @@
 /**
- * Tests for `validate-flow.ts`'s trigger DECLARATION rules (R2-04, ADR-041):
+ * Tests for `validate-flow.ts`'s trigger DECLARATION rules (R2-04, D-23):
  * which `on:` kinds exist, which are schema-reserved, and the `agent-complete`
  * / `projects:` requirements. The target, cron, webhook and shape rules are the
  * sibling `validate-flow-trigger-targets.test.ts`.
@@ -66,7 +66,7 @@ function makeAgentMap(...agents: AgentDefinition[]): ReadonlyMap<string, AgentDe
 }
 
 // ---------------------------------------------------------------------------
-// validateFlow — triggers (R2-04, ADR-041)
+// validateFlow — triggers (R2-04, D-23)
 // ---------------------------------------------------------------------------
 
 describe('validateFlow — trigger-kind', () => {
@@ -93,7 +93,7 @@ describe('validateFlow — trigger-kind', () => {
 describe('validateFlow — trigger-kind-reserved', () => {
   // T1 ruling (R2-08-F2 pin review): this case originally used `agent-complete`
   // as its "reserved kind" example. F2 ships that row as `status: 'shipped'`
-  // (ADR-027's R2-08 amendment), so that example now asserts the OPPOSITE of
+  // (D-10's R2-08 amendment), so that example now asserts the OPPOSITE of
   // the ratified design. T1 explicitly ruled that the T3 test-writer amends
   // this ONE pre-existing test itself (the implementer must not — editing the
   // tests that judge your own change is exactly what the immutable-gates
@@ -152,7 +152,7 @@ describe('validateFlow — trigger-kind-reserved after R2-08-F2 (agent-complete 
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F3 #1) — `pr-merged` / `issue-raised` flip
  * reserved → shipped (project-event kinds over the existing webhook
- * receiver, ADR-027's R2-08-F3). Mirrors the F2 block above exactly: RED for
+ * receiver, D-10's R2-08-F3). Mirrors the F2 block above exactly: RED for
  * the two newly-shipped kinds, green-on-arrival for the kinds that must stay
  * reserved (kills flipping the WHOLE registry instead of just these two rows).
  */
@@ -327,7 +327,7 @@ describe('validateFlow — trigger-projects (R2-08-F1)', () => {
 /**
  * ACCEPTANCE TESTS (T3, forge-f9g fix, W8-A1) — the R2-08 addendum
  * (2026-08-07) that made `projects:` unauthorable on `on: merged` is
- * WITHDRAWN (docs/decisions/027-studio-object-model.md, addendum dated
+ * WITHDRAWN (addendum dated
  * 2026-08-23). Scope is now enforced at a single structural choke point —
  * `decideTriggerProjectScope` (`packages/flows/flow-run-requests.ts`) —
  * consulted both by `drainFlowRunRequests` (the staged-request path) and by

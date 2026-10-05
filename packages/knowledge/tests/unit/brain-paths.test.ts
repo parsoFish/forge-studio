@@ -1,7 +1,7 @@
 /**
  * Unit tests for packages/knowledge/brain-paths.ts.
  *
- * ADR 035: per-project brain + history + contract are forge-owned and CENTRAL
+ * SPEC §4: per-project brain + history + contract are forge-owned and CENTRAL
  * (in the forge repo), not in the managed project's repo. Brain 3 lives at
  * `brain/projects/<name>/themes/`; history + contract at
  * `project-artifacts/<name>/`. `readArtifactRoot` is unchanged; the in-PR
@@ -39,7 +39,7 @@ function writeProjectJson(projectRoot: string, contents: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// projectBrainDir — Brain 3, central in the brain wiki (ADR 035)
+// projectBrainDir — Brain 3, central in the brain wiki (SPEC §4)
 // ---------------------------------------------------------------------------
 
 test('projectBrainDir: central brain/projects/<name> (no longer in the project repo)', () => {
@@ -49,7 +49,7 @@ test('projectBrainDir: central brain/projects/<name> (no longer in the project r
 });
 
 // ---------------------------------------------------------------------------
-// projectThemesDir — Brain 3 themes, central (ADR 035)
+// projectThemesDir — Brain 3 themes, central (SPEC §4)
 // ---------------------------------------------------------------------------
 
 test('projectThemesDir: central brain/projects/<name>/themes', () => {
@@ -59,7 +59,7 @@ test('projectThemesDir: central brain/projects/<name>/themes', () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveKbBrainDir — kbId → brain dir, with the project-brain fallback (ADR 035)
+// resolveKbBrainDir — kbId → brain dir, with the project-brain fallback (SPEC §4)
 // ---------------------------------------------------------------------------
 
 test('resolveKbBrainDir: top-level brain/<id> with a kb.yaml resolves directly', () => {
@@ -113,7 +113,7 @@ test('resolveKbBrainDir: top-level brain wins over a same-named project brain', 
 });
 
 // ---------------------------------------------------------------------------
-// Central demo-history / contract SSOT was specified by ADR 035 but never wired
+// Central demo-history / contract SSOT was specified by SPEC §4 but never wired
 // (zero callers) — removed. Guard against the dead scheme silently returning.
 // ---------------------------------------------------------------------------
 

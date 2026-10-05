@@ -57,7 +57,7 @@ function CriticFindings({ findings }: { findings: CompletenessCriticFinding[] })
 }
 
 /**
- * ADR 020 — the in-UI PLAN gate. Shows the PLAN.html in a `sandbox=""` iframe
+ * The in-UI PLAN gate. Shows the PLAN.html in a `sandbox=""` iframe
  * for reading. Approve is always enabled (no escalation gate). Send-back /
  * Reject are also available. There is no auto-approve.
  */

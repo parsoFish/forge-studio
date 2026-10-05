@@ -1,5 +1,5 @@
 /**
- * forge↔project contract preflight (US-4.1 / ADR-017).
+ * forge↔project contract preflight (US-4.1 / SPEC §6).
  *
  * Checks a project directory against the contract clauses derived empirically
  * from the trafficGame arc (brain theme `forge-project-onboarding-contract`;
@@ -129,7 +129,7 @@ function checkC4(dir: string, projectName: string, forgeRoot: string): ClauseRes
   const base = { clause: 'C4' as const, title: 'Machine-readable architecture context', hard: true };
   const roadmap = join(dir, 'roadmap.md');
   // roadmap.md is the project's own architecture context (stays in the project
-  // repo). Brain 3 is forge-owned + CENTRAL (ADR 035): brain/projects/<name>/profile.md.
+  // repo). Brain 3 is forge-owned + CENTRAL (SPEC §4): brain/projects/<name>/profile.md.
   const brainRel = `brain/projects/${projectName}/profile.md`;
   const brainProfile = join(projectBrainDir(forgeRoot, projectName), 'profile.md');
   const hasRoadmap = existsSync(roadmap);
@@ -139,7 +139,7 @@ function checkC4(dir: string, projectName: string, forgeRoot: string): ClauseRes
   }
   const missing: string[] = [];
   if (!hasRoadmap) missing.push('roadmap.md (in project root)');
-  if (!hasBrain) missing.push(`${brainRel} (forge-owned central project brain — Brain 3, ADR 035)`);
+  if (!hasBrain) missing.push(`${brainRel} (forge-owned central project brain — Brain 3, SPEC §4)`);
   return {
     ...base,
     pass: false,
@@ -169,7 +169,7 @@ function checkBrainStaleness(
     title: 'Brain freshness (themes cite live source paths)',
     hard: false,
   };
-  // Brain 3 is forge-owned + CENTRAL (ADR 035): brain/projects/<name>/themes/.
+  // Brain 3 is forge-owned + CENTRAL (SPEC §4): brain/projects/<name>/themes/.
   const themesDir = projectThemesDir(forgeRoot, projectName);
   if (!existsSync(themesDir)) {
     return { ...base, pass: true, detail: 'no project brain themes to check' };

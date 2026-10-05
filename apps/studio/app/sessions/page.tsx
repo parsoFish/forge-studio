@@ -76,7 +76,7 @@ export default function SessionsIndexPage() {
   // `cycle-list-changed` bridge-WS signal Home already refetches on (a
   // session kickoff/completion is exactly the event that changes the
   // in-flight set), debounced through the SAME `createDebouncedRefreshRuns`
-  // wrapper (ADR-044 P1) so a burst collapses into at most two round-trips.
+  // wrapper (D-27 P1) so a burst collapses into at most two round-trips.
   // No page-level poll, no new transport — one subscribe, mount-only,
   // mirroring `use-studio-home-data.ts`'s own wiring. A failed refetch
   // routes into the SAME error state the page already renders (`refresh`).

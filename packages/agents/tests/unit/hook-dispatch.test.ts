@@ -450,7 +450,7 @@ describe('sdkHooksForAgent: the hook exit code is enforced', () => {
 
 // ---------------------------------------------------------------------------
 // W8-B6 FIX-3 — the three failure modes map to three distinct descriptions.
-// Tested directly (ADR 042: a pure function with an explicit error contract
+// Tested directly (a pure function with an explicit error contract
 // may be exported for direct test) rather than through four real spawns, one
 // of which would make this suite wait out a real 30-second timeout to prove
 // one branch.

@@ -33,7 +33,7 @@ function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), 'forge-demo-checkpoint-'));
 }
 
-/** A minimally-valid WorkItem (ADR 015) — only the fields this check reads
+/** A minimally-valid WorkItem (SPEC §3) — only the fields this check reads
  *  (`work_item_id`, `acceptance_criteria`) vary per test. */
 function workItem(overrides: Partial<WorkItem> & { work_item_id: string }): WorkItem {
   return {

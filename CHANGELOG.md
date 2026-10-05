@@ -19,7 +19,7 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
 
 ### Added
 
-- **Nine packages and two apps** (M2–M4, [ADR 046](docs/decisions/046-package-layout-and-boundary-lint.md)):
+- **Nine packages and two apps** (M2–M4, [D-29](./DECISIONS.md)):
   `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ←
   flows ← stations ← factory ← apps/{forge, studio}` under npm workspaces, the
   allow-graph enforced by dependency-cruiser as a shrinking ratchet, per-package
@@ -31,11 +31,11 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
   through the assistant, and run the example factory to a merged PR from
   Studio. One script yields the verdict per beat, the clip and frames, and the
   tutorial or how-to page. Stories run on forge-owned fixture grounds (M7).
-- **A deletable example factory** (M5, [ADR 048](docs/decisions/048-deletable-example-factory.md)):
+- **A deletable example factory** (M5, [D-32](./DECISIONS.md)):
   no package imports `@forge/factory`; the assembly reaches it through one
   resolution seam that treats absence as supported, and a CI job proves the
   platform boots with the package removed.
-- **Change class and typed acceptance criteria** (M5, [ADR 051](docs/decisions/051-change-class-and-typed-acceptance-criteria.md)):
+- **Change class and typed acceptance criteria** (M5, [D-34](./DECISIONS.md)):
   a required `class: code | docs | config | infra` the architect sets and every
   work item inherits; an operator-authored class → gate-profile table; typed
   `{given, when, then}` criteria shared by architect, PM, review and PLAN.html.
@@ -48,17 +48,16 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
 - **`forge project reset` / Studio "Rebuild contract"** (M4–M5): regenerates a
   project's contract mechanisms from the current template, preserving its
   north star, instructions and secrets, with a drift report.
-- **Every operator interaction is a session kind** (M7, [ADR 043](docs/decisions/043-generic-interactive-surface.md)):
+- **Every operator interaction is a session kind** (M7, [SPEC §5](./SPEC.md)):
   the plan gate, verdict gate and reflection run through the one generic
   session panel with a finalizer; the second verdict-write path is gone.
 - **Demo evidence** (M7): story-derived demos, in-clip cinematography, media
   in the PR, and a no-delta control run.
-- **Studio supervises `forge serve`** (M7, [ADR 011](docs/decisions/011-unattended-scheduler.md),
-  [ADR 031](docs/decisions/031-studio-consolidation.md)): `forge studio` starts
+- **Studio supervises `forge serve`** (M7, [D-12](./DECISIONS.md)): `forge studio` starts
   one serve per forge root, restarts it with backoff, stops it once on exit and
   reports its state on `GET /api/health`; claimable work runs at once, with no
   scheduler lifecycle control anywhere.
-- **The one emergency halt** (M7, [ADR 011](docs/decisions/011-unattended-scheduler.md)):
+- **The one emergency halt** (M7, [D-03](./DECISIONS.md)):
   one Studio control, shown on every page while on, stops every new claim —
   queue claims, fix-loop re-entry and agent dispatches — while every active
   run finishes; the record survives restarts, and releasing it starts the
@@ -82,7 +81,7 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
   `--approve-spend`.
 - **Resume** keeps a halted attempt's work: `resume_from` gains `plan` and
   `pr-open`, and a resumed develop run rebases once at re-entry
-  ([ADR 019](docs/decisions/019-cycle-resume-from-unifier.md)).
+  ([D-06](./DECISIONS.md)).
 
 ### Removed
 

@@ -131,7 +131,7 @@ export function runStudioLint(root: string): StudioLintResult {
   }
 
   // Pre-load catalog guard ids for the agent composition/guard-unknown check
-  // below (ADR-027 R3-03 amendment) — mirrors the validModelIds block above.
+  // below (SPEC §1 R3-03 amendment) — mirrors the validModelIds block above.
   let validGuardIds: ReadonlySet<string> | undefined;
   {
     const catalogPathEarly = join(root, 'studio', 'catalog.yaml');
@@ -447,7 +447,7 @@ export function runStudioLint(root: string): StudioLintResult {
   }
 
   // Read-policy scan (R1-06, §5b below) also covers the central per-project
-  // brains (brain/projects/<id>/kb.yaml, ADR 035) — the ADR-010 amendment
+  // brains (brain/projects/<id>/kb.yaml, SPEC §4) — the SPEC §4
   // ratifies the guard walking BOTH brain/*/kb.yaml AND brain/projects/*/kb.yaml.
   // The R1-01 binding-ref / unique checks stay one-level-deep BY DESIGN (a
   // sandbox checkout may lack the projects a project binding points at, so
@@ -557,22 +557,22 @@ export function runStudioLint(root: string): StudioLintResult {
   }
 
   // ------------------------------------------------------------------
-  // 5b. KB read-policy guard (R1-06, ADR-010 amendment "R1-06 band-scoped
-  //     reviewer grant"). The asymmetric brain-read policy (ADR-010) forbids a
+  // 5b. KB read-policy guard (R1-06, SPEC §4 "R1-06 band-scoped
+  //     reviewer grant"). The asymmetric brain-read policy (SPEC §4) forbids a
   //     `dev-loop` OR `reviewer` reader grant on any NON-project KB binding,
   //     except the ONE ratified exception: a flow binding scoped to
   //     band:'review-band' may grant the reviewer an advisory read. This applies
   //     the pure `kbReadPolicyViolation` predicate (packages/knowledge/kb-read-policy.ts) to
   //     every real, loaded descriptor — the production wiring of a guard that
   //     previously ran only over tmpdir fixtures inside a test. Walks both brain
-  //     shapes (top-level + brain/projects/*), per the ADR-010 amendment.
+  //     shapes (top-level + brain/projects/*), per the SPEC §4.
   // ------------------------------------------------------------------
   const readPolicyKbs: KbDescriptor[] = [...loadedKbs];
   for (const p of projectKbPaths) {
     try {
       const kb = loadKbDescriptor(p);
       readPolicyKbs.push(kb);
-      // W7-FIX-A4 (W7A4-04): the ADR-035 root gets the SAME dir-name check —
+      // W7-FIX-A4 (W7A4-04): the SPEC §4 root gets the SAME dir-name check —
       // a mismatched per-project brain silently loses its derived project↔KB
       // binding, which is exactly the case this backstops.
       findings.push(...kbDirNameFindings(kb.id, p));
@@ -611,9 +611,9 @@ export function runStudioLint(root: string): StudioLintResult {
   //     production spawn site sets `options.tools`); `disallowed-tools` is
   //     the only field that actually removes the subagent-spawn tool from a
   //     skill's reach. Local to this file (not `orchestrator/studio/`) per
-  //     ADR 042 boundary 1/4 — its only production caller is this module.
+  //     its only production caller is this module.
   //     Covers BOTH the installed roster (`skills/`) and the OOTB starter
-  //     template tree (`studio/starters/agents/**`, ADR-033) — the latter is
+  //     template tree (`studio/starters/agents/**`, D-14) — the latter is
   //     the SOURCE those installs are copied from, and forge-6gv.18 shipped
   //     because only the roster half was ever scanned.
   // ------------------------------------------------------------------

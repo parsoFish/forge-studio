@@ -1,5 +1,5 @@
 /**
- * Tests for packages/flows/mint-triggered-initiative.ts (R2-04 / ADR-041).
+ * Tests for packages/flows/mint-triggered-initiative.ts (R2-04 / D-23).
  *
  * Minting a fresh initiative for a cron/webhook-originated flow-run request:
  * the target flow's `project` binding supplies the project, the initiative id
@@ -274,7 +274,7 @@ test('W8-F5: mintTriggeredInitiative REFUSES a target ref that is not a flow-id 
 });
 
 // ---------------------------------------------------------------------------
-// Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+// Seam F6 half 1 (D-34, spec §5 item 8, bead forge-8vfn.6.10.15):
 // the minted manifest's class follows the target flow's declaration.
 // ---------------------------------------------------------------------------
 

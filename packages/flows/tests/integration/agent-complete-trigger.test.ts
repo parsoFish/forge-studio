@@ -30,7 +30,7 @@
  *   `FlowTrigger` gains a REQUIRED per-kind config field for `on:
  *   'agent-complete'` rows: `agent: <slug>` — the source agent whose
  *   completion fires this row, matched by IDENTITY (never
- *   prefix/substring). This is ADR-041 §2's existing per-kind config-block
+ *   prefix/substring). This is D-23's existing per-kind config-block
  *   pattern (cron rows carry `schedule`/`concurrency`, webhook rows carry
  *   `webhook: {…}`) being exercised, not a new design decision — see T1's
  *   ruling on the first cut of this file, which pinned a fail-open contract
@@ -50,7 +50,7 @@
  * that nothing scans the flow roster for `on: agent-complete` declarations
  * and stages a request when a standalone run finishes. This is a genuine
  * design decision the T3 test-writer made under latitude (the ratified
- * ADR-027 R2-08 amendment does not specify the call site or function shape)
+ * D-10 R2-08 amendment does not specify the call site or function shape)
  * — flagged in the accompanying report for T1 to confirm or correct.
  *
  * Test #12 (harness-mode effect-set guard) lives in

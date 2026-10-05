@@ -1,5 +1,5 @@
 /**
- * Forge Studio — Run Derivation Helpers (M1-1, ADR-027/028). A DOOR, not the
+ * Forge Studio — Run Derivation Helpers (M1-1, D-09 / SPEC §2). A DOOR, not the
  * implementation (bead forge-8vfn.15 size split — see design.md): re-exports
  * status/cost/lineage/node-id.ts unchanged so every existing import resolves.
  */

@@ -36,7 +36,7 @@ export type SessionKindMeta = {
   agent: string;
   /** Where the operator starts one, or `null` for a kind with no direct
    *  kickoff surface. Architect keeps its bespoke native entry
-   *  (`/architect/new`, ADR-043 amendment §4 — never the generic form). */
+   *  (`/architect/new`, SPEC §5 — never the generic form). */
   kickoffHref: string | null;
 };
 

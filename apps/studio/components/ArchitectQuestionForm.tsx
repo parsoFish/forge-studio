@@ -17,7 +17,7 @@ import { postArchitectAnswers, type ArchitectQuestion } from '@/lib/bridge-clien
  *  one control per pending question for its generic `question-form`
  *  affordance (`components/studio/session/SessionInteractivePanel.tsx`).
  *  The parameterisation stays for both — architect is permanently bespoke
- *  (ADR-043 amendment §4), and any FUTURE bespoke kind would want the same
+ *  (SPEC §5), and any FUTURE bespoke kind would want the same
  *  interview-round UI. */
 export type QuestionFormSubmitFn = (input: {
   project: string;
@@ -26,7 +26,7 @@ export type QuestionFormSubmitFn = (input: {
 }) => Promise<{ ok: boolean; error?: string }>;
 
 /**
- * ADR 020 — renders a session kind's file-handoff interview round
+ * Renders a session kind's file-handoff interview round
  * (`questions.json`, the reflector's `StructuredQuestion` shape) as one
  * option-group per question. Every question must be answered before submit;
  * answers POST back to the kind's answer endpoint, which appends the round

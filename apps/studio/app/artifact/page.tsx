@@ -33,7 +33,7 @@
  *   type=reflection is the SOLE reflection surface — the interactive ReflectionGate
  *   (questions + freeform + submit) above the read-only ReflectionRenderer.
  *   The legacy /review/[cycleId] + /reflect/[cycleId] routes now redirect here
- *   (M7-3, ADR-031); the harness drives these moments on /artifact directly.
+ *   (M7-3, D-12); the harness drives these moments on /artifact directly.
  */
 
 import { useEffect, useState, useCallback, Suspense } from 'react';

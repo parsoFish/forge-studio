@@ -12,7 +12,7 @@
  * `AGENT_RUNNERS[id] ?? SESSION_KIND_RUNNERS[id]` resolution even though the
  * table is now EMPTY, because it is load-bearing in a way its size hides:
  * `packages/sessions/tests/contract/session-kinds-panel.test.ts` imports it and asserts it
- * gains no `kb-cleanup` key, which is the tripwire keeping ADR-043 §3's
+ * gains no `kb-cleanup` key, which is the tripwire keeping SPEC §5's
  * dispatch fork from re-opening the per-runner cap park, and `knownAgentIds`
  * derives the operator's usage line from the UNION of both tables so a ported
  * kind cannot go invisible (COMMON §15.77). Neither is this lane's to collapse.

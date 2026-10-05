@@ -2,10 +2,10 @@
  * `deriveFlowKickoff` — which launch surface a flow gets, read off its own
  * topology at save time (T1 ruling 167, bead `forge-8vfn.6.11.1`).
  *
- * THE DEFECT IT CLOSES. `FlowDefinition.kickoff` (ADR 027 Stage C) decides
+ * THE DEFECT IT CLOSES. `FlowDefinition.kickoff` (D-09 Stage C) decides
  * which launcher `/flows/<id>` renders — `idea` (the architect's NewIdeaBox),
  * `initiative-select` (the planned-initiative picker), `trigger-only` (none),
- * absent ⇒ the generic Start-Run picker (ADR 028). It was DECLARED-only: the
+ * absent ⇒ the generic Start-Run picker (SPEC §2). It was DECLARED-only: the
  * two seed flows carry a hand-written `kickoff:` block and the Studio flow
  * builder writes none, so every flow an operator built rendered
  * `data-kickoff-kind="generic"` and could not be launched from an idea however
@@ -35,7 +35,7 @@
  * and `FlowTrigger` rows are OUTBOUND dispatches (`forge-develop` fires the
  * reflector agent `on: merged`), so `triggers.length > 0` says nothing about
  * how this flow starts — deriving from it would mislabel `forge-develop`
- * itself. ADR 028's W7-C1 amendment records the same fact from the other end:
+ * itself. SPEC §2's W7-C1 amendment records the same fact from the other end:
  * the `trigger-only` example "is historical … no seed flow uses it today". A
  * branch that can never be true is decorative (§15.162), so there is no such
  * branch — the kind stays authorable in YAML and authoritative when present.

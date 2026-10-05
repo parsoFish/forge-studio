@@ -1,5 +1,5 @@
 /**
- * Pluggable notifications (per ADR 013). Default provider: desktop. Optional:
+ * Pluggable notifications. Default provider: desktop. Optional:
  * webhook. Adding a provider = drop a function in this file and dispatch on
  * config.
  */

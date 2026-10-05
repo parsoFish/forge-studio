@@ -1,5 +1,5 @@
 /**
- * strategy:range model routing across Claude tiers (M6-3, ADR-029).
+ * strategy:range model routing across Claude tiers (M6-3, SPEC §1).
  *
  * Pure, catalog-driven functions. No SDK / IO.
  *

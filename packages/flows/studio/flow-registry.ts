@@ -1,6 +1,6 @@
 /**
- * The Flow kind's registry — load, parse and serialize `flow.yaml` (ADR 027,
- * ADR 028 §1). Carved out of `orchestrator/studio/registry.ts` (Task 13, M4-flows):
+ * The Flow kind's registry — load, parse and serialize `flow.yaml` (D-09,
+ * SPEC §2). Carved out of `orchestrator/studio/registry.ts` (Task 13, M4-flows):
  * the package that owns the flow engine owns loading its definitions, the same
  * split the Agent kind took to `@forge/agents` and the
  * KB kind to `@forge/knowledge`.
@@ -34,7 +34,7 @@ import {
   loadYaml,
 } from '@forge/kernel';
 
-// ADR 051's four change classes as a runtime list, imported rather than
+// D-34's four change classes as a runtime list, imported rather than
 // hand-copied — same SSOT `@forge/factory/class-profiles.ts` reads
 // (`CHANGE_CLASSES`, `packages/flows/manifest.ts`). Both `accepts` (below)
 // and a trigger's `class` (parseFlowTrigger) are checked against this ONE
@@ -43,7 +43,7 @@ import { CHANGE_CLASSES } from '../manifest.ts';
 
 /**
  * The curated starter flow (plan → dev → review + verdict gate) the New-Flow
- * canvas seeds from (ADR-033). Returns null if absent so the builder falls back
+ * canvas seeds from. Returns null if absent so the builder falls back
  * to a blank canvas.
  */
 export function loadStarterFlow(forgeRoot: string): FlowDefinition | null {
@@ -91,12 +91,12 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
     throw new Error(`${file}: triggers[${index}] must be a mapping`);
   }
   const t = raw as Record<string, unknown>;
-  // R2-04 (ADR-041): the `target: {kind, ref}` shape replaced the legacy
+  // R2-04 (D-23): the `target: {kind, ref}` shape replaced the legacy
   // `flow: <id>` key one-shot — fail loud on a stale declaration rather than
   // guessing (no back-compat parsing; the seed files migrated in the same change).
   if ('flow' in t && !('target' in t)) {
     throw new Error(
-      `${file}: triggers[${index}] uses the retired "flow:" key — declare "target: { kind: flow, ref: <id> }" (ADR-041)`,
+      `${file}: triggers[${index}] uses the retired "flow:" key — declare "target: { kind: flow, ref: <id> }" (D-23)`,
     );
   }
   const rawTarget = t['target'];
@@ -142,7 +142,7 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
   // R4-09-F3: reflect mode. Preserve the raw string (do NOT coerce) so the
   // `trigger-mode` enum lint can reach + reject an invalid value.
   if (typeof t['mode'] === 'string') out.mode = t['mode'] as FlowTrigger['mode'];
-  // R2-08-F1 (ADR-027 amendment): `projects:` — fail LOUD on a malformed
+  // R2-08-F1 (D-10 amendment): `projects:` — fail LOUD on a malformed
   // declaration rather than silently coercing it away, unlike the lenient
   // per-kind blocks above. A silently-dropped/mis-shaped scope is exactly the
   // declared-data-fails-open antipattern this field exists to prevent, so
@@ -171,7 +171,7 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
   // a missing/malformed value rather than it silently meaning "fires for all".
   if (typeof t['agent'] === 'string') out.agent = t['agent'];
   if (typeof t['note'] === 'string') out.note = t['note'];
-  // Seam F6 half 1 (ADR 051 decision 4): preserve the raw string (do NOT
+  // Seam F6 half 1 (D-34): preserve the raw string (do NOT
   // coerce a bad value away) so `mintTriggeredInitiative` — the one reader
   // that has both this row AND the flow's `accepts` list in hand — can reach
   // and refuse it by name. Membership in `accepts` cannot be checked here:
@@ -191,7 +191,7 @@ export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {
   const costCeilingUsd = reqNumber(d, 'costCeilingUsd', flowYamlPath);
   const origin = reqString(d, 'origin', flowYamlPath);
 
-  // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): required,
+  // Seam F6 half 1 (D-34, spec §5 item 8): required,
   // non-empty — "a flow registers its accepted classes" is meaningless as an
   // optional/defaulted field, so a flow with no `accepts` fails to load
   // exactly like a flow with no `costCeilingUsd`, naming the flow and (for a

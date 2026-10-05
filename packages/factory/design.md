@@ -60,7 +60,7 @@ edge. The two demo-builder route tests that started the bridge live in
 **Delete this directory and `forge studio` still boots.** Not as a claim — as a
 test: `scripts/factory-deletable.mjs` removes the package in a scratch worktree,
 boots, and asserts the caller's own tree came back untouched. If a third seam
-ever appears, that proof fails by name, and it is meant to: ADR 048 makes the
+ever appears, that proof fails by name, and it is meant to: D-32 makes the
 seam set fixed and enumerated, so a third one is a decision somebody has to
 make out loud.
 

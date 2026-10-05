@@ -1,5 +1,5 @@
 /**
- * The class → gate-profile rules that observe a DECOMPOSED SET (ADR 051,
+ * The class → gate-profile rules that observe a DECOMPOSED SET (D-34,
  * T1 ruling 229 half A).
  *
  * `singleWiAllowed` is enforced as a GATE at the plan gate, on the initiative's

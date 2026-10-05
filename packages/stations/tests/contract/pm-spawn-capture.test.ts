@@ -21,7 +21,7 @@
  *    marker (a fresh controller is constructed every call; only ITS
  *    PRESENCE, not its identity, is a behavioural signal).
  *
- * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * Fixture-move note (SPEC §1 R3-03 amendment, `composition.hooks` →
  * `composition.guards`, 2026-08-04): `pm.json` moved by exactly one byte —
  * `hook` → `guard` at a single site — because `renderPmUserPrompt` (via
  * `pm-binding.ts`) reads the canonical `project-manager`

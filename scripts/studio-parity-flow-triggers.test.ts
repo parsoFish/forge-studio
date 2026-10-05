@@ -1,5 +1,5 @@
 /**
- * Parity check — ADR 046 boundary fix (`studio-beyond-contracts` edge 4:
+ * Parity check — D-29 boundary fix (`studio-beyond-contracts` edge 4:
  * `apps/studio/tests/contract/studio-client.test.ts` used to import
  * `packages/flows/studio/validate-triggers.ts`'s `checkFlowTriggers`
  * directly, which apps/studio tests may no longer do — see

@@ -6,8 +6,8 @@ That example is the **develop factory**: the pipeline that takes an idea
 through to a merged pull request. This page explains what its stations do,
 what each one reads and writes, and how each one is known to fail. It does
 not enumerate every field of every artifact — that's the job of
-[ADR 015](../decisions/015-work-item-format.md) (the work-item schema) and
-[ADR 051](../decisions/051-change-class-and-typed-acceptance-criteria.md)
+[SPEC §3](../../SPEC.md) (the work-item schema) and
+[D-34](../../DECISIONS.md)
 (the change-class and acceptance-criteria contract).
 
 ## Why one page, not five
@@ -15,7 +15,7 @@ not enumerate every field of every artifact — that's the job of
 The stations below used to have one reference-shaped page each — architect,
 brain, developer-loop, project-manager, reflection — under a now-retired
 `docs/phases/` directory. They're folded into one page here for
-the reason [ADR 048](../decisions/048-deletable-example-factory.md) gives for
+the reason [D-32](../../DECISIONS.md) gives for
 the package they live in: the develop factory is **data**, not framework —
 `@forge/factory` is deletable, and CI proves it by booting the bridge from a
 worktree with the package removed. Splitting one subject (what this one
@@ -49,7 +49,7 @@ word and the word from the file.
 
 The brain isn't a station on either flow; it's the knowledge substrate every
 station either **must** consult or is deliberately fenced off from, per the
-policy [ADR 010](../decisions/010-brain-first.md) states and
+policy [SPEC §4](../../SPEC.md) states and
 [`brain/forge-dev/themes/brain-read-policy.md`](../../brain/forge-dev/themes/brain-read-policy.md)
 restates positively after an earlier "every skill reads the brain first"
 mandate proved wrong:
@@ -68,8 +68,8 @@ stations don't, because their intent is already fully captured in the work
 item the planner wrote — re-deriving it from the brain would let a second,
 uncoordinated interpretation of the initiative into a station that's
 supposed to just build what the plan says
-([ADR 018](../decisions/018-three-brain-model.md);
-[ADR 035](../decisions/035-forge-owned-central-artifacts.md) for where
+([SPEC §4](../../SPEC.md);
+[SPEC §4](../../SPEC.md) for where
 Brain 3 physically lives).
 
 Every skill's own `brain-query` (`skills/brain-query/SKILL.md`) is the
@@ -84,8 +84,7 @@ orchestrator's own prompt-injected brain context was also empty
 *Interactive; the one station that blocks on a human.* Turns an operator's
 free-form idea into one or more queued initiatives, natively inside Forge
 Studio (`packages/sessions/kinds/architect.ts`; interview + PLAN gate render
-through the unified `/artifact` viewer — [ADR 031](../decisions/031-studio-consolidation.md),
-[ADR 020](../decisions/020-architect-in-ui.md)).
+through the unified `/artifact` viewer — [D-12](../../DECISIONS.md)).
 
 **Deliberately out of the flow's automatic path.** Nothing invokes the
 architect unattended; the operator types an idea, drives the interview,
@@ -97,7 +96,7 @@ manifest promote into `_queue/pending/`, where the scheduler picks it up.
 - **Outputs:** `PLAN.md` + `PLAN.html` (the review artifact); draft manifests
   under `manifests/`, not yet queued; on approve, one or more
   `_queue/pending/<initiative-id>.md` manifests. Frontmatter now carries the
-  ADR 051 fields — a required `class: code | docs | config | infra` and typed
+  D-34 fields — a required `class: code | docs | config | infra` and typed
   `acceptance_criteria: [{given, when, then}]` — alongside the older
   `iteration_budget` / `cost_budget_usd` caps (`@forge/contracts`'s
   `InitiativeManifest`). There's no separate `features[]` list: the PM
@@ -106,7 +105,7 @@ manifest promote into `_queue/pending/`, where the scheduler picks it up.
   awaiting-verdict → finalizing → committed` (`packages/sessions/kinds/architect.ts`).
   Each turn is bounded and file-checkpointed — the operator's think-time
   happens *between* turns, not inside a blocked session, so the session
-  survives a crash at any point ([ADR 012](../decisions/012-crash-recovery.md)).
+  survives a crash at any point ([D-05](../../DECISIONS.md)).
   An `exploring` stage runs once before drafting: it enumerates edge cases
   (dispositions `covered` /
   `needs-initiative` / `deferred` — nothing found may silently vanish) and
@@ -147,11 +146,11 @@ acceptance criteria to outcome-sized work items in one pass.
   worktree's HEAD; Brain 2 + Brain 3 (mandatory).
 - **Outputs:** one `.forge/work-items/WI-<n>.md` file per work item plus a
   `_graph.md` dependency graph (mermaid `graph TD`) — both formats locked by
-  [ADR 015](../decisions/015-work-item-format.md). Validated by
+  [SPEC §3](../../SPEC.md). Validated by
   `@forge/flows`'s `validateWorkItem` / `validateWorkItemSet` /
   `detectHiddenCoupling` (`packages/flows/work-item.ts`) before anything
   downstream trusts the set.
-- **Optional per-WI fields** (ADR 015 §3a, all omit-on-undefined):
+- **Optional per-WI fields** (SPEC §3, all omit-on-undefined):
   `quality_gate_cmd` (a per-WI gate override), `non_goals`,
   `verification_artifact`, and `creates` (which file a WI originates, feeding
   the one-creator-per-file rule). `demo_hook` is initiative-level only, never
@@ -247,7 +246,7 @@ validate, no retry to spend, and no coverage heuristic to fool. The
 spawned on any path.
 
 - **What the change class decides:** the class → gate-profile table
-  (`packages/factory/class-profiles.ts`, [ADR 051](../decisions/051-change-class-and-typed-acceptance-criteria.md))
+  (`packages/factory/class-profiles.ts`, [D-34](../../DECISIONS.md))
   selects the capture mode — `checkpoints` runs the project's declared
   `demoProcess` steps under orchestrated capture, `plan-output` records the
   merge gate's own output, `none` records the diff alone. A class that asks
@@ -266,7 +265,7 @@ spawned on any path.
 
 *Unattended; read-only by design.* Code identifier: `adversarial-review`
 (`skills/adversarial-review/SKILL.md`, `packages/stations/phases/adversarial-review.ts`).
-One agent, no execution tools ([ADR 036](../decisions/036-orchestrator-owned-gate-execution.md)
+One agent, no execution tools ([D-15](../../DECISIONS.md)
 stands: gates are orchestrator verbs, never agent-authored scripts). It
 critiques the diff the integrate station derived, producing a per-acceptance-criterion
 verdict plus a Why/What/How paragraph.
@@ -281,7 +280,7 @@ verdict plus a Why/What/How paragraph.
   file** — the reviewer is read-only in enforcement, not just in prompt.
 - **The findings are claims, not a gate by themselves.** The operator weighs
   them at the verdict gate; approving is what merges
-  ([ADR 021](../decisions/021-local-review-and-unified-demo.md): approve
+  ([D-07](../../DECISIONS.md): approve
   *is* the merge).
 
 ## Verdict — the gate before merge
@@ -347,7 +346,7 @@ Runs a four-stage retrospective:
 
 Per-field schemas (the work-item frontmatter, the manifest frontmatter, the
 `class → gate-profile` table's columns) are reference material, not
-explanation — they live in ADR 015 and ADR 051, and in the class-profiles
+explanation — they live in SPEC §3 and D-34, and in the class-profiles
 module's own comments. This page is the "why does the shape look like this"
 companion to those; if you need the exact field list, that's the wrong
 altitude for what's written here.

@@ -240,7 +240,7 @@ export async function handleArchitectRoutes(
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
       }
-      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // SPEC §5 (wave-6) — validated EARLY, against the real
       // architect SKILL.md envelope. See resolveKickoffModelTier's header.
       const modelTierResult = resolveKickoffModelTier('architect', body.modelTier);
       if (!modelTierResult.ok) {

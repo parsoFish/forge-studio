@@ -1,6 +1,6 @@
 /**
  * Pseudo-project session anchors — pure transfer from
- * `packages/sessions/session-resolution.ts` (ADR 046 boundary fix,
+ * `packages/sessions/session-resolution.ts` (D-29 boundary fix,
  * `studio-beyond-contracts` edge 3). A project id starting with "." is NEVER
  * a real registered project: `discoverProjects` (`@forge/kernel`)
  * categorically filters every dot-prefixed directory out of the real project

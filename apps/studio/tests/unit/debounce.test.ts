@@ -1,7 +1,7 @@
 /**
  * Tests for apps/studio/lib/debounce.ts — leading+trailing debounce used to
  * collapse bursts of `cycle-list-changed` WS messages into at most two
- * `fetchRuns()` calls (see debounce.ts's header for the ADR-044 rationale).
+ * `fetchRuns()` calls (see debounce.ts's header for the D-27 rationale).
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { debounceLeadingTrailing } from '../../lib/debounce.ts';

@@ -34,7 +34,7 @@ export interface ProjectGate {
   runPreflight(projectDir: string, opts?: PreflightOptions): PreflightReport;
 }
 
-/** What a band contributes: a pre/post band around the generic spawn (ADR 039). */
+/** What a band contributes: a pre/post band around the generic spawn (SPEC §1). */
 export type BandExecutor<Ctx> = (ctx: Ctx) => Promise<void>;
 
 export interface BandRegistry<Ctx> {

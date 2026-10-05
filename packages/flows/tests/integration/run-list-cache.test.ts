@@ -1,6 +1,6 @@
 /**
- * Tests for packages/flows/run-list-cache.ts — ADR-044 P1: a keyed memo of the single
- * run derivation (docs/decisions/044-read-path-memoization.md).
+ * Tests for packages/flows/run-list-cache.ts — D-27 P1: a keyed memo of the single
+ * run derivation.
  *
  * Structure mirrors packages/flows/tests/integration/run-model.test.ts's fixture helpers (small
  * synthetic manifests + events.jsonl trees on tmp dirs) since this module
@@ -139,7 +139,7 @@ test.beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Rule 1 (ADR-044): same derivation, byte-identical output
+// Rule 1 (D-27): same derivation, byte-identical output
 // ---------------------------------------------------------------------------
 
 test('cachedListRuns: byte-identical to listRuns, stable across repeat calls', () => {
@@ -161,7 +161,7 @@ test('cachedListRuns: byte-identical to listRuns, stable across repeat calls', (
 });
 
 // ---------------------------------------------------------------------------
-// Rule 2 (ADR-044): invalidation is the inputs' own metadata
+// Rule 2 (D-27): invalidation is the inputs' own metadata
 // ---------------------------------------------------------------------------
 
 test('cachedListRuns: unchanged manifest+events tree hits the cache — zero re-derivations', () => {
@@ -282,7 +282,7 @@ test('cachedListRuns: absent events file is its own key state — appearance of 
 });
 
 // ---------------------------------------------------------------------------
-// Rule 4 (ADR-044): fail open to the derivation on any doubt
+// Rule 4 (D-27): fail open to the derivation on any doubt
 // ---------------------------------------------------------------------------
 
 test('cachedListRuns: a stat error on the events.jsonl fingerprint fails open to the uncached derivation', () => {

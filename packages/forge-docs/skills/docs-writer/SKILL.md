@@ -37,7 +37,7 @@ budgets: {}
 ## Single responsibility
 
 Drive a single `docs`-class work item to completion via the Ralph loop
-pattern ([ADR 002](../../../../docs/decisions/002-ralph-loop-pattern.md)) —
+pattern (SPEC §1) —
 forge-docs's own agent for the `build` station, the same loop mechanism
 [`developer-ralph`](../../../../skills/developer-ralph/SKILL.md) drives for
 `forge-develop`. Thin wrapper: prepare loop input artifacts (`PROMPT.md`,

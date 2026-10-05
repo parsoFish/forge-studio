@@ -60,7 +60,7 @@ export type ProjectBrainCommitInput = {
 
 /**
  * R4-19 WI-1: pure `{cwd, prompt}` plan for the analyze-step agent turn.
- * Extracted from `runAnalyzeStep` (ADR-042 pure-function allowance) so the
+ * Extracted from `runAnalyzeStep` (D-31 pure-function allowance) so the
  * read-source branch is directly testable without spinning up an agent turn.
  *
  * Branches on `status.kb_binding`:
@@ -76,7 +76,7 @@ export type ProjectBrainCommitInput = {
  * R4-23 WI-3: the task PROSE for each branch (the `## Your task this turn:
  * …` header, the evidence-source sentence, the closing write-contract
  * instruction) now lives in `skills/project-brain-builder/SKILL.md` as the
- * `analyze-project-repo` / `analyze-cycle-archives` turn sections (ADR-024 —
+ * `analyze-project-repo` / `analyze-cycle-archives` turn sections (SPEC §1 —
  * SKILL.md is the single source of intent). This function selects the right
  * turn id per branch via `skillFor` and composes it with DATA ONLY (project
  * name, working directory, staging directory, operator guidance, and —
@@ -159,7 +159,7 @@ export function commitProjectBrain(args: {
   // commits into brain/<kbId> REGARDLESS of binding.kind — resolveKbBrainDir
   // (packages/knowledge/brain-paths.ts) resolves it there. Only the ORDINARY
   // project-brain flow (no hand-off, kbId === status.project, a real project)
-  // targets the central per-project brain brain/projects/<project> (ADR 035).
+  // targets the central per-project brain brain/projects/<project> (SPEC §4).
   //
   // SEC-04: `kbId` is request-derived (either `status.project` or a
   // descriptor's own id) — it rides as its OWN guarded segment against the

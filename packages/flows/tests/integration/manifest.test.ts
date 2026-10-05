@@ -270,7 +270,7 @@ test('validateManifest: rejects an unrecognised origin', () => {
   assert.ok(errors.some((e) => /origin must be one of/i.test(e)), errors.join('; '));
 });
 
-test('ADR 019: resume_from round-trips and is omitted when absent', () => {
+test('D-06: resume_from round-trips and is omitted when absent', () => {
   // Absent → not serialised.
   const plain = serializeManifest(fixture());
   assert.ok(!/resume_from:/.test(plain), 'resume_from should be absent by default');
@@ -281,12 +281,12 @@ test('ADR 019: resume_from round-trips and is omitted when absent', () => {
   assert.match(resuming, /resume_from: integrate/);
   assert.equal(parseManifest(resuming).resume_from, 'integrate');
 
-  // ADR 026: the retired 'developer' resume value is dropped on parse (undefined).
+  // D-20: the retired 'developer' resume value is dropped on parse (undefined).
   const legacy = `---\ninitiative_id: INIT-2026-05-04-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-05-04T18:00:00Z'\niteration_budget: 50\ncost_budget_usd: 25\nclass: code\nphase: pending\norigin: architect\nresume_from: developer\n---\n# x\n`;
   assert.equal(parseManifest(legacy).resume_from, undefined);
 });
 
-test('ADR 028 / J5: flow_id round-trips and is omitted when absent', () => {
+test('SPEC §2 / J5: flow_id round-trips and is omitted when absent', () => {
   // Absent → not serialised, parses to undefined (legacy manifests).
   const plain = serializeManifest(fixture());
   assert.ok(!/flow_id:/.test(plain), 'flow_id should be absent by default');
@@ -329,7 +329,7 @@ test('readManifestFlowId: reads flow_id from a file, null on missing/absent/unpa
   }
 });
 
-test('ADR 026: cycle_id round-trips and is omitted when absent', () => {
+test('D-20: cycle_id round-trips and is omitted when absent', () => {
   // Absent → omit-on-undefined (frontmatter unchanged for legacy manifests).
   const plain = serializeManifest(fixture());
   assert.doesNotMatch(plain, /cycle_id:/);
@@ -341,7 +341,7 @@ test('ADR 026: cycle_id round-trips and is omitted when absent', () => {
   assert.equal(parseManifest(withId).cycle_id, '2026-06-07T10-00-00_INIT-2026-05-04-x');
 });
 
-test('ADR 026: persistManifestCycleId anchors once; readManifestCycleId reads it back', () => {
+test('D-20: persistManifestCycleId anchors once; readManifestCycleId reads it back', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cycleid-'));
   try {
     const p = join(dir, 'm.md');
@@ -363,7 +363,7 @@ test('ADR 026: persistManifestCycleId anchors once; readManifestCycleId reads it
   }
 });
 
-test('ADR 019 (R4-10-F6): persistManifestResumeFromIntegrate stamps the resume marker (crash recovery)', () => {
+test('D-06 (R4-10-F6): persistManifestResumeFromIntegrate stamps the resume marker (crash recovery)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-resume-'));
   try {
     const p = join(dir, 'm.md');
@@ -485,7 +485,7 @@ test('R4-05-F2: persistManifestSpecs writes then re-reads the list, overwrites o
   }
 });
 
-// ---------- ADR 040: send-back loop (resume_from: 'develop', review_rounds, persistManifestSendBack) ----------
+// ---------- D-20: send-back loop (resume_from: 'develop', review_rounds, persistManifestSendBack) ----------
 
 function frontmatterWith(field: string, raw: string): string {
   return [
@@ -506,31 +506,31 @@ function frontmatterWith(field: string, raw: string): string {
   ].join('\n');
 }
 
-test('ADR 040: resume_from accepts \'develop\' (send-back re-entry) and round-trips', () => {
+test('D-20: resume_from accepts \'develop\' (send-back re-entry) and round-trips', () => {
   const resuming = serializeManifest({ ...fixture(), resume_from: 'develop' });
   assert.match(resuming, /resume_from: develop/);
   assert.equal(parseManifest(resuming).resume_from, 'develop');
 });
 
-test('ADR 040: resume_from rejects unrecognised values on parse (dropped to undefined)', () => {
+test('D-20: resume_from rejects unrecognised values on parse (dropped to undefined)', () => {
   const md = frontmatterWith('resume_from', 'bogus');
   assert.equal(parseManifest(md).resume_from, undefined);
 });
 
-test('ADR 040: review_rounds round-trips through serialize -> parse', () => {
+test('D-20: review_rounds round-trips through serialize -> parse', () => {
   const m: InitiativeManifest = { ...fixture(), review_rounds: 3 };
   const serialised = serializeManifest(m);
   assert.match(serialised, /review_rounds: 3/);
   assert.equal(parseManifest(serialised).review_rounds, 3);
 });
 
-test('ADR 040: review_rounds is absent by default and omitted on serialize', () => {
+test('D-20: review_rounds is absent by default and omitted on serialize', () => {
   const plain = serializeManifest(fixture());
   assert.doesNotMatch(plain, /review_rounds/);
   assert.equal(parseManifest(plain).review_rounds, undefined);
 });
 
-test('ADR 040: parseManifest drops invalid review_rounds values (negative, non-numeric, non-integer)', () => {
+test('D-20: parseManifest drops invalid review_rounds values (negative, non-numeric, non-integer)', () => {
   assert.equal(parseManifest(frontmatterWith('review_rounds', '-1')).review_rounds, undefined);
   assert.equal(parseManifest(frontmatterWith('review_rounds', 'x')).review_rounds, undefined);
   assert.equal(parseManifest(frontmatterWith('review_rounds', '1.5')).review_rounds, undefined);
@@ -550,7 +550,7 @@ test('validateManifest: rejects review_rounds that is not a non-negative integer
   assert.equal(validateManifest(fixture()).filter((e) => /review_rounds/i.test(e)).length, 0);
 });
 
-test('ADR 040: persistManifestSendBack stamps resume_from:develop + increments review_rounds from a fresh manifest', () => {
+test('D-20: persistManifestSendBack stamps resume_from:develop + increments review_rounds from a fresh manifest', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
   try {
     const p = join(dir, 'm.md');
@@ -572,7 +572,7 @@ test('ADR 040: persistManifestSendBack stamps resume_from:develop + increments r
   }
 });
 
-test('ADR 040: persistManifestSendBack overwrites a stale resume_from:integrate crash-recovery stamp — an operator send-back supersedes it', () => {
+test('D-20: persistManifestSendBack overwrites a stale resume_from:integrate crash-recovery stamp — an operator send-back supersedes it', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
   try {
     const p = join(dir, 'm.md');
@@ -586,7 +586,7 @@ test('ADR 040: persistManifestSendBack overwrites a stale resume_from:integrate 
   }
 });
 
-test('ADR 040: persistManifestSendBack throws (not best-effort) when the manifest file is missing', () => {
+test('D-20: persistManifestSendBack throws (not best-effort) when the manifest file is missing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
   try {
     assert.throws(() => persistManifestSendBack(join(dir, 'nope.md')));
@@ -596,7 +596,7 @@ test('ADR 040: persistManifestSendBack throws (not best-effort) when the manifes
 });
 
 // ---------------------------------------------------------------------------
-// ADR 051 — `class` and typed `acceptance_criteria`
+// SPEC §3 — `class` and typed `acceptance_criteria`
 //
 // WHICH WRONG IMPLEMENTATION EACH TEST KILLS is named per test. The defect
 // being closed is declared-data-fails-open: the shape these replace was prose
@@ -604,7 +604,7 @@ test('ADR 040: persistManifestSendBack throws (not best-effort) when the manifes
 // rather than an error, so review could not return a verdict on it.
 // ---------------------------------------------------------------------------
 
-test('ADR 051: class and acceptance_criteria round-trip through serialize → parse', () => {
+test('SPEC §3: class and acceptance_criteria round-trip through serialize → parse', () => {
   const m = fixtureWith({
     class: 'docs',
     acceptance_criteria: [
@@ -617,13 +617,13 @@ test('ADR 051: class and acceptance_criteria round-trip through serialize → pa
   assert.deepEqual(round.acceptance_criteria, m.acceptance_criteria);
 });
 
-test('ADR 051: a manifest with no `class` is a parse ERROR — kills "absent means code"', () => {
+test('D-34: a manifest with no `class` is a parse ERROR — kills "absent means code"', () => {
   const withoutClass = serializeManifest(fixture()).replace(/^class: .*\n/m, '');
   assert.doesNotMatch(withoutClass, /^class:/m, 'the fixture must actually be missing the field');
   assert.throws(() => parseManifest(withoutClass), /missing required field: class/);
 });
 
-test('ADR 051: an unknown class is a validateManifest error naming the four — kills "any string passes"', () => {
+test('D-34: an unknown class is a validateManifest error naming the four — kills "any string passes"', () => {
   const m = { ...fixture(), class: 'chore' as unknown as InitiativeManifest['class'] };
   const errors = validateManifest(m);
   assert.ok(
@@ -632,7 +632,7 @@ test('ADR 051: an unknown class is a validateManifest error naming the four — 
   );
 });
 
-test('ADR 051: a malformed acceptance criterion is an ERROR NAMING ITS INDEX — kills "skip what does not parse"', () => {
+test('SPEC §3: a malformed acceptance criterion is an ERROR NAMING ITS INDEX — kills "skip what does not parse"', () => {
   const raw = serializeManifest(fixture()).replace(
     /^acceptance_criteria: \[\]\n/m,
     'acceptance_criteria:\n  - given: ok\n    when: ok\n    then: ok\n  - given: ok\n    when: ok\n',
@@ -644,7 +644,7 @@ test('ADR 051: a malformed acceptance criterion is an ERROR NAMING ITS INDEX —
   );
 });
 
-test('ADR 051: an EMPTY when is legal, an empty given or then is not — a criterion may lack a trigger, never a precondition or an expectation', () => {
+test('D-34: an EMPTY when is legal, an empty given or then is not — a criterion may lack a trigger, never a precondition or an expectation', () => {
   const ok = serializeManifest(fixture()).replace(
     /^acceptance_criteria: \[\]\n/m,
     "acceptance_criteria:\n  - given: a state\n    when: ''\n    then: an expectation\n",
@@ -657,7 +657,7 @@ test('ADR 051: an EMPTY when is legal, an empty given or then is not — a crite
   assert.throws(() => parseManifest(bad), /acceptance_criteria\[0\]\.given must be a non-empty string/);
 });
 
-test('ADR 051: acceptance_criteria that is not a list is an error, not an empty list — kills "coerce anything"', () => {
+test('SPEC §3: acceptance_criteria that is not a list is an error, not an empty list — kills "coerce anything"', () => {
   const raw = serializeManifest(fixture()).replace(
     /^acceptance_criteria: \[\]\n/m,
     'acceptance_criteria: "given X when Y then Z"\n',

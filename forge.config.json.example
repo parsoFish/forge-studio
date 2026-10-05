@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-machine forge config (ADR 009). Copy to forge.config.json (gitignored) and edit. All fields optional — defaults apply when absent.",
+  "_comment": "Per-machine forge config. Copy to forge.config.json (gitignored) and edit. All fields optional — defaults apply when absent.",
 
   "projectsDir": "./projects",
 
@@ -15,13 +15,13 @@
   },
 
   "review": {
-    "_comment": "R4-08-F2 (ADR-040): review send-back loop bounds. Either cap exhausting parks the initiative needs-operator.",
+    "_comment": "R4-08-F2 (D-20): review send-back loop bounds. Either cap exhausting parks the initiative needs-operator.",
     "maxSendBackRounds": 6,
     "maxTotalFixWorkItems": 24
   },
 
   "triggers": {
-    "_comment": "R2-04 (ADR-041): budgets stamped on initiatives MINTED by external triggers (cron/webhook — no architect sized them). Conservative on purpose; an unattended fire must not carry architect-scale spend authority.",
+    "_comment": "R2-04: budgets stamped on initiatives MINTED by external triggers (cron/webhook — no architect sized them). Conservative on purpose; an unattended fire must not carry architect-scale spend authority.",
     "defaultCostBudgetUsd": 10,
     "defaultIterationBudget": 30
   }

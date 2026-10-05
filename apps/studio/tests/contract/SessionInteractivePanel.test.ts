@@ -1,7 +1,6 @@
 /**
  * DOM regression tests for `SessionInteractivePanel.tsx` (W6-B6 — the
- * generic interaction panel, ADR-043 docs/decisions/043-generic-
- * interactive-surface.md 2026-08-15 amendment §1).
+ * generic interaction panel, SPEC §5).
  *
  * Mirrors `SessionAuthoringPanel.test.ts`'s / `SessionCleanupPanel.test.ts`'s
  * own pattern: renders the REAL component via `react-dom/server`'s
@@ -40,7 +39,7 @@ function render(props: {
       // W6-B8 — every existing call site below predates `events`/`terminal`;
       // defaulted here (not in the component, which keeps both required —
       // mirrors `phase`) so this file's pre-existing tests need no mechanical
-      // per-call-site update. `terminal: false` matches the ADR-043 default
+      // per-call-site update. `terminal: false` matches the SPEC §5
       // reading of an affordance-bearing/working session; individual tests
       // below override it to exercise the ActivityLog gate itself.
       events: [],
@@ -764,7 +763,7 @@ test('W8-B3 (sessions-kinds-06): a verdict whose row requires NOTHING renders no
   expect(html).not.toContain('SKILL.md or hook.yaml');
 });
 
-// ADR 046 (`studio-beyond-contracts`): this used to derive `verdict` from
+// D-29 (`studio-beyond-contracts`): this used to derive `verdict` from
 // the live registry via `loadSessionKinds`/`deriveSessionAffordances`
 // (packages/sessions/studio/session-kinds*.ts), which apps/studio tests may
 // no longer import. Hand-built below instead, this file's own convention

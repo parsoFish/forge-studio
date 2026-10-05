@@ -298,7 +298,7 @@ test("runOne (a'): resuming a preserved worktree (resume_from) is never refused,
       pushAbandonedBranch(repo, branch);
 
       // A preserved worktree from an earlier entry of THIS SAME attempt
-      // (ADR 019) — decideWorktreeStrategy must read this as 'reuse'.
+      // (D-06) — decideWorktreeStrategy must read this as 'reuse'.
       worktreeAdd({ projectRepoPath: repo, branch, worktreesRoot, initiativeId });
 
       const manifestPath = writeManifest(paths, initiativeId, repo, { resumeFrom: 'develop' });

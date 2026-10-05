@@ -1,5 +1,5 @@
 /**
- * Flow trigger validation (R2-04, ADR-041) — extracted from validate.ts so the
+ * Flow trigger validation (R2-04, D-23) — extracted from validate.ts so the
  * per-trigger checks don't push that file past the 800-line cap and can be
  * tested in isolation. Check ids match the design 1:1: trigger-kind,
  * trigger-kind-reserved, trigger-target, trigger-cron, trigger-webhook,
@@ -37,7 +37,7 @@ const SECRET_ENV_RE = /^[A-Z][A-Z0-9_]*$/;
 
 /**
  * R2-08-F3: `pr-merged` / `issue-raised` reuse the SAME `webhook:` config
- * shape `on: webhook` uses (own `on:` value, per ADR-027's amendment — never
+ * shape `on: webhook` uses (own `on:` value, per D-10's amendment — never
  * a sub-event under `on: webhook`), but each kind accepts only its OWN event
  * name — never a shared set, or a `webhook` trigger could silently declare
  * `events: [pull_request]` (a kind bridge-hooks.ts never resolves for it) and
@@ -304,7 +304,7 @@ export function checkFlowTriggers(
     // finding per letter instead of one type error.
     //
     // WITHDRAWN EXCLUSION (R2-08 addendum, 2026-08-07, WI forge-f9g,
-    // docs/decisions/027-studio-object-model.md — withdrawn 2026-08-23, W8-A1):
+    // withdrawn 2026-08-23, W8-A1):
     // this used to special-case `on: merged` OUT of `projects:` scoping
     // entirely, because that kind dispatches INLINE from
     // `packages/flows/finalize-merged.ts` (`resolveMergeAgentHandler`) and never

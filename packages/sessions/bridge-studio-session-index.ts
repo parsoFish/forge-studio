@@ -95,7 +95,7 @@ export type SessionIndexRow = {
    *  no priced row in its log, never "cost nothing" (M6-A row 2). */
   costUsd: number | null;
   /** The dispatch run this session belongs to, when it went through the run
-   *  host (`onboarding`); `null` for an ADR-043 spine session. The monitor
+   *  host (`onboarding`); `null` for a SPEC §5 spine session. The monitor
    *  ledger joins ONLY the `null` ones — a session with a runId already has a
    *  standalone-run row and joining it twice double-counts one piece of work
    *  (measured: S9 run 2 read ledger-total 1, onboarding already present). */
@@ -300,7 +300,7 @@ function discoverUnknownSessionKindIds(logsRoot: string, descriptors: readonly S
 /** Deterministic ordering + bound for the aggregate sessions index —
  *  needs-you rows first, then newest-`updatedAt` first within each group;
  *  capped to the newest `cap` rows. Pure (no I/O), so it is unit-testable in
- *  isolation from the filesystem (ADR 042's "a pure function with an
+ *  isolation from the filesystem ("a pure function with an
  *  explicit error contract may be exported for direct tests" boundary).
  *  ISO-8601 timestamps compare correctly as plain strings; a `''`
  *  honest-absent `updatedAt` (kb-cleanup's shape today) sorts LAST within its

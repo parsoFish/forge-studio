@@ -481,11 +481,11 @@ function crossProjectRepoPath(
   return `${candidate} is not inside project "${project}" (expected ${own} or a path beneath it)`;
 }
 /**
- * Wave-6 kickoff model-tier seam (ADR-043 §3 amendment, 2026-08-15). EVERY
+ * Wave-6 kickoff model-tier seam (SPEC §5, 2026-08-15). EVERY
  * `/start`-family route that accepts a caller-supplied `modelTier` validates
  * it here BEFORE any mkdir/status write and persists the returned `tier`
  * verbatim as `status.json`'s `modelTier` — every turn runner reads it back
- * and re-resolves it through `resolveSessionModel` on EVERY turn (ADR 024's
+ * and re-resolves it through `resolveSessionModel` on EVERY turn (SPEC §1's
  * SKILL.md-is-the-envelope contract, not just at kickoff). The enumeration
  * that used to live here went stale twice; the rule is the invariant.
  *

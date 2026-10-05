@@ -215,7 +215,7 @@ const BRAIN_PROFILE_FILENAME = 'profile.md';
  *
  *  T2 ruling (round-1 pin 2, item 3): `checkC4` (HARD) in `packages/projects/preflight.ts`
  *  fails closed unless BOTH `roadmap.md` AND `brain/projects/<id>/
- *  profile.md` (Brain 3, ADR 035, central in the forge repo) exist, but this
+ *  profile.md` (Brain 3, SPEC §4, central in the forge repo) exist, but this
  *  row previously only ever looked at `roadmap.md` — a project could read
  *  `roadmap: present` here while `forge preflight` failed it outright, with
  *  nothing in this row hinting why. `status` STAYS presence-of-roadmap.md

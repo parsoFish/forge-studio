@@ -1,5 +1,5 @@
 /**
- * Tests for the forge↔project contract preflight (US-4.1 / ADR-017) — the
+ * Tests for the forge↔project contract preflight (US-4.1 / SPEC §6) — the
  * BARREL: C4 (machine-readable architecture context, HARD), the composer
  * (`runPreflight`, exercised end-to-end via the "fully-conformant project"
  * and "ok stays false" cases), `buildVerdictEvent`, and
@@ -43,7 +43,7 @@ function tmp(): string {
 }
 
 /** A project dir that satisfies every clause. The project's brain is forge-owned
- *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (ADR 035). */
+ *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (SPEC §4). */
 function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void } {
   const dir = tmp();
   const forgeRoot = tmp();
@@ -59,7 +59,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\nQuality gate: `vitest run`.\n');
-  // Brain 3 (ADR 035): profile lives CENTRAL under the forge root.
+  // Brain 3 (SPEC §4): profile lives CENTRAL under the forge root.
   mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
   // DEMO: a declared demoProcess (the project half of the demo contract family).
@@ -130,7 +130,7 @@ test('C4 (HARD): missing roadmap.md ⇒ fail + ok=false', () => {
 test('C4 (HARD): missing brain sub-wiki ⇒ fail', () => {
   const p = happyProject();
   try {
-    // Brain 3 is forge-owned + central (ADR 035); remove it to test the hard fail.
+    // Brain 3 is forge-owned + central (SPEC §4); remove it to test the hard fail.
     const name = p.dir.split('/').pop()!;
     rmSync(join(p.forgeRoot, 'brain', 'projects', name), { recursive: true, force: true });
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });

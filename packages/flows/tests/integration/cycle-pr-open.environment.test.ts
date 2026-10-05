@@ -21,7 +21,7 @@
  *     `reviewer.pr-open-failed`'s `metadata.error` and in the thrown message,
  *     `classifyCycleFailure` reads `environment:true, recoverable:true` (never
  *     `unifierNoDemo`), and the manifest is stamped `resume_from: 'pr-open'`
- *     (ADR 019, row 122) — dev, integrate AND adversarial-review already
+ *     (D-06, row 122) — dev, integrate AND adversarial-review already
  *     succeeded, so a resume must re-enter ONLY the review node, not the
  *     whole post-develop band `resume_from: 'integrate'` would re-run.
  *   - the tracked demo bundle GENUINELY missing → the original

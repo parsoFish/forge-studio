@@ -98,7 +98,7 @@ import type { ContractStageRow } from '../../lib/session-client';
 // zyc review finding 1 pin — "does a pr-merged/issue-raised trigger built via
 // the real client path pass `packages/flows/studio/validate-triggers.ts`'s
 // real SSOT validator" used to be proved right here, reading that module
-// directly. ADR 046 (`studio-beyond-contracts`) now forbids an apps/studio
+// directly. D-29 (`studio-beyond-contracts`) now forbids an apps/studio
 // test importing anything beyond `@forge/contracts`, so that proof moved to
 // `scripts/studio-parity-flow-triggers.test.ts` (plain `node:test`, not
 // cruised by the boundary lint) — it imports the real validator AND

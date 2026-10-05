@@ -93,7 +93,7 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
 
     const projectArg = 'fixtureproj';
     const projectRoot = join(forgeRoot, 'projects', projectArg);
-    // D1 (ADR-043 §1): the real authoring turnSpec's kindDir is "_authoring"
+    // D1 (SPEC §5): the real authoring turnSpec's kindDir is "_authoring"
     // — hardcoded here (not re-derived from the descriptor we're about to
     // load) so a kindDir drift in the real file surfaces as a containment
     // failure below rather than a silently-matching fixture path.
@@ -102,7 +102,7 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
     mkdirSync(projectRoot, { recursive: true });
     mkdirSync(sessionDir, { recursive: true });
     // awaiting-review is the real authoring turnSpec's ONE noop-step phase
-    // (ADR-043 §1) — SDK-free, mirroring this file's own established
+    // (SPEC §5) — SDK-free, mirroring this file's own established
     // no-mock-seam design (see file header "WHY NO DEPENDENCY-INJECTION SEAM").
     writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'awaiting-review', updated_at: new Date(0).toISOString() });
     assert.equal(
@@ -270,7 +270,7 @@ test('R4-21 phase 2, correction B, AT-B2: cmdAgentRun resolves the projects root
 
 // ---------------------------------------------------------------------------
 // AT-B3 — regression pin: the fix above must not regress the EXISTING
-// guarded-segment containment (R4-22 WI-5 review finding 1 / ADR-043 §3's own
+// guarded-segment containment (R4-22 WI-5 review finding 1 / SPEC §5's own
 // "root-folding" closure) — an untrusted --project value must still ride as
 // its OWN guarded segment against whichever projects root is in effect,
 // never folded into it. GREEN on arrival (the guard already exists in
@@ -349,7 +349,7 @@ test('R4-22 F4, AT-a: cmdAgentRun(["authoring", sid, "--project", p]) writes its
 
     const projectArg = 'fixtureproj';
     const projectRoot = join(forgeRoot, 'projects', projectArg);
-    // The real authoring turnSpec's kindDir is "_authoring" (ADR-043 §1) —
+    // The real authoring turnSpec's kindDir is "_authoring" (SPEC §5) —
     // hardcoded here (not re-derived from the descriptor we're about to
     // load), matching the established precedent set by the WI-1 test above.
     const sessionId = '2026-08-11T00-00-01-r422f4ata';
@@ -357,7 +357,7 @@ test('R4-22 F4, AT-a: cmdAgentRun(["authoring", sid, "--project", p]) writes its
     mkdirSync(projectRoot, { recursive: true });
     mkdirSync(sessionDir, { recursive: true });
     // awaiting-review is the real authoring turnSpec's ONE noop-step phase
-    // (ADR-043 §1) — SDK-free, mirroring the WI-1 test's own established
+    // (SPEC §5) — SDK-free, mirroring the WI-1 test's own established
     // no-mock-seam design.
     writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'awaiting-review', updated_at: new Date(0).toISOString() });
     assert.equal(

@@ -30,7 +30,7 @@ import { resolveGateTimeoutMs } from '@forge/agents';
 // ---------------------------------------------------------------------------
 
 /**
- * ADR 019/026: run `fn` (the resume rebase) with the named worktree-relative
+ * D-06 / D-20: run `fn` (the resume rebase) with the named worktree-relative
  * `.forge/` scratch dirs preserved. A `git rebase` replay clobbers gitignored
  * untracked files, so these dirs (the dev WI specs + the unifier queue) are
  * backed up outside the worktree first and restored afterward IF the rebase
@@ -414,7 +414,7 @@ export function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void
 // ---------------------------------------------------------------------------
 
 /**
- * `.forge/last-gate-failure.md` — the results-flow seam (ADR-036 §2, present ⇒
+ * `.forge/last-gate-failure.md` — the results-flow seam (D-15, present ⇒
  * fresh). Mirrors `developer-loop.ts`'s `lastGateFailurePath` (the dev-loop /
  * retired-unifier writers of the SAME file); a fix agent reads whichever writer
  * last wrote it, so the merge-boundary gate uses the identical path + a
@@ -511,7 +511,7 @@ function runLocalSuiteGate(cmd: string[], worktreePath: string, declaredTimeoutM
 }
 
 /**
- * R4-10-F2 — the relocated dual-boundary full-suite gate (ADR-036 amendment,
+ * R4-10-F2 — the relocated dual-boundary full-suite gate (D-15 amendment,
  * R1-03-F4 spec). Runs, on the INTEGRATED branch tip, keyed off the typed
  * `testProcess` contract:
  *   1. `testProcess.local` (the full suite — today's `quality_gate_cmd`),

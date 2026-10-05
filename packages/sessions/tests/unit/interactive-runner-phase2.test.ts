@@ -131,7 +131,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
 // GENERIC turnSpec-runner mechanism against a synthetic `test-kind` fixture
 // (already real production code, unaffected by phase 2). These three tests
 // prove something the generic-mechanism suite structurally cannot: that the
-// REAL "authoring" row in the checked-in YAML (D1 — ADR-043 §1 verbatim)
+// REAL "authoring" row in the checked-in YAML (D1 — SPEC §5 verbatim)
 // actually carries the right kindDir/style/phases/writes/finalizer/next
 // values — a typo or drift in that ONE production file (e.g. `writes:
 // [package]` instead of `[staging]`, or a `finalizer:` id that doesn't match

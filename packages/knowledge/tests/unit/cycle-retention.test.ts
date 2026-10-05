@@ -150,7 +150,7 @@ function setupBrainTree(opts: {
   mtime?: Date;
 }): TreeHarness {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'forge-retention-test-'));
-  // Brain 3 is forge-owned + central (ADR 035): brain/projects/<name>/themes/.
+  // Brain 3 is forge-owned + central (SPEC §4): brain/projects/<name>/themes/.
   const themesDir = join(forgeRoot, 'brain', 'projects', opts.projectName, 'themes');
   mkdirSync(themesDir, { recursive: true });
   for (const [file, body] of Object.entries(opts.themes)) {

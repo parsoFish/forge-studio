@@ -10,7 +10,7 @@
  * never executes on `PUT /api/studio/agents/:slug`. A typo'd or unknown
  * guard id — via the builder UI or a raw API call — is accepted with 200
  * and persisted to disk, silently inert until someone happens to run
- * `forge studio lint`. This directly contradicts ADR-027 §6: "The same
+ * `forge studio lint`. This directly contradicts D-09: "The same
  * validation runs at save (bridge PUT) and at spawn." Only
  * `apps/forge/studio-lint.ts` currently computes and supplies the set (mirrors the
  * pre-existing `composition/guard-unknown` real-lint-entry-point pin in

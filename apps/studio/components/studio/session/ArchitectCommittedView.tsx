@@ -4,7 +4,7 @@
  * ArchitectCommittedView — the post-approve panel shared by the architect
  * session page (committed phase, SessionArchitectPanel) and the /artifact plan
  * payoff (ArchitectPlanGate) — W7-A3: sessions-kinds-08/12, artifact-plan-22/23,
- * flows-23; M7-E row 205 (ADR 011/031).
+ * flows-23; M7-E row 205 (D-12).
  *
  * Replaces the hardcoded "Approved — manifests queued; the autonomous loop is
  * building it now → /flows/forge-develop" (a claim that was false whenever

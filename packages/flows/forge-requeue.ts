@@ -13,7 +13,7 @@
  *   5. Remove the worktree if present (`git worktree remove --force` plus
  *      `rm -rf` fallback) so the next claim gets a fresh canvas.
  *
- * Resume modes (ADR 019) PRESERVE the worktree + branch instead of wiping
+ * Resume modes (D-06) PRESERVE the worktree + branch instead of wiping
  * them, so the resumed cycle runs against the salvaged per-WI work:
  *   - `--resume-from=integrate` re-enters at the post-develop `integrate` node (the
  *     successor develop flow's `resumable` re-entry point, R4-10-F6).
@@ -62,7 +62,7 @@ export type RequeueOptions = {
   /** Reset retry_count to 0 (default false: keep prior count + append to previous_failure_modes). */
   resetRetries?: boolean;
   /**
-   * ADR 019 (successor develop flow, R4-10-F6): resume the next cycle at the
+   * D-06 (successor develop flow, R4-10-F6): resume the next cycle at the
    * post-develop `integrate` node instead of a full re-run. Sets `resume_from: integrate`
    * on the manifest AND preserves the worktree (the per-WI commits live there) —
    * so step 5's worktree removal is skipped. Use after a post-develop-band
@@ -178,7 +178,7 @@ export function runRequeue(
   // `failure_classification` event `inferRequeueResume` itself reads.
   const priorFailure = readPriorFailureSignal(forgeRoot, manifest.cycle_id);
 
-  // ADR 019 + N7 (+ M7 row 150, ruling 1794): decide the resume position. An
+  // D-06 + N7 (+ M7 row 150, ruling 1794): decide the resume position. An
   // explicit `--resume-from=integrate` is the operator's override — UNLESS
   // the prior failure was a clean-boundary halt, where honouring it
   // unconditionally would silently skip WIs that never ran; that case
@@ -207,13 +207,13 @@ export function runRequeue(
     ...manifest,
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
-    // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
+    // D-06: stamp the resume marker so the scheduler runs the cycle from the
     // preserved worktree — `integrate` re-enters at the post-develop `integrate` node
     // (successor develop flow, R4-10-F6); `pr-open` (row 122, bead forge-8vfn.8.1.55)
     // re-enters at the review node only — a narrower resume for a failure classified
     // specifically at the PR-open call, where the post-develop band already succeeded.
     // A fresh (non-resume) requeue CLEARS any resume marker (e.g. one a send-back
-    // stamped, ADR 040) so the re-run is a true full cycle. N7's in-place dev-loop
+    // stamped, D-20) so the re-run is a true full cycle. N7's in-place dev-loop
     // resume deliberately stamps NOTHING: the scheduler's preserved-work-items reuse
     // path detects it from the worktree itself.
     resume_from:
@@ -233,7 +233,7 @@ export function runRequeue(
   renameSync(tmpPath, toPath);
   rmSync(fromPath, { force: true });
 
-  // 4. Remove stranded verdict files. ADR 026 retired the `<id>.pr-feedback.md`
+  // 4. Remove stranded verdict files. D-20 retired the `<id>.pr-feedback.md`
   //    send-back thread (review feedback is now appended UWIs in the worktree),
   //    so always clear any legacy feedback file too — it is no longer read.
   const verdictsRemoved: string[] = [];
@@ -255,7 +255,7 @@ export function runRequeue(
 
   // 5. Remove the worktree AND delete the initiative branch — UNLESS resuming
   //    (unifier OR developer), where the preserved worktree + branch ARE the
-  //    salvaged WI work the resume runs against (ADR 019). Deleting the branch on a
+  //    salvaged WI work the resume runs against (D-06). Deleting the branch on a
   //    normal re-run is load-bearing: otherwise the next `git worktree add`
   //    reuses the STALE branch (based on whatever main was at the original run)
   //    instead of branching fresh from CURRENT main — and if main has since

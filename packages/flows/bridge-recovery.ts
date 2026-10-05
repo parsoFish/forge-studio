@@ -236,10 +236,10 @@ export function moveGatedManifestToFailed(
  * worktree or branch.
  *
  * ACTIVE (in-flight): there IS a live agent, running in the SEPARATE `forge
- * serve` daemon process — this bridge process has no handle on it (ADR 011
+ * serve` daemon process — this bridge process has no handle on it (D-04
  * process boundary) and does not try to build one. It writes a flag file the
  * runner already polls at its existing clean-boundary checks (the SAME
- * mechanism the cost ceiling halts at — `flow-runner.ts`, ADR 028
+ * mechanism the cost ceiling halts at — `flow-runner.ts`, SPEC §2
  * amendment). Pure filesystem write, so no dry-bridge refusal is needed
  * (`apps/forge/dry-bridge.ts` classifies this route `exempt-local`).
  *

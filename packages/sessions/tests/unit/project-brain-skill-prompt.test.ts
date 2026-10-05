@@ -23,7 +23,7 @@
  * What each AT kills:
  *   AT-1 — an implementation that copy-pastes the prose into SKILL.md but
  *          forgets to delete it from the .ts (intent still lives in two
- *          places, TS half still "wins" per ADR-024's complaint), OR that
+ *          places, TS half still "wins" per SPEC §1's complaint), OR that
  *          rewords the prose instead of moving it verbatim.
  *   AT-2 — an implementation that keeps the private fail-open
  *          `loadSkillPrompt` / `'You are the forge project-brain builder.'`

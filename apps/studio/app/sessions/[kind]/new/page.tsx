@@ -24,8 +24,8 @@ import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from '@/lib/ki
 // task item 3). Context card + project/KB select + prompt (when the kind
 // takes one) + a model-tier picker (`KickoffModelTierPicker`) rendered from
 // the agent's OWN `SKILL.md`-declared envelope
-// (`agentCapabilityDescriptor.allowedTiers`, ADR-043 2026-08-15 amendment
-// §3) → Start → the kind's existing `/start` route → the minted id and a
+// (`agentCapabilityDescriptor.allowedTiers`, SPEC §5)
+// → Start → the kind's existing `/start` route → the minted id and a
 // real anchor onto the shared session shell (ruling 396: this page stays).
 //
 // W6-B6 fix (wave-6 final gate, journey demo-builder DB-4): the capability is
@@ -45,7 +45,7 @@ import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from '@/lib/ki
 // wrapper's replacement entry; project select only). `architect` is
 // explicitly OUT — it keeps its own native entry, `/architect/new`
 // (`NewIdeaBox`) — this page links to it rather than duplicating it
-// (ADR-043 amendment §4: architect stays bespoke end to end, panel AND
+// (SPEC §5: architect stays bespoke end to end, panel AND
 // kickoff alike).
 //
 // W8-B5b WI-3: the `community-refresh` kind (W6-CR-3) — the ONLY kind ever to

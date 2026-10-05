@@ -1,6 +1,6 @@
 # Supervising `forge serve`
 
-`forge studio` is `forge serve`'s supervisor (ADR 011, ADR 031 decision 5): it
+`forge studio` is `forge serve`'s supervisor ([D-12](../../DECISIONS.md)): it
 brings `serve` up the same way it brings up the bridge and the UI — spawning
 it detached at boot, adopting a live pid if one already exists, restarting a
 dead one with crash-loop backoff, and sending it exactly one `SIGTERM` when
@@ -30,7 +30,7 @@ or by systemd/pm2 (below) — rather than spawning a second one beside it.
 ## What forge does and does NOT do
 
 `forge serve` is the long-running daemon that claims every eligible pending
-manifest and drives it to completion. Its WORK-recovery model (ADR 012) is
+manifest and drives it to completion. Its WORK-recovery model (D-05) is
 intentionally minimal: two file-system sweeps (stale-heartbeat +
 missing-worktree) that re-queue orphaned in-flight work on startup and on a
 5-minute timer — that recovers *work* that was mid-flight when a process died.
@@ -38,13 +38,13 @@ Restarting the `serve` **process** itself belongs to `forge studio`, not to
 `serve` restarting itself: a process cannot reliably resurrect itself, so
 forge does not hand-roll a second watchdog beside the one `forge studio`
 already runs (CLAUDE.md's "never re-invent a resource controller / process
-isolator" line, ADRs 011–013).
+isolator" line, [R-03](../../DECISIONS.md)).
 
 So the supervision contract is split cleanly:
 
 | Concern | Owner |
 | --- | --- |
-| Re-queue orphaned in-flight cycles | forge (ADR 012 sweeps) |
+| Re-queue orphaned in-flight cycles | forge (D-05 sweeps) |
 | Restart the `forge serve` **process** when it exits or wedges | **`forge studio`**, with crash-loop backoff |
 | Surface `serve`'s liveness to the operator, read-only | Studio (`GET /api/health`'s `serve` object) |
 
@@ -53,7 +53,7 @@ So the supervision contract is split cleanly:
 Some ground — a headless server, CI, a box where no one runs `forge studio`
 at all — still needs `serve` running without a supervising Studio. For that
 case only, hand the process to a battle-tested OS supervisor rather than
-hand-rolling one, matching ADR 011's "run in the foreground (or under
+hand-rolling one, matching the daemon's "run in the foreground (or under
 systemd/pm2 for process supervision)" line:
 
 ### systemd (Linux servers)

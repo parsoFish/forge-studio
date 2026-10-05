@@ -6,7 +6,7 @@
  * shape (gray-matter frontmatter + markdown body), same DFS three-color cycle
  * detection.
  *
- * Schema and rules locked in ADR 015. Files live at
+ * Schema and rules locked in SPEC §3. Files live at
  * `<worktree>/.forge/work-items/WI-<n>.md`; the dependency graph at
  * `<worktree>/.forge/work-items/_graph.md`.
  */
@@ -33,7 +33,7 @@ export type WorkItem = {
   files_in_scope: string[];        // worktree-relative
   estimated_iterations: number;    // > 0
   /**
-   * S3 refinement (2026-05-20, ADR 015 §"Refinement 2026-05-20" + CONTRACTS.md
+   * S3 refinement (2026-05-20, SPEC §3 §"Refinement 2026-05-20" + CONTRACTS.md
    * C5). The four fields below are OPTIONAL and serialised **omit-on-undefined**
    * — a WI without any of them produces frontmatter byte-identical to the
    * pre-amendment shape (round-trip test in work-item.test.ts).
@@ -47,7 +47,7 @@ export type WorkItem = {
   verification_artifact?: string;
   /**
    * R4-05-F7: coarse subsystem/feature-area tag the plan agent populates so
-   * ADR-037 constraint selectors can match on wi.domain (beyond
+   * D-17 constraint selectors can match on wi.domain (beyond
    * manifest.<field> globs). Optional.
    */
   domain?: string;
@@ -67,7 +67,7 @@ export type WorkItem = {
    */
   behavior_preserving?: boolean;
   /**
-   * ADR 040 — set only on fix work-items compiled by the send-back/fix loops
+   * D-20 — set only on fix work-items compiled by the send-back/fix loops
    * (review-loop send-back, demo-fix, gate-fix); PM-authored WIs leave it
    * unset, so their frontmatter stays byte-identical. Distinguishes
    * review/demo/gate-originated dev WIs from PM-authored ones. (The retired
@@ -78,7 +78,7 @@ export type WorkItem = {
 };
 
 /**
- * ADR 040 — valid values for `WorkItem.origin` (fix work-items compiled by
+ * D-20 — valid values for `WorkItem.origin` (fix work-items compiled by
  * the send-back/fix loops). Exported so the fix-work-items compiler module
  * (Q2) can validate against the same vocabulary instead of duplicating the
  * literal list.
@@ -87,7 +87,7 @@ export const FIX_WI_ORIGINS: readonly NonNullable<WorkItem['origin']>[] = ['revi
 export type FixWiOrigin = NonNullable<WorkItem['origin']>;
 
 // `WI-<n>` are dev work items (PM-emitted). `UWI-<n>` are unifier work items
-// (the unifier's own queue, ADR 026): UWI-1 is the static unify/PR-prep mission;
+// (the unifier's own queue, D-20): UWI-1 is the static unify/PR-prep mission;
 // UWI-2+ are appended from review feedback. Both reuse the same WorkItem
 // machinery (parse/serialize/validate/topo/read/write) — only the id prefix and
 // the directory (.forge/unifier-items/) differ.
@@ -99,7 +99,7 @@ export type FixWiOrigin = NonNullable<WorkItem['origin']>;
 // can use the dev-only pattern without reaching into `packages/flows`
 // (rank 5); this door re-exports them so this module's public API is
 // unchanged. See `@forge/contracts` for the full provenance note (the SPLIT
-// SUFFIX rationale, ADR 015 2026-08-23 amendment / ON-7, and the six
+// SUFFIX rationale, SPEC §3 2026-08-23 amendment / ON-7, and the six
 // narrower hand-rolled copies this SSOT replaced across orchestrator/, cli/
 // and loops/).
 export {

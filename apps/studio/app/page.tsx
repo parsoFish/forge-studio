@@ -68,7 +68,7 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 export default function HomePage() {
   const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
-  // M7-E row 205 (ADR 011/031): the read-only serve status — the hook shares
+  // M7-E row 205 (D-12): the read-only serve status — the hook shares
   // the tab's ONE serve-status poll (lib/serve-status-store.ts, row 207); Home
   // adds no fetch, no interval, no endpoint literal of its own.
   const { status: serveStatus } = useServeStatus();
@@ -216,7 +216,7 @@ export default function HomePage() {
         onCancelled={(row, outcome) => { setLastCancel({ row, outcome }); void refreshSessions(); }}
       />
 
-      {/* ===== SERVE STATUS — M7-E row 205 (ADR 011/031): `forge studio`
+      {/* ===== SERVE STATUS — M7-E row 205 (D-12): `forge studio`
           supervises `forge serve` directly; there is no operator start/pause/
           resume/stop control, so this renders ONLY the honest read-only
           notice, and only while there is something to report (restarting/

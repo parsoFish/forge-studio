@@ -6,7 +6,7 @@
  * R2/R4 build on (a phase-agnostic way to run any roster agent).
  *
  * Two spawn shapes, selected by the def's declared `runtime.loopStrategy`
- * (R4-01-F2, ADR-039):
+ * (R4-01-F2, SPEC §1):
  *
  *   - absent — the legacy single-iteration `AgentInvocation` path (adapter
  *     `createAgent`, prompt stamped to a scratch PROMPT.md). One call, one
@@ -30,7 +30,7 @@
  * suppression check below guards the self-lifecycle paths exactly as
  * before.
  *
- * ADR-036: `runAgent` runs NO gate/CI/demo-capture — it only spawns the
+ * D-15: `runAgent` runs NO gate/CI/demo-capture — it only spawns the
  * agent and reports back what happened; gate results flow TO agents, never
  * FROM them. Satisfied by construction: this module never imports
  * `runGateCapturing`, `composedUnifierGate`, `orchestrated-capture.ts`, or
@@ -187,7 +187,7 @@ export type RunContext = {
    * Observer for every raw streamed SDK message on the one-shot path,
    * called before runAgent's own result-message handling. Telemetry
    * (tool-use tallies, turn counting/warnings) stays caller-side — the
-   * ADR-036 boundary: observations flow out, judgments never move in.
+   * D-15 boundary: observations flow out, judgments never move in.
    */
   onMessage?: (msg: unknown) => void;
   /**
@@ -348,7 +348,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // outright (there is no run to cap). Pinned by run-agent-w7b5.test.ts;
   // the R6-04 refusal pins were amended in the same commit.
 
-  // Step 1: derive the spec from the studio SKILL.md (ADR-027).
+  // Step 1: derive the spec from the studio SKILL.md (D-09).
   const spec = deriveAgentSpec(relative(ctx.forgeRoot ?? FORGE_ROOT, def.path), ctx.forgeRoot ?? FORGE_ROOT);
 
   // forge-8vfn.5.50 — this run's own spawn marker, minted before EITHER
@@ -543,7 +543,7 @@ async function runOneShotSpawn(
   runMarker: string,
   turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
-  // ADR 024 item 90 — a bound project's declared skills; see project-skills.ts.
+  // SPEC §1 item 90 — a bound project's declared skills; see project-skills.ts.
   const composedSystemPrompt = loadAndComposeProjectSkills(ctx, FORGE_ROOT, def.slug);
 
   const options: Record<string, unknown> = {

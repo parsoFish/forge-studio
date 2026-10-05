@@ -169,7 +169,7 @@ export function migrateProjectConfig(projectRoot: string): MigrateOutcome {
   return validateThenWrite(projectRoot, path, migrated, moved);
 }
 
-const RETIRED_REQUIRED_REASON = "the change class's `acceptance` column decides, ADR 051 decision 2";
+const RETIRED_REQUIRED_REASON = "the change class's `acceptance` column decides, D-35";
 
 /**
  * Bead forge-mfv5.3.5: an ALREADY-NESTED contract (gitpulse's, betterado's)

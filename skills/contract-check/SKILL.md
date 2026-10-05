@@ -1,6 +1,6 @@
 ---
 name: contract-check
-description: "The declaration carrier and display identity for the onboard-project flow's contract gate — the REAL forge↔project contract preflight (runPreflight, packages/projects/preflight.ts) runs orchestrator-side (ADR-036); never spawned via the flow path (the only path onboard-project uses), but standalone-dispatchable like any other band-guard def — see 'What this is, honestly' below."
+description: "The declaration carrier and display identity for the onboard-project flow's contract gate — the REAL forge↔project contract preflight (runPreflight, packages/projects/preflight.ts) runs orchestrator-side (D-15); never spawned via the flow path (the only path onboard-project uses), but standalone-dispatchable like any other band-guard def — see 'What this is, honestly' below."
 library: true
 phase: contract-check
 surface: unattended
@@ -32,7 +32,7 @@ first-class citizen of the platform (a `composition.guards` entry, a
 `studio/catalog.yaml` display row, a real roster member `forge studio lint`
 can validate) — nothing more. The `onboard-project` flow's `contract-check`
 node carries both `agent:"contract-check"` and `gate:"contract"`
-(ADR-039 declared dispatch); at runtime, `execAgent`
+(SPEC §1 declared dispatch); at runtime, `execAgent`
 (`packages/stations/phases/executor-table.ts`) resolves the declared
 `onboard-preflight` band guard and routes the node to
 `execOnboardPreflight`, which calls the REAL `runPreflight` function
@@ -54,10 +54,10 @@ radius is `budgets.maxBudgetUsd: 0` below — the SDK aborts the spawn as soon
 as any cost accrues (`result` subtype `error_max_budget_usd`), capping a
 standalone run to at most one turn's spend.
 
-This is deliberate on the flow path (ADR-036): the orchestrator runs gates;
+This is deliberate on the flow path (D-15): the orchestrator runs gates;
 an agent never self-certifies its own contract-check there. Letting an LLM
 decide whether a project passes its own onboarding contract would reopen
-exactly the self-grading hazard ADR-036 closes for the demo/review bands.
+exactly the self-grading hazard D-15 closes for the demo/review bands.
 
 ## Why the model/budget frontmatter exists anyway
 

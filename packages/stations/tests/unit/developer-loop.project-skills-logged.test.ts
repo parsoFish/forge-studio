@@ -1,5 +1,5 @@
 /**
- * ADR 024 item 90 — the dev loop's `makeAgentWithTelemetry` wires
+ * SPEC §1 item 90 — the dev loop's `makeAgentWithTelemetry` wires
  * `onProjectSkillsLoaded` (developer-loop.ts) into a `project_skills_loaded`
  * log event. `claude-agent.project-skills.test.ts` already pins that
  * `createClaudeAgent` FIRES the callback with the declared skill ids; this

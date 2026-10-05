@@ -16,7 +16,7 @@ tomorrow) can drive the page by reading structured DOM state rather
 than scraping rendered text. Pattern from
 [anthropics/cwc-workshops `how-we-claude-code`](https://github.com/anthropics/cwc-workshops/tree/main/how-we-claude-code).
 
-Studio has no standalone `/dashboard` any more (retired M7, ADR-031) —
+Studio has no standalone `/dashboard` any more (retired M7, D-12) —
 every route below owns its own `data-page="<name>"` root (+
 `data-page-ready` once its first fetch settles), so this is a per-route
 inventory rather than one shared page-level contract:
@@ -508,7 +508,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   otherwise it renders as a plain secondary
   `[data-action="browse-flows"][data-live="false"]` "Browse flows"
   (`href="/flows"`) — the same destination the old fallback silently used,
-  now labelled as what it is, never a "live" promise the click cannot keep. **M7-E (row 205, ADR 011 as amended):**
+  now labelled as what it is, never a "live" promise the click cannot keep. **M7-E (row 205, D-03):**
   there is no operator-facing scheduler control anywhere in Studio — no card,
   no start/pause/resume/stop button, no `scheduler` section. `forge studio`
   spawns and supervises `forge serve` itself (boot spawn, adopt a live pid,
@@ -534,7 +534,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-component="queued-serve-unconfirmed"]` instead, never the pickup
   promise; `restarting`/`draining`/`down` still render the shared
   `serve-status-notice` as above.
-  **The one emergency halt** (ADR 011) is the single operator brake — it
+  **The one emergency halt** ([D-03](../../DECISIONS.md)) is the single operator brake — it
   starts, pauses, resumes and stops nothing; it only refuses new claims while
   every active run finishes. `GET /api/health`'s `serve.halt`
   (`{since, actor, active, queued}`, or `null`) drives it. The global
@@ -901,7 +901,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `lib/session-kind-meta.ts`'s `KICKOFF_ENTRIES`: the six generic kickoff
   kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
   kb-cleanup/authoring/onboarding) plus architect's bespoke
-  native entry (`/architect/new` — ADR-043 amendment §4), labels = the
+  native entry (`/architect/new` — SPEC §5), labels = the
   descriptors' own titles. (The interactive `community-refresh` kind was a
   seventh generic kickoff kind until W8-B5b WI-3 retired it.)
   **W7-B1 (home-sessions-07): a filter bar**,
@@ -1197,7 +1197,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   non-destructive (posts on its own click, no arm-then-confirm — unlike
   Abandon) and never touches the worktree or branch: active writes a flag file
   the runner consults at its next clean node/work-item boundary (the same
-  boundary the cost-ceiling stop already halts at, ADR 028's amendment);
+  boundary the cost-ceiling stop already halts at, SPEC §2's amendment);
   gated has no live agent, so it moves the manifest to `failed/` directly. A
   successful post renders `[data-component="run-control-outcome"]
   [data-outcome-control="stop"]` (plain text, not the
@@ -1705,7 +1705,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   fieldset `[data-question-inferred="true"]` (the interactive form stamps
   `"false"`) with a `[data-question-inferred-badge]` and the inferred
   `[data-question-answer]`, and NO submit button. The old `/review/[cycleId]` and `/reflect/[cycleId]`
-  routes are now permanent WIRE redirects into `/artifact` (M7-3, ADR-031;
+  routes are now permanent WIRE redirects into `/artifact` (M7-3, D-12;
   converted from client-side shim pages to `next.config.mjs` `redirects()`
   entries at W6-IA-8 — `?run=<id>&type=verdict&mode=gate` /
   `?run=<id>&type=reflection&mode=view` respectively) — no page renders at the
@@ -2806,7 +2806,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `RunRail` row's `[data-action="open-run-detail"]` anchor on the flow monitor.
   A thin client shell (`app/flows/[id]/run/[runId]/page.tsx`) resolves the run
   and hands props to the pure `FlowRunDetail` component. **Everything on this
-  page is DERIVED from the event log; nothing is stored** (ADR-008) — reading
+  page is DERIVED from the event log; nothing is stored** (SPEC §3) — reading
   a run writes no file.
 
   **REVIEW FINDINGS NAME THEIR OWN ABSENCE, `forge-8vfn.7.6.63`.** The panel
@@ -4036,7 +4036,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   page arms the gate from the session's live phase, so a link rendered one
   summary poll before `awaiting-verdict` still opens the gate (6.11.48). Its
   label is "Review the plan →" at awaiting-verdict (the PLAN gate is still
-  just another gate — M7-4, ADR-031) and "View the plan →" otherwise; the committed
+  just another gate — M7-4, D-12) and "View the plan →" otherwise; the committed
   phase renders the shared **ArchitectCommittedView** inside
   `[data-section="architect-status"]`: `[data-section="architect-committed"]
   [data-commit-tone="building|claimed-not-running|claimed-unknown|
@@ -4209,7 +4209,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `SessionInteractivePanel` is its second real consumer (the per-question
   interview form, `sectionName="session-interview"`), exactly the reuse the
   parameterisation was kept for. **architect and project-brain are the only kinds left on their own bespoke
-  panel**, permanently (ADR-043 amendment §4).
+  panel**, permanently (SPEC §5).
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
   (W6-B9)** render the generic `SessionInteractivePanel` in this same ladder
   slot — see its own entry below for the full contract.
@@ -4321,12 +4321,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   `GET /api/studio/sessions` rows (`state`/`error`/`idleMs`, and `needsYou`
   = `lifecycle.needsYou` — truthful in both directions). Session kinds are
   declared as data in `studio/session-kinds.yaml` and validated by
-  `forge studio lint` (`validateSessionKinds`, ADR-027's R2-10 amendment).
+  `forge studio lint` (`validateSessionKinds`, D-09's R2-10 amendment).
   `turns` are DERIVED from the runners' existing checkpoint files — each turn
   carries the `source` it came from (`idea.md`, `prompt.md`,
   `answers.json#round-N`, `questions.json`, `feedback.md`) — never invented.
   A checkpoint stage outside the kind's declared `stages` is a **409**, never
-  a defaulted 200. `affordances` (W6-B3, ADR-043 §1) is
+  a defaulted 200. `affordances` (W6-B3, SPEC §5) is
   `deriveSessionAffordances(descriptor, phase)` — computed server-side from
   whichever phase table the descriptor carries (`turnSpec` for a real
   dispatchable kind, `panel` for a legacy kind's read-only twin), ALWAYS
@@ -4365,7 +4365,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   then the pid) and writes `{...status, phase: 'cancelled', cancelled_at,
   cancelled_from}` via `guardedWriteSessionStatus` — `cancelled` is the ONE
   universal reserved terminal phase (`CANCELLED_PHASE`, `apps/forge/bridge-studio.ts`;
-  ADR-043 2026-08-19 amendment), read as terminal by `isTerminalPhase` for
+  SPEC §5), read as terminal by `isTerminalPhase` for
   every kind BEFORE the per-kind tables, and never a per-kind yaml row.
   Response `{ok, kind, sessionId, project, phase:'cancelled', previousPhase,
   killed}`. Covered by the bridge's global `x-forge-csrf` guard (403
@@ -4417,7 +4417,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   re-derives an affordance from `phase`. Wired into the session shell for
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
   (W6-B9)** — architect and project-brain are the only kinds left on their own bespoke panels
-  (`SessionArchitectPanel`, documented above), permanently (ADR-043
+  (`SessionArchitectPanel`, documented above), permanently (SPEC §5
   amendment §4 — its branching council/interview control flow has no linear
   phase-table seam). `SessionCleanupPanel`/`SessionAuthoringPanel` (W6-B8)
   and `SessionInstructionsPanel` (W6-B9) are DELETED — no dual paths.
@@ -4748,7 +4748,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `instructions`, `demo`, `kb-cleanup`, `authoring`, `project-brain`,
   `onboarding`. `architect` is explicitly OUT —
   `kind === 'architect'` renders a small link-out card to `/architect/new`
-  rather than duplicating `NewIdeaBox` (ADR-043 amendment §4: architect
+  rather than duplicating `NewIdeaBox` (SPEC §5: architect
   stays bespoke, kickoff included).
 - **Roadmap-draft artifact = a dependency DAG (R4-15-F1, 2026-08-06).** The
   architect session's `roadmap-draft` artifact carries the initiative
@@ -5157,7 +5157,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     centre is pushed off-centre by the label). Node click opens the article
     pane (`[data-node-article-body]`); the KB selector is `#kb-select`, one
     `<option value="<kbId>">` per KB `loadKbDescriptors` finds walking
-    `brain/*` AND `brain/projects/*` (ADR 035 central per-project brains, e.g.
+    `brain/*` AND `brain/projects/*` (SPEC §4 central per-project brains, e.g.
     `mdtoc`, `gitpulse`, alongside the OOTB `cycles`/`forge-dev`). The right
     rail also lists every theme-layer node as text (R6-08 WI-3 F1) —
     `[data-component="theme-list"]` with per-row
@@ -5836,7 +5836,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `GET /api/triggers` lists every declared `FlowTrigger` across the whole flow
   roster as `{on, target, projects, sourceFlowId}`, `projects: null`
   (unscoped) kept distinct from `projects: []` (scoped to nothing) on the
-  wire. Per ADR-027's R2-08 amendment ("the `data-*` vocabulary is named by
+  wire. Per D-09's R2-08 amendment ("the `data-*` vocabulary is named by
   R2-08-F4 and attached by the consuming surfaces"):
   - a **run's own trigger** renders `[data-trigger-kind][data-trigger-source]
     [data-trigger-scope]` (`data-trigger-scope=""` when `scope` is `null` —

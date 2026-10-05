@@ -1,5 +1,5 @@
 /**
- * The plan gate's class rule (ADR 051 decision 4, T1 ruling 229 half B).
+ * The plan gate's class rule (D-36, T1 ruling 229 half B).
  *
  * WHAT IT REFUSES, AND WHY HERE. A class whose profile sets
  * `singleWiAllowed: false` — `code` and `infra` as the operator ratified them —
@@ -14,7 +14,7 @@
  * one-item initiative is the PM being correct.
  *
  * WHY THE PROFILE ARRIVES BY INJECTION. The table is
- * `packages/factory`'s — the deletable example (ADR 048) — and this package may
+ * `packages/factory`'s — the deletable example (D-32) — and this package may
  * not import it. The assembly binds the lookup; when it is absent, or the class
  * is one the installed table does not know, the rule DOES NOT FIRE. A platform
  * with no example factory installed enforces no example's policy, which is

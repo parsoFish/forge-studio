@@ -10,7 +10,7 @@
  *   POST /api/initiatives/:id/plan    → repoint ONE WI-less initiative at the
  *                                        forge-architect flow (decompose only)
  *   POST /api/flows/:id/run           → enqueue an EXISTING initiative onto
- *                                        the named flow (ADR-041 generic
+ *                                        the named flow (D-23 generic
  *                                        per-flow claimable enqueue)
  *
  * Each is a manifest-move queue-state transition; none spawns in-request —
@@ -207,7 +207,7 @@ export async function handleRunTriggerRoutes(
   }
 
   // W7-A3 (flows-02/03) — per-flow run trigger: enqueue an EXISTING
-  // initiative onto THIS flow (`enqueueFlowRun`, the ADR-041 generic per-flow
+  // initiative onto THIS flow (`enqueueFlowRun`, the D-23 generic per-flow
   // claimable enqueue). The flow monitor's generic "Start Run" used to POST the
   // flow id as an initiativeId to /api/runs (always 400, silently). Same
   // status→HTTP mapping as the plan route above; the scheduler claims it later.

@@ -9,7 +9,7 @@ import { copyStagingToLibrary, InteractiveFinalizerError } from '../../interacti
 /**
  * forge-7m2 — `copyStagingToLibrary` must read the staging dirname it walks
  * from `FinalizerContext.stagingDirName` (sourced, per the fix, from the
- * ADR-043 yaml turnSpec's authored field), never from a hardcoded `'staging'`
+ * SPEC §5 yaml turnSpec's authored field), never from a hardcoded `'staging'`
  * literal. Before this fix, `discoverStagingEntries`
  * (`packages/sessions/interactive-finalizers.ts`) hardcodes the literal at TWO call
  * sites, so a session kind that authors a non-default staging dirname has its

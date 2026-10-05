@@ -17,7 +17,7 @@
  * clauses with a rationale (`acceptAdvisory`). The loop itself does only the
  * deterministic auto-fixes + the authoritative re-check + the report.
  *
- * ADR-036 preserved: the loop runs no gate/CI/merge — it reads preflight and
+ * D-15 preserved: the loop runs no gate/CI/merge — it reads preflight and
  * applies idempotent local fixes, nothing more.
  */
 

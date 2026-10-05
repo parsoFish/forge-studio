@@ -1,7 +1,7 @@
 /**
  * Validates the curated Studio starter library (studio/starters/).
  * These are templates, not live agents/flows, so `forge studio lint` does not
- * scan them — this test is their integrity gate (ADR-033): every starter agent
+ * scan them — this test is their integrity gate (D-14): every starter agent
  * passes validateAgent, and the basic flow passes validateFlow against the
  * agents the starters instantiate to.
  */

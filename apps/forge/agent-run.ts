@@ -109,7 +109,7 @@ export async function cmdAgent(rest: string[], forgeRoot: string, deps?: AgentDi
 
 
 /**
- * ADR-043 §3 (R4-22 WI-5) — dispatch-fork lookup for `cmdAgentRun`. Resolves
+ * SPEC §5 (R4-22 WI-5) — dispatch-fork lookup for `cmdAgentRun`. Resolves
  * `agentId`'s session-kind descriptor from `studio/session-kinds.yaml`, if
  * any. `loadSessionKinds` throws on a missing file / unparseable YAML; none
  * of the 4 legacy `AGENT_RUNNERS` ids need this file at all, so a broken or
@@ -135,7 +135,7 @@ function findSessionKindDescriptor(agentId: string, forgeRoot: string): SessionK
 }
 
 /**
- * ADR-043 §3 (R4-22 WI-5) — the "new road": a `turnSpec`-bearing session-kind
+ * SPEC §5 (R4-22 WI-5) — the "new road": a `turnSpec`-bearing session-kind
  * descriptor (by construction, one with NO `AGENT_RUNNERS` entry) drives the
  * generic `runInteractiveTurn` spine (`packages/sessions/interactive-runner.ts`,
  * R4-22 WI-3) instead of one of the 4 bespoke runners below. `args` is
@@ -185,7 +185,7 @@ async function runTurnSpecAgent(
   // preamble then guards [kindDir, sessionId] RELATIVE to an already-escaped root,
   // making the comparison tautological). That gap is INHERITED and left untouched on
   // the legacy road (ruling 44: the 4 legacy runners stay byte-for-byte identical),
-  // but this is NEW code with no back-compat obligation, and ADR-043 makes this the
+  // but this is NEW code with no back-compat obligation, and SPEC §5 makes this the
   // durable home every future interactive kind funnels through — so the untrusted
   // project name rides as its OWN guarded SEGMENT under the trusted projects root,
   // never folded into it. This closes `..`, `/abs`, `.`, separators and control
@@ -208,7 +208,7 @@ async function runTurnSpecAgent(
     return;
   }
   // bead forge-poc — `descriptor.turnSpec` is guaranteed present here: the
-  // ONLY caller (`cmdAgentRun`'s ADR-043 §3 fork below) invokes this function
+  // ONLY caller (`cmdAgentRun`'s SPEC §5 fork below) invokes this function
   // exclusively when `descriptor?.turnSpec` is truthy. Asserted rather than
   // silently trusted, per this codebase's declared-data-fails-open rule —
   // if this invariant is ever violated it fails loud, naming the id, instead
@@ -224,7 +224,7 @@ async function runTurnSpecAgent(
   // above this call catching it; the session's status.json then sits at
   // whatever phase it was in when the turn started, forever — the operator
   // UI polls status and shows silence, the only trace is stderr.log (R4-23
-  // widened exactly this trigger set; ADR-043 2026-08-14 amendment §4).
+  // widened exactly this trigger set; SPEC §5).
   // The session dir mirrors `runInteractiveTurn`'s OWN SEC-04 containment
   // preamble (`sessionDirSegments(project, kindDir, sessionId)` under the logs
   // root) — same segments, same root, so the terminal write lands exactly
@@ -259,7 +259,7 @@ async function runTurnSpecAgent(
 export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<void> {
   const agentId = rest[0];
 
-  // ADR-043 §3 dispatch fork (R4-22 WI-5) — evaluated BEFORE the
+  // SPEC §5 dispatch fork (R4-22 WI-5) — evaluated BEFORE the
   // unknown-agent-id bail-out below. A turnSpec-bearing session kind has NO
   // AGENT_RUNNERS entry, so checking `entry` first would reject every
   // new-style kind as "unknown agent-id" before this lookup is ever

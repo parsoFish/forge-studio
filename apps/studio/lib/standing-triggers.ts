@@ -10,7 +10,7 @@
  * The `projects: null` (unscoped — the declaration carries no `projects:`
  * key, so the trigger fires for every project) vs `projects: []` (declared
  * empty — scoped to nothing) distinction is preserved by the server all the
- * way to the wire (ADR-027's R2-08 amendment rule 1) and is preserved here
+ * way to the wire (D-10's R2-08 amendment rule 1) and is preserved here
  * too: collapsing them would make an always-fires trigger read as if it
  * never fires. `StandingTriggers.tsx` renders that distinction as
  * `data-trigger-scope-count="all"` vs `"0"`.

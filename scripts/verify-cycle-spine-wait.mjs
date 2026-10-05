@@ -109,7 +109,7 @@ export function createSpineWait({ forgeRoot, page, getPhaseStates, captureFrame,
   }
 
   /**
-   * Wait, bounded, for a send-back's in-place drain (ADR-026) to actually
+   * Wait, bounded, for a send-back's in-place drain (D-20) to actually
    * finish: the cycle's bridge-reported status must first LEAVE
    * `ready-for-review` (the pre-send-back snapshot — evidence Studio's
    * supervised `forge serve` has started reprocessing it) and only THEN

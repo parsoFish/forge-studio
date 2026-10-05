@@ -1,5 +1,5 @@
 /**
- * Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+ * Seam F6 half 1 (D-34, spec §5 item 8, bead forge-8vfn.6.10.15):
  * "a flow registers its accepted classes" — `loadFlowDefinition`'s own
  * validation of the new required `accepts` field.
  *

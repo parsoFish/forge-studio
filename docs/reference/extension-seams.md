@@ -6,7 +6,7 @@ conformance/contract test suite as its admission gate, a registry, and (for
 two of them) a `catalog.yaml` entry.
 
 The RuntimeAdapter seam has two registered non-Claude implementations —
-Gemini and Aider (ADR-032) — dep+creds-gated so they register but are not
+Gemini and Aider — dep+creds-gated so they register but are not
 selectable until an operator provisions the dependency and credentials. The
 KbBackend seam is **filesystem-only today** — `FilesystemKbBackend` is the
 sole implementation; the interface exists for a future backend but nothing
@@ -155,12 +155,12 @@ triggers: []
 | `resumable` | no | node can be re-entered after partial failure — e.g. the develop flow's integrate station (code identifier `demo` in `studio/flows/forge-develop/flow.yaml` today) |
 
 **Edge `artifact`** names the markdown artifact written by the `from` node
-and read by the `to` node. Every artifact must be greppable (ADR-007).
+and read by the `to` node. Every artifact must be greppable (SPEC §3).
 
 `forge studio lint` validates a flow: required fields present, all `agent`
 slugs resolve to a `skills/<slug>/SKILL.md`, all `gate` ids are known, all
 edge endpoints are declared nodes, no dangling edges. The flow engine
-dispatches nodes via a data-table + node-executor registry ([ADR-028](../decisions/028-flow-engine.md)).
+dispatches nodes via a data-table + node-executor registry ([SPEC §2](../../SPEC.md)).
 
 ---
 
@@ -221,7 +221,7 @@ passes to the SDK at spawn time.
 
 **`brainAccess: mandatory`** is enforced by convention (and by the
 brain-read policy in `CLAUDE.md`): planners and the reflector must read the
-brain before acting; the dev-loop must not read Brain 1/2, though it may read the project's Brain 3 as supplemental context (ADR 018 as amended).
+brain before acting; the dev-loop must not read Brain 1/2, though it may read the project's Brain 3 as supplemental context (SPEC §4).
 
 `deriveAgentSpec('skills/my-agent/SKILL.md')` turns a SKILL.md into the
 runtime spec: `{ phase, skill, tier, allowedTools, disallowedTools }`. The

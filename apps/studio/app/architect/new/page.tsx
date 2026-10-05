@@ -8,7 +8,7 @@ import { routeReady } from '@/lib/route-readiness';
 import { useProjectRoster } from '@/lib/use-project-roster';
 
 /**
- * Native Studio "new idea / start a run" entry (M7-4, ADR-031). W7-B6: the
+ * Native Studio "new idea / start a run" entry (M7-4, D-12). W7-B6: the
  * whole form lives in `NewIdeaBox` (self-contained: roster select over real
  * project ids, tier picker, cost ceiling) so `/architect/new` and
  * `/sessions/architect/new` render the SAME component — the two entries

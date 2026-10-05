@@ -2,11 +2,11 @@
 
 What governs this package, and the three decisions a reader is most likely to question.
 
-## The ADRs that govern it
+## The decisions that govern it
 
-- **[ADR 024](../../docs/decisions/024-phases-as-subagents-invoking-skills.md) — agents compose skills.** A skill is an instruction/tool unit an agent invokes; this package owns authoring, scanning and listing them, and `agents` owns invoking them. The split in the ADR is the split in the code: everything here answers "what is this object and may it be trusted", never "run it as part of a turn".
-- **[ADR 018](../../docs/decisions/018-three-brain-model.md)** for the boundary this package sits inside — `library` is rank 2 in the allow-graph (`scripts/check-boundaries.mjs`), below `agents`, above `kernel` and `contracts`. It may never import `agents`, `sessions`, `flows` or `factory`, and never a rank-2 sibling (`knowledge`, `projects`): a shared symbol goes to `kernel`/`contracts` additively, or the consumer moves up.
-- **[ADR 042](../../docs/decisions/042-surface-cap-scope-and-testability.md)** for why the size cap is a real constraint and not a target to route around.
+- **SPEC §1 — agents compose skills.** A skill is an instruction/tool unit an agent invokes; this package owns authoring, scanning and listing them, and `agents` owns invoking them. The split in the spec is the split in the code: everything here answers "what is this object and may it be trusted", never "run it as part of a turn".
+- **SPEC §4** for the boundary this package sits inside — `library` is rank 2 in the allow-graph (`scripts/check-boundaries.mjs`), below `agents`, above `kernel` and `contracts`. It may never import `agents`, `sessions`, `flows` or `factory`, and never a rank-2 sibling (`knowledge`, `projects`): a shared symbol goes to `kernel`/`contracts` additively, or the consumer moves up.
+- **D-31** for why the size cap is a real constraint and not a target to route around.
 
 ## Three decisions worth stating
 

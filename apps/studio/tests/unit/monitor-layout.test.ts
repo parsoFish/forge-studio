@@ -1,6 +1,6 @@
 /**
  * Tests for apps/studio/lib/monitor-layout.ts — the pure run-model → monitor
- * topology mapping (M7-1, ADR-031).
+ * topology mapping (M7-1, D-12).
  *
  * Pure synchronous function: no DOM, no React. Runs under the forge-ui
  * Vitest runner (vitest.config.ts include: lib/**\/*.test.ts), matching its

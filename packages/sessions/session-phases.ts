@@ -16,7 +16,7 @@
  * which likewise lives here and is re-exported there.
  *
  * "LEGACY" names the KINDS, not the code: `architect` is permanently bespoke
- * (ADR 043 amendment §4) and `project-brain` has no table yet, so both need
+ * (SPEC §5) and `project-brain` has no table yet, so both need
  * their phases written down somewhere instead of derived from a phase row.
  * Every table-bearing kind derives the same facts from its own `turnSpec`.
  */
@@ -31,7 +31,7 @@
 export { CANCELLED_PHASE } from './session-status-io.ts';
 
 /** The per-kind terminal phases for the four kinds whose runners predate the
- *  ADR-043 phase table (architect, instructions, demo and project-brain —
+ *  SPEC §5 phase table (architect, instructions, demo and project-brain —
  *  the four with no `turnSpec` to derive a `step: terminal` row from, unlike
  *  kb-cleanup/authoring). ONE named constant that both `apps/forge/ui-bridge.ts`
  *  (its four per-kind list routes, which gate `ensureSessionTail` on it) and

@@ -89,7 +89,7 @@ export class DispatchInFlight extends Error {
 }
 
 /**
- * Thrown by the dispatch claim while the one emergency halt (ADR 011) is on:
+ * Thrown by the dispatch claim while the one emergency halt (D-03) is on:
  * nothing new starts. `since` is the halt record's timestamp, or `null` when
  * the record is unreadable (an unreadable record reads as halted).
  */

@@ -21,7 +21,7 @@ export const EXPLICIT_MODULES = [
   // — session-derived staging paths + a request-derived packageId both reach fs
   // writes; same class as the legacy interactive runners below.
   'packages/sessions/interactive-finalizers.ts',
-  // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine, and the four
+  // R4-22 WI-3 (SPEC §5): the generic interactive-turn spine, and the four
   // legacy runners. They cannot be reached by the reachability walk (that walk
   // follows relative imports from the bridge entry points; the
   // apps/forge/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN

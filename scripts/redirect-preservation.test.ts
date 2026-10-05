@@ -98,7 +98,7 @@ test('every currently-moved route has a wire redirect old-path -> new-path', asy
   }
 });
 
-test('W6: /architect/new stays a LIVE page — no redirect source may match it (architect never migrates, ADR-043 §4)', async () => {
+test('W6: /architect/new stays a LIVE page — no redirect source may match it (architect never migrates, R-13)', async () => {
   const mod = await import('../apps/studio/next.config.mjs');
   const cfg = (mod.default ?? mod) as { redirects?: () => Promise<Array<{ source: string }>> };
   const redirects = typeof cfg.redirects === 'function' ? await cfg.redirects() : [];

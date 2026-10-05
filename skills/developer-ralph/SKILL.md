@@ -39,7 +39,7 @@ budgets: {}
 
 ## Single responsibility
 
-Drive a single work item to completion via the Ralph loop pattern ([ADR 002](../../docs/decisions/002-ralph-loop-pattern.md)). Thin wrapper: prepare loop input artifacts (`PROMPT.md`, `AGENT.md`, `fix_plan.md`), invoke [`packages/agents/ralph/runner.ts`](../../packages/agents/ralph/runner.ts).
+Drive a single work item to completion via the Ralph loop pattern (SPEC §1). Thin wrapper: prepare loop input artifacts (`PROMPT.md`, `AGENT.md`, `fix_plan.md`), invoke [`packages/agents/ralph/runner.ts`](../../packages/agents/ralph/runner.ts).
 
 ## Inputs / Outputs
 
@@ -100,9 +100,9 @@ After your work, **commit** with a conventional-commits message (`feat:`, `fix:`
 Hard rules:
 - **You are CONTINUING, not restarting.** Every prior iteration's work is committed on this branch. FIRST move each iteration: `git log --oneline main..HEAD` + `git diff --stat main..HEAD` to see what is already built, and read `AGENT.md` for what has been tried. Build on it — never re-research what `AGENT.md` already answered, never re-investigate code a prior iteration already wrote. If you catch yourself reading SDK/docs/source to "understand" rather than to make a concrete edit, stop reading and write.
 - **Write code EARLY.** Make a concrete, committed change every iteration. Write a compiling skeleton in your first one or two tool calls; flesh it out across iterations — do NOT spend a whole iteration researching. Progress = committed diffs, not understanding.
-- **Anchor on the WI's acceptance criteria.** Make each AC's `then` clause observable. (Brain 3 is available as supplemental context per ADR 010 if the WI is thin on a project convention; the forge brain is off-limits.)
+- **Anchor on the WI's acceptance criteria.** Make each AC's `then` clause observable. (Brain 3 is available as supplemental context per SPEC §4 if the WI is thin on a project convention; the forge brain is off-limits.)
 - **`files_in_scope` is advisory orientation, NOT a fence.** It is the planner's best guess — a starting point. You are FREE to edit any file needed to make the gate pass, including sweeping changes (e.g. running a formatter over the whole tree) when the AC requires it. Don't rewrite unrelated features, but never let the scope list stop you from applying the actual fix.
 - **Read what the gate is telling you, then use the project's own fixers.** When the gate reports a failure, fix THAT, the cheap way. If a formatter/linter has an auto-fix target (`make fmt`, `gofmt -w`, `prettier --write`, `ruff --fix`), RUN IT over the whole tree in one command instead of hand-editing files.
 - **No shortcuts.** Don't skip tests, don't `--no-verify`, don't disable lint rules.
 - **No hallucinated test passes.** If you claim tests pass, prove it by running them via `Bash`.
-- **`creates:` / `verification_artifact:` paths are MANDATORY outputs (ADR 037).** If the WI lists either, the orchestrator runs `git diff --name-only main...HEAD` and rejects the iteration if NONE of those paths are in the diff. Before you exit each iteration, ensure at least one of those paths exists (a compiling stub satisfies the path check). If the gate emits "[forge gate-tightening] REJECTED: …", the message lists the exact paths — create one in the next iteration.
+- **`creates:` / `verification_artifact:` paths are MANDATORY outputs (D-17).** If the WI lists either, the orchestrator runs `git diff --name-only main...HEAD` and rejects the iteration if NONE of those paths are in the diff. Before you exit each iteration, ensure at least one of those paths exists (a compiling stub satisfies the path check). If the gate emits "[forge gate-tightening] REJECTED: …", the message lists the exact paths — create one in the next iteration.

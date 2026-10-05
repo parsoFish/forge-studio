@@ -68,7 +68,7 @@ why.
 ## Declared skills reach the agent, not just preflight
 
 `preflight-skills.ts`'s `loadDeclaredSkills(projectDir, forgeRoot)` is the read half of
-the SKILLS clause `checkSkills` only ever checked EXISTENCE for (ADR 024 item 90):
+the SKILLS clause `checkSkills` only ever checked EXISTENCE for (SPEC §1, item 90):
 both resolve through the same `resolveDeclaredSkillPath`, but the loader also reads
 each `SKILL.md`'s content and THROWS `MissingDeclaredSkillError` on a declared id that
 doesn't resolve, so `@forge/agents`'s two spawn builders can fold the text into every

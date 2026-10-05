@@ -168,7 +168,7 @@ test('resolveDevWiConcurrency: R2-03-F4 — the definition cap is the DEFAULT (b
   delete process.env.FORGE_DEV_WI_CONCURRENCY;
   try {
     // an explicit operator config value WINS over the agent-declared default
-    // (ADR-009's dev.maxConcurrentWorkItems lever is preserved).
+    // (the dev.maxConcurrentWorkItems lever is preserved).
     assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 2 } }, 4), 2);
     // no config → the definition cap is the effective default.
     assert.equal(resolveDevWiConcurrency({}, 3), 3);
@@ -257,7 +257,7 @@ test('resolvePostMergeCiConfig: config values honoured; env overrides beat confi
 });
 
 // ---------------------------------------------------------------------------
-// R4-08-F2 (ADR-040): review send-back loop bounds — either cap exhausting
+// R4-08-F2 (D-20): review send-back loop bounds — either cap exhausting
 // parks the initiative needs-operator.
 // ---------------------------------------------------------------------------
 

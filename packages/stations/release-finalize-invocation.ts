@@ -30,7 +30,7 @@ export type ReleaseFinalizeAllowedTool = 'Read' | 'Edit' | 'Bash' | 'Grep' | 'Gl
 export type ReleaseFinalizeDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
 /**
- * ADR 024 / M2-3: the release-finalizer spec derived from SKILL.md (single
+ * SPEC §1 / M2-3: the release-finalizer spec derived from SKILL.md (single
  * source). The orchestrator resolves the model from the tier declared in the
  * frontmatter.
  */
@@ -53,7 +53,7 @@ function loadSkillText(): string {
 }
 
 /**
- * Build the release-finalizer system prompt: the SKILL.md contract (ADR 024:
+ * Build the release-finalizer system prompt: the SKILL.md contract (SPEC §1:
  * the single source of phase intent). Static; per-cycle data (branch,
  * changelog/version paths, declared steps) goes in the user prompt only so the
  * cache key holds across cycles.

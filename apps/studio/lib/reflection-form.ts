@@ -1,5 +1,5 @@
 /**
- * Pure form helpers for the reflection human moment (M7-3, ADR-031).
+ * Pure form helpers for the reflection human moment (M7-3, D-12).
  *
  * Extracted from the ReflectionGate component so the gating + payload-assembly
  * logic is unit-testable under the node-environment vitest harness (the

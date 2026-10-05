@@ -150,7 +150,7 @@ test('flows-28/49 (S3-11): each control advertises BOTH ids — the run handle a
 
 test('flows-23 / MEDIUM-2: a QUEUED run with serve UNREAD (null) says it could not confirm — never the pickup promise', () => {
   // KILLS: rendering `queued-awaits-serve` whenever `serve` is falsy. `null`
-  // means the read never resolved (or failed) — ADR 031: Studio never claims
+  // means the read never resolved (or failed) — D-12: Studio never claims
   // a run is in progress unless a daemon is alive and claiming it.
   mockServeStatus = null;
   const html = markup(RunControls, { run: run('planned') });

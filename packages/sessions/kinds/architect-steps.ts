@@ -393,7 +393,7 @@ const DRAFT_SCHEMA = {
           iteration_budget: { type: 'number' },
           cost_budget_usd: { type: 'number' },
           depends_on: { type: 'array', items: { type: 'string' } },
-          // ADR 051: both are REQUIRED of the model. `class` selects the gate
+          // D-34: both are REQUIRED of the model. `class` selects the gate
           // profile; `acceptance_criteria` is the typed field that replaces
           // prose recovered by regex, so the shape is stated here rather than
           // hoped for in the skill's prose.
@@ -564,7 +564,7 @@ export async function runDraftStep(
     return list.map((d) => buildManifest(d, status, datePart, created_at, knownSlugs));
   };
   // Row 159 (bead forge-8vfn.8.1.47, ruling 1891) — S10 run 41: buildManifest
-  // rejecting a draft (ADR 051's typed-criteria / class validation) used to
+  // rejecting a draft (D-34's typed-criteria / class validation) used to
   // throw straight out of this turn with no repair chance (see the module doc
   // on `architect-draft-repair.ts`). ONE bounded extra structured call, same
   // shape as the forced-emit retry above, before the session gives up.
@@ -605,7 +605,7 @@ export async function runDraftStep(
     title: draftInitiatives[idx]?.title ?? m.initiative_id,
     iteration_budget: m.iteration_budget,
     cost_budget_usd: m.cost_budget_usd,
-    // ADR 051: read off the MANIFEST, not the draft — `buildManifest` is where
+    // D-34: read off the MANIFEST, not the draft — `buildManifest` is where
     // the class and the criteria were validated, so the plan the operator
     // confirms shows the same values the queue will run.
     class: m.class,
@@ -714,7 +714,7 @@ export async function runDraftRounds(
 }
 
 // ---------------------------------------------------------------------------
-// Prompt source (ADR 003 / ADR 024 — prompt is skill content, not re-baked TS)
+// Prompt source (SPEC §1 — prompt is skill content, not re-baked TS)
 // ---------------------------------------------------------------------------
 //
 // Per-turn prose now lives in `skills/architect/SKILL.md` as `<!-- turn: id -->`

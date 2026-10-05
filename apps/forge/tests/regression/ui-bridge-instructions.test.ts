@@ -95,7 +95,7 @@ test('POST /api/instructions/start defaults mode=edit when an AGENTS.md exists',
 // the 8KB cap; the boundary value) live in
 // `packages/sessions/kinds/instructions.ts`'s own test coverage.
 
-// --- ADR-043 §3 amendment (wave-6 kickoff model-tier seam) -----------------
+// --- SPEC §5 amendment (wave-6 kickoff model-tier seam) -----------------
 
 test('POST /api/instructions/start with a valid modelTier ("opus", within the widened range) is persisted into status.json', async () => {
   const { status, json } = await post('/api/instructions/start', { project: 'demo', modelTier: 'opus' });

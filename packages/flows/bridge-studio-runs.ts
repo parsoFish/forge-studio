@@ -198,7 +198,7 @@ export async function applyPlanVerdict(
     // spawned.
     const refuse = (): void => sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     if (kind === 'approve') {
-      // ADR 051 / ruling 229 half B — the class rule, BEFORE any spend. Read
+      // D-34 / ruling 229 half B — the class rule, BEFORE any spend. Read
       // from the draft manifests the operator is approving (never from
       // status.json, which does not carry them), through the same guarded
       // family as every other read on this path: a symlinked `manifests` dir

@@ -42,7 +42,7 @@ import { debounceLeadingTrailing } from './debounce';
  * ONE bridge WebSocket (`subscribe()`): a `cycle-list-changed` message
  * re-fetches runs only, exactly as both callers did before extraction.
  *
- * ADR-044 P1 (`docs/decisions/044-read-path-memoization.md`, merged to main
+ * D-27 P1, merged to main
  * as `feat/w6-p1-run-list-cache` AFTER this hook's own extraction landed —
  * re-targeted here on merge): the `cycle-list-changed` refetch is wrapped in
  * `debounceLeadingTrailing` (`./debounce.ts`, 500ms leading+trailing) so a
@@ -100,7 +100,7 @@ export type StudioHomeData = {
 };
 
 /**
- * Extracted so the ADR-044 P1 debounce wiring is a plain, directly-testable
+ * Extracted so the D-27 P1 debounce wiring is a plain, directly-testable
  * unit — a `Debounced<[]>` (`./debounce.ts`) wrapping a refetch callback,
  * with NO React/effect involvement — rather than only provable by reading
  * the hook's source text. `use-studio-home-data.test.ts` exercises this with
@@ -195,7 +195,7 @@ export function useStudioHomeData(): StudioHomeData {
 
     // Subscribe to bridge WS to re-fetch runs (+ sessions, W6-B11) on
     // cycle-list-changed — the ONE live-refresh transport Studio has.
-    // ADR-044 P1: debounce leading+trailing 500ms (createDebouncedRefreshRuns,
+    // D-27 P1: debounce leading+trailing 500ms (createDebouncedRefreshRuns,
     // above) so a burst of cycle-list-changed messages collapses into at
     // most two round-trips instead of one per message.
     // W7-A1: connection STATE is no longer discarded here — it is owned by

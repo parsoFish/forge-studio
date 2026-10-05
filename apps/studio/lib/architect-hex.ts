@@ -4,7 +4,7 @@ import type { SessionLifecycleState } from './session-lifecycle-client';
 
 /**
  * Architect-phase presentation logic, extracted out of the old MomentHex
- * wrapper (retired in M7-4, ADR-031) so the native Studio interview surface can
+ * wrapper (retired in M7-4, D-12) so the native Studio interview surface can
  * drive the shared {@link StageHex} primitive directly without the
  * ScreenShell/MomentHex standalone tree. Pure + unit-tested: the phase→hex
  * mapping and the P1 stale-session predicate are the load-bearing pieces.

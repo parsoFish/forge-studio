@@ -6,14 +6,14 @@
  * moved with its history and its tests.
  *
  * `resolveRoot` is deliberately ABSENT. Spec §3 lists it among kernel's
- * contents, but ADR 045 — which designs it — says of itself: "Accepted
- * (2026-08-23, operator) — design only. Nothing in this ADR is built by the
+ * contents, but its design record says of itself: "Accepted
+ * (2026-08-23, operator) — design only. Nothing in this record is built by the
  * change that lands it." There is nothing to quarry, and writing it here would
  * be new kernel logic. Operator ruling at H5, 2026-08-31: it lands in M4 under
- * ADR 045's own roadmap items.
+ * its own roadmap items.
  */
 
-/** The JSONL event log (ADR 008) — SPEC.md §3 Artifact. */
+/** The JSONL event log (SPEC.md §3 Artifact). */
 export * from './logging.ts';
 export * from './tool-fence.ts';
 /** The one cost rule: stream usage to dollars, computed in exactly one place. */
@@ -25,7 +25,7 @@ export * from './config.ts';
 export * from './gh-identity.ts';
 /** First-run scaffolding: the `_queue/`, `_worktrees/`, `_logs/` layout. */
 export * from './init.ts';
-/** The one emergency halt record (ADR 011): `<queueRoot>/halt.json`. */
+/** The one emergency halt record (D-03): `<queueRoot>/halt.json`. */
 export * from './halt.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
@@ -59,7 +59,7 @@ export * from './ids.ts';
  *  attest — moved from `cli/studio-provenance.ts` (QUARRY:76). */
 export * from './provenance.ts';
 /** Project-layout SSOT: id normalisation, on-disk discovery, and the
- *  per-project brain dirs (ADR 035) shared by projects/knowledge/library. */
+ *  per-project brain dirs (SPEC §4) shared by projects/knowledge/library. */
 export * from './project-layout.ts';
 /** The child-process env allowlist seam: deny-by-default, one composer. */
 export * from './spawn-env.ts';

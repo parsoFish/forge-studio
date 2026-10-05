@@ -2,27 +2,27 @@
 
 > This document is the **narrative / intended** architecture. The
 > **canonical current architecture** is captured in [`docs/explanation/architecture.md`](./docs/explanation/architecture.md),
-> [`docs/decisions/`](./docs/decisions/), and [`docs/reference/project-contract.md`](./docs/reference/project-contract.md).
+> [`DECISIONS.md`](./DECISIONS.md), and [`docs/reference/project-contract.md`](./docs/reference/project-contract.md).
 > The 2026-05-17 as-built snapshot and the pre-simplification refocus-architecture design docs
-> were archived prior art (removed 2026-06-07 — see git history). ADRs in [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
+> were archived prior art (removed 2026-06-07 — see git history). [`DECISIONS.md`](./DECISIONS.md) records load-bearing decisions.
 >
 > **Reconciled 2026-05-16**, refreshed **2026-05-17** post-closure,
 > **refreshed 2026-06-14** post-M7/M8 consolidation. Key load-bearing facts:
-> (a) **Forge Studio is the one product ([ADR 031](./docs/decisions/031-studio-consolidation.md))** —
+> (a) **Forge Studio is the one product ([D-12](./DECISIONS.md))** —
 > the pre-Studio `/dashboard` is deleted; `forge studio` is the canonical launcher
 > (`forge watch` is gone); every operator gate is a Studio screen; (b) **brain-first
 > is narrowed** — the planner and reflector read the brain; the dev-loop and
-> reviewer do not ([ADR 010](./docs/decisions/010-brain-first.md));
+> reviewer do not ([SPEC §4](./SPEC.md));
 > (c) **no auto-merge** — the GitHub PR is the operator's merge surface;
 > `closure.ts` is the single terminal-move authority; (d) **Forge Studio is the
-> sole operator surface** ([ADR 031](./docs/decisions/031-studio-consolidation.md)
+> sole operator surface** ([D-12](./DECISIONS.md)
 > — architect runs natively in Studio; review/reflect render
 > on the unified `/artifact` viewer); (e) **the swappable seams are real and
-> used in production** ([ADR 032](./docs/decisions/032-subsumption-proof.md)):
+> used in production**:
 > runtime adapter registry and the KbBackend seam (filesystem-only today) — the
 > **runtime adapter** seam carries a second implementation shipped.
 >
-> **Platform and example ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), [ADR 048](./docs/decisions/048-deletable-example-factory.md)):**
+> **Platform and example ([D-32](./DECISIONS.md)):**
 > forge-studio is a builder of software factories. The platform — `packages/*`,
 > `apps/forge`, `apps/studio` and their seams — is generic to any factory; the
 > phases below are the stations and gates of the **example develop factory**
@@ -34,7 +34,7 @@
 
 The platform runs any factory's flows on one engine; the example develop factory's work is carried by composable flows backed by a brain. The flow engine
 ([`packages/flows/flow-runner.ts`](./packages/flows/flow-runner.ts)) walks a
-`FlowDefinition` (a YAML-declared DAG, ADR 028) in topological order, dispatching
+`FlowDefinition` (a YAML-declared DAG, SPEC §2) in topological order, dispatching
 each node through a **node-executor registry** — no `classifyNode` switch. The
 example factory ships as two chained flows — `studio/flows/forge-architect/`
 (plan + decompose) and `studio/flows/forge-develop/` (dev → review) — handing
@@ -49,29 +49,29 @@ work items.
 
 > **High-level view (refreshed 2026-06-14 — M7/M8).** The diagram below reflects
 > the as-built Studio-as-one-product and three-seam architecture. The structural
-> reference is [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) and [`docs/decisions/`](./docs/decisions/).
+> reference is [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) and [`DECISIONS.md`](./DECISIONS.md).
 
 ```mermaid
 flowchart TB
     OP(["Operator"])
 
-    subgraph STUDIO["Forge Studio — the ONE product · forge studio · ADR 031"]
+    subgraph STUDIO["Forge Studio — the ONE product · forge studio · D-12"]
         direction LR
         AR["1 · Architect<br/>idea → PLAN gate → INIT-*.md<br/>/architect/&lt;sid&gt;"]
         RV["5 · Review/Reflect<br/>structured demo, approve/send-back<br/>/artifact/&lt;cycleId&gt;"]
     end
 
-    ORCH["Orchestrator — thin coordination ONLY<br/>scheduler · _queue/ state machine · git worktrees · crash recovery<br/>picks a model tier and spawns each phase; owns no phase prompt · ADR 011-013"]
+    ORCH["Orchestrator — thin coordination ONLY<br/>scheduler · _queue/ state machine · git worktrees · crash recovery<br/>picks a model tier and spawns each phase; owns no phase prompt · D-03/D-04/D-05"]
 
-    subgraph ENGINE["Flow engine (ADR 028) — node-executor registry, no switch"]
+    subgraph ENGINE["Flow engine (SPEC §2) — node-executor registry, no switch"]
         direction LR
-        PM["2 · project-manager<br/>node kind: agent · wi-contract band hook (ADR 039)"]
+        PM["2 · project-manager<br/>node kind: agent · wi-contract band hook (SPEC §1)"]
         DV["3 · developer-loop<br/>node kind: agent · loopStrategy:'ralph' · Ralph × N worktrees<br/>runtime adapter: getAdapter(sdkId)"]
-        UN["4 · integrate + adversarial-review<br/>node kind: agent · integrate-band + review-band hooks (ADR 039)<br/>orchestrator/phases/demo-agent.ts, packages/stations/phases/adversarial-review.ts"]
-        RFL["reflector<br/>node kind: agent · reflection-close band hook (ADR 039)"]
+        UN["4 · integrate + adversarial-review<br/>node kind: agent · integrate-band + review-band hooks (SPEC §1)<br/>orchestrator/phases/demo-agent.ts, packages/stations/phases/adversarial-review.ts"]
+        RFL["reflector<br/>node kind: agent · reflection-close band hook (SPEC §1)"]
     end
 
-    subgraph SEAMS["Swappable seams · ADR 032"]
+    subgraph SEAMS["Swappable seams"]
         direction LR
         RA["Runtime adapter registry<br/>claude (live) · gemini · aider<br/>packages/agents/_adapters/registry.ts"]
         KB["KbBackend seam<br/>FilesystemKbBackend (live, only impl)<br/>packages/knowledge/kb-backend.ts"]
@@ -86,8 +86,8 @@ flowchart TB
         C4["code-review · tdd · …"]
     end
 
-    BRAIN[("Brain — 3 scoped graphs<br/>forge-dev · cycles · per-project<br/>planners + reflector READ; dev-loop + reviewer do NOT · ADR 010")]
-    LOG[("Markdown artifacts + JSONL event log<br/>the inter-phase protocol · ADR 007/008")]
+    BRAIN[("Brain — 3 scoped graphs<br/>forge-dev · cycles · per-project<br/>planners + reflector READ; dev-loop + reviewer do NOT · SPEC §4")]
+    LOG[("Markdown artifacts + JSONL event log<br/>the inter-phase protocol · SPEC §3")]
 
     OP --> STUDIO
     AR -->|"writes _queue/pending/INIT-*.md"| ORCH
@@ -161,7 +161,7 @@ The brain is the system's memory. It is a **Karpathy-style LLM wiki** with three
 After the **Tier 4 three-brain restructure (2026-05-26)**, three scoped brains:
 - **Brain 1 (forge-dev):** `brain/forge-dev/` — forge TypeScript source knowledge + ADRs + engineering notes.
 - **Brain 2 (cycles):** `brain/cycles/` — cycle-derived patterns, antipatterns, raw archives. `brain/cycles/_raw/` holds immutable cycle records.
-- **Brain 3 (per-project):** `brain/projects/<name>/themes/` — forge-owned, central in the forge repo (ADR 035).
+- **Brain 3 (per-project):** `brain/projects/<name>/themes/` — forge-owned, central in the forge repo (SPEC §4).
 
 Layer structure (each brain follows this pattern):
 1. **`_raw/`** — immutable raw sources. Ground truth.
@@ -178,8 +178,8 @@ The brain is itself a small set of agents (Claude Code skills):
 ### 2. Architect *(human-in-the-loop)*
 
 The architect runs **natively inside Forge Studio** on the dedicated
-`/architect/<sid>` screen ([ADR 020](./docs/decisions/020-architect-in-ui.md),
-extended by [ADR 031](./docs/decisions/031-studio-consolidation.md)).
+`/architect/<sid>` screen
+([D-12](./DECISIONS.md)).
 
 Responsibility: turn ideas + existing roadmap + brain knowledge into **initiatives** — coherent units of work, each carrying Given/When/Then acceptance criteria in its body, that move a project to a desired state.
 
@@ -208,7 +208,7 @@ The PM uses the brain first; researches more broadly only when the brain is insu
 
 ### 4. Developer Loop *(unattended)*
 
-The developer loop is **the Ralph loop pattern** ([ghuntley/how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum)) run as a flow DAG node (node kind: `agent`, declared `runtime.loopStrategy: 'ralph'` — R4-01-F2/ADR-039 — `fanOut: work-items`).
+The developer loop is **the Ralph loop pattern** ([ghuntley/how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum)) run as a flow DAG node (node kind: `agent`, declared `runtime.loopStrategy: 'ralph'` — R4-01-F2/SPEC §1 — `fanOut: work-items`).
 
 ```
 loop:
@@ -219,7 +219,7 @@ loop:
 ```
 
 Key properties:
-- **Runtime adapter seam (ADR 029)** — agents are created via `getAdapter(sdkId).createAgent`, not `createClaudeAgent` directly. The registry (`packages/agents/_adapters/registry.ts`) holds `claudeAdapter` (live), `geminiAdapter`, and `aiderAdapter` (both DEP+CREDS-GATED; `available:false` until provisioned). A second adapter is a one-file drop-in that passes the conformance suite.
+- **Runtime adapter seam (SPEC §1)** — agents are created via `getAdapter(sdkId).createAgent`, not `createClaudeAgent` directly. The registry (`packages/agents/_adapters/registry.ts`) holds `claudeAdapter` (live), `geminiAdapter`, and `aiderAdapter` (both DEP+CREDS-GATED; `available:false` until provisioned). A second adapter is a one-file drop-in that passes the conformance suite.
 - **Parallel work** = N git worktrees × N Ralph instances, coordinated by the orchestrator's scheduler.
 - **The developer loop is *complete* for an initiative** when all work items have landed in the initiative branch with all checks passing.
 - **Merge conflict handling** is part of the loop, not the orchestrator.
@@ -233,7 +233,7 @@ Responsibility: closeout of an initiative back to main.
 The verdict gate (the develop flow's successor band's quality gate) runs between iterations and:
 
 1. **Re-runs the project quality gate** (orchestrator-verified — never trusts the agent's claim).
-2. **Asks the verdict provider** — production: the operator reviews via the **`/artifact/<cycleId>`** Studio screen ([ADR 031](./docs/decisions/031-studio-consolidation.md)). The file-based `verdict-response.md` handoff is written by the Studio bridge.
+2. **Asks the verdict provider** — production: the operator reviews via the **`/artifact/<cycleId>`** Studio screen ([D-12](./DECISIONS.md)). The file-based `verdict-response.md` handoff is written by the Studio bridge.
 3. **On approve** → closure merges the PR and fires reflection. **On send-back** → feedback is appended to `fix_plan.md` as Given/When/Then ACs; loop continues.
 
 > **Note (refocus pass):** `runReviewer` has been folded into `cycle.ts` — the reviewer phase was removed as a separate phase; the develop flow's successor band owns review-prep and the PR opens inline after the delivery gate passes.
@@ -244,7 +244,7 @@ The verdict gate (the develop flow's successor band's quality gate) runs between
 
 Cap: fixed at ≤2 send-back rounds (iteration cap removed from the reviewer when `computeAdaptiveReviewIterationCap` was deleted with the Ralph reviewer in S4). There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict). Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
 
-The example factory's verdict gate is the **`/artifact/<cycleId>` UI screen** (Studio's unified artifact viewer — [ADR 031](./docs/decisions/031-studio-consolidation.md)). The operator approves or sends-back directly there; the bridge writes the `verdict-response.md` handoff.
+The example factory's verdict gate is the **`/artifact/<cycleId>` UI screen** (Studio's unified artifact viewer — [D-12](./DECISIONS.md)). The operator approves or sends-back directly there; the bridge writes the `verdict-response.md` handoff.
 
 ### 6. Reflection *(human-in-the-loop, then unattended ingest)*
 
@@ -262,7 +262,7 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 
 A factory runs unattended between the gates its flow declares. The example
 develop factory's gates are below, all on **Forge Studio** — the sole operator
-surface ([ADR 031](./docs/decisions/031-studio-consolidation.md); `forge studio` is the
+surface ([D-12](./DECISIONS.md); `forge studio` is the
 one launcher command) — with the kickoff (Develop on the roadmap card) as the
 named operator act between its two flows. The load-bearing platform invariant is
 that every gate, in any factory, is
@@ -273,16 +273,16 @@ The Studio bridge writes the handoff files the phases already consume:
 
 | Moment | Studio screen | File handoff (written by the bridge) |
 |---|---|---|
-| Architect *(out-of-cycle — file-checkpointed runner; [ADR 020](./docs/decisions/020-architect-in-ui.md), [ADR 031](./docs/decisions/031-studio-consolidation.md))* | `/architect/<sid>` | writes `_queue/pending/INIT-*.md` + roadmap rows |
-| Review + Reflect *(structured demo, approve/send-back; [ADR 021](./docs/decisions/021-local-review-and-unified-demo.md), [ADR 031](./docs/decisions/031-studio-consolidation.md))* | `/artifact/<cycleId>` | `verdict-response.md`; approve → closure merges the PR; free-form feedback → `_logs/<id>/user-feedback.md` |
+| Architect *(out-of-cycle — file-checkpointed runner; [D-12](./DECISIONS.md))* | `/architect/<sid>` | writes `_queue/pending/INIT-*.md` + roadmap rows |
+| Review + Reflect *(structured demo, approve/send-back; [D-07](./DECISIONS.md), [D-12](./DECISIONS.md))* | `/artifact/<cycleId>` | `verdict-response.md`; approve → closure merges the PR; free-form feedback → `_logs/<id>/user-feedback.md` |
 
 Everything else runs unattended for arbitrary durations via:
 
 - **`_queue/` state-machine directories** (`pending → in-flight → ready-for-review → done | failed`).
-- **`packages/flows/scheduler.ts`** (~770 LOC persistent loop — see ADR 011 for the reconciliation of its scope) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
+- **`packages/flows/scheduler.ts`** (~770 LOC persistent loop) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
 - **Crash recovery** by atomic claim + heartbeat: orphaned in-flight items return to `pending/` on restart.
 
-This is **not a re-invented job queue + worker pool + resource controller**. See ADR 011-013 for the line we're holding.
+This is **not a re-invented job queue + worker pool + resource controller**. See [R-03](./DECISIONS.md) for the line we're holding.
 
 ### Brain-first research
 
@@ -290,7 +290,7 @@ Every skill mandates `brain-query` as its first action. Broader research (web, d
 
 ### Logging & visualisation
 
-Every skill invocation emits a structured event to `_logs/<cycle-id>/events.jsonl` (schema in [`docs/decisions/008-jsonl-event-log.md`](./docs/decisions/008-jsonl-event-log.md)). The event log is the source of truth for:
+Every skill invocation emits a structured event to `_logs/<cycle-id>/events.jsonl` (schema in [SPEC §3](./SPEC.md)). The event log is the source of truth for:
 
 - **Reflection** (replay what happened).
 - **Visualisation** (`forge status`, forge UI live phase view).
@@ -298,15 +298,15 @@ Every skill invocation emits a structured event to `_logs/<cycle-id>/events.json
 
 ### Phase isolation & quality
 
-> Note (2026-05-25): the synthetic per-phase benchmark suites under `benchmarks/` were removed. They had begun teaching the phases toward the bench shape rather than measuring real outcomes. Phase quality is now judged on real merged cycles — brain themes accumulate the evidence. The real-capability harness ([ADR 022](./docs/decisions/022-real-capability-harness.md)) is what asserts real-cycle outcomes now; only the synthetic benchmark realization was retired.
+> Note (2026-05-25): the synthetic per-phase benchmark suites under `benchmarks/` were removed. They had begun teaching the phases toward the bench shape rather than measuring real outcomes. Phase quality is now judged on real merged cycles — brain themes accumulate the evidence. The real-capability harness ([D-08](./DECISIONS.md)) is what asserts real-cycle outcomes now; only the synthetic benchmark realization was retired.
 
-### Flow engine + node-executor registry (ADR 028)
+### Flow engine + node-executor registry (SPEC §2)
 
 `packages/flows/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `@forge/agents/studio/agent-registry.ts`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind onto the node context and calls the injected `PhaseExecutor` (`kernel`), which looks the kind up in `DEFAULT_NODE_EXECUTORS`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
 
 **Amended 2026-08-31 (M2-B, `docs/roadmaps/1.0.md` §4 M2 Lane B, [SPEC.md](./SPEC.md) §2 Station):** the runner holds the port, not the phases. `runFlow` receives a `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }` and a `ProjectGate { runPreflight }` ([SPEC.md](./SPEC.md) §6) and imports neither implementation — its ten phase imports and its preflight import are gone. The executors themselves, the injectable phase set and the band registrations live in `packages/stations/phases/executor-table.ts` and `executor-deps.ts`, which move to `@forge/factory` at the package cutover. Bands register through `registerBand`, closed over the ratified `BAND_GUARD_IDS`, instead of a hardcoded record.
 
-**Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'reflect'` plus one now-retired develop-flow closing-phase slug) is retired down to one row. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `packages/agents/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). R4-01-F4 later retired that last slug — `PHASE_EXECUTOR_KINDS` is now empty.
+**Amended 2026-07-24 (R4-01-F2, [SPEC §1](./SPEC.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'reflect'` plus one now-retired develop-flow closing-phase slug) is retired down to one row. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `packages/agents/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). R4-01-F4 later retired that last slug — `PHASE_EXECUTOR_KINDS` is now empty.
 
 The four built-in node-kind executors:
 - `execArchitect` — silent DAG marker (the PLAN gate was satisfied before queue pickup).
@@ -316,7 +316,7 @@ The four built-in node-kind executors:
 
 Budget helpers (`packages/flows/flow-budgets.ts`): `CostTracker` (cost-ceiling check at every clean node boundary), `WedgeDetector` (per-node heartbeat/progress watch, race via `raceWithWedge`), `RateLimitGate` (gates spawn on rate-limit backoff).
 
-### Swappable seams (ADR 032)
+### Swappable seams
 
 The seams are declarative data over interfaces. The **runtime adapter** seam ships a
 **second implementation** behind it, making the subsumption claim mechanically true; the
@@ -326,8 +326,8 @@ engine** is registry-driven (any node type is a data-table entry).
 
 | Seam | Interface / registry | 1st impl (live) | 2nd impl |
 |---|---|---|---|
-| **Runtime adapter** (ADR 029) | `RuntimeAdapter` · `packages/agents/_adapters/registry.ts` | `claudeAdapter` — Claude Agent SDK | `geminiAdapter` (`@google/genai`), `aiderAdapter` (Aider CLI) — DEP-gated |
-| **KbBackend** (ADR 027) | `KbBackend` · `packages/knowledge/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | none today — seam present, filesystem-only |
+| **Runtime adapter** (SPEC §1) | `RuntimeAdapter` · `packages/agents/_adapters/registry.ts` | `claudeAdapter` — Claude Agent SDK | `geminiAdapter` (`@google/genai`), `aiderAdapter` (Aider CLI) — DEP-gated |
+| **KbBackend** (D-09) | `KbBackend` · `packages/knowledge/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | none today — seam present, filesystem-only |
 | **Dev-loop runtime** | via RuntimeAdapter seam | Ralph + Claude Agent SDK | Aider CLI via `aiderAdapter` — DEP-gated |
 
 The closure is `packages/agents/tests/contract/conformance.test.ts`: it runs every registered runtime adapter, the Gemini and Aider second implementations included, through one contract.
@@ -336,8 +336,8 @@ Cycle helpers extracted to `packages/flows/cycle-helpers.ts` to break the `flow-
 
 ## What forge is *not*
 
-- It is not a job queue with priorities and dedup. (See ADR 011.)
+- It is not a job queue with priorities and dedup. (See [R-03](./DECISIONS.md).)
 - It is not a resource controller. (`maxConcurrentInitiatives` is a static knob.)
-- It is not a per-project agent personality. (Skills are shared; per-project taste lives in `brain/projects/<name>/profile.md` in the forge repo (ADR 035).)
+- It is not a per-project agent personality. (Skills are shared; per-project taste lives in `brain/projects/<name>/profile.md` in the forge repo (SPEC §4).)
 - It does not retry failed initiatives automatically. (Failure → human triage.)
 - It does not host its own model runtime, vector DB, or agent harness. (Claude Agent SDK does that.)

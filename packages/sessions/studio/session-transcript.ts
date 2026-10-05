@@ -560,7 +560,7 @@ export function deriveSessionArtifact(input: {
    *  store). Ignored for every other kind. */
   cleanupFindings?: readonly CleanupFinding[];
   /** R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — additive-optional
-   *  (ADR-042 disclose-not-park), only consumed by the 'cleanup-plan' kind.
+   *  (disclose-not-park), only consumed by the 'cleanup-plan' kind.
    *  See CleanupScan's own doc for the full contract this unlocks. Omitted
    *  entirely ⇒ every unmatched action derives 'unknown', never 'cleared' —
    *  the fail-safe default. Ignored for every other kind. */

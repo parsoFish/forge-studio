@@ -390,7 +390,7 @@ export async function handleStudioWriteRoutes(
       // ---- DELETE /api/studio/flows/:id (W7-B4, flows-11) ------------------
       // A shipped seed is refused outright (403 — the OOTB pipeline is not
       // deletable state); an in-flight run locks deletion exactly like edits
-      // (423, ADR-028 D6); an authored flow deletes with its directory.
+      // (423, SPEC §2 D6); an authored flow deletes with its directory.
       if (method === 'DELETE') {
         if (!pathGuard.exists) {
           sendJson(res, 404, { error: `unknown flow "${id}"` }, origin);
@@ -541,7 +541,7 @@ export async function handleStudioWriteRoutes(
       const nodes = Array.isArray(b['nodes']) ? b['nodes'] : (existing?.nodes ?? []);
       const edges = Array.isArray(b['edges']) ? b['edges'] : (existing?.edges ?? []);
       const triggers = Array.isArray(b['triggers']) ? b['triggers'] : (existing?.triggers ?? []);
-      // Seam F6 half 1 (ADR 051 decision 4): the builder has no UI for this
+      // Seam F6 half 1 (D-34): the builder has no UI for this
       // field yet, so a save carries it exactly like `nodes`/`edges` above —
       // forward a provided array verbatim (a bad entry surfaces on the next
       // load/lint, same as a bad node), else preserve `existing`, else `code`
@@ -550,7 +550,7 @@ export async function handleStudioWriteRoutes(
       const accepts = Array.isArray(b['accepts'])
         ? (b['accepts'] as FlowDefinition['accepts'])
         : (existing?.accepts ?? ['code']);
-      // `review` (ADR 051 d2 as amended) rides the merge the same way, or a save strips it.
+      // `review` (D-34 as amended) rides the merge the same way, or a save strips it.
       const review = b['review'] !== undefined ? (b['review'] as FlowDefinition['review']) : existing?.review;
 
       // Bump version: n+1 for existing, 1 for new
@@ -657,13 +657,13 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 9. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
+      // 9. Edit-lock: reject if a run of this flowId is currently active (SPEC §2 D6)
       // The predicate `r.flowId === id` is correct: since S8/DEC-3 run-model stamps
       // each run with the flowId its manifest names (forge-architect /
       // forge-develop), so a run of THIS flow is locked while in flight.
       // Pre-S8 manifests with no flow_id stamp as 'unknown' (never matches a real
       // editable flow id) — correct, an unknowable archival flow is not editable.
-      // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
+      // D-27 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
       const activeRun = cachedListRuns(ctx.forgeRoot, Date.now()).find(
         (r) => r.flowId === id && r.status === 'active',
       );

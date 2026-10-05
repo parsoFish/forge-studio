@@ -31,7 +31,7 @@ export function themeScanFiles(forgeRoot: string): string[] {
 }
 
 /**
- * Is this KB dir one of the two FORGE sub-wikis — the domain of the ADR 018
+ * Is this KB dir one of the two FORGE sub-wikis — the domain of the SPEC §4
  * category→sub-wiki routing rules (`CHECK_SCOPE: 'forge-themes'`)? Derived from
  * `THEME_SUBDIRS`, never re-listed by a caller.
  */
@@ -41,19 +41,19 @@ export function isForgeBrainDir(forgeRoot: string, brainDir: string): boolean {
 }
 
 /**
- * The two FORGE sub-wikis, relative to `brain/` (ADR 018). This is the
+ * The two FORGE sub-wikis, relative to `brain/` (SPEC §4). This is the
  * category-routing domain (`pattern`→`cycles`, `decision`→`forge-dev`) and the
  * `forge-only` scope filter — it is NOT the set of theme dirs the lint walks.
  * That universe is `themeDirs()` below, which also covers Brain 3
- * (`brain/projects/<name>/themes/`, ADR 035) and operator-created KBs
+ * (`brain/projects/<name>/themes/`, SPEC §4) and operator-created KBs
  * (`brain/<id>/themes/`).
  */
 export const THEME_SUBDIRS = ['cycles', 'forge-dev'] as const;
 
 /**
  * THE one enumeration of every brain theme directory: each `brain/<kb>/themes/`
- * plus each `brain/projects/<name>/themes/` (ADR 035 moved Brain 3 into this
- * repo; ADR 018 is the sub-wiki layout). `readThemeFiles`, `findThemeBySlug`
+ * plus each `brain/projects/<name>/themes/` (Brain 3 moved into this
+ * repo; SPEC §4 is the sub-wiki layout). `readThemeFiles`, `findThemeBySlug`
  * and `collectThemeSlugTargets` all derive from this — three callers, one walk,
  * so no caller can hold a stale idea of what exists.
  *

@@ -7,7 +7,7 @@
  * dev-loop ran that set anyway, merged it to a real project and cut a release,
  * because every downstream claimant reads the work-items DIRECTORY while the
  * only thing the failure path withheld was the manifest's `specs` pointer.
- * Reproduced live by G1 run 3 (2026-09-04): `WI-3: creates is required (ADR 037)`
+ * Reproduced live by G1 run 3 (2026-09-04): `WI-3: creates is required`
  * at 15:38:26, `WI-1 dev started` at 15:38:35, merged as gitpulse #15 at 16:05.
  *
  * §15.167 — the gate was on the wrong artifact. Withholding a pointer while

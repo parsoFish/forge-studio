@@ -1,5 +1,5 @@
 /**
- * flow-runner.ts — Definition-driven DAG executor (ADR 028).
+ * flow-runner.ts — Definition-driven DAG executor (SPEC §2).
  *
  * Walks a `FlowDefinition` in topological order and executes each node through
  * ONE port: `PhaseExecutor { run(nodeId, ctx) -> CycleOutcome }`
@@ -12,9 +12,9 @@
  * What the runner still owns, because none of it is a station:
  *   - topological order, node-kind resolution (`./flow-node-kind.ts`) and the
  *     per-node context it hands the port (`./flow-node-context.ts`);
- *   - the ADR 027 inbound-artifact guard, with the reflection-close exemption
+ *   - the D-09 inbound-artifact guard, with the reflection-close exemption
  *     (that node's `verdict` is produced out of band by the human gate);
- *   - budgets and safety (ADR 028 §4): `costCeilingUsd` warns at 70% and stops
+ *   - budgets and safety (SPEC §2): `costCeilingUsd` warns at 70% and stops
  *     at a CLEAN NODE BOUNDARY at 100%, never mid-write; per-node `wedgeKillMs`
  *     races a concurrent timer so a hung executor is killed even if it never
  *     returns; the rate-limit gate waits before a spawn and records `resetsAt`
@@ -169,14 +169,14 @@ export type FlowRunArgs = {
    * The one port every station executes through (SPEC.md §2 Station,
    * `docs/roadmaps/1.0.md` §4 M2 Lane B). The runner imports no phase; the
    * caller supplies the table — `createPhaseExecutor()` in
-   * `@forge/factory`'s `createPhaseExecutor()` builds the shipped one; `packages/flows/phase-wiring.ts` is the port it arrives through (ADR 048).
+   * `@forge/factory`'s `createPhaseExecutor()` builds the shipped one; `packages/flows/phase-wiring.ts` is the port it arrives through (D-32).
    */
   executor: PhaseExecutor<NodeExecContext>;
   /**
    * The project contract's preflight, injected (SPEC.md §6 Project). The runner
    * declares the port and never imports `packages/projects/preflight.ts`; the caller supplies
    * the implementation — `createProjectGate()` in
-   * `@forge/factory`'s `createProjectGate()` builds the shipped one; it arrives through `packages/flows/phase-wiring.ts` (ADR 048).
+   * `@forge/factory`'s `createProjectGate()` builds the shipped one; it arrives through `packages/flows/phase-wiring.ts` (D-32).
    */
   projectGate: ProjectGate;
   /**
@@ -194,7 +194,7 @@ export type FlowRunArgs = {
    * the port and outside the node's try/catch, where a closure failure keeps
    * being classified as itself and never as the node's rate-limit error. The
    * runner imports no phase, so it is injected: `@forge/factory`'s
-   * `defaultRunClosure` is the shipped one, injected through `phase-wiring.ts` (ADR 048).
+   * `defaultRunClosure` is the shipped one, injected through `phase-wiring.ts` (D-32).
    */
   runClosure: (
     input: CycleInput,
@@ -322,7 +322,7 @@ function extractResetsAt(_err: unknown): number | null {
 
 
 // ---------------------------------------------------------------------------
-// Edit-lock version seam (ADR-028 §6, M3-6 minimal)
+// Edit-lock version seam (SPEC §2, M3-6 minimal)
 // ---------------------------------------------------------------------------
 
 /**
@@ -403,7 +403,7 @@ const RESUME_POINTS_INTO_DEVELOP: ReadonlySet<CycleInput['resumeFrom']> = new Se
  * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
  * resumeFrom: Row 167 (ruling 1916) — a resume that re-enters the develop flow
- * ('integrate' ADR 019, 'pr-open' row 122, 'develop' ADR 040 fix loop) rebases
+ * ('integrate' D-06, 'pr-open' row 122, 'develop' D-20 fix loop) rebases
  * the preserved worktree onto current main EXACTLY ONCE here, before the first
  * node runs (`RESUME_POINTS_INTO_DEVELOP`, below). This is resume machinery,
  * not a phase's job — no node on the shipped `forge-develop` flow is the PM,
@@ -496,7 +496,7 @@ export async function runFlow({
   // the threading note above `runFlow`), so this shadows the destructured
   // `rawInput` with a single augmented object rather than mutating it
   // in place or rebuilding it per node.
-  // ADR 028 amendment (M7 row 150, ruling 1774): the operator-stop flag file is
+  // D-11 amendment (M7 row 150, ruling 1774): the operator-stop flag file is
   // a SECOND trigger on this SAME clean-boundary halt, checked at the identical
   // two boundaries as the cost ceiling (here, and at the node boundary below).
   // `inFlightDir` is `dirname(rawInput.manifestPath)` — while a cycle RUNS, its
@@ -548,7 +548,7 @@ export async function runFlow({
     terminateEarly: false,
   };
 
-  // ADR-027 runtime artifact contracts — built once per run (7 small files; an
+  // D-09 runtime artifact contracts — built once per run (7 small files; an
   // absent template dir → empty map → the guard no-ops).
   const artifactTemplates = new Map<string, ArtifactContract>(
     listArtifactTemplates(FORGE_ROOT).map((t) => [t.id, { id: t.id, kind: t.kind, schema: t.schema }]),
@@ -603,8 +603,8 @@ export async function runFlow({
       inboundArtifacts,
     };
 
-    // ADR-027: assert the node's inbound artifacts exist before it runs. The
-    // reflect node (the agent carrying the reflection-close band, ADR-039) is
+    // D-09: assert the node's inbound artifacts exist before it runs. The
+    // reflect node (the agent carrying the reflection-close band, SPEC §1) is
     // exempt — its inbound `verdict` is produced by the human review gate
     // (async in unattended mode); verdict.json is persisted at the decision
     // point, not by a producing node. A dry run produces no real artifacts,
@@ -677,7 +677,7 @@ export async function runFlow({
     const nextNodeId = currentIdx >= 0 ? (order[currentIdx + 1] ?? null) : null;
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
 
-    // ADR 028 amendment (ruling 1774): the operator-stop flag, checked at the
+    // D-11 amendment (ruling 1774): the operator-stop flag, checked at the
     // SAME clean node boundary — never mid-write, same as the ceiling above.
     if (checkOperatorStop()) {
       nodeLogger.emit({
@@ -719,7 +719,7 @@ export async function runFlow({
       });
     },
     dispatch: (trigger) => {
-      // R2-08-F1 (ADR-027 amendment; N2, round-4 correction): carry the
+      // R2-08-F1 (D-10 amendment; N2, round-4 correction): carry the
       // trigger's own `projects:` declaration + a resolved `eventProject`
       // onto EVERY staged request UNCONDITIONALLY — including `projects: []`.
       // `drainFlowRunRequests` is the ONE enforcement point (rule 2); a

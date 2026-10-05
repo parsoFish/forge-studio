@@ -4,7 +4,7 @@
  * Reads draft initiative manifests from a session's `manifests/` dir, validates
  * each, and writes them into `_queue/pending/`. Extracted from
  * `architect-commit.ts:doApprove` so the in-UI architect runner's finalize step
- * (ADR 020) and the legacy `forge architect commit` path share one code path —
+ * and the legacy `forge architect commit` path share one code path —
  * the promotion rule must not drift between the two surfaces.
  */
 

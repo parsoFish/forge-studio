@@ -13,12 +13,12 @@
  * descriptor renders a blank page", and the next declared kind must fail
  * this test the moment it is authored, not after its own walkthrough
  * finding. architect and project-brain are the two kinds with bespoke
- * panels (ADR-043 amendment §4) — the ONLY legitimate absences.
+ * panels (SPEC §5) — the ONLY legitimate absences.
  *
  * forge-r594: the pin originally filtered on `turnSpec` alone, but a kind
- * can ALSO drive the generic panel via a `panel:` phase table (ADR-043
- * 2026-08-15 amendment §2 — demo/onboarding/instructions all use this shape
- * and never gain a turnSpec, amendment §1) — that half of the vocabulary
+ * can ALSO drive the generic panel via a `panel:` phase table (SPEC §5:
+ * demo/onboarding/instructions all use this shape
+ * and never gain a turnSpec) — that half of the vocabulary
  * passed this pin even while missing from GENERIC_PANEL_KINDS. Every
  * currently-shipped `panel:`-only kind already happens to be in the
  * literal, so widening the real-data assertion below stays green; the

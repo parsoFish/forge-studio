@@ -2,7 +2,7 @@
  * Adversarial-review invocation contract — system + user prompt builders
  * (R4-08-F1).
  *
- * ADR 024/039: skills/adversarial-review/SKILL.md is the single source of the
+ * SPEC §1: skills/adversarial-review/SKILL.md is the single source of the
  * agent's intent; this binding emits only DYNAMIC run context. The system
  * prompt = the SKILL.md verbatim (composition is empty — the agent needs no
  * contract skill; its output contract lives in its own SKILL.md + the

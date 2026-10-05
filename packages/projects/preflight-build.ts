@@ -1,5 +1,5 @@
 /**
- * forge↔project contract preflight — BUILD + ARTIFACTS (US-4.1 / ADR-017).
+ * forge↔project contract preflight — BUILD + ARTIFACTS (US-4.1 / SPEC §6).
  * ARTIFACTS: build outputs must be gitignored (advisory, betterado #4a).
  * BUILD: the project's build process is declared, distinct from the test
  * gate (advisory, R1-04-F3). A clause-family leaf of `preflight.ts`, whose

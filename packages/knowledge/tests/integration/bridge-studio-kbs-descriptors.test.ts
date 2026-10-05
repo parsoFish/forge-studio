@@ -151,7 +151,7 @@ test('GET /api/studio/kbs/resolve-node/:nodeId: invalid node id → 400', async 
   assert.ok(typeof json['error'] === 'string');
 });
 
-// ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
+// SPEC §4: per-project brains live at brain/projects/<id>/. loadKbDescriptors
 // must surface them alongside the top-level brains so they appear in Studio's KB
 // list/graph (previously only direct subdirs of brain/ were scanned).
 test('loadKbDescriptors: includes central per-project brains under brain/projects/', () => {

@@ -1,5 +1,5 @@
 /**
- * Tests for `validate-flow.ts`'s trigger TARGET rules (R2-04, ADR-041): the
+ * Tests for `validate-flow.ts`'s trigger TARGET rules (R2-04, D-23): the
  * `target: {kind, ref}` shape and its self-loop check, the cron expression, the
  * webhook provider/event matrix, and the per-kind `trigger-shape` requirements.
  * Which `on:` kinds exist at all is the sibling `validate-flow-triggers.test.ts`.
@@ -65,9 +65,9 @@ function makeAgentMap(...agents: AgentDefinition[]): ReadonlyMap<string, AgentDe
 }
 
 // ---------------------------------------------------------------------------
-// validateFlow — triggers (R2-04, ADR-041)
+// validateFlow — triggers (R2-04, D-23)
 // ---------------------------------------------------------------------------
-// validateFlow — trigger targets, cron, webhook and shape (R2-04, ADR-041)
+// validateFlow — trigger targets, cron, webhook and shape (R2-04, D-23)
 // ---------------------------------------------------------------------------
 
 describe('validateFlow — trigger-target', () => {
@@ -204,7 +204,7 @@ describe('validateFlow — trigger-cron', () => {
     assert.match(f.message, /enum-reserved/);
   });
 
-  it('TARGET flow has no project → error trigger-cron (ADR-041: the mint uses the target flow project)', () => {
+  it('TARGET flow has no project → error trigger-cron (D-23: the mint uses the target flow project)', () => {
     // validCron targets `other-flow`; the DECLARING flow's project is irrelevant.
     const flow = makeFlow({ project: 'someproj', triggers: [validCron()] });
     const flowProjectOf = (id: string) => (id === 'other-flow' ? null : 'someproj');
@@ -354,7 +354,7 @@ describe('validateFlow — trigger-webhook', () => {
     assert.match(f.message, /sources/);
   });
 
-  it('TARGET flow has no project → error trigger-webhook (ADR-041: the mint uses the target flow project)', () => {
+  it('TARGET flow has no project → error trigger-webhook (D-23: the mint uses the target flow project)', () => {
     const flow = makeFlow({ project: 'someproj', triggers: [validWebhook()] });
     const flowProjectOf = (id: string) => (id === 'other-flow' ? null : 'someproj');
     const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowProjectOf });

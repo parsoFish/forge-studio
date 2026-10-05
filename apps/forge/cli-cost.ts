@@ -1,6 +1,6 @@
 /**
  * `forge cost by-class` — §7.3 release-definition evidence: cost-per-merged-
- * initiative by ADR 051 change class. A verb shell over the pure producer
+ * initiative by D-34 change class. A verb shell over the pure producer
  * `packages/flows/cost-by-class.ts`'s `costByClass` — argv/`--root` in,
  * a table (or `--json`) out. Split out of `cli.ts` (own file, one dispatch
  * line there) so the already-at-cap file does not grow — mirrors

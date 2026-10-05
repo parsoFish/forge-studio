@@ -1,5 +1,5 @@
 /**
- * Google Gemini RuntimeAdapter (M8-A, ADR 029 — flywheel adapter drop-in).
+ * Google Gemini RuntimeAdapter (M8-A, SPEC §1 — flywheel adapter drop-in).
  *
  * A second runtime adapter behind the same `RuntimeAdapter` seam the Claude
  * reference adapter satisfies (packages/agents/_adapters/claude/index.ts) — contract-

@@ -9,13 +9,13 @@ import { createLogger } from '@forge/kernel';
 /**
  * R4-22 WI-3 (T3, acceptance tests) — pins the contract for the generic
  * interactive-turn runner, `packages/sessions/interactive-runner.ts`, BEFORE it
- * exists (ADR-043 §2: docs/decisions/043-generic-interactive-surface.md).
+ * exists (SPEC §5).
  *
  * `runInteractiveTurn(descriptor, ctx)` is the ONE spine every future
  * `turnSpec`-bearing session kind runs through instead of a bespoke
  * `orchestrator/*-runner.ts`. It owns, once: the SEC-04 containment preamble
  * (`resolveGuardedPath(projectRoot, [kindDir, sessionId])` →
- * `guardedReadSessionStatus`), the ADR-024 spec/model/prompt derivation
+ * `guardedReadSessionStatus`), the SPEC §1 spec/model/prompt derivation
  * (`deriveAgentSpec(skillPathRelative(agent))` → `modelForSpec`), the shared
  * telemetry (`createLogger` / `makeToolEventSink` / `flushIteration(1)`), and
  * the phase-table dispatch loop (`status.phase` → matching `turnSpec.phases`
@@ -34,7 +34,7 @@ import { createLogger } from '@forge/kernel';
  * lands with a later WI), so every test here builds its OWN tiny forgeRoot
  * with its own `studio/session-kinds.yaml` and loads descriptors through the
  * REAL `loadSessionKinds` parse path (packages/sessions/studio/session-kinds.ts) rather than a
- * hand-built object literal — three rows, all shaped exactly like ADR-043
+ * hand-built object literal — three rows, all shaped exactly like SPEC §5
  * §1's own worked example:
  *
  *   - `test-kind`               — the ADR's 4-phase table verbatim
@@ -50,17 +50,17 @@ import { createLogger } from '@forge/kernel';
  * (skills/project-brain-builder/SKILL.md, `allowed-tools: […, Write]`,
  * `runtime: {sdk: claude, strategy: fixed, model: claude-sonnet-4-6}`) so
  * `deriveAgentSpec(skillPathRelative(descriptor.agent))` resolves for real
- * instead of throwing on a fabricated agent id — the ADR-024 derivation leg
+ * instead of throwing on a fabricated agent id — the SPEC §1 derivation leg
  * is exercised genuinely, only the LLM call itself is stubbed via `queryFn`.
  *
  * ---------------------------------------------------------------------------
- * MY CALL, on the parts ADR-043 / the WI-3 brief leave open (stated
+ * MY CALL, on the parts SPEC §5 / the WI-3 brief leave open (stated
  * explicitly, mirroring the WI-2 finalizers suite's own precedent, so the
  * implementer has one target):
  * ---------------------------------------------------------------------------
  *
  *   1. `FinalizerContext.libraryRoot` / `.packageId` derivation from
- *      `ctx.forgeRoot` + the session is UNSPECIFIED by ADR-043 and the WI-3
+ *      `ctx.forgeRoot` + the session is UNSPECIFIED by SPEC §5 and the WI-3
  *      brief — there is no `turnSpec` field, no `ctx` field, and no existing
  *      config constant anywhere in the repo that names it (grepped; the only
  *      precedent is the WI-2 finalizers suite's OWN test-local guess,
@@ -77,7 +77,7 @@ import { createLogger } from '@forge/kernel';
  *      "containment root does not exist" for a reason unrelated to the
  *      runner's actual correctness. Flagged in the WI-3 report as a real
  *      open question, not silently resolved here.
- *   2. `result.artifacts` semantics are entirely unpinned by ADR-043's
+ *   2. `result.artifacts` semantics are entirely unpinned by SPEC §5's
  *      signature (`Record<string, unknown>` with no key contract stated
  *      anywhere). Left unasserted throughout this file rather than guessed —
  *      pinning invented keys here would dictate an implementation choice
@@ -360,7 +360,7 @@ export function setupRealAuthoring(): RealAuthoringFixture {
     throw new Error(
       'REPO_ROOT/studio/session-kinds.yaml "authoring" row has no turnSpec — this IS the RED this suite pins ' +
         '(R4-21 phase 2, WI-1, D1): loadSessionKinds(REPO_ROOT) must return "authoring" WITH a turnSpec whose 4 ' +
-        'phase rows deep-equal ADR-043 §1\'s table before this fixture (and every test below) can run at all.',
+        'phase rows deep-equal SPEC §5\'s table before this fixture (and every test below) can run at all.',
     );
   }
   const root = mkdtempSync(join(tmpdir(), 'interactive-runner-real-authoring-'));

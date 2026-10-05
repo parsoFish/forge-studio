@@ -1,5 +1,5 @@
 /**
- * The run view's shape (ADR 028 §3: "a run is derived, never stored").
+ * The run view's shape (SPEC §2: "a run is derived, never stored").
  *
  * Moved here from `packages/contracts/run-view-types.ts` (bead `forge-8vfn.5.17`,
  * M2-B's cycle-break relocation): the ONE declaration for

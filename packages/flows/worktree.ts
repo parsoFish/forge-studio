@@ -1,5 +1,5 @@
 /**
- * Thin wrappers over `git worktree`. Per ADR 006, we use git worktrees natively
+ * Thin wrappers over `git worktree`. Per D-02, we use git worktrees natively
  * for filesystem isolation per parallel work unit; this module exists only to
  * track lockfiles, heartbeat path, and the `gh`-friendly conventions.
  *
@@ -104,8 +104,8 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
  *
  * Reuse iff a registered worktree is present at the expected path AND it carries
  * durable, gitignored state the next phase consumes:
- *   - a resume marker (`resume_from`): 'integrate' crash recovery (ADR-019) or
- *     'develop' fix-loop re-entry (ADR-040). Per-WI commits +
+ *   - a resume marker (`resume_from`): 'integrate' crash recovery (D-06) or
+ *     'develop' fix-loop re-entry (D-20). Per-WI commits +
  *     `.forge/work-items/` + `.forge/unifier-items/` live there; a fresh `add`
  *     re-checks-out the branch and wipes those untracked specs.
  *   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle preserved

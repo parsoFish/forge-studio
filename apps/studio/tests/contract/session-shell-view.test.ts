@@ -102,7 +102,7 @@ import {
 } from '../../lib/session-shell-view.ts';
 import type { SessionShellPayload, SessionShellFetchResult } from '../../lib/session-client.ts';
 // `isPseudoProjectAnchor` (imported above, from ../../lib/session-shell-view.ts)
-// is itself a re-export of `@forge/contracts`'s own definition (ADR 046
+// is itself a re-export of `@forge/contracts`'s own definition (D-29
 // boundary fix, `studio-beyond-contracts` edge 3, pure transfer) — there is
 // no separate on-disk SSOT left to compare it against, so the parity tests
 // this file used to carry (AT-104/AT-104b) are gone rather than repointed:

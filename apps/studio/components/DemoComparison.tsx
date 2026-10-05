@@ -5,7 +5,7 @@ import { resolveBridgeUrl } from '@/lib/bridge-client';
 import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow } from '@/lib/bridge-client';
 
 /**
- * ADR 021 — renders the unifier-authored structured `demo.json` natively (this
+ * D-07 — renders the unifier-authored structured `demo.json` natively (this
  * IS the demo review surface; F4 retired the parallel DEMO.html). The schema
  * this renders IS the contract the unifier fills, which is what makes demos
  * consistent. Forge dark theme; mirrors the plan screen's "rich artifact on its

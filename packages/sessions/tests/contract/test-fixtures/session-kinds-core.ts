@@ -66,8 +66,8 @@
  * or pins an already-safe shape (GREEN today, coverage only — reported
  * honestly per T2's brief, not disguised as a fresh catch).
  *
- * AT-R422-1 .. AT-R422-10 (this file) — R4-22 WI-1, ADR-043
- * (docs/decisions/043-generic-interactive-surface.md §1): the additive-optional
+ * AT-R422-1 .. AT-R422-10 (this file) — R4-22 WI-1, SPEC §5:
+ * the additive-optional
  * `turnSpec` field on SessionKindDescriptor. The module under test does NOT
  * carry `turnSpec`, `TURN_STYLES`, `TURN_STEPS`, `FINALIZER_IDS`, `SCHEMA_IDS`,
  * `turnStyleState`, `turnStepState`, `finalizerIdState`, or `schemaIdState` yet
@@ -147,7 +147,7 @@
  * `d.id` is checked against `SLUG_RE` (`/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`,
  * packages/agents/skill-path.ts) one screen up in the same function — but every
  * REAL `kindDir` value in this design is underscore-prefixed (`_authoring`,
- * `_architect`, `_demo`, ADR-043 §1's own worked example). SLUG_RE requires
+ * `_architect`, `_demo`, SPEC §5's own worked example). SLUG_RE requires
  * a leading `a-z` letter, so it REJECTS every one of them. Reusing
  * SLUG_RE/CHECK_SLUG for kindDir would make every real shipped kindDir value
  * a lint error. The kindDir check must be a NEW, distinct "safe single path
@@ -167,7 +167,7 @@ import yaml from 'js-yaml';
 import matter from 'gray-matter';
 
 import { type SessionKindDescriptor } from '../../../studio/session-kinds.ts';
-// R4-19-F2 — the constraint test (ADR-043's whole point): a new interactive
+// R4-19-F2 — the constraint test (SPEC §5's whole point): a new interactive
 // session kind must ride the EXISTING generic runInteractiveTurn spine, never
 // a new AGENT_RUNNERS entry. Imported directly from the real production
 // registry (apps/forge/agent-run.ts), not re-derived, so the assertion below is

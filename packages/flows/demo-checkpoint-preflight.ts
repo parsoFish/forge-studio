@@ -28,7 +28,7 @@
  * SCOPED TO THE ONE CLASS THAT CAPTURES CHECKPOINT-COMMAND EVIDENCE. The
  * class → gate-profile table is the installed example factory's
  * (`@forge/factory/class-profiles.ts`), read elsewhere only through
- * `@forge/stations`'s `ClassProfilePort` (ADR 048); `packages/flows` sits
+ * `@forge/stations`'s `ClassProfilePort` (D-32); `packages/flows` sits
  * below both and may import neither. Today exactly one class (`code`) sets
  * `capture: 'checkpoints'` — every other class's AC-derived checkpoints are
  * never read downstream, so checking them here is pure false-refusal risk

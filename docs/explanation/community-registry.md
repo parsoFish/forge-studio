@@ -66,7 +66,7 @@ the real file is replaced — a write that cannot be re-loaded never lands.
 Studio **writes the working tree only**. It never runs `git add`/`git
 commit` on the forge repo — an unattended-adjacent surface silently
 committing to the operator's own checkout is exactly the class of surprise
-ADR-031's "one interaction point" exists to avoid, and the 2026-07-16
+D-12's "one interaction point" exists to avoid, and the 2026-07-16
 bridge-self-merge incident is the standing lesson. Instead:
 
 - `GET /api/studio/community` carries `meta.registryDirty` — git's own

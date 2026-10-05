@@ -47,9 +47,9 @@ const THEME_BEFORE = [
   '',
   'Planners read Brain 2 plus the cycle Brain 3. The reviewer additionally',
   'gains a per-KB advisory read of any review-band flow KB (amended',
-  '2026-08-09, ADR 010 / ADR 027 R1-06).',
+  '2026-08-09, SPEC §4 / R1-06).',
   '',
-  'See [ADR 010](../../docs/decisions/010-brain-first.md).',
+  'See [brain policy](../../docs/reference/brain-policy.md).',
   '',
 ].join('\n');
 
@@ -68,7 +68,7 @@ test('classifyKbEdit — related_themes change is structural', () => {
 });
 
 test('classifyKbEdit — link-target-only change is structural', () => {
-  const after = THEME_BEFORE.replace('../../docs/decisions/010-brain-first.md', '../../docs/decisions/010-brain-first-amended.md');
+  const after = THEME_BEFORE.replace('../../docs/reference/brain-policy.md', '../../docs/reference/brain-policy-amended.md');
   assert.equal(classifyKbEdit('themes/brain-read-policy.md', THEME_BEFORE, after), 'structural');
 });
 
@@ -77,7 +77,7 @@ test('classifyKbEdit — the orch-01 shape (prose lines deleted/condensed) is pr
   const after = THEME_BEFORE
     .replace('Planners read Brain 2 plus the cycle Brain 3. The reviewer additionally', 'Planners read Brain 2.')
     .replace('gains a per-KB advisory read of any review-band flow KB (amended', '')
-    .replace('2026-08-09, ADR 010 / ADR 027 R1-06).', '');
+    .replace('2026-08-09, SPEC §4 / R1-06).', '');
   assert.equal(classifyKbEdit('themes/brain-read-policy.md', THEME_BEFORE, after), 'prose');
 });
 
@@ -193,12 +193,12 @@ function makeGateRoot(): { root: string; brainDir: string; themeFile: string } {
   // Keep the on-disk fixture lint-CLEAN apart from the injected finding: the
   // drain's own-theme lens (collectKbFindings) runs the REAL lintThemeFiles
   // over this file, so its link target and category index must exist.
-  mkdirSync(join(root, 'brain', 'docs', 'decisions'), { recursive: true });
-  writeFileSync(join(root, 'brain', 'docs', 'decisions', '010-brain-first.md'), '# ADR 010 (fixture)\n');
+  mkdirSync(join(root, 'brain', 'docs', 'reference'), { recursive: true });
+  writeFileSync(join(root, 'brain', 'docs', 'reference', 'brain-policy.md'), '# Brain policy (fixture)\n');
   // NOTE: link target resolves ../../ from brain/projects/gated-kb/themes →
   // brain/projects/docs — create that too so checkSourceLinks stays clean.
-  mkdirSync(join(root, 'brain', 'projects', 'docs', 'decisions'), { recursive: true });
-  writeFileSync(join(root, 'brain', 'projects', 'docs', 'decisions', '010-brain-first.md'), '# ADR 010 (fixture)\n');
+  mkdirSync(join(root, 'brain', 'projects', 'docs', 'reference'), { recursive: true });
+  writeFileSync(join(root, 'brain', 'projects', 'docs', 'reference', 'brain-policy.md'), '# Brain policy (fixture)\n');
   writeFileSync(join(brainDir, 'decisions.md'), '# Decisions\n\n- [brain-read-policy](./themes/brain-read-policy.md)\n');
   mkdirSync(join(root, '_logs'), { recursive: true });
   return { root, brainDir, themeFile };
@@ -212,7 +212,7 @@ test('runKbDrain — a prose-touching agent fix NEVER lands directly: reverted +
       message: 'theme exceeds the soft line cap', check: 'checkLengthSoftCap',
       kind: 'length.soft-cap', resolution: 'agent',
     };
-    // W8-F1: the condense KEEPS the ADR link. The original fixture truncated
+    // W8-F1: the condense KEEPS the doc link. The original fixture truncated
     // at line 10, which also deleted a markdown link whose target exists — so
     // it was really testing two things at once, and under W8-F1's
     // class-independent audit the link deletion (not the prose loss) is what
@@ -221,7 +221,7 @@ test('runKbDrain — a prose-touching agent fix NEVER lands directly: reverted +
     const condensed = [
       ...THEME_BEFORE.split('\n').slice(0, 10),
       '',
-      'See [ADR 010](../../docs/decisions/010-brain-first.md).',
+      'See [brain policy](../../docs/reference/brain-policy.md).',
       '',
     ].join('\n');
     const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-t1', {
@@ -285,7 +285,7 @@ test('W8-F1 — a prose rewrite that ALSO deletes a live link is REFUSED, not dr
       message: 'theme exceeds the soft line cap', check: 'checkLengthSoftCap',
       kind: 'length.soft-cap', resolution: 'agent',
     };
-    // The original orch-01 truncation: condenses the prose AND drops the ADR
+    // The original orch-01 truncation: condenses the prose AND drops the doc
     // link, whose target exists.
     const condensed = THEME_BEFORE.split('\n').slice(0, 10).join('\n') + '\n';
     const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-w8f1', {
@@ -314,7 +314,7 @@ test('W8-F1 — a prose rewrite that ALSO deletes a live link is REFUSED, not dr
     assert.equal(proposals.length, 1, JSON.stringify(proposals));
     assert.equal(proposals[0].disposition, 'refused');
     assert.ok(
-      proposals[0].reasons.some((r) => r.includes('010-brain-first.md')),
+      proposals[0].reasons.some((r) => r.includes('brain-policy.md')),
       `the reason must name what was destroyed — got ${JSON.stringify(proposals[0].reasons)}`,
     );
   } finally {

@@ -1,5 +1,5 @@
 /**
- * Aider RuntimeAdapter (M8-A flywheel drop-in, ADR 029).
+ * Aider RuntimeAdapter (M8-A flywheel drop-in, SPEC §1).
  *
  * ---------------------------------------------------------------------------
  * What Aider is, and why this adapter is shaped the way it is

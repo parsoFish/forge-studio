@@ -1,5 +1,5 @@
 /**
- * KB descriptor validation (ADR 027, §6) — the `kb` half of what was
+ * KB descriptor validation (SPEC §4) — the `kb` half of what was
  * `orchestrator/studio/validate.ts`, moved here by T1 ruling 159 to sit beside
  * `kb-descriptor.ts`, the loader whose output it checks.
  *

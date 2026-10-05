@@ -105,7 +105,7 @@ the follower accelerates into the leader's tail at the ramp.
 
 ## Sources
 
-- [`docs/decisions/adr-collision-architecture-2026-05-22.md`](../../../../projects/trafficGame/docs/decisions/adr-collision-architecture-2026-05-22.md) — the parent ADR.
+- trafficGame's collision-architecture decision record (2026-05-22, in the trafficGame repo) — the parent decision.
 - [`docs/baselines/grading-frontier-cross-theories.md`](../../../../projects/trafficGame/docs/baselines/grading-frontier-cross-theories.md) — the 5-fix list + champion.
 - [`src/traffic/CollisionAvoidance.ts`](../../../../projects/trafficGame/src/traffic/CollisionAvoidance.ts), [`src/traffic/OverlapTracker.ts`](../../../../projects/trafficGame/src/traffic/OverlapTracker.ts), [`src/traffic/VehicleUpdate.ts`](../../../../projects/trafficGame/src/traffic/VehicleUpdate.ts).
 - Commit `7c64b4b` "feat(traffic): elevation-aware collision avoidance + binary elevation model" on the trafficGame `main` (merged via PR #57).

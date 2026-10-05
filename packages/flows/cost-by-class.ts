@@ -1,7 +1,7 @@
 /**
  * §7.3 release-definition gap — "cost-per-merged-initiative by class". Pure
  * producer: reads every manifest in `_queue/done/` (MERGED), buckets by its
- * ADR 051 `class` frontmatter, and sums each bucket's authoritative spend
+ * D-34 `class` frontmatter, and sums each bucket's authoritative spend
  * from its cycle log, reusing `@forge/kernel`'s `deriveSessionCostUsd` (the
  * one cost rule every other surface uses) rather than re-deriving cost math.
  */
@@ -22,14 +22,14 @@ export type CostByClassRow = {
   readonly unpriced: number; // no resolvable cost — never folded into totalUsd as $0.
 };
 
-/** Display order: the four ADR 051 classes, then the catch-all. */
+/** Display order: the four D-34 classes, then the catch-all. */
 const CLASS_ORDER: readonly CostClass[] = [...CHANGE_CLASSES, 'unclassified'];
 
 /**
  * Read `class` + `cycle_id` off a manifest's RAW frontmatter (gray-matter,
  * same library `manifest.ts` parses with) — NOT `parseManifest`, which
  * throws on a missing `class`. Every manifest in this repo's `_queue/done/`
- * today predates ADR 051 and has none, so that path would silently drop
+ * today predates D-34 and has none, so that path would silently drop
  * every merged initiative instead of bucketing it `unclassified`. A file
  * this lenient read cannot even open still counts: unclassified, unpriced.
  */
@@ -71,7 +71,7 @@ function readCycleCostUsd(logsRoot: string, cycleId: string | null): number | nu
   return deriveSessionCostUsd(events);
 }
 
-/** Cost-per-merged-initiative by ADR 051 change class (§7.3 evidence).
+/** Cost-per-merged-initiative by D-34 change class (§7.3 evidence).
  *  `forgeRoot` is the operator-trusted forge checkout root — read only. */
 export function costByClass(forgeRoot: string): CostByClassRow[] {
   const root = resolve(forgeRoot);

@@ -12,12 +12,12 @@
  * `/home/parso/forge/brain/projects/gitweave/profile.md` appeared at 22:09:21Z
  * inside the run's window, in a tree the run does not own. Its own content
  * named the writer: "Stub scaffolded by forge preflight auto-fix (Brain 3 —
- * forge-owned central project brain, ADR 035)". The story runner's fence
+ * forge-owned central project brain, SPEC §4)". The story runner's fence
  * reported `fence: clean` in that same run, because the fence only ever
  * inspected its own worktree.
  *
  * WHY A PAIR CHECK AND NOT A CALLER FIX. `roadmap.md` lives INSIDE the project;
- * Brain 3 is CENTRAL (ADR 035) and lives under `forgeRoot`. So the two
+ * Brain 3 is CENTRAL (SPEC §4) and lives under `forgeRoot`. So the two
  * arguments are only coherent when `forgeRoot` is the root that actually
  * manages `projectDir`. Rather than guess which of the several callers passed
  * the mismatched pair — the CLI `chdir`s to `FORGE_ROOT` at startup, so the

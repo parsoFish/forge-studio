@@ -20,7 +20,7 @@
  * `findNewestCycleId` — but it is a read-only UI-aggregation fallback used
  * ONLY when a manifest carries no `cycle_id` at all, e.g. a legacy manifest;
  * it is never consulted by the requeue/resume/dispatch path.) `cycle_id` is
- * minted once (ADR 026, `manifest.ts`'s `persistManifestCycleId`) and never
+ * minted once (D-20, `manifest.ts`'s `persistManifestCycleId`) and never
  * re-stamped, round-tripping unchanged through every `parseManifest` /
  * `serializeManifest` pass forge-requeue.ts's own move-to-pending step does.
  *

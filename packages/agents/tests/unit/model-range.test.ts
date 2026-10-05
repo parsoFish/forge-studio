@@ -1,5 +1,5 @@
 /**
- * Tests for strategy:range model routing (M6-3, ADR-029).
+ * Tests for strategy:range model routing (M6-3, SPEC §1).
  *
  * Uses the catalog fixture shape (CatalogModel array) rather than loading the
  * real catalog.yaml, so the tests are hermetic.

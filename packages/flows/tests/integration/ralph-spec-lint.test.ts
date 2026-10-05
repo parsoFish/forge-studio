@@ -349,7 +349,7 @@ test('selector matches nothing, no test file in the enforced write set — VACUO
     assert.match(result.errors[0]!, /go test -run TestResolveFrameworkAuth/);
     assert.match(result.errors[0]!, /TestResolveFrameworkAuth/);
     assert.match(result.errors[0]!, /vacuous pass risk/);
-    assert.match(result.errors[0]!, /ADR 037/);
+    assert.match(result.errors[0]!, /D-17/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

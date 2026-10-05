@@ -6,7 +6,7 @@ One agent, run once. Resolve a slug to a definition, compose its prompt, spawn
 it through a pinned SDK seam, keep what it spawns contained, and classify how it
 ended. Everything else in this package exists to serve that sentence.
 
-## ADR 024 — an agent composes skills; it is not a hardcoded phase
+## An agent composes skills; it is not a hardcoded phase
 
 The runnable unit is a **SKILL.md with frontmatter**, not a function in a phase
 table. `packages/agents/studio/agent-registry.ts` loads it, `packages/agents/studio/derive.ts` derives what the
@@ -21,14 +21,14 @@ against a closed set, `runtime.loopStrategy: 'ralph'` is refused on the
 standalone route before a run directory exists, and connection readiness is
 checked before a spawn rather than after a failure.
 
-## ADR 043 §3 — session kinds dispatch ahead of the legacy table
+## Session kinds dispatch ahead of the legacy table
 
 `cmdAgentRun` resolves a turnSpec-bearing session-kind descriptor **before** it
 consults `AGENT_RUNNERS`. All four legacy kinds have since been ported into
 `packages/sessions/kinds/`, so that table is now empty — and it stays, because
 `packages/sessions/studio/session-kinds.test.ts` asserts against it. That
 assertion is what stops a new kind quietly acquiring a bespoke runner and
-re-opening the per-runner cap park ADR 043 dissolved. `knownAgentIds` derives
+re-opening the per-runner cap park SPEC §5 dissolved. `knownAgentIds` derives
 the operator's usage line from the **union** of both tables for the matching
 reason: a kind that ports must not become invisible while still working.
 

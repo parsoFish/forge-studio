@@ -9,7 +9,7 @@
  * The SDK's `query` is dependency-injectable (`opts.queryFn`) so unit tests
  * can verify the glue without hitting the network.
  *
- * Wired per ADR 001 (Claude Agent SDK) and ADR 002 (Ralph loop pattern).
+ * Wired per D-01 (Claude Agent SDK) and SPEC §1 (Ralph loop pattern).
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -95,7 +95,7 @@ export type ClaudeAgentOptions = {
    */
   idleDeadlineMs?: number;
   /**
-   * R2-03-F4 (ADR-028 abort-chain TODO) — an EXTERNAL abort signal (the flow
+   * R2-03-F4 (SPEC §2 abort-chain TODO) — an EXTERNAL abort signal (the flow
    * node's wedge-kill) chained into this iteration's own abort controller, so
    * a wedge-kill on a fanout node actually cancels the in-flight per-item CLI
    * subprocess instead of leaving it running as zombie work. Distinct from the
@@ -182,7 +182,7 @@ export type ClaudeAgentOptions = {
    */
   onReasoning?: (text: string) => void;
   /**
-   * ADR 024 item 90 — fired once per iteration with the ids of this
+   * SPEC §1 item 90 — fired once per iteration with the ids of this
    * worktree's declared `.forge/project.json` `skills[]` (`loadDeclaredSkills`),
    * whenever the list is non-empty. The caller (which owns the run's logger)
    * turns this into a structured JSONL event, mirroring `onHeartbeat`/
@@ -240,7 +240,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
   return async ({ promptPath, worktreePath }) => {
     const prompt = readFileSync(promptPath, 'utf8');
 
-    // ADR 024 item 90 — `worktreePath` IS the project directory for a per-WI
+    // SPEC §1 item 90 — `worktreePath` IS the project directory for a per-WI
     // Ralph iteration (an explicit AgentInvocation parameter, never guessed
     // from `process.cwd()`), so this resolves the SAME `.forge/project.json`
     // `skills[]` `checkSkills` validates at preflight. A declared id that

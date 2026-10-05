@@ -518,7 +518,7 @@ test('(g) RED [Finding 1]: GET /api/studio/kbs leaks a secret through a symlinke
     assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
     assert.ok(
       !text.includes('SECRET-MARKER-LEAFPROJKB-9e21b'),
-      `the kb LIST response must NOT leak through brain/projects/<id>/kb.yaml — the SECOND containment root (ADR 035 per-project brains) — got: ${text}. A fix that only guards the brain/<id> loop and forgets the brain/projects/<id> loop leaves this hole open.`,
+      `the kb LIST response must NOT leak through brain/projects/<id>/kb.yaml — the SECOND containment root (SPEC §4 per-project brains) — got: ${text}. A fix that only guards the brain/<id> loop and forgets the brain/projects/<id> loop leaves this hole open.`,
     );
     assert.ok(
       !text.includes('SECRET-DESC-LEAFPROJKB-4f7a3'),

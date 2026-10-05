@@ -17,7 +17,7 @@ import {
 } from '@/lib/architect-plan-view';
 
 /**
- * The native Studio PLAN surface for an architect session (M7-4, ADR-031;
+ * The native Studio PLAN surface for an architect session (M7-4, D-12;
  * rewritten per phase in W7-A3 — artifact-plan-03/04/09/10/21/27/33,
  * sessions-kinds-14). Rendered on /artifact when `runId='_architect-<sid>'`.
  *

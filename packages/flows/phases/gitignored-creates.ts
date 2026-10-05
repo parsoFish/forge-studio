@@ -1,5 +1,5 @@
 /**
- * ADR 051 decision 5 — "does git see this path?", answered once per pass.
+ * D-34 — "does git see this path?", answered once per pass.
  *
  * A work item's `creates:` list is what the required-paths check reads the diff
  * for. A path under a gitignored directory can never appear in that diff, so the

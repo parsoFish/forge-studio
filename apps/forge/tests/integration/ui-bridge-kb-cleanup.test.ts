@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the kb-cleanup session's start route (R4-19-F2 — the
- * `kb-cleanup` interactive session kind, ADR-043 §1/§3):
+ * `kb-cleanup` interactive session kind, SPEC §5/§3):
  *
  *   POST /api/studio/kbs/:id/cleanup/start
  *
@@ -356,7 +356,7 @@ test('AT-4: a NON-project-bound KB\'s start route anchors the session under the 
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — brain-maintenance
+// SPEC §5 amendment (wave-6 kickoff model-tier seam) — brain-maintenance
 // (the kb-cleanup session's agent) is now strategy:range [sonnet, opus].
 // ---------------------------------------------------------------------------
 

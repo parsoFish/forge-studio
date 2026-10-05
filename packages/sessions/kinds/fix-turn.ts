@@ -7,7 +7,7 @@
  * `kinds/kind-turn.ts` cannot drive them — its first act is
  * `resolveGuardedPath(projectRoot, [kindDir, sessionId])` and a status read
  * whose absence is a refusal — and bending it to make session state optional
- * is the ADR-043 machinery ruling 78 declined. Ruling 78 says a kind wanting
+ * is the SPEC §5 machinery ruling 78 declined. Ruling 78 says a kind wanting
  * more gets its own entry point and its PR says so: this is that entry point,
  * `../design.md` says so at length, and bead `forge-8vfn.6.6` (M5) carries the
  * machinery itself.
@@ -208,7 +208,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   const onText = makeReasoningSink(logger, sinkCtx);
   const onThinking = makeThinkingSink(logger, sinkCtx);
 
-  // ADR 003 — the prompt is skill content, not re-baked TS. `skillPath` is
+  // SPEC §1 — the prompt is skill content, not re-baked TS. `skillPath` is
   // resolved OUTSIDE the try so a throw from it is not mistaken for an
   // unreadable file; only the read itself falls back.
   const skillFile = skillPath(variant.skillName, input.forgeRoot);

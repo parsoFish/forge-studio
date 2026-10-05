@@ -1,5 +1,5 @@
 /**
- * Gemini adapter conformance + contract tests (M8-A, ADR 029).
+ * Gemini adapter conformance + contract tests (M8-A, SPEC §1).
  *
  * Runs WITHOUT live creds and WITHOUT the @google/genai dependency installed:
  *

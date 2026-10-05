@@ -3,7 +3,7 @@
  * one row per node in a flow's own definition, carrying that node's OWN
  * status/cost/note as recorded on the run, never the run's aggregate.
  *
- * ADR-008 posture: nothing new is stored. Every row is derived from the
+ * SPEC §3 posture: nothing new is stored. Every row is derived from the
  * flow definition (`Flow.nodes`) plus the already-derived run model
  * (`Run.phases` / `Run.phaseMeta`), both of which the bridge already serves.
  *
@@ -26,7 +26,7 @@
  *     rendering filler. `model`, `brainReads` and `gateChecks` are
  *     deliberately excluded (`gateChecks` is unreachable — it only ever
  *     populates for `nodeId === 'unifier'`, and no seed flow declares that
- *     node since its retirement, R4-10-F1 / ADR-039/040).
+ *     node since its retirement, R4-10-F1).
  *   - a `run === null` (the run never existed) yields no rows at all, never
  *     a fabricated all-pending timeline.
  */

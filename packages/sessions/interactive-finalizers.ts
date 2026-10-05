@@ -1,6 +1,6 @@
 /**
  * `FINALIZERS` — the deep-frozen registry of finalize-phase steps a generic
- * interactive runner invokes at its `committing` stage (ADR-043 §2/§5,
+ * interactive runner invokes at its `committing` stage (SPEC §5,
  * R4-22 WI-2). Seeded incrementally: `copyStagingToLibrary` — the COPY
  * primitive that installs a drafted package into the real library under a
  * trusted, config-derived containment root; `writeToRepoRoot` (items 2+4);
@@ -132,7 +132,7 @@ import { withStudioWrite } from '@forge/projects';
 import { commitProjectBrain, type ProjectBrainCommitInput } from '@forge/knowledge';
 
 // ---------------------------------------------------------------------------
-// Error contract (ADR-042's third boundary — a pure function with an
+// Error contract (the third boundary — a pure function with an
 // explicit error contract). A deliberately NAMED class, never a bare Error,
 // so a caller can distinguish "the finalizer refused this operation" from an
 // accidental crash bubbling up through the same call.
@@ -192,9 +192,9 @@ export type FinalizerContext = {
   manifestPorts?: QueuePorts;
   /** See ProjectRepoPathGuard. Absent ⇒ writeToRepoRoot refuses (no silent trust). */
   isContainedProjectRepoPath?: ProjectRepoPathGuard;
-  /** forge-7m2 — additive-optional (ADR-042 boundary #2: an additive-optional
+  /** forge-7m2 — additive-optional (an additive-optional
    *  field on an exported type is disclose-not-park). AUTHORED data, sourced
-   *  from the ADR-043 yaml turnSpec's `committing` phase row's `stagingDirName`
+   *  from the SPEC §5 yaml turnSpec's `committing` phase row's `stagingDirName`
    *  (`studio/session-kinds.yaml`, threaded by `runFinalizeStep` in
    *  `interactive-agent-step.ts`) — never inferred, never hardcoded here.
    *  Optional on the TYPE because only `copyStagingToLibrary` consumes it
@@ -228,7 +228,7 @@ type StagedEntry = { relParts: string[]; srcRealPath: string };
  * entry — directories included, before descending into them — through
  * `resolveGuardedPath(sessionDir, [stagingDirName, ...relParts])`. `forge-7m2`:
  * `stagingDirName` is AUTHORED data (the caller's `FinalizerContext.stagingDirName`,
- * itself sourced from the ADR-043 yaml turnSpec) — never a hardcoded literal
+ * itself sourced from the SPEC §5 yaml turnSpec) — never a hardcoded literal
  * here, so a session kind that authors a non-default staging dirname is
  * honored rather than silently missed. Throws `InteractiveFinalizerError` on
  * the first entry that fails containment (symlink, hardlink, or any other
@@ -414,7 +414,7 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
     throw new InteractiveFinalizerError('copyStagingToLibrary: FinalizerContext.packageId is required.');
   }
   // forge-7m2 — required AT USE TIME even though the type carries it
-  // optional (ADR-042 boundary #2's additive-optional discipline is about
+  // optional (the additive-optional discipline is about
   // the TYPE, shared across finalizers that don't all need it; this
   // finalizer specifically cannot do its job without it). Refuse loudly,
   // naming the omission, rather than silently falling back to a literal —

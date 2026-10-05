@@ -26,11 +26,11 @@ be reachable from here or it cannot reach the browser at all.
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |
 | work-item id patterns (`WI-`/`UWI-`, the split-suffix rule) + numeric stem | `WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `DEV_WORK_ITEM_ID_PATTERN` · `devWorkItemIdStem` |
 | trigger payloads — the owner/repo full-name validator | `REPO_RE` |
-| trigger-kind registry (ADR 041) | `TRIGGER_KINDS` · `TRIGGER_KIND_IDS` · `SHIPPED_TRIGGER_KIND_IDS` |
+| trigger-kind registry (D-23) | `TRIGGER_KINDS` · `TRIGGER_KIND_IDS` · `SHIPPED_TRIGGER_KIND_IDS` |
 | onboarding session-stage vocabulary | `SESSION_STAGES` |
-| agent-band / guard vocabulary (ADR 039) | `BAND_GUARD_IDS` · `TOGGLE_GUARD_IDS` · `PLATFORM_GUARD_IDS` |
+| agent-band / guard vocabulary (SPEC §1) | `BAND_GUARD_IDS` · `TOGGLE_GUARD_IDS` · `PLATFORM_GUARD_IDS` |
 | spend ceilings | `DEFAULT_KICKOFF_COST_CEILING_USD` · `MAX_KICKOFF_COST_CEILING_USD` |
-| the fixed bridge port (ADR 031) | `DEFAULT_BRIDGE_PORT` |
+| the fixed bridge port (D-12) | `DEFAULT_BRIDGE_PORT` |
 | KB drain round cap | `KB_DRAIN_MAX_ROUNDS` |
 | upload-materials vocabulary | `MATERIAL_KINDS` |
 | failure-signature prefixes failure-classifier.ts scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |

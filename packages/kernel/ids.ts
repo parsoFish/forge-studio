@@ -101,7 +101,7 @@ export const SLUG_RULE_TEXT = `a single lowercase-kebab path segment matching ${
  *  kind in the message (skill / hook / connection / community item) — the
  *  same rule guards every file-package id, so the caller supplies the word
  *  the operator will read (library-13: a hooks route used to say "invalid
- *  skill id"). Additive-optional (ADR 042: disclose-not-park). */
+ *  skill id"). Additive-optional (disclose-not-park). */
 export function assertSkillSlug(name: string, noun: string = 'skill'): void {
   if (name.length > MAX_SKILL_ID_LENGTH) {
     throw new Error(
@@ -126,8 +126,8 @@ export function assertSkillSlug(name: string, noun: string = 'skill'): void {
  * `forgeRoot` as a parameter everywhere), so there was nothing to consume and
  * no second anchor is introduced.
  *
- * This is NOT ADR 045's `resolveRoot`, which `packages/kernel/index.ts`
- * records as deliberately absent pending that ADR's own M4 roadmap items.
+ * This is NOT the designed `resolveRoot`, which `packages/kernel/index.ts`
+ * records as deliberately absent pending its own M4 roadmap items.
  * This is the quarried constant, moved with its callers; the two must not be
  * conflated, and `ids.test.ts` positive-controls the resolved value against
  * `package.json` + `skills/` so a future re-depth fails loudly instead of

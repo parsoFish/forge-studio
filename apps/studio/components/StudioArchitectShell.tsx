@@ -8,7 +8,7 @@ import { useDocumentTitle } from '@/lib/document-title';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 /**
- * Native Studio chrome for the architect surfaces (M7-4, ADR-031). Replaces the
+ * Native Studio chrome for the architect surfaces (M7-4, D-12). Replaces the
  * retired ScreenShell/MomentHex standalone screen: the architect interview now
  * lives inside Studio (StudioNav + the `data-page` DOM-as-metrics root) just
  * like /artifact and the flow monitor. Page-specific page attributes

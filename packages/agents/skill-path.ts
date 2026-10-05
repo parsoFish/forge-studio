@@ -1,5 +1,5 @@
 /**
- * Per-turn skill sections (R4-23, ADR-024) — the per-spawn half of what used
+ * Per-turn skill sections (R4-23, SPEC §1) — the per-spawn half of what used
  * to be one 373-line `skill-path` module.
  *
  * M4-library PR 2 split that module three ways, because it was three things
@@ -31,7 +31,7 @@ export * from '@forge/library';
 
 
 // ---------------------------------------------------------------------------
-// R4-23 — per-turn skill sections (ADR-024 artifact migration)
+// R4-23 — per-turn skill sections (SPEC §1 artifact migration)
 // ---------------------------------------------------------------------------
 //
 // A `SKILL.md` may carry named per-turn sections, each introduced by an
@@ -44,7 +44,7 @@ export * from '@forge/library';
 //
 // This lets a runner that drives a multi-turn agent (interview, draft, ...)
 // keep exactly ONE copy of that agent's task instructions — in `SKILL.md`,
-// the single source of intent (ADR-024) — instead of duplicating a
+// the single source of intent (SPEC §1) — instead of duplicating a
 // hand-written prose prompt in TypeScript alongside it.
 
 /** Matches a turn-marker line in isolation: `<!-- turn: <id> -->`, optionally

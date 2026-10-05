@@ -1,6 +1,6 @@
 /**
  * factory-cli-wiring.ts — the CLI's half of the example-factory seam
- * (ADR 048 clause 2). `forge demo capture` / `forge demo render` / `forge gate
+ * (D-32). `forge demo capture` / `forge demo render` / `forge gate
  * docs` are the example's verbs; nothing here is reachable from a bridge route.
  *
  * WHY THIS IS A SECOND FILE, and not a second seam. `factory-wiring.ts` is

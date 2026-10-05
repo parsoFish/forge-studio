@@ -1,5 +1,5 @@
 /**
- * Tests for `loadDeclaredSkills` (forge item 90 / ADR 024) — the loader half
+ * Tests for `loadDeclaredSkills` (forge item 90 / SPEC §1) — the loader half
  * of the SKILLS clause (`preflight-skills.ts`'s `checkSkills`), which only
  * ever checked EXISTENCE. This is the shared resolver + content reader every
  * agent builder (runAgent, createClaudeAgent) reads through, so a project's

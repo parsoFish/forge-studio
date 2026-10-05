@@ -31,9 +31,9 @@ budgets:
 
 Collaborate with the operator during ideation. Emit **one `PLAN.md` operator artefact** (plus its rich PLAN.html sibling) for operator review before any manifest hits `_queue/pending/`. The in-UI runner's **finalize** step (on operator approve) promotes manifests (`approve`), re-runs with feedback (`revise`), or archives the session (`reject`).
 
-## Surface — the in-UI runner (ADR 020 / ADR 023)
+## Surface — the in-UI runner
 
-Your host is the **architect session kind** (`packages/sessions/kinds/architect.ts`, driven by the shared turn spine) — the sole operator surface (ADR 023), file-checkpointed, one bounded turn at a time. It never auto-starts or auto-approves; every turn requires an explicit operator action. **You do NOT call `AskUserQuestion`.** Interview is **file-based handoff**:
+Your host is the **architect session kind** (`packages/sessions/kinds/architect.ts`, driven by the shared turn spine) — the sole operator surface (D-12), file-checkpointed, one bounded turn at a time. It never auto-starts or auto-approves; every turn requires an explicit operator action. **You do NOT call `AskUserQuestion`.** Interview is **file-based handoff**:
 - **Interview step** — return `{ done, questions? }` where `questions` is an array of `{ question, header ≤12 chars, options[]: { label, description } }`. Runner writes `questions.json`; operator answers come back in `answers.json`. Set `done: true` once scope/success-signal/constraint ambiguity is resolved.
 - **Draft step** — return initiatives as structured JSON; runner builds manifests, writes PLAN.md/PLAN.html. On **approve**, promotes manifests directly to `_queue/pending/`.
 
@@ -67,14 +67,14 @@ After reading, emit `architect.brain-query` listing paths consulted. Include eve
 
 ## Initiative body — single source of intent
 
-Each initiative **MUST declare ≥1 acceptance criterion in the typed `acceptance_criteria` field** (ADR 051), one per independently-deliverable outcome — an array of `{given, when, then}`. They are a FIELD, not prose in the body: nothing parses the body for criteria any more, so a criterion written only in the body does not exist. `when` may be an empty string when the criterion is a state assertion with no trigger (`given` and `then` may not be empty). A malformed entry is a hard error that names its index, not a criterion quietly dropped.
+Each initiative **MUST declare ≥1 acceptance criterion in the typed `acceptance_criteria` field** (D-34), one per independently-deliverable outcome — an array of `{given, when, then}`. They are a FIELD, not prose in the body: nothing parses the body for criteria any more, so a criterion written only in the body does not exist. `when` may be an empty string when the criterion is a state assertion with no trigger (`given` and `then` may not be empty). A malformed entry is a hard error that names its index, not a criterion quietly dropped.
 
-Each initiative **MUST also declare its `class`** — `code`, `docs`, `config` or `infra` (ADR 051). The class selects the gate profile the work is judged by, so it is the single most consequential field you set; there is no default and an initiative without one is refused. Choose by what is DELIVERED, not by what the repository is written in: a README change in a Go repo is `docs`.
+Each initiative **MUST also declare its `class`** — `code`, `docs`, `config` or `infra` (D-34). The class selects the gate profile the work is judged by, so it is the single most consequential field you set; there is no default and an initiative without one is refused. Choose by what is DELIVERED, not by what the repository is written in: a README change in a Go repo is `docs`.
 
 - **No `features[]` list.** Hierarchy is 3-level (initiative → WI → file), not 4.
 - Write ACs at the grain of independently-runnable outcomes.
 - **Do NOT size work items or set `quality_gate_cmd`.** The PM owns all sizing and gate selection.
-- **Gates/ACs MUST match the deliverable type — and since ADR 051 the `class` field is how you say so.** A docs-only initiative (README, ADR, skill-markdown, docs-site content — no source code delivered) is `class: docs`, and its profile already selects docs gates; give it docs-appropriate ACs (build/render passes, links resolve, rendered output matches source-of-truth) and never a demo-evidence or test-count AC. Code initiatives are `class: code` and keep test/demo-evidence ACs as usual. Before the class field the PM had to infer the gate from how the AC was phrased, which is what cost ~4 wasted decomposition retries per docs cycle.
+- **Gates/ACs MUST match the deliverable type — and since D-34 the `class` field is how you say so.** A docs-only initiative (README, ADR, skill-markdown, docs-site content — no source code delivered) is `class: docs`, and its profile already selects docs gates; give it docs-appropriate ACs (build/render passes, links resolve, rendered output matches source-of-truth) and never a demo-evidence or test-count AC. Code initiatives are `class: code` and keep test/demo-evidence ACs as usual. Before the class field the PM had to infer the gate from how the AC was phrased, which is what cost ~4 wasted decomposition retries per docs cycle.
 - Cross-initiative ordering via `depends_on` on the initiative (scheduler gate).
 - **State NOT-DOING positively.** Every initiative body must include a `### Not in scope` block naming what this initiative deliberately does NOT implement — prevents scope creep, gives the reviewer a clear rejection criterion.
 
@@ -171,7 +171,7 @@ the PLAN's "Edge cases & constraints" section for the operator's review.
 ## Event-log entries to emit
 
 - `architect.start` — ideation begun.
-- `architect.brain-query` — every brain query (ADR 010).
+- `architect.brain-query` — every brain query (SPEC §4).
 - `architect.user-decision` — every taste decision the operator makes.
 - `architect.plan-emitted` — when PLAN.md is written.
 - `architect.end` — session complete.

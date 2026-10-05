@@ -56,7 +56,7 @@ function parseCatalogModels(raw: unknown, file: string): CatalogModel[] {
  * Parse `catalog.yaml`'s `guards:` section. `kind` is DERIVED from
  * `BAND_GUARD_IDS`, never read from the file — a declared `kind:` value in the
  * YAML (if present) is parsed and then discarded, never merged or trusted
- * (ADR-027 R3-03 amendment).
+ * (D-09 R3-03 amendment).
  */
 function parseCatalogGuards(raw: unknown, file: string): CatalogGuardEntry[] {
   if (!Array.isArray(raw)) return [];
@@ -76,7 +76,7 @@ function parseCatalogGuards(raw: unknown, file: string): CatalogGuardEntry[] {
   });
 }
 
-// catalog.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
+// catalog.yaml is hand-edited (git changes); no serializer by design (D-09).
 export function loadCatalog(catalogYamlPath: string): Catalog {
   const d = loadYaml(catalogYamlPath);
   return {

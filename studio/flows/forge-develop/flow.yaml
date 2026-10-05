@@ -6,7 +6,7 @@ project: null
 kb: cycles
 costCeilingUsd: 25
 origin: seed
-# Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): forge-develop runs the
+# Seam F6 half 1 (D-34, spec §5 item 8): forge-develop runs the
 # SAME dev -> integrate -> adversarial-review -> verdict spine regardless of
 # the initiative's change class — the class selects the gate PROFILE
 # (packages/factory/class-profiles.ts: iter0FailFirst, required-paths source,
@@ -19,7 +19,7 @@ accepts: [code, docs, config, infra]
 # initiativeId + cycle_id the architect flow minted, so cost/roadmap/metrics
 # (and the WI hexes pm already emitted) roll up under one _logs/<cycleId>.
 #
-# R4-10-F1 (ADR-039/040): the monolithic unifier node is retired from the live
+# R4-10-F1 (SPEC §1, D-20): the monolithic unifier node is retired from the live
 # flow in favour of the two Q3-B successor agents on the R2 engine —
 #   dev → integrate → adversarial-review → verdict
 # `integrate` (the `integrate-band`, skills/demo-agent) authors demo.json + the relocated
@@ -48,7 +48,7 @@ edges:
   - { from: dev, to: integrate, artifact: wi-branches }
   - { from: integrate, to: adversarial-review, artifact: pr }
   - { from: adversarial-review, to: review, artifact: review-findings }
-# Declaration-driven reflect trigger (ADR-041 target shape). Develop terminates
+# Declaration-driven reflect trigger (D-23 target shape). Develop terminates
 # at `ready-for-review` (PR open), BEFORE merge, so the flow-runner (which fires
 # `on: flow-complete`) deliberately skips this `on: merged` trigger. The real
 # merge signal is async + post-run: orchestrator/finalize-merged.ts reads THIS

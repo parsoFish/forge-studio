@@ -50,7 +50,7 @@ export type StudioPostContext = StudioContext & {
    */
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /**
-   * ADR 048 / 051 — the example factory's class → gate-profile table, reached
+   * D-32 / D-34 — the example factory's class → gate-profile table, reached
    * by INJECTION because it is a deletable package this one may not import.
    * Returns `null` for a class the installed table does not know; ABSENT when
    * no factory is installed, in which case the plan gate enforces no class
@@ -261,7 +261,7 @@ export async function applyReviewVerdict(
         // rejection escaping the detached call.
       });
     }
-    // ADR-027: persist the operator's approve as the durable verdict artifact
+    // D-09: persist the operator's approve as the durable verdict artifact
     // before finalize/reflection runs (overwrite a prior merge-path fallback).
     // Ride-along 3: carry the dry-bridge marker into the durable artifact too
     // — a reflector reading verdict.json later must be able to tell a
@@ -380,7 +380,7 @@ export async function applyReviewVerdict(
           `Delete the marker after taking action (or raise review.maxSendBackRounds / review.maxTotalFixWorkItems) to re-enable send-backs.`,
       );
     }
-    // ADR 040: the round this send-back opens + the config-owned caps. The
+    // D-20: the round this send-back opens + the config-owned caps. The
     // compiler enforces both caps BEFORE writing (reject-then-park — accepting
     // would enqueue work that never runs).
     const caps = resolveReviewLoopCaps();
@@ -449,7 +449,7 @@ export async function applyReviewVerdict(
         });
       }
     } catch { /* best-effort — never block the send-back on logging */ }
-    // ADR-027: persist the operator's send-back (rationale + the fix-WI
+    // D-09: persist the operator's send-back (rationale + the fix-WI
     // acceptance criteria + the round it opened) as the durable verdict artifact.
     writeVerdictJson(
       ctx.logsRoot,
@@ -474,7 +474,7 @@ export async function applyReviewVerdict(
     }, origin);
   } catch (appendErr) {
     if (appendErr instanceof FixLoopCapError) {
-      // ADR 040: reject-then-park, LOUDLY — the 409 (UI error surface), the
+      // D-20: reject-then-park, LOUDLY — the 409 (UI error surface), the
       // greppable worktree marker (the drain reports needs-operator while it
       // exists), a `sendback.cap-exhausted` event, and an operator
       // notification. All best-effort except the 409 itself.

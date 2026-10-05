@@ -205,7 +205,7 @@ export type FlowEdge = {
   artifact?: string;
 };
 
-/** R2-04 (ADR-041): what a trigger starts. `agent` targets are the R4-09
+/** R2-04 (D-23): what a trigger starts. `agent` targets are the R4-09
  *  standalone-reflect extension — schema-accepted, but not authorable in the
  *  UI yet (the kind selector below always builds `{kind:'flow', ref}`). */
 export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
@@ -220,7 +220,7 @@ export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
  */
 export type WebhookEventName = 'push' | 'release' | 'pull_request' | 'issues';
 
-/** R2-04 (ADR-041): a webhook trigger's receive/trust config. Secrets are
+/** R2-04 (D-22): a webhook trigger's receive/trust config. Secrets are
  *  env-var NAMES — the values live in the operator's environment, never in
  *  flow.yaml or this client. */
 export type WebhookTriggerConfig = {
@@ -233,7 +233,7 @@ export type WebhookTriggerConfig = {
 };
 
 /**
- * R2-04 (ADR-041): a declared trigger row — mirrors
+ * R2-04 (D-23): a declared trigger row — mirrors
  * orchestrator/studio/types.ts's server shape verbatim (the `flow: string`
  * shape this replaced was a pre-registry skew; every consumer now reads
  * `target.ref`, never a top-level `.flow`).
@@ -255,7 +255,7 @@ export type FlowTrigger = {
 };
 
 /**
- * R2-04 (ADR-041): the shipped trigger kinds authorable in the UI today.
+ * R2-04 (D-23): the shipped trigger kinds authorable in the UI today.
  * Mirrors packages/flows/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS` — the
  * server-side SSOT (registry rows-as-data). forge-ui cannot import
  * orchestrator TS directly, so this is a hand-kept mirror; keep it in
@@ -278,7 +278,7 @@ export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
 
 /**
  * zyc review finding 1: the `on:` kinds that carry the `webhook:` config
- * block. `pr-merged` / `issue-raised` (R2-08-F3, ADR-027's amendment) reuse
+ * block. `pr-merged` / `issue-raised` (R2-08-F3, D-10's amendment) reuse
  * the SAME `webhook:` shape `on: webhook` uses — own `on:` value, never a
  * sub-event under `on: webhook` — so `packages/flows/bridge-hooks.ts`'s
  * `findWebhookTrigger` (which scans every flow for a trigger whose
@@ -365,7 +365,7 @@ export type TriggerBuilderFields = {
  *
  * The target is always `{kind:'flow', ref: fields.targetId}` for every kind —
  * agent targets are not authorable yet (R4-09; the request shape is schema-
- * ready per ADR-041, just not reachable from this UI).
+ * ready per D-23, just not reachable from this UI).
  */
 export function buildTriggerDeclaration(
   kind: ShippedTriggerKind,
@@ -591,7 +591,7 @@ export type KbBinding =
       kind: 'flow';
       ref: string;
       /**
-       * Optional band scope (R1-06, ADR-010 amendment "R1-06 band-scoped
+       * Optional band scope (R1-06, SPEC §4 "R1-06 band-scoped
        * reviewer grant") — mirrors orchestrator/studio/types.ts's KbBinding.
        * Meaningless off a `flow` binding. Absent ⇒ unscoped.
        */
@@ -975,7 +975,7 @@ export async function fetchAgentCapability(slug: string): Promise<AgentCapabilit
   return parseAgentCapability(body?.capability);
 }
 
-/** Fetch the curated OOTB starter agents (ADR-033) for the New-Agent picker. */
+/** Fetch the curated OOTB starter agents (D-14) for the New-Agent picker. */
 export async function fetchStarters(): Promise<Agent[]> {
   const body = await studioRead<{ starters?: unknown[] }>('/api/studio/starters');
   return (body.starters ?? []).map(parseAgentDefinition);
@@ -1998,7 +1998,7 @@ export async function createKb(body: {
  *  session straight to a 404. */
 export async function startKbCleanup(
   id: string,
-  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — an operator-chosen kickoff
+  /** W6-B6 (SPEC §5) — an operator-chosen kickoff
    *  model tier, validated server-side against brain-maintenance's own
    *  SKILL.md-declared envelope (`resolveKickoffModelTier`). Omit for the
    *  spec's spawn-default tier. */

@@ -3,7 +3,7 @@
 import type { EventLogEntry } from '@/lib/bridge-client';
 
 /**
- * Shared focused-hex visual (ADR 020/021) — the agent-flow hex aesthetic
+ * Shared focused-hex visual (D-07) — the agent-flow hex aesthetic
  * (glowing hexagon + progress arc + ephemeral tool-burst chips) for a single
  * stage. Both the architect plan screen and the review screen render through
  * this so the two screens stay visually aligned and don't drift. Callers map

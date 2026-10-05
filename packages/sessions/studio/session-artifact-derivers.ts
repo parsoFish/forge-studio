@@ -184,8 +184,8 @@ export type ContractBuildoutArtifact = {
 // derivation in this module already goes through — no new fs call path.
 //
 // R4-21 phase 2, WI-1, D2 (_wave5/unit-specs/R4-21-phase2.md): this
-// subdirectory was named `package/` in R4-21 phase 1, predating ADR-043
-// (docs/decisions/043-generic-interactive-surface.md §1), whose ratified
+// subdirectory was named `package/` in R4-21 phase 1, predating SPEC §5
+// (the generic interactive surface), whose ratified
 // `turnSpec` table declares `writes: [staging]`. Renamed here to match the
 // ratified data rather than parameterising the finalizer. The rename is
 // COMPLETE, not additive — a leftover `package/` dir is never scanned, not
@@ -343,7 +343,7 @@ const CLEANUP_PLAN_FILENAME = 'cleanup-plan.md';
 export type CleanupFinding = { readonly kind: string; readonly file: string };
 
 /** R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — the scanned-domain signal.
- *  Additive-optional on `deriveSessionArtifact`'s input (ADR-042
+ *  Additive-optional on `deriveSessionArtifact`'s input
  *  disclose-not-park), threaded through to `deriveCleanupPlan`, mirroring
  *  how `contractStages` is already threaded. `forgeRoot` is the absolute
  *  root a repo-relative plan `target` resolves against; `brainDir` is the

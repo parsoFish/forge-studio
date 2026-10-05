@@ -21,7 +21,7 @@ runtime:
   # authoring kickoff next to it offered a choice, so 1.0.md §3's "SDK / model
   # / effort are set per session" was true for some kinds and false for others
   # (S9 beat 11). Widening the envelope is a SKILL.md edit rather than a UI
-  # decision (ADR 043's own rationale), so it is made here. Sonnet stays FIRST
+  # decision (SPEC §5's own rationale), so it is made here. Sonnet stays FIRST
   # and is therefore still what an unchosen run uses — no behaviour changes for
   # anyone who picks nothing.
   strategy: range

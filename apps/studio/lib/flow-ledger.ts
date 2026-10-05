@@ -3,7 +3,7 @@
  * caller of the shared engine in `./history-ledger.ts`. Turns a flow's own
  * `Run[]` into `LedgerRow[]`, sourcing every segment from real, already-
  * derived `Run`/`RunPhaseMeta` fields — nothing here is re-derived or
- * re-summed (ADR-008: nothing new is stored).
+ * re-summed (SPEC §3: nothing new is stored).
  *
  * ⚑ D9 — `gate-fails` is sourced from `phaseMeta['dev'].retries` ONLY.
  * Every other node's `retries` is a count of `error`-typed events (spawn

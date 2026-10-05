@@ -1,5 +1,5 @@
 /**
- * Tests for the architect bridge routes (ADR 020).
+ * Tests for the architect bridge routes.
  *
  * Starts a real bridge against a temp `forgeRoot` with a file-seeded session
  * dir (no SDK, no spawn — `FORGE_ARCHITECT_NO_SPAWN=1`), and exercises the
@@ -379,7 +379,7 @@ test('POST /api/architect/start creates a session dir + status', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — architectAgentSpec
+// SPEC §5 amendment (wave-6 kickoff model-tier seam) — architectAgentSpec
 // is strategy:fixed (sonnet), so the only legal modelTier is "sonnet".
 // ---------------------------------------------------------------------------
 

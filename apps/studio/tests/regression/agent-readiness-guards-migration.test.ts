@@ -1,6 +1,6 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — F1 of the
- * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename:
+ * PR #76 (SPEC §1) `composition.hooks` → `composition.guards` rename:
  * `apps/studio/lib/agent-readiness.ts`'s check key/label must be the guard one
  * (`key: 'guard'`), not the hook one (`key: 'hook'`).
  *

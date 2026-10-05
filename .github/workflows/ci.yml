@@ -103,14 +103,14 @@ jobs:
       - name: Disabled-CTA reason ratchet
         run: node scripts/check-disabled-reason.mjs
 
-      # The three structural ratchets (ADR 046, proposed — parked at H5; the
+      # The three structural ratchets (D-29, proposed — parked at H5; the
       # constraints themselves are already on main in docs/roadmaps/1.0.md §0
       # and the blueprint spec §8). Each enforces something §0 stated as prose
       # and nothing checked:
       # the allow-graph, the 800-line file cap, and one owner per production
       # file. All three baseline today's tree and may only shrink; none has a
       # --write-baseline, so tightening is a deliberate, reviewable edit.
-      - name: Allow-graph boundary ratchet (ADR 046)
+      - name: Allow-graph boundary ratchet (D-29)
         run: node scripts/check-boundaries.mjs
 
       - name: File-size cap ratchet (800 lines, 1.0.md §0)
@@ -130,14 +130,17 @@ jobs:
       - name: Stale path citations ratchet (bead forge-8vfn.13)
         run: node scripts/check-stale-path-citations.mjs
 
-      # ADR 048 clause 3 — deleting the example package leaves the platform
+      - name: Decision-record citations ratchet (falls to zero)
+        run: node scripts/check-adr-citations.mjs
+
+      # D-32 — deleting the example package leaves the platform
       # running, proven by execution. The deletion happens in a throwaway `git
       # worktree` and the checkout is asserted untouched either side (bead
       # forge-8vfn.6.10.21), so this is safe anywhere in the job; it stays last
       # by habit. A step rather than a job: the four required contexts are what
       # the merge protocol waits on, and a fifth would change that set without
       # changing what is proven.
-      - name: Deletable example factory (ADR 048)
+      - name: Deletable example factory (D-32)
         run: node --experimental-strip-types scripts/factory-deletable.mjs
 
   # The story suite as the standing UI gate (forge-8vfn.7.6.131): boots

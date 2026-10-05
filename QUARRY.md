@@ -7,7 +7,7 @@ file in the same PR.
 
 **Scope.** Every production file under `orchestrator/`, `cli/`, `loops/`,
 `skills/`, `packages/` and `apps/forge/` — code (`.ts .tsx .mjs .js .cjs`) plus the `SKILL.md` agent definitions,
-which are production artifacts ([ADR 024](docs/decisions/024-phases-as-subagents-invoking-skills.md):
+which are production artifacts ([SPEC §1](./SPEC.md):
 the `SKILL.md` **is** the agent), in either discovery-root shape SEAM F1
 (`packages/kernel/discovery-roots.ts`, operator ruling item 81) makes real: the
 top-level `skills/<slug>/SKILL.md` and a package's own
@@ -22,7 +22,7 @@ it — neither counted nor owned by `check-owner.mjs`.
 **Owner** is one of the nine packages plus the two apps named by
 [`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md) §0 and §4 M2, and described in the
 blueprint spec
-[§3](docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md). ADR 046
+[§3](docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md). D-29
 ratifies that layout and is **proposed, not yet accepted** — it is parked at the
 operator gate H5 (`1.0.md` §5), so this file cites the roadmap and the spec,
 which are on `main`, rather than an ADR that is not. **Disposition** is how the
@@ -56,9 +56,9 @@ operator-ratified new cap — never a silent raise.
 |---|---|---|---|---|
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
 | `kernel` | 36 | 6,530 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
-| `library` | 63 | 17,106 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
+| `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 48 | 11,220 | **9,423** | ratified 9,423 — row 206 (forge-8vfn.8.5.56): collision-free preflight-fix run ids, a crashed fix reads failed; +11, lane-ratified (≤100, ruling 666). |
-| `knowledge` | 44 | 13,461 | **12,884** | ratified 12,884 — row 206 (forge-8vfn.8.5.56): brain-fix claims the run id through the dispatch seam, fix-agent checks the active-job derivation, a crashed fix reads failed; +52, lane-ratified (≤100, ruling 666). |
+| `knowledge` | 44 | 13,460 | **12,884** | ratified 12,884 — row 206 (forge-8vfn.8.5.56): brain-fix claims the run id through the dispatch seam, fix-agent checks the active-job derivation, a crashed fix reads failed; +52, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,909 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 89 | 25,147 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 35 | 8,548 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **493** | **132,554** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **493** | **132,552** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -324,7 +324,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 418 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 152 |
-| packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 392 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's ADR-024 identity and stays in the parent rather than being imported back as a cycle. |
+| packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 392 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's SPEC §1 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 77 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 290 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 80 |
@@ -415,7 +415,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/brain-fix-turn.ts | apps/forge | rewritten | 99 |
 | apps/forge/manifest-fixtures.ts | apps/forge | rewritten | 46 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
-| packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 396 |
+| packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 395 |
 | packages/knowledge/testing.ts | knowledge | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `resolveKbProcesses` has no production consumer outside this package, only two `apps/forge` tests reach for it, so it stays off the main door and behind `@forge/knowledge/testing` instead.** |
 | packages/projects/project-config.ts | projects | verbatim | 322 |
 | packages/projects/project-config-write.ts | projects | verbatim | 74 |
@@ -484,7 +484,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 122 |
 | packages/agents/studio/derive.ts | agents | verbatim | 300 |
 | packages/agents/studio/hook-dispatch.ts | agents | verbatim | 546 |
-| packages/library/studio/hook-library.ts | library | verbatim | 536 |
+| packages/library/studio/hook-library.ts | library | verbatim | 535 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
 | packages/library/studio/hook-runtime.ts | library | verbatim | 619 |
 | packages/library/studio/hook-approval-ledger.ts | library | verbatim | 485 |
@@ -560,7 +560,7 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 140 |
-| packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (ADR 046 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
+| packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
 | packages/factory/demo.ts | factory | verbatim | 420 |
 | packages/flows/index.ts | flows | verbatim | 132 |
@@ -592,7 +592,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/process-liveness.ts | kernel | rewritten | 124 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
 | packages/kernel/forge-ref-guard-hook.ts | kernel | rewritten | 238 **New file, row 211 (forge-8vfn.8.5.47):** the `reference-transaction` git hook script + its idempotent installer, replacing row 208's PreToolUse Bash-command fence (`forge-repo-git-fence.ts`/`repo-identity.ts`, both deleted by this same change) after it misfired on a project commit it misparsed. Asks git's own ref-moving machinery instead, from inside git itself. |
 | packages/kernel/per-work-item-row.ts | kernel | rewritten | 19 **New file, row 207 (forge-8vfn.8.5.57):** `isPerWorkItemRow` — the one predicate run-model derivation and the story harness's run-end parity share to keep per-work-item rows out of run-level pairing. |
-| packages/kernel/halt.ts | kernel | rewritten | 69 **New file, row 207 (forge-8vfn.8.5.57):** the one emergency halt record `<forgeRoot>/_queue/halt.json` (ADR 011) — `forgeQueueRoot`/`haltPath`/`readHalt`/`writeHalt`/`releaseHalt`; kernel so the queue claim (flows) and the dispatch claim (kernel) read the same file. |
+| packages/kernel/halt.ts | kernel | rewritten | 69 **New file, row 207 (forge-8vfn.8.5.57):** the one emergency halt record `<forgeRoot>/_queue/halt.json` (D-03) — `forgeQueueRoot`/`haltPath`/`readHalt`/`writeHalt`/`releaseHalt`; kernel so the queue claim (flows) and the dispatch claim (kernel) read the same file. |
 | packages/kernel/dispatch-claim.ts | kernel | rewritten | 319 **New file, row 206 (forge-8vfn.8.5.56):** `claimDispatchSlot`/`releaseDispatchSlot` + `newRunStamp`/`randomRunSuffix`, the ONE on-disk dispatch claim `apps/forge/bridge-agent-dispatch.ts`, `apps/forge/bridge-studio-writes.ts` and `@forge/knowledge`'s `spawnBrainFix` all share, so no rank-1-or-above package copies it. `isAlive` is an injected parameter (kernel is rank 1; the real `isTurnAlive` is rank 4). |
 | packages/knowledge/index.ts | knowledge | verbatim | 112 |
 | packages/library/index.ts | library | verbatim | 115 |

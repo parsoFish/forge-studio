@@ -46,12 +46,12 @@ import { skillPathRelative } from '@forge/agents/skill-path.ts';
 
 
 // ---------------------------------------------------------------------------
-// ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)
+// SPEC §1 / M2-4: spec derived from skills/architect/SKILL.md (single source)
 // ---------------------------------------------------------------------------
 
 /**
  * The architect's PhaseAgentSpec — derived from SKILL.md frontmatter so the
- * model tier and tool allow-list have one source of truth (ADR-024).
+ * model tier and tool allow-list have one source of truth (SPEC §1).
  */
 export const architectAgentSpec = deriveAgentSpec(skillPathRelative('architect'));
 
@@ -111,7 +111,7 @@ export type ArchitectStatus = {
   updated_at: string;
   completenessCritic?: CompletenessCriticStatus;
   /**
-   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * SPEC §5 (2026-08-15, wave-6 kickoff model-tier seam): an
    * operator-chosen model tier, validated by the bridge's `/api/architect/
    * start` route against `architectAgentSpec` (`strategy:fixed`, so the only
    * legal value is the fixed model's own tier) before it is ever persisted
@@ -168,7 +168,7 @@ export type RunArchitectTurnInput = {
   queueRoot?: string;
   /** Logger override (tests). */
   logger?: EventLogger;
-  /** Path to the architect skill (prompt source — ADR 003). */
+  /** Path to the architect skill (prompt source — SPEC §1). */
   skillPromptPath?: string;
   /** Safety cap on interview rounds before forcing a draft. Default 4. */
   maxInterviewRounds?: number;
@@ -212,13 +212,13 @@ export type DraftInitiative = {
    */
   depends_on?: string[];
   /**
-   * ADR 051 — the change class this initiative is. Required of the architect:
+   * D-34 — the change class this initiative is. Required of the architect:
    * it selects the gate profile the work is judged by, and there is no default
    * to fall back to. `buildManifest` refuses a draft that omits it.
    */
   class: 'code' | 'docs' | 'config' | 'infra';
   /**
-   * ADR 051 — typed acceptance criteria. Required of the architect and carried
+   * SPEC §3 — typed acceptance criteria. Required of the architect and carried
    * verbatim onto the manifest, where the PM compiles them into work items,
    * review returns a verdict per entry and PLAN.html renders them. This is the
    * field that retires `extractGwtBlocks`: criteria are DECLARED, not recovered

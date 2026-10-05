@@ -508,7 +508,7 @@ test('assertTrackedDemoExists: throws when demo/<id>/demo.json is missing', () =
   }
 });
 
-test('assertTrackedDemoExists: returns the demo dir when demo.json exists (ADR 021)', () => {
+test('assertTrackedDemoExists: returns the demo dir when demo.json exists (D-07)', () => {
   const { proj, cleanup } = makeRepoWithOrigin();
   try {
     mkdirSync(join(proj, 'demo', 'INIT-ok'), { recursive: true });

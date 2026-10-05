@@ -6,11 +6,11 @@
  * `2026-09-12T07-28-42_INIT-2026-09-12-exclude-author-flag`, last event
  * `event_type=error`:
  *
- *   project-manager phase failed: set errors: WI-3: creates is required (ADR 037)
+ *   project-manager phase failed: set errors: WI-3: creates is required (D-18)
  *   unless verification_artifact is set — pure-modification WIs must declare
  *   verification_artifact as the creates: escape
  *
- * ADR 037 behaved as designed. The PM did what its SKILL told it to do. At base
+ * The creates rule behaved as designed. The PM did what its SKILL told it to do. At base
  * `879c96b7` that file said, in two separate places:
  *
  *   ":158  **`creates:` is OPTIONAL — omit unless needed.**"
@@ -43,11 +43,11 @@ function wiWithNeither(): WorkItem {
   return { work_item_id: 'WI-3', files_in_scope: ['src/existing.ts'] } as unknown as WorkItem;
 }
 
-describe('forge-a62b: the PM skill and ADR 037 state ONE rule', () => {
+describe('forge-a62b: the PM skill and the creates rule state ONE rule', () => {
   test('the validator quarantines a WI with neither field — the consequence the skill must prevent', () => {
     const errors = validateCompiledWorkItemSet([wiWithNeither()]);
     assert.equal(errors.length, 1, `expected exactly one error, got: ${JSON.stringify(errors)}`);
-    assert.match(errors[0]!, /WI-3: creates is required \(ADR 037\)/);
+    assert.match(errors[0]!, /WI-3: creates is required \(D-18\)/);
     assert.match(errors[0]!, /unless verification_artifact is set/);
   });
 

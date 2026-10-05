@@ -56,7 +56,7 @@ type StubWi = { wiId: string; filename?: string; gate?: string[]; omitCreates?: 
 function makeWi(initiativeId: string, wi: StubWi): string {
   const fname = wi.filename ?? `azuredevops/internal/service/release/${wi.wiId.toLowerCase()}.go`;
   const gate = wi.gate ?? ['node', '--test', `tests/${wi.wiId.toLowerCase()}.test.ts`];
-  // ADR 037: `creates:` is mandatory-with-escape; `omitCreates` exercises the
+  // D-17: `creates:` is mandatory-with-escape; `omitCreates` exercises the
   // compile-stage rejection of a WI that declares neither creates nor
   // verification_artifact.
   const creates = wi.omitCreates ? '' : `creates:\n  - ${fname}\n`;
@@ -289,7 +289,7 @@ test(
       );
       assert.match(
         wi2Body,
-        /## Compiled constraints \(project & brain, ADR 037\)/,
+        /## Compiled constraints \(project & brain, D-17\)/,
         'the revise-added WI must carry its compiled forge:constraint clause',
       );
       assert.match(
@@ -343,7 +343,7 @@ test(
   },
 );
 
-test('ADR-051/C7: docs-class + a declared acceptance tier + no acceptance WI → PM pass succeeds and emits the skip event', async () => {
+test('D-34/C7: docs-class + a declared acceptance tier + no acceptance WI → PM pass succeeds and emits the skip event', async () => {
   const h = setupHarness(
     {
       ...BASE_CONFIG,
@@ -371,7 +371,7 @@ test('ADR-051/C7: docs-class + a declared acceptance tier + no acceptance WI →
   }
 });
 
-test('ADR-051/C7 regression lock: code-class + a declared acceptance tier + no acceptance WI → still refused, unchanged message', async () => {
+test('D-34/C7 regression lock: code-class + a declared acceptance tier + no acceptance WI → still refused, unchanged message', async () => {
   const h = setupHarness(
     {
       ...BASE_CONFIG,
@@ -393,7 +393,7 @@ test('ADR-051/C7 regression lock: code-class + a declared acceptance tier + no a
   }
 });
 
-test('ADR-051/C7: a declared acceptance tier with no class-profile table bound → refuses by name (ClassProfilePort)', async () => {
+test('D-34/C7: a declared acceptance tier with no class-profile table bound → refuses by name (ClassProfilePort)', async () => {
   const h = setupHarness(
     {
       ...BASE_CONFIG,
@@ -655,9 +655,9 @@ test('M2-3: advisory brainAccess condition — gate passes when brainAccess !== 
   assert.ok(!mandatoryGateFires('advisory', 1), 'advisory + 1 read should NOT fire');
 });
 
-// ---------- ADR 037: wi-spec-compiler seam through runOnePmPass ----------
+// ---------- D-17: wi-spec-compiler seam through runOnePmPass ----------
 
-test('ADR-037: malformed constraint block in profile.md → controlled PM failure outcome, not an unhandled throw', async () => {
+test('D-17: malformed constraint block in profile.md → controlled PM failure outcome, not an unhandled throw', async () => {
   const h = setupHarness(BASE_CONFIG);
   const sourcesRoot = mkdtempSync(join(tmpdir(), 'forge-pm-constraint-sources-'));
   try {
@@ -693,7 +693,7 @@ test('ADR-037: malformed constraint block in profile.md → controlled PM failur
   }
 });
 
-test('ADR-037: valid constraint block is injected through the full PM pass into the final validated set', async () => {
+test('D-17: valid constraint block is injected through the full PM pass into the final validated set', async () => {
   const h = setupHarness(BASE_CONFIG);
   const sourcesRoot = mkdtempSync(join(tmpdir(), 'forge-pm-constraint-sources-'));
   try {
@@ -714,7 +714,7 @@ test('ADR-037: valid constraint block is injected through the full PM pass into 
 
     for (const wiId of ['WI-1', 'WI-2']) {
       const onDisk = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wiId}.md`), 'utf8');
-      assert.match(onDisk, /## Compiled constraints \(project & brain, ADR 037\)/);
+      assert.match(onDisk, /## Compiled constraints \(project & brain, D-17\)/);
       assert.match(onDisk, /Always run gofmt before committing\./);
       assert.match(onDisk, /<!-- forge:compiled clause="go-conventions" -->/);
     }
@@ -731,13 +731,13 @@ test('ADR-037: valid constraint block is injected through the full PM pass into 
   }
 });
 
-test('ADR-037: WI with neither creates nor verification_artifact → compileErrors fold into setErrors and fail the pass', async () => {
+test('D-17: WI with neither creates nor verification_artifact → compileErrors fold into setErrors and fail the pass', async () => {
   const h = setupHarness(BASE_CONFIG);
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1', omitCreates: true }]);
     await assert.rejects(
       () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }),
-      /project-manager phase failed:[\s\S]*creates is required \(ADR 037\)/,
+      /project-manager phase failed:[\s\S]*creates is required \(D-18\)/,
     );
 
     const events = readEvents(h.logger);

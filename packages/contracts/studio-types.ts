@@ -1,4 +1,4 @@
-/** Forge Studio object model (ADR 027). Pure types — no logic. */
+/** Forge Studio object model (D-09). Pure types — no logic. */
 
 import type { ManifestClass } from './manifest-types.ts';
 
@@ -10,7 +10,7 @@ export type AgentComposition = {
   tools: string[];
   mcps: string[];
   /**
-   * Platform dispatch-key vocabulary (ADR-027 R3-03 amendment): the 5 toggle
+   * Platform dispatch-key vocabulary (SPEC §1 R3-03 amendment): the 5 toggle
    * ids (event-log, cost-guard, stall-watchdog, merge-gate, scratch-strip)
    * and the 5 band ids (wi-contract, reflection-close, integrate-band,
    * review-band, onboard-preflight). Guard ids are DISPATCH KEYS — `resolveBandGuard` scans them
@@ -21,7 +21,7 @@ export type AgentComposition = {
    */
   guards: string[];
   /**
-   * Library lifecycle-hook ids (R3-03-F1b, ADR-027 amendment "R3-03,
+   * Library lifecycle-hook ids (R3-03-F1b, SPEC §1 amendment "R3-03,
    * 2026-08-04"): REINTRODUCED with a narrowed meaning — resolves ONLY
    * against the hooks registry (`studio/hooks/<id>/`,
    * `packages/library/studio/hook-library.ts`), never a `composition.guards`
@@ -50,7 +50,7 @@ export type AgentRuntime = {
    * single iteration). Absent ⇒ 'ralph' (unchanged behaviour).
    */
   loopStrategy?: string;
-  // NOTE: a `subagentModel` lever was removed (ADR-027) — it had no spawn-site
+  // NOTE: a `subagentModel` lever was removed (D-09) — it had no spawn-site
   // consumer (forge does not yet spawn SDK subagents). Reintroduce it together
   // with the first flow whose agent actually sub-spawns.
 };
@@ -61,7 +61,7 @@ export type AgentBudgets = {
   maxTurnsPerIteration?: number;
   wedgeKillMs?: number;
   /**
-   * One-shot spawn caps (R4-01-F2, ADR-039), `runAgent`'s `'one-shot'` path
+   * One-shot spawn caps (R4-01-F2, SPEC §1), `runAgent`'s `'one-shot'` path
    * only — the Ralph loop keeps its per-iteration caps above. Effective cap:
    * `max(maxBudgetUsd, maxBudgetUsdShare × initiative.costBudgetUsd)`.
    * `maxBudgetUsd` IS A REQUEST TO THE SDK, NOT A GUARANTEE (bead
@@ -124,7 +124,7 @@ export type AgentDefinition = {
   surface?: string;
   /**
    * Declared flow-engine executor kind (R2-01-F2) — the DECLARED replacement
-   * for flow-runner's old hardcoded AGENT_KIND table. R4-01-F2 (ADR-039)
+   * for flow-runner's old hardcoded AGENT_KIND table. R4-01-F2 (SPEC §1)
    * retired the 'pm' | 'dev' | 'reflect' rows onto declared dispatch
    * (composition.guards band ids / loopStrategy:'ralph'); 'unifier' is the
    * LAST remaining legacy phase-executor slug, held until R4-01-F4. Absent ⇒
@@ -166,7 +166,7 @@ export type FlowNode = {
   gate?: string; // human gate id
   fanOut?: string; // upstream artifact name driving runtime multiplicity
   resumable?: boolean;
-  // Canvas layout (ADR-033 / J3). Persisted so a hand-arranged flow survives a
+  // Canvas layout (J3). Persisted so a hand-arranged flow survives a
   // reload; absent ⇒ the builder autolayouts (Kahn). Pure presentation — the
   // flow engine ignores them.
   x?: number;
@@ -176,7 +176,7 @@ export type FlowNode = {
 export type FlowEdge = { from: string; to: string; artifact: string };
 
 /**
- * R2-04 (ADR-041): what a trigger starts. `flow` targets have a claimable
+ * R2-04 (D-23): what a trigger starts. `flow` targets have a claimable
  * enqueue today; `agent` targets are the R4-09 standalone-reflect extension —
  * schema + lint accept them, the drain's dispatcher throws until R4-09 wires
  * the standalone-agent dispatch (the request is retained, never dropped).
@@ -184,7 +184,7 @@ export type FlowEdge = { from: string; to: string; artifact: string };
 export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
 
 /**
- * R2-04 (ADR-041): a webhook trigger's receive/trust config. Secrets are
+ * R2-04 (D-22): a webhook trigger's receive/trust config. Secrets are
  * env-var NAMES (the values live in the operator's environment, never in
  * flow.yaml). `sources` is a mandatory repo-full-name allowlist checked
  * AFTER signature verification (scoping, not the trust root).
@@ -219,7 +219,7 @@ export const TRIGGER_MODES = ['interactive', 'automated'] as const;
 export type TriggerMode = (typeof TRIGGER_MODES)[number];
 
 /**
- * R2-04 (ADR-041): a declared trigger row. `on` must be a registry kind
+ * R2-04 (D-23): a declared trigger row. `on` must be a registry kind
  * (packages/flows/flow-trigger.ts TRIGGER_KINDS); per-kind config blocks are
  * lint-enforced (`trigger-shape`): `schedule`/`concurrency` only on cron,
  * `webhook` only on webhook, `mode` only on a merged agent (reflect) target.
@@ -236,7 +236,7 @@ export type FlowTrigger = {
   /** R4-09-F3: reflect-agent (on:merged) only. Absent ⇒ interactive. */
   mode?: TriggerMode;
   /**
-   * R2-08-F1 (ADR-027 amendment): kind-independent per-project scoping.
+   * R2-08-F1 (D-10 amendment): kind-independent per-project scoping.
    * Absent ⇒ unscoped (fires for any resolved project — the pre-existing
    * behaviour). A declared `[]` ⇒ scoped to nothing. The two states are NEVER
    * collapsed into each other — `loadFlowDefinition` preserves the
@@ -290,7 +290,7 @@ export type FlowDefinition = {
   path: string;
 };
 
-/** Artifact template kinds (ADR-027 amendment 2026-06-15). */
+/** Artifact template kinds (D-09 amendment 2026-06-15). */
 export const ARTIFACT_KINDS = ['file', 'git-state'] as const;
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
@@ -364,7 +364,7 @@ export type InstructionSeed = {
 };
 
 /**
- * Valid KB storage backends (ADR-018 amendment — backend-selection seam).
+ * Valid KB storage backends (SPEC §4 amendment — backend-selection seam).
  * Filesystem is the only implementation today; the seam is preserved for a
  * future graph-memory backend (an earlier Zep attempt was removed).
  */
@@ -383,7 +383,7 @@ export type KbBinding =
       kind: 'flow';
       ref: string;
       /**
-       * Optional band scope (R1-06, ADR-010 amendment "R1-06 band-scoped
+       * Optional band scope (R1-06, SPEC §4 amendment "R1-06 band-scoped
        * reviewer grant"). Meaningless off a `flow` binding — a `project`/
        * `unique` binding declaring `band` is rejected at load time
        * (`parseKbBinding`, packages/knowledge/studio/kb-descriptor.ts). Absent ⇒
@@ -425,7 +425,7 @@ export type KbDescriptor = {
   /** Storage backend; absent ⇒ filesystem (the historical default). */
   backend?: string;
   /**
-   * Provenance stamp (forge-3oq, ADR-042 disclose-not-park additive-optional
+   * Provenance stamp (forge-3oq disclose-not-park additive-optional
    * field): `'seed'` on the two shipped OOTB brains, `'studio'` on a KB
    * created via `POST /api/studio/kbs`, absent on every pre-existing brain
    * that predates this field (an honest gap — the server-side
@@ -442,7 +442,7 @@ export type CatalogModel = { id: string; name: string; sdk: string; tier: string
 export type CatalogEntry = { id: string; name: string; desc?: string };
 
 /**
- * A catalog `guards:` entry (ADR-027 R3-03 amendment). `kind` is DERIVED from
+ * A catalog `guards:` entry (SPEC §1 R3-03 amendment). `kind` is DERIVED from
  * `BAND_GUARD_IDS` (`packages/agents/agent-bands.ts`) at load time — never
  * declared in `studio/catalog.yaml` — so a `kind:` value present in the YAML
  * is parsed and then overridden, not merged or trusted (the
@@ -496,7 +496,7 @@ export type CatalogConnectionEntry = CatalogEntry & {
  * A curated, proven community skill forge showcases in its OOTB library (like the
  * community skill-directory sites). Reference metadata only — `source` points at
  * the upstream; `tier` is the recommended model tier. Hand-edited in
- * studio/catalog.yaml (ADR-027 §5). Which forge agents actually compose a skill is
+ * studio/catalog.yaml (D-09). Which forge agents actually compose a skill is
  * DERIVED from real agent `composition.skills` (`deriveSkillUsage`,
  * orchestrator/studio/skill-library.ts, R3-01-F3/F4) — never hand-declared here;
  * a `composedBy` field was deleted because all 8 shipped claims were false

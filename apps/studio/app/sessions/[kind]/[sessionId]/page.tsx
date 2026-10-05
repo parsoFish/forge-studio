@@ -38,7 +38,7 @@ import { makeCoalescedRefresh } from '@/lib/coalesce-refresh';
 /** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
  *  added `kb-cleanup`/`authoring`; W6-B9 adds `instructions`, deleting its
  *  bespoke `SessionInstructionsPanel` (no dual paths) — architect is now the
- *  ONLY kind left on its own panel, permanently (ADR-043 amendment §4: its
+ *  ONLY kind left on its own panel, permanently (SPEC §5: its
  *  branching council/interview control flow has no linear phase-table seam
  *  a generic ladder could express). */
 /** W7-B3 (sessions-kinds-06 / community-14, historical): community-refresh

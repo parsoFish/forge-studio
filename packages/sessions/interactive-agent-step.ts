@@ -85,7 +85,7 @@ export const RUNNER_SKILL = 'interactive-runner';
  *  `guardedReadSessionStatus<S>` is generic in interactive-session.ts. Every
  *  real session-kind status shape (InstructionsStatus, ProjectBrainStatus,
  *  a future turnSpec-driven status) satisfies this structurally. An optional
- *  `modelTier` (ADR-043 §3 amendment, wave-6) rides here structurally too —
+ *  `modelTier` (SPEC §5, wave-6) rides here structurally too —
  *  the bridge's kickoff route already validated it before it ever reached
  *  disk (see `resolveKickoffModelTier`, apps/forge/ui-bridge.ts), so this module
  *  only needs to READ it back, never re-validate its shape. */
@@ -240,7 +240,7 @@ export async function runAgentStyleStep(args: {
   // and it was right to say so when the split first moved the hook wiring here.
   const queryFn: QueryFn = args.queryFn ?? (sdkQuery as unknown as QueryFn);
 
-  // ADR-024: spec/model/prompt derivation from the agent's OWN SKILL.md —
+  // SPEC §1: spec/model/prompt derivation from the agent's OWN SKILL.md —
   // resolved against the real forge install (deriveAgentSpec's default root),
   // never `ctx.forgeRoot` — the agent/skill roster is part of the forge
   // install, not per-project/per-test data (see header note).
@@ -644,7 +644,7 @@ function readSkillPrompt(agentId: string, turnId?: string): string {
 }
 
 /** A generic, kind-agnostic turn prompt: the skill (single source of the
- *  agent's intent, ADR-024), which phase/step this turn is, where to write,
+ *  agent's intent, SPEC §1), which phase/step this turn is, where to write,
  *  and the current session status as read-only context. */
 /**
  * W7-B3 (sessions-kinds-32 / home-sessions-06): `writeRoots` are the SAME

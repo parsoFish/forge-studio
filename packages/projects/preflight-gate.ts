@@ -1,5 +1,5 @@
 /**
- * forge↔project contract preflight — the "test" clause family (US-4.1 / ADR-017).
+ * forge↔project contract preflight — the "test" clause family (US-4.1 / SPEC §6).
  *
  * C1 (fast, trustworthy quality gate, HARD), C1b (CI merge-boundary net,
  * advisory-when-absent), and C7 (live-acceptance tier, advisory visibility).

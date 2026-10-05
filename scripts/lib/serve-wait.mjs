@@ -4,7 +4,7 @@
  * `forge serve`'s progress.
  *
  * `forge studio` starts and supervises a forever-mode `forge serve` the same
- * way it supervises the bridge and the UI (ADR 011/031, M7-E row 205):
+ * way it supervises the bridge and the UI (D-12, M7-E row 205):
  * whenever serve is live it claims every eligible manifest in
  * `_queue/pending/` on its own. Neither driver spawns `forge serve` itself —
  * both wait on the SAME two observables the product exposes: the queue

@@ -21,7 +21,7 @@ import { writeSessionStatus, readSessionStatus } from '../../interactive-session
 //
 // This is also the home of this initiative's single most important
 // behavioural pin: the approval gate. "awaiting-approval" deliberately
-// carries NO `next` in the ADR-043-shaped table (studio/session-kinds.yaml,
+// carries NO `next` in the SPEC §5-shaped table (studio/session-kinds.yaml,
 // session-kinds.test.ts's own R4-19-F2 block) — driving a turn while a
 // session sits there must NOT advance it. TEST-WRITER ONLY.
 // ===========================================================================

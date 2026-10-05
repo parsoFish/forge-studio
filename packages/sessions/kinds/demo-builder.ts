@@ -1,5 +1,5 @@
 /**
- * The `demo` session kind — a registered step-handler variant (ADR 043 as
+ * The `demo` session kind — a registered step-handler variant (SPEC §5 as
  * amended 2026-09-03, M4 ruling 60).
  *
  * Builds a project's demo DECLARATION (bead forge-mfv5.2.8): an agent drafts
@@ -73,7 +73,7 @@ import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------
-// ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)
+// SPEC §1: spec derived from skills/demo-builder/SKILL.md (single source)
 // ---------------------------------------------------------------------------
 
 export const demoBuilderAgentSpec = deriveAgentSpec(skillPathRelative('demo-builder'));

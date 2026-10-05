@@ -25,7 +25,7 @@
  *  - `writePlanDoc(session, root)`      — returns PLAN.md path (also writes PLAN.html)
  *
  * The PLAN is reviewed + approved on the in-UI `/artifact?run=_architect-<sid>&type=plan` gate
- * (ADR 020/023); the operator's verdict comes through the bridge, not via
+ * (R-05); the operator's verdict comes through the bridge, not via
  * PLAN.md annotations.
  */
 
@@ -52,13 +52,13 @@ export type ProposedInitiative = {
   /** Initiative-level dependencies on other initiatives (mirrors manifest.ts). */
   depends_on_initiatives?: string[];
   /**
-   * ADR 051 — the change class the operator CONFIRMS at this gate. It is shown
+   * D-34 — the change class the operator CONFIRMS at this gate. It is shown
    * in the proposal table because approving a plan approves the gates its work
    * will be judged by, and those are selected by this field.
    */
   class: 'code' | 'docs' | 'config' | 'infra';
   /**
-   * ADR 051 — the initiative's typed criteria, rendered as-is. Before this
+   * SPEC §3 — the initiative's typed criteria, rendered as-is. Before this
    * field the renderer recovered them from `body` with `extractGwtBlocks`, and
    * a criterion the regex missed was silently not shown.
    */
@@ -139,7 +139,7 @@ export function renderPlanDoc(session: ArchitectSession): string {
 
   // Operator quick-start — the plan is reviewed + approved on the in-UI plan
   // gate. W7-B7 (artifact-plan-30): the gate lives on the /artifact plan
-  // surface — the old /architect/<sid> screen was retired (M7-4 / ADR-031).
+  // surface — the old /architect/<sid> screen was retired (M7-4 / D-12).
   parts.push(
     '> **Operator review.** This plan is presented at `/artifact?run=_architect-' + session.session_id +
       '&type=plan` in Forge Studio. Read each section there, then click **approve**, **revise**, ' +

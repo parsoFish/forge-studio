@@ -1,5 +1,5 @@
 /**
- * Parity check — ADR 046 boundary fix (`studio-beyond-contracts` edges 1/2:
+ * Parity check — D-29 boundary fix (`studio-beyond-contracts` edges 1/2:
  * `apps/studio/tests/contract/SessionInteractivePanel.test.ts` used to import
  * `packages/sessions/studio/session-kinds.ts`'s `loadSessionKinds` and
  * `packages/sessions/studio/session-kinds-affordances.ts`'s

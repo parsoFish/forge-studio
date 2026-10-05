@@ -1,5 +1,5 @@
 /**
- * Conformance + registry tests (M6-2, ADR 029).
+ * Conformance + registry tests (M6-2, SPEC §1).
  *
  * Proves:
  *   A. The example adapter satisfies the full conformance contract (no SDK).

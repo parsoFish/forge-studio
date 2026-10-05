@@ -122,7 +122,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const DEV_WI_MERGE_CONFLICT_MAX_RETRIES = 1;
 
 /**
- * Adapt an EventLogger into the `resolveSdkId` log callback (ADR 029). When a
+ * Adapt an EventLogger into the `resolveSdkId` log callback (SPEC §1). When a
  * SKILL.md declares a `runtime.sdk` that is not available (unregistered, or
  * registered-but-available:false in this environment), `resolveSdkId` falls
  * back to `claude` AND fires this callback so the fallback is observable in the
@@ -196,7 +196,7 @@ export function makeAgentWithTelemetry(
     workItemId?: string;
   },
   agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning' | 'onProjectSkillsLoaded'>,
-  // Runtime selection (ADR-029). Now threaded from the SKILL.md runtime.sdk via
+  // Runtime selection (SPEC §1). Now threaded from the SKILL.md runtime.sdk via
   // the phase agent spec (devAgentSpec/unifierAgentSpec), resolved through
   // resolveSdkId at the caller so a free-text/unavailable id falls back to
   // 'claude' (logged). The 'claude' default here is the safe fallback for any
@@ -271,7 +271,7 @@ export async function runDeveloperLoop(
 ): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const cp = requireClassProfiles(classProfiles, 'developer-loop');
-  // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (ADR 051).
+  // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (D-34).
   const classProfile = cp.profileFor(cp.readChangeClass(input.manifestPath));
   const requiredPathsSource = classProfile.requiredPathsSource;
   // Seam F4: model/tier resolved from THIS def, not the canonical constant.
@@ -284,7 +284,7 @@ export async function runDeveloperLoop(
     input_refs: [workItemsDir],
     output_refs: [],
     metadata: {
-      // ADR 024 seam observability: the agent + tier the orchestrator spawned.
+      // SPEC §1 seam observability: the agent + tier the orchestrator spawned.
       agent_skill: agentDef.slug,
       agent_tier: devSpawnModel.tier,
       model: devSpawnModel.model,
@@ -306,12 +306,12 @@ export async function runDeveloperLoop(
   }
 
   const ordered = topologicalOrder(items);
-  // ADR 019: a resume that skips per-WI work (see `resumeSkipsPerWiWork`) skips the
+  // D-06: a resume that skips per-WI work (see `resumeSkipsPerWiWork`) skips the
   // per-WI dev-loop entirely — the WI commits already exist on the preserved branch
   // from the prior cycle. We still read + validate the WI set above (the
   // post-develop band uses it for context), but run the per-WI loop over an empty
   // list so the walk re-enters at the `integrate` node without rebuilding any WI.
-  // ADR 040: resume-from-develop (the fix loop) RUNS the full list — prior WIs
+  // D-20: resume-from-develop (the fix loop) RUNS the full list — prior WIs
   // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
   const skipsPerWiWork = resumeSkipsPerWiWork(input.resumeFrom);
   const toRun = skipsPerWiWork ? [] : ordered;
@@ -324,7 +324,7 @@ export async function runDeveloperLoop(
   // which then can't tell "my changes broke it" from "it was already broken"
   // and burns its whole budget. Fail fast with a distinct diagnosis instead.
   // Skipped on ANY resume (the branch already carries the WI commits — not a
-  // baseline; ADR 040's develop re-entry included).
+  // baseline; D-20 develop re-entry included).
   if (!input.resumeFrom) {
     assertGreenBaseline(input, logger, start.event_id);
   }
@@ -333,7 +333,7 @@ export async function runDeveloperLoop(
   const systemPrompt = buildDevSystemPrompt(forgeRoot, agentDef);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 
-  // ADR 029: resolve the dev agent's runtime sdk ONCE (seam F4: THIS def's
+  // SPEC §1: resolve the dev agent's runtime sdk ONCE (seam F4: THIS def's
   // own declared `runtime.sdk`). resolveSdkId gates a free-text / unavailable
   // id back to 'claude' and logs `sdk.unavailable-fallback` so the downgrade
   // is observable rather than silent. Stock SKILL.md → 'claude'.
@@ -627,7 +627,7 @@ export async function runDeveloperLoop(
         // R2-03-F4: chain the node wedge-kill into this WI's Ralph iterations.
         ...(signal ? { externalSignal: signal } : {}),
       },
-      // ADR 029: spawn on the resolved runtime sdk (default 'claude').
+      // SPEC §1: spawn on the resolved runtime sdk (default 'claude').
       DEV_SDK_ID,
       // Studio observability sub-gap #2: emit each assistant reasoning block
       // as a log event so the operator UI can show live "thinking" per WI hex.
@@ -1109,7 +1109,7 @@ export async function runDeveloperLoop(
     } finally {
       // Phase 4 step 5: per-WI worktrees are pure scratch — remove them on
       // EVERY outcome (success, ralph failure, merge conflict) so the next
-      // WI never inherits stale state. No ADR-019 preserve semantics here;
+      // WI never inherits stale state. No D-06 preserve semantics here;
       // the WI's outcome lives on in the cycle branch (merge) or the event
       // log (failure), never in the per-WI worktree itself.
       removeWiWorktree({
@@ -1229,11 +1229,11 @@ export async function runDeveloperLoop(
       work_item_count: items.length,
       complete: completeCount,
       failed: items.length - completeCount,
-      // ADR 019: flag resume runs so the report/UI can distinguish a
+      // D-06: flag resume runs so the report/UI can distinguish a
       // unifier-only resume (0 WIs run, commits already on branch) from a
       // genuine 0/N total failure.
       resumed: skipsPerWiWork,
-      // ADR 040: which resume kind, when any — 'develop' is the fix-loop
+      // D-20: which resume kind, when any — 'develop' is the fix-loop
       // re-entry (full list run, prior WIs fast-exit).
       ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
     },
@@ -1245,7 +1245,7 @@ export async function runDeveloperLoop(
   // identify what's missing, and feedback rounds can complete the work.
   // Only throw when ZERO WIs succeeded (total dev-loop failure); otherwise
   // emit the partial outcome and hand off to the post-develop band.
-  // ADR 019: on a resume that skips per-WI work (see `resumeSkipsPerWiWork`) zero WIs run by design
+  // D-06: on a resume that skips per-WI work (see `resumeSkipsPerWiWork`) zero WIs run by design
   // (their commits are already on the branch), so the total-failure guard must not fire.
   if (!skipsPerWiWork && completeCount === 0 && items.length > 0) {
     throw new Error(
@@ -1723,7 +1723,7 @@ export function writeMergeConflictFeedback(
  *   - Quality gate: a composed `unifierQualityGate` checking all five
  *     gates (initiative, demo, pr-self-contained, branches-in-sync, delivery).
  *
- * ADR 026: the unifier runs a for-each-pending-UWI loop; review feedback
+ * D-20: the unifier runs a for-each-pending-UWI loop; review feedback
  * appends UWIs the drain runs in the same cycle (no send-back to a dev phase).
  *
  * Failure classification per council 04 F7:

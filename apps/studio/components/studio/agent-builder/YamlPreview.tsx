@@ -125,7 +125,7 @@ function buildYaml(definition: Definition, catalog: Catalog): string {
 
   lines.push(kv('slug', slug || '(new)'));
   lines.push(kv('name', name || '(unnamed)'));
-  // phase — agents-15: SKILL.md-authored, read-only (ADR-027); shown only
+  // phase — agents-15: SKILL.md-authored, read-only (D-09); shown only
   // when actually declared, same "absent is meaningful" discipline the rest
   // of this preview already uses.
   if (phase) lines.push(kv('phase', phase));

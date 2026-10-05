@@ -1,8 +1,8 @@
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F1) — per-project trigger scoping, `projects:`.
  *
- * Pins ADR-027's R2-08 amendment ("`projects:` — per-project trigger
- * scoping", docs/decisions/027-studio-object-model.md) BEFORE the
+ * Pins D-10's R2-08 amendment ("`projects:` — per-project trigger
+ * scoping") BEFORE the
  * implementation exists. Landed before F1 ships — every test below is RED
  * against current `main`/this branch's tip except where explicitly marked
  * green-on-arrival (a pin of pre-existing behaviour that must survive F1).
@@ -20,7 +20,7 @@
  *     Covered in orchestrator/studio/validate.test.ts, not here.
  *   - `FlowRunRequest.projects?: string[]` — a snapshot of the firing
  *     trigger's OWN `projects:` declaration, carried onto the staged request
- *     (never re-derived from prose at drain time — ADR-041 §5's "no free
+ *     (never re-derived from prose at drain time — D-23's "no free
  *     text into id/path space" invariant, extended).
  *   - `FlowRunRequest.eventProject?: string | null` — the project id THIS
  *     event resolved to. `null`/absent = unresolved.

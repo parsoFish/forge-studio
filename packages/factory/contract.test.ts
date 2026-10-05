@@ -3,7 +3,7 @@
  *
  * `packages/flows/contract.test.ts` pins a README against an `index.ts`. That
  * shape cannot be copied here, and the reason is the point of the package:
- * `index.ts` is `export {}` ON PURPOSE (ADR 048). The two seams import DEEP
+ * `index.ts` is `export {}` ON PURPOSE (D-32). The two seams import DEEP
  * specifiers precisely so a barrel cannot drag the demo-capture machinery into
  * the bridge's module graph, and populating one to give this test something to
  * read would build a second door with no consumer — the exact "declared data
@@ -48,7 +48,7 @@ test('kills "a seam reaches past the document": every specifier a seam imports i
 test('kills "the seam set drifted from the deletability proof": this file and factory-deletable.mjs agree on what a seam is', () => {
   // The proof refuses any production importer outside its own SEAM set. If the
   // two lists disagreed, one of them would be checking a door the other does
-  // not consider real, and ADR 048's "fixed, enumerated set of seams" would be
+  // not consider real, and D-32's "fixed, enumerated set of seams" would be
   // enumerated twice with two answers.
   const proof = readFileSync(join(REPO, 'scripts/factory-deletable.mjs'), 'utf8');
   const declared = proof.match(/const SEAM = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
