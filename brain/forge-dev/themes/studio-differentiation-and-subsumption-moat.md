@@ -48,11 +48,11 @@ flows*, so those and the brain compound across a portfolio.
 
 | Sub-domain | Seam |
 |---|---|
-| Agent runtime / model | `RuntimeAdapter` + conformance suite ([ADR 029](../../../docs/decisions/029-runtime-adapters.md)) |
+| Agent runtime / model | `RuntimeAdapter` + conformance suite ([SPEC §1](../../../SPEC.md)) |
 | Dev-loop engine | `loops/_adapters/` |
-| Memory / knowledge | KB as a descriptor over an existing brain ([ADR 027](../../../docs/decisions/027-studio-object-model.md)) |
-| Tools / integrations | MCP/tool/hook catalogue; agents compose them ([ADR 024](../../../docs/decisions/024-phases-as-subagents-invoking-skills.md)) |
-| Flow composition | the generic flow engine — "forge is just one flow" ([ADR 028](../../../docs/decisions/028-flow-engine.md)) |
+| Memory / knowledge | KB as a descriptor over an existing brain ([D-09](../../../DECISIONS.md)) |
+| Tools / integrations | MCP/tool/hook catalogue; agents compose them ([SPEC §1](../../../SPEC.md)) |
+| Flow composition | the generic flow engine — "forge is just one flow" ([SPEC §2](../../../SPEC.md)) |
 
 Defs-as-data, runtime-agnosticism and cost routing are commodities — and that
 is the point: ubiquitous primitives are what make a clean seam possible.
@@ -67,7 +67,7 @@ claim is narrow, and all four qualifiers stay in every external statement:
 > **steerable, gated, knowledge-compounding** autonomous pipeline, for a
 > **portfolio** operator.
 
-[ADR 038](../../../docs/decisions/038-north-star-platform-and-ootb.md) made the
+[D-32](../../../DECISIONS.md) made the
 *internal* north star two-level. That is internal only — external positioning
 is unchanged until non-SWE connectors exist to market.
 
@@ -77,7 +77,7 @@ Subsumption is **architecture-validated, not shipped**. The only exercised
 socket is the runtime adapter: the KB is forge's own brain (the backend swap
 was scoped filesystem-only) and the dev-loop is Ralph with placeholder adapters.
 Credibility needs **one real second adapter** —
-[ADR 032](../../../docs/decisions/032-subsumption-proof.md) records that gap.
+[SPEC §1](../../../SPEC.md) records that gap.
 
 ## The two standing risks
 

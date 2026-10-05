@@ -10,7 +10,7 @@ related_themes: [cost-event-phase-aware-aggregation-rule, jsonl-event-log, orche
 
 # Derived, never stored — the run-model posture
 
-[ADR-008](../../../docs/decisions/008-jsonl-event-log.md) makes `_logs/<cycle-id>/events.jsonl`
+[SPEC §3](../../../SPEC.md) makes `_logs/<cycle-id>/events.jsonl`
 the one source of truth but never states the derivation rule: `run-model.ts` declares the shapes,
 `run-model-derive.ts` computes every one from events. `Run.trigger` states it verbatim — "derived
 and never stored/authored … NEVER a fabricated default" (`orchestrator/run-model.ts:129-133`) — and
@@ -53,7 +53,7 @@ acceptance weight lands in the `npm test` CI home the derivation lives in, not a
 
 ## The bounded-memoization corollary
 
-[ADR-044](../../../docs/decisions/044-read-path-memoization.md) narrows this posture, not reverses
+[D-27](../../../DECISIONS.md) narrows this posture, not reverses
 it: a read-path cache is still this same single derivation wrapped in a keyed memo — manifest
 content hash + events-log mtime+size, asymmetric on purpose (`packages/flows/run-list-cache.ts` header) —
 never a second derivation, never a persisted artifact. `_queue/done/` grows unbounded and a

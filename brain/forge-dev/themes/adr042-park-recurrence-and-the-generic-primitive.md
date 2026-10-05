@@ -22,7 +22,7 @@ related_themes:
 
 # ADR-042 parks recur on per-agent runners — generalise to one primitive
 
-A new `orchestrator/` runtime executor — a `GATE_KIND` registry row, an interactive `*-runner.ts` — grows the capped surface, so under [ADR 042](../../../docs/decisions/042-surface-cap-scope-and-testability.md) it is **ask-first**, not disclose-not-park. That is correct per-instance. But in **batch D the identical ask parked three times**:
+A new `orchestrator/` runtime executor — a `GATE_KIND` registry row, an interactive `*-runner.ts` — grows the capped surface, so under [D-31](../../../DECISIONS.md) it is **ask-first**, not disclose-not-park. That is correct per-instance. But in **batch D the identical ask parked three times**:
 
 - **R4-18** — a new interactive runner / gate-kind executor.
 - **R4-19-F2** — the same shape, initially **mislabelled** as something other than a new executor; it was one.
@@ -47,8 +47,8 @@ This dissolves the per-agent-runner cap pressure at the root: with the primitive
 
 ## Sources
 
-- [`docs/decisions/042-surface-cap-scope-and-testability.md`](../../../docs/decisions/042-surface-cap-scope-and-testability.md) — the surface-cap scope and the ask-first boundary.
-- [`docs/decisions/024-phases-as-subagents-invoking-skills.md`](../../../docs/decisions/024-phases-as-subagents-invoking-skills.md) — the generic runnable-primitive / artifact-migration direction (R4-01).
+- [`DECISIONS.md` D-31](../../../DECISIONS.md) — the surface-cap scope and the ask-first boundary.
+- [`SPEC.md` SPEC §1](../../../SPEC.md) — the generic runnable-primitive / artifact-migration direction (R4-01).
 - `_wave5/ledger.md` (gitignored campaign state) — R4-18, R4-19-F2 (mislabelled), R4-21 park points, batch D region.
 
 ## See also
