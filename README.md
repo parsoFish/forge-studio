@@ -44,7 +44,7 @@ This README and the pages it links to are the documentation. Files an AI coding 
 
 ```bash
 # Prerequisites
-node --version           # Node 20+
+node --version           # Node 22.12+
 gh --version             # GitHub CLI, logged in: gh auth status
 git --version            # 2.20+ (for git worktree)
 claude --version         # Claude Code, logged in (`claude`, then /login) — forge's agents run through it
