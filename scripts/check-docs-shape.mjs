@@ -18,10 +18,12 @@
  *   2. HAND-WRITTEN = every docs/**\/*.md minus roadmaps/,
  *      superpowers/ and product/, minus every file carrying `generated_from:`
  *      frontmatter (the story runner's output). That count is <= 25;
- *   3. a page under tutorials/ or how-to/ whose basename is a story id in
- *      tests/stories/*.story.mjs MUST carry `generated_from:
- *      tests/stories/<id>.story.mjs` — stripping the header is how a
- *      generated file would slip into the hand-written count;
+ *   3. generated pages live on the docs site only. Every page under
+ *      apps/docs/src/content/docs/guides/how-to/ MUST carry `generated_from:
+ *      tests/stories/<id>.story.mjs` naming a story that exists — a how-to
+ *      is generated from a story, never hand-written, and stripping the
+ *      header is how a hand edit would hide. A docs/ page carrying
+ *      `generated_from:` is a write to the retired emit target and FAILS;
  *   4. the index reaches everything, in two tiers:
  *      (a) every HAND-WRITTEN page is linked from docs/README.md DIRECTLY —
  *          with ~17 pages there is no excuse for a directory fallback;
@@ -48,6 +50,8 @@ const root = resolve(process.argv[2] ?? FORGE_ROOT);
 const DOCS_DIR = join(root, 'docs');
 const README_PATH = join(DOCS_DIR, 'README.md');
 const STORIES_DIR = join(root, 'tests/stories');
+const SITE_HOWTO_REL = 'apps/docs/src/content/docs/guides/how-to';
+const SITE_HOWTO_DIR = join(root, SITE_HOWTO_REL);
 
 /** The four Diátaxis quadrants — the shape the tree is FOR. */
 const QUADRANTS = ['tutorials', 'how-to', 'reference', 'explanation'];
@@ -169,27 +173,28 @@ function main() {
     const fm = frontmatter(file.abs);
     const generatedFrom = frontmatterField(fm, 'generated_from');
 
-    // Rule 3 — a story's page carries the story's own header.
-    if (top !== null && (top === 'tutorials' || top === 'how-to')) {
-      const id = basename(file.rel, '.md');
-      if (ids.has(id)) {
-        const expected = `tests/stories/${id}.story.mjs`;
-        if (!generatedFrom) {
-          violations.push(
-            `${file.rel} is story ${id}'s generated page but carries no \`generated_from:\` header — restore it by re-running \`npm run stories -- --story ${id}\`; a generated page is never hand-written and never counted`,
-          );
-        } else if (generatedFrom !== expected) {
-          violations.push(
-            `${file.rel} is story ${id}'s page but its \`generated_from:\` says "${generatedFrom}" — it must say "${expected}"`,
-          );
-        }
-      }
+    // Rule 3 (retired target) — the story runner writes to the site only.
+    if (generatedFrom) {
+      violations.push(
+        `${file.rel} carries \`generated_from:\` — generated pages live in ${SITE_HOWTO_REL}/, never under docs/; delete it and re-run the story`,
+      );
     }
 
     // Rule 2 — the hand-written set.
     if (top !== null && UNCOUNTED.includes(top)) continue;
     if (generatedFrom) { generatedRels.push(file.rel); continue; }
     handwritten.push(file.rel);
+  }
+
+  // Rule 3 (site) — every how-to on the site is a story's generated page.
+  for (const abs of markdownFilesUnder(SITE_HOWTO_DIR)) {
+    const rel = relative(root, abs).split('\\').join('/');
+    const from = frontmatterField(frontmatter(abs), 'generated_from');
+    if (!from) {
+      violations.push(`${rel} carries no \`generated_from:\` header — a how-to is generated from a story under tests/stories/, never hand-written; re-run the story that writes it`);
+    } else if (!/^tests\/stories\/[A-Za-z0-9._-]+\.story\.mjs$/.test(from) || !existsSync(join(root, from))) {
+      violations.push(`${rel} says \`generated_from: ${from}\` but no such story exists — re-run the story that writes this page, or delete the page`);
+    }
   }
 
   // Rule 4 — the index links every hand-written page.

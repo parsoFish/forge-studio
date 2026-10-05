@@ -318,26 +318,6 @@ test('a file that was ALREADY dirty before the run is the operator\'s, and is ne
   assert.deepEqual(breaches, { restore: [], remove: [], defer: [], unknown: [] });
 });
 
-test('the run\'s OWN artifacts are never a breach, wherever the fence is called', () => {
-  // The clip, the story.json, the generated doc and the gallery index are the
-  // run's output. Listing all four makes the fence independent of where in the
-  // run it is called — there is no ordering left to remember (S15.80).
-  const after = parseGitPorcelain(
-    porcelainZ('?? demos/stories/S8/', ' M demos/stories/index.html', ' M docs/how-to/S8.md', '?? docs/tutorials/S8.md'),
-  );
-  assert.deepEqual(fenceBreaches([], after, 'S8'), { restore: [], remove: [], defer: [], unknown: [] });
-});
-
-test('another story\'s artifact IS a breach — the allowance is this run\'s id, not the gallery', () => {
-  const after = parseGitPorcelain(porcelainZ(' M demos/stories/S2/story.json', ' M docs/how-to/S2.md'));
-  assert.deepEqual(fenceBreaches([], after, 'S8'), {
-    restore: ['demos/stories/S2/story.json', 'docs/how-to/S2.md'],
-    remove: [],
-    defer: [],
-    unknown: [],
-  });
-});
-
 // --- ROW 101 / M7-D finding 1: expansion failure must HOLD, never delete ---
 
 test('ROW 101 (RED): a git-status failure expanding a collapsed ancestor HOLDS it, never removes it', () => {

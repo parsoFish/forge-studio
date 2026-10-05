@@ -37,9 +37,11 @@ function run(root: string): { code: number; out: string } {
   }
 }
 
-/** A generated story doc, exactly as `npm run stories` writes its header. */
-function generated(kind: 'tutorial' | 'how-to', id: string): string {
-  return `---\nkind: ${kind}\nstory: ${id}\ngenerated_from: tests/stories/${id}.story.mjs\n---\n\n# ${id}\n`;
+const HOWTO = 'apps/docs/src/content/docs/guides/how-to';
+
+/** A generated how-to page, with the header `npm run stories` writes. */
+function generated(id: string): string {
+  return `---\ntitle: ${id}\ntype: how-to\ngenerated_from: tests/stories/${id}.story.mjs\n---\n\nStep.\n`;
 }
 
 function page(title: string): string {
@@ -127,8 +129,8 @@ test('rule 2: generated pages and the planning directories do NOT count toward t
   // 24 pages + docs/README.md = exactly the cap; the five below must not add to it.
   const files: Record<string, string> = {};
   for (let i = 0; i < 24; i++) files[`docs/reference/page-${i}.md`] = page(`Page ${i}`);
-  files['docs/tutorials/S1.md'] = generated('tutorial', 'S1');
-  files['docs/how-to/S3.md'] = generated('how-to', 'S3');
+  files[`${HOWTO}/onboard.md`] = generated('S1');
+  files[`${HOWTO}/reset.md`] = generated('S3');
   files['docs/roadmaps/1.0.md'] = page('Roadmap');
   files['docs/superpowers/specs/spec.md'] = page('Spec');
   files['docs/product/user-stories.md'] = page('Catalogue');
@@ -145,29 +147,30 @@ test('rule 2: generated pages and the planning directories do NOT count toward t
   assert.match(out, /\b25\b/, 'the PASS line states the hand-written count');
 });
 
-test('rule 3: a generated page whose generated_from header was stripped FAILS, naming the story', () => {
-  const root = fixture(
-    { 'docs/tutorials/S1.md': '---\nkind: tutorial\nstory: S1\n---\n\n# Onboard\n' },
-    ['S1'],
-  );
+test('rule 3: a site how-to without a generated_from header FAILS — how-tos are generated, never hand-written', () => {
+  const root = fixture({ [`${HOWTO}/onboard.md`]: '---\ntitle: Onboard\ntype: how-to\n---\n\nStep.\n' }, ['S1']);
   const { code, out } = run(root);
   rmSync(root, { recursive: true, force: true });
-  assert.equal(code, 1, `a story page without generated_from must fail, got:\n${out}`);
-  assert.match(out, /S1/, 'the violation must name the story');
-  assert.match(out, /generated_from/, 'the violation must name the missing header');
+  assert.equal(code, 1, `a how-to without generated_from must fail, got:\n${out}`);
+  assert.match(out, /guides\/how-to\/onboard\.md/, 'the violation names the page');
+  assert.match(out, /generated_from/, 'the violation names the missing header');
 });
 
-test('rule 3: a generated page whose generated_from points at the wrong story FAILS', () => {
-  const root = fixture(
-    {
-      'docs/tutorials/S1.md': '---\nkind: tutorial\nstory: S1\ngenerated_from: tests/stories/S2.story.mjs\n---\n\n# Onboard\n',
-    },
-    ['S1', 'S2'],
-  );
+test('rule 3: a site how-to whose generated_from names no story FAILS', () => {
+  const root = fixture({ [`${HOWTO}/onboard.md`]: generated('S9') }, ['S1']);
   const { code, out } = run(root);
   rmSync(root, { recursive: true, force: true });
-  assert.equal(code, 1, `a mismatched generated_from must fail, got:\n${out}`);
-  assert.match(out, /S1/, 'the violation must name the page whose header is wrong');
+  assert.equal(code, 1, `a generated_from naming a missing story must fail, got:\n${out}`);
+  assert.match(out, /tests\/stories\/S9\.story\.mjs/, 'the violation names the missing story file');
+});
+
+test('rule 3: the retired docs/how-to and docs/tutorials emit targets FAIL if a generated page reappears there', () => {
+  const root = fixture({ 'docs/how-to/S3.md': generated('S3') }, ['S3']);
+  const { code, out } = run(root);
+  rmSync(root, { recursive: true, force: true });
+  assert.equal(code, 1, `a generated page under docs/ must fail, got:\n${out}`);
+  assert.match(out, /docs\/how-to\/S3\.md/);
+  assert.match(out, /apps\/docs/, 'the violation names where generated pages belong');
 });
 
 test('rule 4: a hand-written page missing from the docs index FAILS, naming the page', () => {
@@ -183,9 +186,9 @@ test('rule 4: a hand-written page missing from the docs index FAILS, naming the 
   assert.doesNotMatch(out, /reference\/cli\.md is not/, 'the linked page must not be reported');
 });
 
-test('rule 4: a generated page needs no index link — the quadrant README is the story runner’s', () => {
+test('rule 4: a site how-to needs no docs/ index link', () => {
   const root = fixture(
-    { 'docs/reference/cli.md': page('CLI'), 'docs/how-to/S3.md': generated('how-to', 'S3') },
+    { 'docs/reference/cli.md': page('CLI'), [`${HOWTO}/reset.md`]: generated('S3') },
     ['S3'],
     '# Docs index\n\n- [CLI](./reference/cli.md)\n',
   );

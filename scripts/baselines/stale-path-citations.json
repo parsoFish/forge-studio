@@ -1524,18 +1524,6 @@
     "count": 1
   },
   {
-    "file": "docs/how-to/S6.md",
-    "kind": "path",
-    "cited": "brain/story-s6/antipatterns.md",
-    "count": 1
-  },
-  {
-    "file": "docs/how-to/S9.md",
-    "kind": "stem",
-    "cited": "sessions-index",
-    "count": 2
-  },
-  {
     "file": "docs/product/user-stories.md",
     "kind": "path",
     "cited": "docs/operator-journey.md",
