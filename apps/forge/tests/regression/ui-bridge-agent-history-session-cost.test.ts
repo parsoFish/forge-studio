@@ -72,8 +72,10 @@ async function getJson(path: string): Promise<{ status: number; body: unknown }>
  *  restates the second turn's dollars. */
 function seedRestatingSession(project: string, sessionId: string): { rule: number; naive: number } {
   const projectDir = join(forgeRoot, 'projects', project);
-  mkdirSync(join(projectDir, '_architect', sessionId), { recursive: true });
-  writeFileSync(join(projectDir, '_architect', sessionId, 'status.json'), JSON.stringify({
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', project, '_architect', sessionId);
+  mkdirSync(projectDir, { recursive: true });
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({
     phase: 'drafting', session_id: sessionId, project, project_repo_path: projectDir,
     updated_at: '2026-01-01T00:10:00.000Z',
   }, null, 2));

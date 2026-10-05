@@ -115,6 +115,7 @@ export function norm(s: string): string {
 export const OPERATOR_GUIDANCE_SENTINEL = 'OPERATOR-GUIDANCE-SENTINEL-4471: keep it dark and minimal.';
 
 export function setup(overrides?: Partial<DemoBuilderStatus>, demoProcess?: DemoStep[]): {
+  project: string;
   projectRoot: string;
   repoPath: string;
   logsRoot: string;
@@ -137,11 +138,12 @@ export function setup(overrides?: Partial<DemoBuilderStatus>, demoProcess?: Demo
   );
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-14T00-00-00';
-  const sessionDir = demoSessionDir(projectRoot, sessionId);
+  const project = 'skillprompt-demo';
+  const sessionDir = demoSessionDir(logsRoot, project, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const status: DemoBuilderStatus = {
     session_id: sessionId,
-    project: 'skillprompt-demo',
+    project,
     project_repo_path: repoPath,
     phase: 'generating',
     iteration: 1,
@@ -150,7 +152,7 @@ export function setup(overrides?: Partial<DemoBuilderStatus>, demoProcess?: Demo
     ...overrides,
   };
   writeSessionStatus(sessionDir, status);
-  return { projectRoot, repoPath, logsRoot, sessionId, sessionDir };
+  return { project, projectRoot, repoPath, logsRoot, sessionId, sessionDir };
 }
 
 export const loggerFor = (logsRoot: string, sid: string) => createLogger(`_demo-${sid}`, logsRoot);

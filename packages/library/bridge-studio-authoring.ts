@@ -171,7 +171,7 @@ import {
   type StudioContext,
   type RouteContext,
 } from '@forge/kernel';
-import { resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
+import { resolveGuardedPath, sessionDirSegments, resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
 
 /** The authoring session kind's on-disk kind dir under `<logsRoot>/_sessions/<project>/`. */
 const AUTHORING_KIND_DIR = '_authoring';
@@ -269,10 +269,12 @@ export async function runFinalize(
   const { project, sessionId, kind, id } = input;
 
   try {
-    // Step 1 — the logs root the bridge was started with: a session dir lives
-    // at `<logsRoot>/_sessions/<project>/_authoring/<sessionId>`, never in the
-    // project's checkout (forge-8vfn.8.5.58).
+    // Step 1 — session dirs live at `<logsRoot>/_sessions/<project>/_authoring/<sessionId>`, never in the ground.
     const logsRoot = ctx.logsRoot;
+
+    // Step 1b — the project must be a contained, existing project (a symlink escaping the projects root is refused).
+    const projectGuard = resolveGuardedPath(resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot))), [project]);
+    if (!projectGuard.ok || !projectGuard.exists) return void sendJson(res, 400, { error: 'invalid project or session' }, origin);
 
     // Step 2 — `project` and `sessionId` EACH ride as their OWN guarded
     // segment. Never folded into the root.

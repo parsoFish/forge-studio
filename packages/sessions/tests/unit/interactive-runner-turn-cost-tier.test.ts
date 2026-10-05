@@ -92,7 +92,7 @@ function setUp(sessionId: string, modelTier?: string): { forgeRoot: string; proj
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
   const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
-  const sessionDir = join(projectRoot, '_tiercost', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_tiercost', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, {
     session_id: sessionId,
@@ -105,10 +105,10 @@ function setUp(sessionId: string, modelTier?: string): { forgeRoot: string; proj
 
 test('a priced turn on the DEFAULT (cheapest-first) tier reports that tier on interactive.turn-cost', async () => {
   const sessionId = '2026-09-19T00-00-00-defaulttier';
-  const { forgeRoot, projectRoot, logsRoot, sessionDir } = setUp(sessionId);
+  const { forgeRoot, logsRoot, sessionDir } = setUp(sessionId);
 
   await runInteractiveTurn(descriptorFor(forgeRoot, 'tiercostkind'), {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn: pricedQueryFn(sessionDir),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn: pricedQueryFn(sessionDir),
   });
 
   const rows = eventsUnder(logsRoot).filter((r) => r['message'] === 'interactive.turn-cost');
@@ -121,10 +121,10 @@ test('a priced turn on the DEFAULT (cheapest-first) tier reports that tier on in
 
 test('NEGATIVE CONTROL: a session kicked off at a DIFFERENT tier emits that different tier — a hardcoded value cannot pass', async () => {
   const sessionId = '2026-09-19T00-00-00-opustier';
-  const { forgeRoot, projectRoot, logsRoot, sessionDir } = setUp(sessionId, 'opus');
+  const { forgeRoot, logsRoot, sessionDir } = setUp(sessionId, 'opus');
 
   await runInteractiveTurn(descriptorFor(forgeRoot, 'tiercostkind'), {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn: pricedQueryFn(sessionDir),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn: pricedQueryFn(sessionDir),
   });
 
   const rows = eventsUnder(logsRoot).filter((r) => r['message'] === 'interactive.turn-cost');

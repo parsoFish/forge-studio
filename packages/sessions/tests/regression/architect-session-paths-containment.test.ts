@@ -28,11 +28,15 @@ import { tmpdir } from 'node:os';
 import { sessionPaths } from '../../kinds/architect-plan.ts';
 import { PathGuardContainmentError } from '@forge/kernel';
 
-function scratch(): { root: string; projectRoot: string } {
+/** `home` is the session home; `projectRoot` names the per-project sessions dir
+ *  (`<logsRoot>/_sessions/p`) that holds `_architect/` — session dirs live under
+ *  the logs root, never in the managed project's checkout. */
+function scratch(): { root: string; home: { logsRoot: string; project: string }; projectRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'session-paths-containment-'));
-  const projectRoot = join(root, 'project');
+  const logsRoot = join(root, '_logs');
+  const projectRoot = join(logsRoot, '_sessions', 'p');
   mkdirSync(join(projectRoot, '_architect'), { recursive: true });
-  return { root, projectRoot };
+  return { root, home: { logsRoot, project: 'p' }, projectRoot };
 }
 
 const ESCAPING_IDS = [
@@ -43,10 +47,10 @@ const ESCAPING_IDS = [
 
 for (const [id, why] of ESCAPING_IDS) {
   test(`sessionPaths refuses ${JSON.stringify(id)} on its own — ${why}`, () => {
-    const { root, projectRoot } = scratch();
+    const { root, home } = scratch();
     try {
       assert.throws(
-        () => sessionPaths(projectRoot, id),
+        () => sessionPaths(home, id),
         PathGuardContainmentError,
         'an escaping id must be refused by the guard, not silently resolved into an unverified path',
       );
@@ -57,12 +61,12 @@ for (const [id, why] of ESCAPING_IDS) {
 }
 
 test('sessionPaths refuses an absolute-path session id — a PLANTED scratch dir, never a real system path', () => {
-  const { root, projectRoot } = scratch();
+  const { root, home } = scratch();
   const absoluteVictim = join(root, 'absolute-victim');
   mkdirSync(absoluteVictim, { recursive: true });
   try {
     assert.throws(
-      () => sessionPaths(projectRoot, absoluteVictim),
+      () => sessionPaths(home, absoluteVictim),
       PathGuardContainmentError,
       'an absolute id must be refused, not resolved verbatim as the session dir',
     );
@@ -71,16 +75,18 @@ test('sessionPaths refuses an absolute-path session id — a PLANTED scratch dir
   }
 });
 
-test('sessionPaths refuses a SYMLINKED _architect dir pointing outside projectRoot', () => {
+test('sessionPaths refuses a SYMLINKED _architect dir pointing outside the logs root', () => {
   const root = mkdtempSync(join(tmpdir(), 'session-paths-containment-symlink-'));
-  const projectRoot = join(root, 'project');
+  const logsRoot = join(root, '_logs');
+  const home = { logsRoot, project: 'p' };
+  const projectRoot = join(logsRoot, '_sessions', 'p');
   mkdirSync(projectRoot, { recursive: true });
   const victim = join(root, 'victim');
   mkdirSync(victim, { recursive: true });
   symlinkSync(victim, join(projectRoot, '_architect'), 'dir');
   try {
     assert.throws(
-      () => sessionPaths(projectRoot, '2026-09-04T00-00-00'),
+      () => sessionPaths(home, '2026-09-04T00-00-00'),
       PathGuardContainmentError,
       'a symlinked _architect dir must be refused by the identity walk, not followed',
     );
@@ -90,9 +96,9 @@ test('sessionPaths refuses a SYMLINKED _architect dir pointing outside projectRo
 });
 
 test('POSITIVE CONTROL: a well-formed session id still resolves — the refusals above are not the function refusing everything', () => {
-  const { root, projectRoot } = scratch();
+  const { root, home } = scratch();
   try {
-    const paths = sessionPaths(projectRoot, '2026-09-04T00-00-00');
+    const paths = sessionPaths(home, '2026-09-04T00-00-00');
     assert.match(paths.sessionDir, /_architect[/\\]2026-09-04T00-00-00$/);
     assert.equal(paths.planPath, join(paths.sessionDir, 'PLAN.md'));
     assert.equal(paths.feedbackPath, join(paths.sessionDir, 'feedback.md'));

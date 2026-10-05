@@ -37,7 +37,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { request as httpRequest } from 'node:http';
@@ -47,6 +47,7 @@ import matter from 'gray-matter';
 // `packages/sessions/tests/contract/affordance-no-raw-fs.test.ts` — it reads
 // package SOURCE, so it belongs beside the source, and it now covers all six
 // modules the carve spread that code across rather than the one file it used to.
+import { sessionDirSegments } from '@forge/kernel';
 import { startBridge } from '../../ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 
@@ -103,8 +104,14 @@ function freshSessionId(): string {
   return `2026-08-15T00-00-${String(sessionCounter).padStart(3, '0')}-fx`;
 }
 
+/** Session dirs live under the logs root, never in the managed project's checkout. */
+function sessionDirOf(project: string, kindDir: string, sessionId: string): string {
+  return join(forgeRoot, '_logs', ...sessionDirSegments(project, kindDir, sessionId));
+}
+
 function seedSession(project: string, kindDir: string, sessionId: string, status: Record<string, unknown>): string {
-  const dir = join(forgeRoot, 'projects', project, kindDir, sessionId);
+  const dir = sessionDirOf(project, kindDir, sessionId);
+  mkdirSync(join(forgeRoot, 'projects', project), { recursive: true });
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
   return dir;
@@ -194,7 +201,8 @@ test('SEC-3: an absolute-path-shaped sessionId ("/etc/passwd", percent-encoded) 
 
 test('SEC-4: a well-formed but non-existent sessionId under a REAL project -> 404 {error:"session not found"}', async () => {
   const project = 'secproj4';
-  mkdirSync(join(forgeRoot, 'projects', project, '_instructions'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'projects', project), { recursive: true });
+  mkdirSync(dirname(sessionDirOf(project, '_instructions', 'x')), { recursive: true });
   const res = await postJson(affordanceUrl('instructions', 'no-such-session-2026', 'anything'), { project, verdict: 'approve' });
   const body = (await res.json()) as { error: string };
   assert.equal(res.status, 404);
@@ -580,7 +588,7 @@ test('TBL-kbcleanup-3: verdict approve when status.json carries no string kb_id 
 test('TBL-authoring-1: verdict approve (kind:skill) at awaiting-review -> 200, delegates to runFinalize (landed + installed), phase -> committed', async () => {
   const project = 'tblauthoring1';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: W6B4 Authored Skill\ndescription: fixture\n---\n\nBody.\n', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -600,7 +608,7 @@ test('TBL-authoring-1: verdict approve (kind:skill) at awaiting-review -> 200, d
 test('TBL-authoring-2: verdict reject at awaiting-review -> 200, phase -> rejected, nothing landed (W7-C2: the yaml row now declares the three-way gate)', async () => {
   const project = 'tblauthoring2';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: Untouched\ndescription: fixture\n---\n\nBody.\n', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -620,7 +628,7 @@ test('TBL-authoring-2: verdict reject at awaiting-review -> 200, phase -> reject
 test('TBL-authoring-3: verdict approve with missing "id" -> 400, nothing landed/installed', async () => {
   const project = 'tblauthoring3';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: Untitled\ndescription: fixture\n---\n\nBody.\n', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -633,7 +641,7 @@ test('TBL-authoring-3: verdict approve with missing "id" -> 400, nothing landed/
 test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-4: the GENERIC meta.requires check names the missing field — body.id absent entirely (not just empty) still 400s naming "id", nothing landed/installed', async () => {
   const project = 'tblauthoring4';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: Untitled\ndescription: fixture\n---\n\nBody.\n', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -652,7 +660,7 @@ test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-4: the GENERIC meta.requir
 test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-5: "kind" is DERIVED from the REAL staged files, never trusted from the request body — a body claiming kind:"hook" over a staged SKILL.md still installs as a skill', async () => {
   const project = 'tblauthoring5';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: W6B9 Kind Derivation\ndescription: fixture\n---\n\nBody.\n', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -674,7 +682,7 @@ test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-5: "kind" is DERIVED from 
 test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-6: neither SKILL.md nor hook.yaml staged yet -> 409, honest ("still drafting"), never a guessed kind', async () => {
   const project = 'tblauthoring6';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'README.md'), 'not a package marker file', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -701,7 +709,7 @@ test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-6: neither SKILL.md nor ho
 test('TBL-authoring-7 (W8-B4 FIX-1, reviewer repro): verdict approve with a staged template.md (no SKILL.md/hook.yaml) at awaiting-review -> 200 via the SAME generic verdict route the Approve button calls, never 409; installs into studio/artifact-templates/<id>.md', async () => {
   const project = 'tblauthoring7';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   const draft = matter.stringify('\nDescribe the artifact this template defines.\n', {
     category: 'planning',
@@ -730,7 +738,7 @@ test('TBL-authoring-7 (W8-B4 FIX-1, reviewer repro): verdict approve with a stag
 test('TBL-authoring-8 (control): verdict approve with a staged hook.yaml + scripts/run.sh (no SKILL.md/template.md) at awaiting-review -> 200 via the same generic verdict route; installs studio/hooks/<id>', async () => {
   const project = 'tblauthoring8';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging', 'scripts'), { recursive: true });
   writeFileSync(
     join(sessionDir, 'staging', 'hook.yaml'),
@@ -754,7 +762,7 @@ test('TBL-authoring-8 (control): verdict approve with a staged hook.yaml + scrip
 test('TBL-authoring-9 (enumeration message): none of the three marker files staged -> 409 whose message NAMES every shape it looked for (SKILL.md, hook.yaml, template.md), not the stale two-item phrasing', async () => {
   const project = 'tblauthoring9';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'README.md'), 'not a package marker file', 'utf8');
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
@@ -779,7 +787,7 @@ test('UNHANDLED-1: a valid, currently-derived staged-review affordance -> 501 Un
   // authoring's "analyzing" phase yields BOTH staged-review (writes:[staging])
   // and next-turn (next:awaiting-review) — real, derived, currently-available
   // affordances with genuinely no write action.
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'analyzing' }, null, 2), 'utf8');
 
@@ -795,7 +803,7 @@ test('UNHANDLED-1: a valid, currently-derived staged-review affordance -> 501 Un
 test('UNHANDLED-2: a valid, currently-derived next-turn affordance -> 501 UnhandledAffordanceBody naming its kind', async () => {
   const project = 'unhandled2';
   const sessionId = freshSessionId();
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = sessionDirOf(project, '_authoring', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'analyzing' }, null, 2), 'utf8');
 
@@ -878,13 +886,13 @@ test('SEC-SYMLINK: the session dir itself is a SYMLINK (not a real directory) po
     'utf8',
   );
 
-  // The attack: `<projectsRoot>/<project>/_instructions/<sessionId>` is
+  // The attack: `<logsRoot>/_sessions/<project>/_instructions/<sessionId>` is
   // ITSELF a symlink to the victim dir — the exact AT-47 shape
   // packages/sessions/bridge-studio-sessions.ts's own header documents (a symlink whose
   // OWN path is safely inside the requested parent but which resolves to a
   // DIFFERENT session entirely). `resolveGuardedPath`'s per-segment identity
   // walk must catch this at the `sessionId` segment.
-  const kindDir = join(forgeRoot, 'projects', project, '_instructions');
+  const kindDir = dirname(sessionDirOf(project, '_instructions', sessionId));
   mkdirSync(kindDir, { recursive: true });
   symlinkSync(victimDir, join(kindDir, sessionId));
 

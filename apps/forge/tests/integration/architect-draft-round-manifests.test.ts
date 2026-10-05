@@ -117,8 +117,9 @@ function ports() {
 function plant(): { root: string; projectRoot: string; manifestsDir: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-draft-manifests-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
+  mkdirSync(projectRoot, { recursive: true });
   const status: ArchitectStatus = {
     session_id: 'sess-1',
     project: 'p1',
@@ -145,7 +146,7 @@ test('7.6.17: a re-draft that echoes round 1 ids back as slugs leaves ONE manife
   ]);
   try {
     await runArchitectTurn({
-      manifestPorts: ports(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: ports(), sessionId: 'sess-1', project: 'p1', projectRoot,
       logsRoot: join(root, '_logs'), brainCwd: root,
       queryFn: scriptedQueryFn([round1, HIGH, round2, CLEAN]).queryFn as never,
       logger: silentLogger(),
@@ -176,7 +177,7 @@ test('7.6.17: a SHRINKING re-draft leaves no orphan — round 1 initiative that 
   const round2 = DRAFT([['keep-this-one', []]]);
   try {
     await runArchitectTurn({
-      manifestPorts: ports(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: ports(), sessionId: 'sess-1', project: 'p1', projectRoot,
       logsRoot: join(root, '_logs'), brainCwd: root,
       queryFn: scriptedQueryFn([round1, HIGH, round2, CLEAN]).queryFn as never,
       logger: silentLogger(),

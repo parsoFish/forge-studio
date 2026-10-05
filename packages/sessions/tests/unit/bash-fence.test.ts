@@ -361,7 +361,7 @@ function realKindFixture(kindId: string): { descriptor: NonNullable<ReturnType<t
   const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-19T12-00-00';
-  const sessionDir = join(projectRoot, descriptor.turnSpec.kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'project', descriptor.turnSpec.kindDir, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   return { descriptor, forgeRoot, projectRoot, logsRoot, sessionId, sessionDir };
 }
@@ -379,7 +379,7 @@ async function captureRealCanUseTool(kindId: string, status: Record<string, unkn
     }
     return gen();
   };
-  await runInteractiveTurn(fx.descriptor, { sessionId: fx.sessionId, projectRoot: fx.projectRoot, forgeRoot: fx.forgeRoot, logsRoot: fx.logsRoot, queryFn, logger: createLogger(`_bash-fence-${kindId}`, fx.logsRoot) });
+  await runInteractiveTurn(fx.descriptor, { sessionId: fx.sessionId, project: 'project', forgeRoot: fx.forgeRoot, logsRoot: fx.logsRoot, queryFn, logger: createLogger(`_bash-fence-${kindId}`, fx.logsRoot) });
   assert.ok(captured, 'queryFn must have been invoked');
   assert.equal(typeof captured!.canUseTool, 'function', 'a fenced turn installs canUseTool');
   return { cut: captured!.canUseTool as WriteRootCanUseTool, sessionDir: fx.sessionDir, allowedTools: captured!.allowedTools as string[] };

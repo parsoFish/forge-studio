@@ -288,7 +288,7 @@ export function setup(): Fixture {
   mkdirSync(projectRoot, { recursive: true });
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-10T00-00-00';
-  const sessionDir = join(projectRoot, '_interactivetest', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest', sessionId);
   return { root, forgeRoot, projectRoot, logsRoot, sessionId, sessionDir };
 }
 
@@ -370,7 +370,7 @@ export function setupRealAuthoring(): RealAuthoringFixture {
   mkdirSync(projectRoot, { recursive: true });
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-11T00-00-00';
-  const sessionDir = join(projectRoot, descriptor.turnSpec.kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', descriptor.turnSpec.kindDir, sessionId);
   return { root, forgeRoot, projectRoot, logsRoot, sessionId, sessionDir, descriptor };
 }
 

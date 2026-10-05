@@ -12,7 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,7 +26,9 @@ test('kills "the architect inherits the bridge\'s cwd": options.cwd IS the proje
   const root = mkdtempSync(join(tmpdir(), 'architect-ground-cwd-'));
   try {
     const projectRoot = join(root, 'projects', 'project');
-    mkdirSync(join(projectRoot, '_architect', SESSION_ID), { recursive: true });
+    const sessionDir = join(root, '_logs', '_sessions', 'testproj', '_architect', SESSION_ID);
+    mkdirSync(sessionDir, { recursive: true });
+    mkdirSync(projectRoot, { recursive: true });
     const skillPromptPath = join(root, 'skill.md');
     writeFileSync(skillPromptPath, [
       'Ground-cwd fixture.',
@@ -44,7 +46,7 @@ test('kills "the architect inherits the bridge\'s cwd": options.cwd IS the proje
       'FIXTURE architect FORCE-EMIT turn.',
     ].join('\n'));
     writeFileSync(
-      join(projectRoot, '_architect', SESSION_ID, 'status.json'),
+      join(sessionDir, 'status.json'),
       JSON.stringify({
         session_id: SESSION_ID,
         project: 'testproj',
@@ -81,6 +83,7 @@ test('kills "the architect inherits the bridge\'s cwd": options.cwd IS the proje
     await runArchitectTurn({
       sessionId: SESSION_ID,
       projectRoot,
+      project: 'testproj',
       queryFn,
       logsRoot: join(root, '_logs'),
       logger: createLogger(`_architect-${SESSION_ID}`, join(root, '_logs')),
@@ -88,6 +91,7 @@ test('kills "the architect inherits the bridge\'s cwd": options.cwd IS the proje
       brainCwd: root,
     });
 
+    assert.ok(!existsSync(join(projectRoot, '_architect')), 'the ground must contain no session dir');
     assert.equal(cwdSeen, projectRoot, 'the SDK must be told the ground; inheriting the caller\'s cwd is how a relative write reaches forge\'s tree');
     assert.notEqual(cwdSeen, process.cwd(), 'and it must not be whatever directory the bridge happened to start in');
   } finally {

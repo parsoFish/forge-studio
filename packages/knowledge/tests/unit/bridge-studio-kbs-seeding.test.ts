@@ -41,7 +41,7 @@ test('mintProjectBrainSeedingSession: refuses a traversal-shaped project segment
   try {
     const { write, captured } = recordingWrite();
     assert.throws(
-      () => mintProjectBrainSeedingSession(projectsRoot, '../../etc', 'kb1', { kind: 'unique' }, write),
+      () => mintProjectBrainSeedingSession(projectsRoot, join(projectsRoot, '_logs'), '../../etc', 'kb1', { kind: 'unique' }, write),
       /containment/,
       'must refuse by name, the same way the sibling /start routes do',
     );
@@ -55,7 +55,7 @@ test('mintProjectBrainSeedingSession: an ordinary project segment still resolves
   const projectsRoot = mkdtempSync(join(tmpdir(), 'kbs-seed-'));
   try {
     const { write, captured } = recordingWrite();
-    mintProjectBrainSeedingSession(projectsRoot, 'my-project', 'kb1', { kind: 'unique' }, write);
+    mintProjectBrainSeedingSession(projectsRoot, join(projectsRoot, '_logs'), 'my-project', 'kb1', { kind: 'unique' }, write);
     const status = captured();
     assert.ok(status, 'a normal segment must still succeed');
     assert.equal(status?.project_repo_path, join(projectsRoot, 'my-project'));

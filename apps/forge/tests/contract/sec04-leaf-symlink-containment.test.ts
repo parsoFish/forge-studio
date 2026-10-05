@@ -2,7 +2,7 @@
  * ACCEPTANCE PINS (SEC-04, bd forge-ebj) — the LEAF-SYMLINK escape family.
  *
  * The dir-level SEC-04 fix (landed at this HEAD) routes every session-dir build
- * through `resolveGuardedPath(root, [project, kindDir, sessionId])` — the DIR is
+ * through `resolveGuardedPath(logsRoot, ['_sessions', project, kindDir, sessionId])` — the DIR is
  * now contained. But the leaf FILE beneath it is NOT: the current callers guard
  * the dir, then RAW-APPEND the leaf and read/write through it:
  *
@@ -13,7 +13,7 @@
  *     writeSessionStatus(dir, {...})                // join(dir,'status.json') — UNguarded
  *
  *   runner (runInstructionsTurn, orchestrator/instructions-runner.ts):
- *     resolveGuardedPath(projectRoot, [KIND, sessionId])  // dir guarded ✔
+ *     resolveSessionDir(logsRoot, project, KIND, sessionId)  // dir guarded ✔
  *     readSessionStatus(guarded.realPath)                 // status.json leaf — UNguarded
  *     writeSessionStatus(sessionDir, {...})               // status.json leaf — UNguarded
  *
@@ -31,7 +31,7 @@
  * These pins plant a real guarded dir + a symlinked `status.json` leaf and assert
  * the victim OUTSIDE both roots is byte-IDENTICAL after the call (write-escape
  * blocked) and that the read-escape does not silently succeed (refuse, don't
- * disclose). Victims live under os.tmpdir(), OUTSIDE projectsRoot AND forgeRoot.
+ * disclose). Victims live under os.tmpdir(), OUTSIDE the logs root AND forgeRoot.
  *
  * FALSE-NEGATIVE DISCIPLINE (immutable-gates): every precondition is asserted by
  * execution BEFORE the verdict — the dir is genuinely contained (a plain SEC-04
@@ -66,6 +66,7 @@ function tmp(prefix: string): string {
 
 let forgeRoot: string;
 let projectsRoot: string;
+let logsRoot: string;
 const outsideDirs: string[] = [];
 let symlinksUnavailable = false;
 
@@ -86,7 +87,9 @@ const noopQuery: QueryFn = () => {
 before(() => {
   forgeRoot = tmp('sec04-leaf-forge-');
   projectsRoot = join(forgeRoot, 'projects');
+  logsRoot = join(forgeRoot, '_logs');
   mkdirSync(projectsRoot, { recursive: true });
+  mkdirSync(logsRoot, { recursive: true });
 
   // A real, legitimately-shaped in-root project — the guarded base every leaf
   // vector plants its session dir under.
@@ -116,11 +119,11 @@ function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
 }
 
 /** Build a REAL, genuinely-contained instructions session dir under
- *  projects/legit/_instructions/<sessionId>/, then replace its `status.json`
+ *  _logs/_sessions/legit/_instructions/<sessionId>/, then replace its `status.json`
  *  with a SYMLINK to `victimStatusPath` (out of root). Returns nothing — the
  *  caller has already planted + captured the victim. */
 function plantGuardedDirWithSymlinkedStatus(sessionId: string, victimStatusPath: string): string {
-  const sessionDir = join(projectsRoot, 'legit', '_instructions', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'legit', '_instructions', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const leaf = join(sessionDir, 'status.json');
   symlinkSync(victimStatusPath, leaf, 'file');
@@ -178,9 +181,10 @@ test('(RED) runInstructionsTurn writes through a symlinked status.json leaf, ove
   try {
     await runInstructionsTurn({
       sessionId: 'sess-runner-leaf-write',
+      project: 'legit',
       projectRoot: join(projectsRoot, 'legit'),
       queryFn: noopQuery,
-      logsRoot: join(forgeRoot, '_logs'),
+      logsRoot,
       forgeRoot,
     });
   } catch {
@@ -211,9 +215,10 @@ test('(RED) runInstructionsTurn reads through a symlinked status.json leaf (out-
   try {
     const r = await runInstructionsTurn({
       sessionId: 'sess-runner-leaf-read',
+      project: 'legit',
       projectRoot: join(projectsRoot, 'legit'),
       queryFn: noopQuery,
-      logsRoot: join(forgeRoot, '_logs'),
+      logsRoot,
       forgeRoot,
     });
     returnedPhase = r.phase;
@@ -228,12 +233,12 @@ test('(RED) runInstructionsTurn reads through a symlinked status.json leaf (out-
 });
 
 // A guard-shape sanity anchor: the sessionId itself is a real, contained
-// directory (relative(projectsRoot, dir) does NOT step out) — so any failure
+// directory (relative(logsRoot, dir) does NOT step out) — so any failure
 // above is attributable to the LEAF, not to a dir-level traversal the existing
 // SEC-04 pins already cover.
-test('anchor: the planted session DIR is genuinely contained under projectsRoot (isolating the leaf as the sole escape)', (t) => {
+test('anchor: the planted session DIR is genuinely contained under the logs root (isolating the leaf as the sole escape)', (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const dir = join(projectsRoot, 'legit', '_instructions', 'sess-brief-leaf-write');
-  const rel = relative(projectsRoot, dir);
-  assert.notEqual(rel.split(sep)[0], '..', 'the session dir must be inside projectsRoot (leaf is the only out-of-root hop)');
+  const dir = join(logsRoot, '_sessions', 'legit', '_instructions', 'sess-brief-leaf-write');
+  const rel = relative(logsRoot, dir);
+  assert.notEqual(rel.split(sep)[0], '..', 'the session dir must be inside the logs root (leaf is the only out-of-root hop)');
 });

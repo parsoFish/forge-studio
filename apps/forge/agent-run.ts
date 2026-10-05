@@ -70,9 +70,9 @@ export interface AgentRunnerEntry {
    *  session dir lives under (`<logsRoot>/_sessions/<project>/<kindDir>/<sessionId>/status.json`),
    *  mirroring `TurnSpec.kindDir` for the new-road turnSpec kinds
    *  (`runTurnSpecAgent` below). Read STRAIGHT off each runner's own
-   *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts` ('_architect', historical: since ported),
-   *  `packages/sessions/instructions-runner.ts` ('_instructions', historical: since ported),
-   *  `packages/sessions/kinds/project-brain.ts` ('_project-brain', now a
+   *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts`,
+   *  `packages/sessions/instructions-runner.ts`,
+   *  `packages/sessions/kinds/project-brain.ts` (now a
    *  `SESSION_KIND_RUNNERS` row) — with
    *  ONE deliberate trap: demo-builder's is `_demo`, NOT `_demo-builder` (see
    *  `packages/sessions/demo-builder-runner.ts`'s `DEMO_KIND_DIR` (historical: since ported) and

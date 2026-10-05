@@ -36,9 +36,12 @@ import { archiveSessionDir } from '../../kinds/architect-plan.ts';
  * which is not a control at all (§15.75). Every escaping id below therefore
  * points at something that EXISTS.
  */
-function scratch(): { root: string; projectRoot: string; victim: string; inner: string } {
+function scratch(): { root: string; home: { logsRoot: string; project: string }; projectRoot: string; victim: string; inner: string } {
   const root = mkdtempSync(join(tmpdir(), 'architect-archive-'));
-  const projectRoot = join(root, 'project');
+  // Session dirs live under the LOGS root now: `<logsRoot>/_sessions/<project>/_architect/<sid>`.
+  const logsRoot = join(root, '_logs');
+  const home = { logsRoot, project: 'p' };
+  const projectRoot = join(logsRoot, '_sessions', 'p');
   mkdirSync(join(projectRoot, '_architect', '2026-09-04T00-00-00'), { recursive: true });
   const victim = join(root, 'victim');
   mkdirSync(victim, { recursive: true });
@@ -50,7 +53,7 @@ function scratch(): { root: string; projectRoot: string; victim: string; inner: 
   // `_architect/a/b` exists, so a separator smuggled into one segment names a
   // REAL directory rather than a missing one.
   mkdirSync(join(projectRoot, '_architect', 'a', 'b'), { recursive: true });
-  return { root, projectRoot, victim, inner };
+  return { root, home, projectRoot, victim, inner };
 }
 
 /** Absolute-path case: the id points at a PLANTED scratch dir, never at a real
@@ -71,12 +74,12 @@ const ESCAPING_IDS = [
 
 for (const [id, why] of ESCAPING_IDS) {
   test(`archiveSessionDir refuses ${JSON.stringify(id)} on its own — ${why}`, () => {
-    const { root, projectRoot, victim, inner } = scratch();
+    const { root, home, projectRoot, victim, inner } = scratch();
     const useId = id === '@ABSOLUTE@' ? absoluteVictim || join(root, 'absolute-victim') : id;
     if (id === '@ABSOLUTE@') mkdirSync(useId, { recursive: true });
     try {
       assert.throws(
-        () => archiveSessionDir(projectRoot, useId),
+        () => archiveSessionDir(home, useId),
         /refusing to archive/,
         'an escaping id must be refused BY THE GUARD in this function — "session dir not found" is a refusal by accident, and the pre-fix code gives exactly that for the ids whose target happens not to exist',
       );
@@ -95,7 +98,7 @@ for (const [id, why] of ESCAPING_IDS) {
 }
 
 test('a SYMLINKED archive root is refused — the escape with the worst outcome, and the one this fix most clearly buys', () => {
-  const { root, projectRoot, victim } = scratch();
+  const { root, home, projectRoot, victim } = scratch();
   try {
     // Pre-fix: existsSync follows the link, no mkdir runs, and renameSync
     // resolves the symlinked parent in the kernel — the session dir lands
@@ -105,7 +108,7 @@ test('a SYMLINKED archive root is refused — the escape with the worst outcome,
     // nothing outside the project root moves was vacuous.)
     symlinkSync(victim, join(projectRoot, '_architect', '_archived'), 'dir');
     assert.throws(
-      () => archiveSessionDir(projectRoot, '2026-09-04T00-00-00'),
+      () => archiveSessionDir(home, '2026-09-04T00-00-00'),
       /refusing to archive/,
       'a symlinked archive root must be refused by the guard, not followed',
     );
@@ -125,9 +128,9 @@ test('a SYMLINKED archive root is refused — the escape with the worst outcome,
 });
 
 test('POSITIVE CONTROL: a well-formed session id still archives — the refusals above are not the function refusing everything', () => {
-  const { root, projectRoot } = scratch();
+  const { root, home, projectRoot } = scratch();
   try {
-    const archived = archiveSessionDir(projectRoot, '2026-09-04T00-00-00');
+    const archived = archiveSessionDir(home, '2026-09-04T00-00-00');
     assert.equal(existsSync(archived), true, 'the archived dir exists at the returned path');
     assert.equal(
       existsSync(join(projectRoot, '_architect', '2026-09-04T00-00-00')),

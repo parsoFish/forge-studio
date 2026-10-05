@@ -60,7 +60,7 @@ function setup(): { projectRoot: string; repoPath: string; sessionDir: string; l
   const repoPath = join(root, 'repo');
   mkdirSync(join(repoPath, '.forge'), { recursive: true });
   writeFileSync(join(repoPath, '.forge', 'project.json'), JSON.stringify(PROJECT_CONFIG));
-  const sessionDir = demoSessionDir(projectRoot, SESSION_ID);
+  const sessionDir = demoSessionDir(join(root, '_logs'), 'door', SESSION_ID);
   mkdirSync(sessionDir, { recursive: true });
   const status: DemoBuilderStatus = {
     session_id: SESSION_ID, project: 'door', project_repo_path: repoPath,
@@ -72,7 +72,7 @@ function setup(): { projectRoot: string; repoPath: string; sessionDir: string; l
 
 async function turn(ctx: ReturnType<typeof setup>, queryFn: QueryFn) {
   return await runDemoBuilderTurn({
-    sessionId: SESSION_ID, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn,
+    sessionId: SESSION_ID, project: 'door', projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn,
     logger: createLogger(`_demo-${SESSION_ID}`, ctx.logsRoot), logsRoot: ctx.logsRoot,
   });
 }

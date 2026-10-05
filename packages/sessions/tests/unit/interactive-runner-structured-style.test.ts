@@ -17,9 +17,9 @@ import { writeSessionStatus, readSessionStatus } from '../../interactive-session
 type StructuredStatus = { session_id: string; phase: string; updated_at: string };
 
 test('turnSpec style:structured (schema:interview-qa) runs a real structured turn, advances phase, and persists the result under the declared writes dir', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-19T00-00-00';
-  const sessionDir = join(projectRoot, '_interactivetest-structured', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-structured', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<StructuredStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -34,7 +34,7 @@ test('turnSpec style:structured (schema:interview-qa) runs a real structured tur
   };
 
   const result = await runInteractiveTurn(descriptor, {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
   });
 
   assert.ok(queryFnCalled, 'the structured-style primitive must actually invoke queryFn');
@@ -46,9 +46,9 @@ test('turnSpec style:structured (schema:interview-qa) runs a real structured tur
 });
 
 test('turnSpec style:structured with NO schema declared refuses loudly, naming the kind', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-19T00-00-01';
-  const sessionDir = join(projectRoot, '_interactivetest-structured-noschema', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-structured-noschema', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<StructuredStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -56,15 +56,15 @@ test('turnSpec style:structured with NO schema declared refuses loudly, naming t
   const queryFn: QueryFn = () => { throw new Error('queryFn must not be called — the runner must refuse before spawning'); };
 
   await assert.rejects(
-    () => runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    () => runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /schema/i,
   );
 });
 
 test('turnSpec style:structured naming an unregistered schema id refuses loudly, naming the offending id', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-19T00-00-02';
-  const sessionDir = join(projectRoot, '_interactivetest-structured-badschema', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-structured-badschema', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<StructuredStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -72,15 +72,15 @@ test('turnSpec style:structured naming an unregistered schema id refuses loudly,
   const queryFn: QueryFn = () => { throw new Error('queryFn must not be called — the runner must refuse before spawning'); };
 
   await assert.rejects(
-    () => runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    () => runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /totally-not-a-real-schema-id/,
   );
 });
 
 test('a structured turn never writes output.json through a symlink the agent planted in its own writes dir', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-19T00-00-01';
-  const sessionDir = join(projectRoot, '_interactivetest-structured', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-structured', sessionId);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeSessionStatus<StructuredStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   const outside = join(forgeRoot, 'outside-secret.txt');
@@ -90,7 +90,7 @@ test('a structured turn never writes output.json through a symlink the agent pla
   const queryFn: QueryFn = () => (async function* () { yield { type: 'result', total_cost_usd: 0.02, structured_output: { done: true, questions: [] } }; })();
 
   await assert.rejects(
-    runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /output\.json/,
   );
   assert.equal(readFileSync(outside, 'utf8'), 'untouched\n');

@@ -85,7 +85,7 @@ function freshSessionId(): string {
 }
 
 function seedSession(project: string, kindDir: string, sessionId: string, status: Record<string, unknown>): string {
-  const dir = join(forgeRoot, 'projects', project, kindDir, sessionId);
+  const dir = join(forgeRoot, '_logs', '_sessions', project, kindDir, sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
   return dir;

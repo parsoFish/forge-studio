@@ -33,7 +33,7 @@ function containedUnder(allowedRoot: string): (candidate: string, opts: { forgeR
 
 test('committing + finalizer:writeToRepoRoot reaches the finalizer with a real instructions-shaped (non-slug) session id — needsPackageId:false skips the gate', async () => {
   const { forgeRoot, projectRoot, logsRoot } = setup();
-  const sessionDir = join(projectRoot, '_interactivetest-writetorepo', INSTRUCTIONS_SHAPED_ID);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-writetorepo', INSTRUCTIONS_SHAPED_ID);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'AGENTS.draft.md'), '# fixture\n');
   const repoRoot = join(projectRoot, 'target-repo');
@@ -45,7 +45,7 @@ test('committing + finalizer:writeToRepoRoot reaches the finalizer with a real i
 
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-writetorepo');
   const result = await runInteractiveTurn(descriptor, {
-    sessionId: INSTRUCTIONS_SHAPED_ID, projectRoot, forgeRoot, logsRoot,
+    sessionId: INSTRUCTIONS_SHAPED_ID, project: 'proj', forgeRoot, logsRoot,
     queryFn: neverCalledQueryFn(), logger: logger(logsRoot, INSTRUCTIONS_SHAPED_ID),
     isContainedProjectRepoPath: containedUnder(repoRoot),
   });
@@ -57,10 +57,10 @@ test('committing + finalizer:writeToRepoRoot reaches the finalizer with a real i
 });
 
 test('committing + finalizer:copyStagingToLibrary with the SAME non-slug id still refuses — needsPackageId:true is unchanged', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   mkdirSync(join(forgeRoot, 'library'), { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'library'), { recursive: true });
-  const sessionDir = join(projectRoot, '_interactivetest', INSTRUCTIONS_SHAPED_ID);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest', INSTRUCTIONS_SHAPED_ID);
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   writeFileSync(join(sessionDir, 'staging', 'README.md'), '# fixture\n');
   writeSessionStatus<Status>(sessionDir, { session_id: INSTRUCTIONS_SHAPED_ID, phase: 'committing', updated_at: new Date().toISOString() });
@@ -68,7 +68,7 @@ test('committing + finalizer:copyStagingToLibrary with the SAME non-slug id stil
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
   await assert.rejects(
     () => runInteractiveTurn(descriptor, {
-      sessionId: INSTRUCTIONS_SHAPED_ID, projectRoot, forgeRoot, logsRoot,
+      sessionId: INSTRUCTIONS_SHAPED_ID, project: 'proj', forgeRoot, logsRoot,
       queryFn: neverCalledQueryFn(), logger: logger(logsRoot, INSTRUCTIONS_SHAPED_ID),
     }),
     /not a valid slug/,

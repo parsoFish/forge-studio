@@ -46,9 +46,9 @@
   "result": {
     "phase": "awaiting-verdict",
     "wrote": [
-      "<TMP>/project/_instructions/2026-01-01T00-00-00/AGENTS.draft.md"
+      "<TMP>/_logs/_sessions/testproj/_instructions/2026-01-01T00-00-00/AGENTS.draft.md"
     ],
-    "draftPath": "<TMP>/project/_instructions/2026-01-01T00-00-00/AGENTS.draft.md"
+    "draftPath": "<TMP>/_logs/_sessions/testproj/_instructions/2026-01-01T00-00-00/AGENTS.draft.md"
   },
   "statusAfter": {
     "session_id": "2026-01-01T00-00-00",

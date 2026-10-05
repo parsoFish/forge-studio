@@ -84,7 +84,7 @@ function recordingLogger(): { logger: EventLogger; messages: string[]; entries: 
 function plant(): { root: string; projectRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-draft-repair-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
   const status: ArchitectStatus = {
     session_id: 'sess-1', project: 'p1', project_repo_path: projectRoot, phase: 'drafting', round: 1,
@@ -100,7 +100,7 @@ test('(a) an invalid draft earns ONE bounded repair turn; a valid repair proceed
   const { logger, messages, entries } = recordingLogger();
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict', 'the repaired draft passes the clean critic and proceeds');
@@ -127,7 +127,7 @@ test('(b)+(c) a second-failing repair classifies the failure, never a second rep
   try {
     await assert.rejects(
       () => runArchitectTurn({
-        manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+        manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
         logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
       }),
       (err: unknown) => {

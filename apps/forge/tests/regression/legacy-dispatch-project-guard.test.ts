@@ -46,6 +46,17 @@ process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
  *  path-guard.ts` / `apps/forge/agent-run.ts`), not invented wording. */
 const CONTAINMENT_RE = /is not a valid project name|unsafe path segment|identity mismatch|containment|escapes/i;
 
+/** The stderr of a call that got PAST the project-name guard: the runner then
+ *  reports that no session was started ("no status.json — session dir failed
+ *  containment (containment root does not exist)") because the session dir
+ *  now lives under the logs root and these fixtures seed none. That sentence
+ *  mentions "containment" but is the missing-session message, NOT a project-
+ *  name refusal, so it is removed before the guard-refusal vocabulary is
+ *  matched. Any OTHER containment wording still trips the assertion. */
+function withoutMissingSessionMessage(err: string): string {
+  return err.replace(/no status\.json — session dir failed containment \(containment root does not exist\)\. Has the session been started\?/g, '');
+}
+
 // ---------------------------------------------------------------------------
 // Driver — mirrors `cli/agent-run.test.ts`'s own `run()`/`withCwd()` helpers (historical: long since split up)
 // (the established house pattern for this file's sibling suite: a sentinel
@@ -226,7 +237,7 @@ test('regression lock: an ordinary existing project name is accepted past the gu
   try {
     const r = await withCwd(forgeRoot, () => run(['architect', SID, '--project', 'realproj'], forgeRoot));
     assert.doesNotMatch(
-      r.err, CONTAINMENT_RE,
+      withoutMissingSessionMessage(r.err), CONTAINMENT_RE,
       `an ordinary project name must never trip the containment refusal — got exit(${r.exitCode}), stderr: ${r.err}`,
     );
   } finally {
@@ -240,7 +251,7 @@ test('regression lock: a name starting with ".." but containing no separator is 
   try {
     const r = await withCwd(forgeRoot, () => run(['architect', SID, '--project', '..foo'], forgeRoot));
     assert.doesNotMatch(
-      r.err, CONTAINMENT_RE,
+      withoutMissingSessionMessage(r.err), CONTAINMENT_RE,
       `"..foo" is a legitimate, contained name (no separator) and must never trip the containment refusal — got exit(${r.exitCode}), stderr: ${r.err}`,
     );
   } finally {
@@ -307,8 +318,12 @@ test('regression lock: POST /api/architect/start rejects a traversal-shaped proj
       const sid = (JSON.parse(encText) as { sessionId?: string }).sessionId;
       assert.ok(sid, `expected a sessionId on a 2xx response — got: ${encText}`);
       assert.ok(
-        existsSync(join(projectsRoot, '..%2f..%2fetc', '_architect', sid!)),
-        'if accepted, the literal "..%2f..%2fetc" segment must have been created strictly INSIDE projectsRoot, proving no decode occurred',
+        existsSync(join(forgeRoot, '_logs', '_sessions', '..%2f..%2fetc', '_architect', sid!)),
+        'if accepted, the literal "..%2f..%2fetc" segment must have been created strictly INSIDE the logs root\'s _sessions tree, proving no decode occurred',
+      );
+      assert.equal(
+        existsSync(join(projectsRoot, '..%2f..%2fetc', '_architect')), false,
+        'no session dir may be created in the ground (projects/) at all',
       );
     }
   } finally {

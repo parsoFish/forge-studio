@@ -131,11 +131,11 @@ const SCENARIOS: Array<{ label: string; overrides: Partial<DemoBuilderStatus>; d
 
 for (const { label, overrides, demoProcess } of SCENARIOS) {
   test(`AT-3: the ${label} scenario selects the generate-declaration section for the write pass and ground-it for the second`, async () => {
-    const { projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
+    const { project, projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
     const skillPromptPath = writeSelectionFixture();
     const prompts: string[] = [];
     await runDemoBuilderTurn({
-      sessionId, projectRoot, forgeRoot: FORGE_ROOT, skillPromptPath,
+      sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, skillPromptPath,
       queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
       logger: loggerFor(logsRoot, sessionId), logsRoot,
     });
@@ -156,7 +156,7 @@ test('AT-4: a skillPromptPath fixture with no turn markers makes the generate tu
   // deliberately used (not a noop) so a base-line "no throw at all" failure
   // is unambiguous, rather than accidentally rejecting for an unrelated
   // reason (e.g. "no DEMO.html produced").
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' });
   const dir = mkdtempSync(join(tmpdir(), 'demo-builder-fixture-nomarkers-'));
   const skillPromptPath = join(dir, 'demo-builder-SKILL.md');
   writeFileSync(skillPromptPath, '---\nname: demo-builder\n---\n\nJust prose. No turn markers anywhere in this fixture.\n');
@@ -164,6 +164,7 @@ test('AT-4: a skillPromptPath fixture with no turn markers makes the generate tu
   await assert.rejects(
     () => runDemoBuilderTurn({
       sessionId,
+      project,
       projectRoot,
       forgeRoot: FORGE_ROOT,
       skillPromptPath,
@@ -190,7 +191,7 @@ test('AT-5: the prompt still carries the runner-injected DATA half — project n
     { kind: 'capture', text: 'capture the cli', element: 'cli-capture' },
     { kind: 'verify', text: 'npm test', element: 'test-evidence' },
   ];
-  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup(
+  const { project, projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup(
     { phase: 'generating', project: 'AT5-DATA-PROJECT' },
     composedProcess,
   );
@@ -200,6 +201,7 @@ test('AT-5: the prompt still carries the runner-injected DATA half — project n
   const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
+    project,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
@@ -270,10 +272,11 @@ test('AT-6: the demoTaskLines export contract survives — its output lists ever
   // Primary assertion — the SAME contract observed end-to-end through the
   // real runner's fully-composed prompt (what the R4-07 descriptor-parity
   // guarantee actually depends on in production).
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' }, FIXTURE_STEPS);
+  const { project, projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' }, FIXTURE_STEPS);
   const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
+    project,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
@@ -328,11 +331,12 @@ test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after t
     overrides: Partial<DemoBuilderStatus>,
     demoProcess?: DemoStep[],
   ): Promise<string> {
-    const { projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
+    const { project, projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
     const prompts: string[] = [];
     const queryFn = makeWritingQueryFn((p) => { prompts.push(p); });
     await runDemoBuilderTurn({
       sessionId,
+      project,
       projectRoot,
       forgeRoot: FORGE_ROOT,
       // NO skillPromptPath — this drives the REAL skills/demo-builder/SKILL.md.
@@ -384,7 +388,7 @@ function gitLine(dir: string, args: string[]): string {
 }
 
 test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent already wrote into the repo must not leave forge-studio dirty/uncommitted', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating' });
+  const { project, projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating' });
 
   // Turn repoPath into a REAL git repo (mirrors packages/projects/tests/regression/project-repo-tx.test.ts's setupRepo()).
   execFileSync('git', ['-C', repoPath, 'init', '-b', 'main'], { stdio: 'ignore' });
@@ -422,6 +426,7 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
   await assert.rejects(
     () => runDemoBuilderTurn({
       sessionId,
+      project,
       projectRoot,
       forgeRoot: FORGE_ROOT,
       queryFn: throwingQueryFn,

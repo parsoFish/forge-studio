@@ -21,9 +21,9 @@
  * Mirrors `POST /api/studio/authoring/start` (`cli/ui-bridge-authoring-
  * start.test.ts`) and the KB-create hand-off (`packages/knowledge/bridge-studio-kbs.ts`
  * ~:1189) for the session-anchor shape: a project-bound KB anchors its
- * cleanup session under the real project (`<projectsRoot>/<ref>/`); every
+ * cleanup session under the real project (`<logsRoot>/_sessions/<ref>/`); every
  * OTHER binding kind anchors under the dot-prefixed KB-seeding anchor
- * (`<projectsRoot>/.kb-<id>/`) so `discoverProjects` never surfaces a
+ * (`<logsRoot>/_sessions/.kb-<id>/`) so `discoverProjects` never surfaces a
  * phantom project for it.
  *
  * DESIGN CALL this file makes explicit:
@@ -39,6 +39,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sessionDirSegments, sessionKindSegments } from '@forge/kernel';
 import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
 
@@ -221,15 +222,15 @@ test('AT-1 (RAW WIRE — a fetch()-delivered ".." cannot reach this route at all
 
   // Canary #2: the concrete, plausible escape TARGET. The real route joins
   // `sessionProject` (resolved from a genuine KB lookup) under
-  // `<forgeRoot>/projects/<sessionProject>/_kb-cleanup/<sid>`. An
+  // `<forgeRoot>/_logs/_sessions/<sessionProject>/_kb-cleanup/<sid>`. An
   // implementation that instead used the RAW, request-derived kb id AS
   // `sessionProject` before ever validating or resolving it would land
-  // `join(projectsRoot, '..', '_kb-cleanup', sid)` — i.e. `..` from
-  // `<forgeRoot>/projects/` resolves to `<forgeRoot>` itself, so a
-  // `_kb-cleanup/` directory appearing directly under forgeRoot (one level
-  // above `projects/`) is that specific wrong implementation's exact,
+  // `join(logsRoot, '_sessions', '..', '_kb-cleanup', sid)` — i.e. `..` from
+  // `<forgeRoot>/_logs/_sessions/` resolves to `<forgeRoot>/_logs` itself, so a
+  // `_kb-cleanup/` directory appearing directly under `_logs` (one level
+  // above `_sessions/`) is that specific wrong implementation's exact,
   // detectable on-disk signature.
-  const escapeTargetDir = join(forgeRoot, '_kb-cleanup');
+  const escapeTargetDir = join(forgeRoot, '_logs', '_kb-cleanup');
   assert.ok(!existsSync(escapeTargetDir), 'arrange: the plausible escape-target dir must not pre-exist');
 
   const before = snapshotFileList(forgeRoot);
@@ -298,7 +299,7 @@ test('AT-2: unknown (but well-formed) kb id -> 404', async () => {
 // bound project (e.g. hardcoding `.kb-<id>` regardless of binding kind, or
 // dropping kb_id/kb_binding/findings from status.json — the declared-data-
 // fails-open shape this campaign keeps finding).
-test('AT-3: a project-bound KB\'s start route resolves the session anchor to the REAL bound project (mirrors the KB-create hand-off, cli/bridge-studio-kbs.ts ~:1189) — 200, server-generated sessionId, status.json at <project>/_kb-cleanup/<sid>/ with phase:drafting + kb_id + kb_binding + findings array, dry-bridge marker present', async () => {
+test('AT-3: a project-bound KB\'s start route resolves the session anchor to the REAL bound project (mirrors the KB-create hand-off, cli/bridge-studio-kbs.ts ~:1189) — 200, server-generated sessionId, status.json at _logs/_sessions/<project>/_kb-cleanup/<sid>/ with phase:drafting + kb_id + kb_binding + findings array, dry-bridge marker present', async () => {
   writeKb('proj-bound-cleanup-kb', '{ kind: project, ref: demoproj }');
   mkdirSync(join(forgeRoot, 'projects', 'demoproj'), { recursive: true });
 
@@ -310,7 +311,7 @@ test('AT-3: a project-bound KB\'s start route resolves the session anchor to the
   assert.ok(typeof body.sessionId === 'string' && body.sessionId.length > 0, 'sessionId must be server-generated and present');
   assert.ok(body.dryBridge, `expected a dryBridge marker on the response under FORGE_DRY_BRIDGE=1 (mirrors authoring/start), got: ${text}`);
 
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_kb-cleanup', body.sessionId));
   assert.ok(existsSync(join(sessionDir, 'status.json')), `expected a real status.json at ${sessionDir}`);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
   assert.equal(status.session_id, body.sessionId);
@@ -320,6 +321,7 @@ test('AT-3: a project-bound KB\'s start route resolves the session anchor to the
   assert.deepEqual(status.kb_binding, { kind: 'project', ref: 'demoproj' }, 'kb_binding must be the KB\'s own descriptor-derived binding, not a re-derived guess');
   assert.ok(Array.isArray(status.findings), 'findings must be a real array (possibly empty for a clean KB), never absent');
   assert.ok(typeof status.updated_at === 'string' && status.updated_at.length > 0);
+  assert.ok(!existsSync(join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup')), 'no session dir may be written into the project checkout');
 });
 
 // ---------------------------------------------------------------------------
@@ -341,11 +343,12 @@ test('AT-4: a NON-project-bound KB\'s start route anchors the session under the 
   const body = JSON.parse(text) as { sessionId: string };
 
   const expectedAnchor = `${KB_SEEDING_ANCHOR_PREFIX}unique-cleanup-kb`;
-  const sessionDir = join(forgeRoot, 'projects', expectedAnchor, '_kb-cleanup', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments(expectedAnchor, '_kb-cleanup', body.sessionId));
   assert.ok(existsSync(join(sessionDir, 'status.json')), `expected the session anchored under the dot-prefixed anchor at ${sessionDir}`);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
   assert.equal(status.project, expectedAnchor, 'the echoed project must be the dot-anchored value, verbatim');
 
+  assert.ok(!existsSync(join(forgeRoot, 'projects', expectedAnchor)), 'the session lives under the logs root — no anchor dir may be created in the projects tree');
   assert.ok(
     !existsSync(join(forgeRoot, 'projects', 'unique-cleanup-kb')),
     'a phantom projects/<kbId>/ (without the dot-prefix) must never be created — this is the exact phantom-project defect the KB-create hand-off\'s own MAJOR-2 fix guards against',
@@ -366,7 +369,7 @@ test('AT-16: a valid modelTier ("opus", within the widened range) is persisted i
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { sessionId: string };
 
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_kb-cleanup', body.sessionId));
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus & { modelTier?: string };
   assert.equal(status.modelTier, 'opus');
 });
@@ -374,7 +377,7 @@ test('AT-16: a valid modelTier ("opus", within the widened range) is persisted i
 test('AT-17: an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set, no session dir created', async () => {
   writeKb('modeltier-reject-kb', '{ kind: project, ref: demoproj }');
   mkdirSync(join(forgeRoot, 'projects', 'demoproj'), { recursive: true });
-  const kbCleanupDir = join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup');
+  const kbCleanupDir = join(forgeRoot, '_logs', ...sessionKindSegments('demoproj', '_kb-cleanup'));
   const before = existsSync(kbCleanupDir) ? readdirSync(kbCleanupDir).sort() : [];
 
   const res = await startWithBody('modeltier-reject-kb', { modelTier: 'haiku' });
@@ -402,7 +405,7 @@ test('AT-5: findings reflect a REAL on-disk lint defect for this KB — not a fa
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { sessionId: string };
 
-  const sessionDir = join(forgeRoot, 'projects', `${KB_SEEDING_ANCHOR_PREFIX}defect-cleanup-kb`, '_kb-cleanup', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments(`${KB_SEEDING_ANCHOR_PREFIX}defect-cleanup-kb`, '_kb-cleanup', body.sessionId));
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
 
   assert.ok(status.findings.length > 0, `expected at least one real finding for the planted defect, got: ${JSON.stringify(status.findings)}`);
@@ -430,7 +433,7 @@ test('W8-B3 (ON-5): the start route records the request as prompt.md — the KB,
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { sessionId: string };
-  const sessionDir = join(forgeRoot, 'projects', `${KB_SEEDING_ANCHOR_PREFIX}ontime-cleanup-kb`, '_kb-cleanup', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments(`${KB_SEEDING_ANCHOR_PREFIX}ontime-cleanup-kb`, '_kb-cleanup', body.sessionId));
 
   const prompt = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
   assert.match(prompt, /ontime-cleanup-kb/, 'the request must name the KB it was made against');

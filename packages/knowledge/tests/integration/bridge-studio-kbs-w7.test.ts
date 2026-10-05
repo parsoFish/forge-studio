@@ -223,11 +223,13 @@ test('DELETE /api/studio/kbs/:id — removes the dot-anchor session dir and repo
   try {
     seedKb(iso.root, 'doomed-kb');
     // Dot-anchor sessions (non-project KB).
-    const anchorSession = join(iso.root, 'projects', '.kb-doomed-kb', '_kb-cleanup', '2026-08-20T09-00-00-aaaa');
+    // Session dirs live under the logs root; the dot-dir under projects/ is only an empty cwd anchor.
+    mkdirSync(join(iso.root, 'projects', '.kb-doomed-kb'), { recursive: true });
+    const anchorSession = join(iso.root, '_logs', '_sessions', '.kb-doomed-kb', '_kb-cleanup', '2026-08-20T09-00-00-aaaa');
     mkdirSync(anchorSession, { recursive: true });
     writeFileSync(join(anchorSession, 'status.json'), JSON.stringify({ phase: 'drafting', kb_id: 'doomed-kb' }));
     // A project-anchored cleanup session carrying this kb_id (reported, not swept).
-    const projSession = join(iso.root, 'projects', 'other-project', '_kb-cleanup', '2026-08-20T09-01-00-bbbb');
+    const projSession = join(iso.root, '_logs', '_sessions', 'other-project', '_kb-cleanup', '2026-08-20T09-01-00-bbbb');
     mkdirSync(projSession, { recursive: true });
     writeFileSync(join(projSession, 'status.json'), JSON.stringify({ phase: 'applied', kb_id: 'doomed-kb' }));
 
@@ -235,7 +237,8 @@ test('DELETE /api/studio/kbs/:id — removes the dot-anchor session dir and repo
     assert.equal(res.status, 200, JSON.stringify(res.json));
     assert.equal(res.json['removedSessionAnchor'], true);
     assert.deepEqual(res.json['orphanedSessions'], ['other-project/_kb-cleanup/2026-08-20T09-01-00-bbbb']);
-    assert.ok(!existsSync(join(iso.root, 'projects', '.kb-doomed-kb')), 'the dot-anchor dir must be removed');
+    assert.ok(!existsSync(join(iso.root, 'projects', '.kb-doomed-kb')), 'the dot-anchor cwd dir must be removed');
+    assert.ok(!existsSync(join(iso.root, '_logs', '_sessions', '.kb-doomed-kb')), 'the dot-anchor session dir must be removed');
     assert.ok(existsSync(projSession), 'a real project\'s session dir is never swept');
   } finally {
     rmSync(iso.root, { recursive: true, force: true });

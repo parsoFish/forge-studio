@@ -83,7 +83,7 @@
   "result": {
     "phase": "awaiting-review",
     "wrote": [
-      "<TMP>/project/_demo/2026-01-01T00-00-00/generations/1/demo-process.json",
+      "<TMP>/_logs/_sessions/testproj/_demo/2026-01-01T00-00-00/generations/1/demo-process.json",
       "<TMP>/repo/.forge/demo/DEMO.html"
     ],
     "demoPath": "<TMP>/repo/.forge/demo/DEMO.html"

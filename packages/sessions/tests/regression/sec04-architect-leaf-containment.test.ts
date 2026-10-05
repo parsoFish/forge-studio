@@ -121,7 +121,7 @@ before(() => {
   logsRoot = join(forgeRoot, '_logs');
   mkdirSync(projectsRoot, { recursive: true });
   mkdirSync(logsRoot, { recursive: true });
-  mkdirSync(join(projectsRoot, 'legit', '_architect'), { recursive: true });
+  mkdirSync(join(logsRoot, '_sessions', 'legit', '_architect'), { recursive: true });
 
   const probe = tmp('sec04-arch-leaf-probe-');
   try {
@@ -146,7 +146,7 @@ after(() => {
 
 test('positive control: a legit in-root interviewing turn writes a REAL questions.json and returns awaiting-answers', async () => {
   const sid = 'leaf-legit-ctrl';
-  const sessionDir = join(projectsRoot, 'legit', '_architect', sid);
+  const sessionDir = join(logsRoot, '_sessions', 'legit', '_architect', sid);
   plantStatusJson(sessionDir, {
     session_id: sid,
     project: 'legit',
@@ -158,6 +158,7 @@ test('positive control: a legit in-root interviewing turn writes a REAL question
   const prompts: string[] = [];
   const r = await runArchitectTurn({
     sessionId: sid,
+    project: 'legit',
     projectRoot: join(projectsRoot, 'legit'),
     logsRoot,
     brainCwd: forgeRoot,
@@ -181,7 +182,7 @@ test('(RED) runArchitectTurn must NOT write questions.json through a symlinked l
   writeFileSync(victim, SENTINEL);
 
   const sid = 'leaf-writequestions';
-  const sessionDir = join(projectsRoot, 'legit', '_architect', sid);
+  const sessionDir = join(logsRoot, '_sessions', 'legit', '_architect', sid);
   plantStatusJson(sessionDir, {
     session_id: sid,
     project: 'legit',
@@ -196,6 +197,7 @@ test('(RED) runArchitectTurn must NOT write questions.json through a symlinked l
   try {
     await runArchitectTurn({
       sessionId: sid,
+      project: 'legit',
       projectRoot: join(projectsRoot, 'legit'),
       logsRoot,
       brainCwd: forgeRoot,
@@ -228,7 +230,7 @@ test('(RED) runArchitectTurn must NOT read answers.json through a symlinked leaf
   );
 
   const sid = 'leaf-readinterview';
-  const sessionDir = join(projectsRoot, 'legit', '_architect', sid);
+  const sessionDir = join(logsRoot, '_sessions', 'legit', '_architect', sid);
   plantStatusJson(sessionDir, {
     session_id: sid,
     project: 'legit',
@@ -243,6 +245,7 @@ test('(RED) runArchitectTurn must NOT read answers.json through a symlinked leaf
   try {
     await runArchitectTurn({
       sessionId: sid,
+      project: 'legit',
       projectRoot: join(projectsRoot, 'legit'),
       logsRoot,
       brainCwd: forgeRoot,

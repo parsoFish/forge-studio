@@ -96,17 +96,17 @@ test('accumulates multiple writes on the one branch, merged by a single save', (
   }
 });
 
-test('commitStudioChange -A excludes forge scratch/session dirs', () => {
+test('commitStudioChange -A excludes forge scratch dirs (session dirs no longer live in the ground)', () => {
   const dir = setupRepo();
   try {
     ensureStudioBranch(dir);
     writeFileSync(join(dir, 'keep.txt'), 'keep\n');
-    mkdirSync(join(dir, '_demo', 'sess'), { recursive: true });
-    writeFileSync(join(dir, '_demo', 'sess', 'status.json'), '{}');
+    mkdirSync(join(dir, '_preflight-fix', 'sess'), { recursive: true });
+    writeFileSync(join(dir, '_preflight-fix', 'sess', 'status.json'), '{}');
     commitStudioChange(dir, 'forge-studio: scoped');
     const tree = g(dir, ['ls-tree', '-r', '--name-only', STUDIO_BRANCH]);
     assert.ok(tree.includes('keep.txt'), 'real file committed');
-    assert.equal(tree.includes('_demo'), false, 'scratch session dir excluded');
+    assert.equal(tree.includes('_preflight-fix'), false, 'scratch dir excluded');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

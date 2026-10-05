@@ -26,7 +26,7 @@ function repoDir(): string {
 }
 
 function demoSessionDirFor(sid: string): string {
-  return join(repoDir(), '_demo', sid);
+  return join(forgeRoot, '_logs', '_sessions', 'demo', '_demo', sid);
 }
 
 async function post(path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {

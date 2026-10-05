@@ -84,7 +84,7 @@ function seedInstructionsSession(overrides?: Partial<InstructionsStatus>): {
   const repoPath = join(base, 'repo');
   const logsRoot = join(base, '_logs');
   const sessionId = '2026-08-09T00-00-00';
-  const sessionDir = instructionsSessionDir(projectRoot, sessionId);
+  const sessionDir = instructionsSessionDir(logsRoot, 'proj', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   mkdirSync(repoPath, { recursive: true });
   writeSessionStatus(sessionDir, {
@@ -126,7 +126,7 @@ test('V1a: a symlinked questions.json leaf cannot be WRITTEN through (no out-of-
 
     let threw = false;
     try {
-      await runInstructionsTurn({ sessionId: s.sessionId, projectRoot: s.projectRoot, logsRoot: s.logsRoot, queryFn, logger: logger(s.logsRoot, s.sessionId) });
+      await runInstructionsTurn({ sessionId: s.sessionId, project: 'proj', projectRoot: s.projectRoot, logsRoot: s.logsRoot, queryFn, logger: logger(s.logsRoot, s.sessionId) });
     } catch {
       threw = true;
     }
@@ -170,7 +170,7 @@ test('V1b: a symlinked answers.json leaf cannot be READ (no out-of-root disclosu
       questions: [{ question: 'Next?', header: 'Next', options: [] }],
     });
 
-    await runInstructionsTurn({ sessionId: s.sessionId, projectRoot: s.projectRoot, logsRoot: s.logsRoot, queryFn, logger: logger(s.logsRoot, s.sessionId) });
+    await runInstructionsTurn({ sessionId: s.sessionId, project: 'proj', projectRoot: s.projectRoot, logsRoot: s.logsRoot, queryFn, logger: logger(s.logsRoot, s.sessionId) });
 
     // --- containment: the out-of-root answer text must NOT appear in any prompt
     //     the runner built. RED pre-fix (readAnswerRounds read the symlinked file

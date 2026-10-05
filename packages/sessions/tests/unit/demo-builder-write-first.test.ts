@@ -69,11 +69,11 @@ function recordingQueryFn(writeOn: number | null, passes: Pass[]): QueryFn {
 }
 
 test('6.11.49: pass 1 runs with NO Bash and a budget well inside 24 — the agent cannot run the project before it has written anything', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
 
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(1, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -105,12 +105,12 @@ test('6.11.49: pass 1 runs with NO Bash and a budget well inside 24 — the agen
 });
 
 test('6.11.49: an agent that writes NOTHING fails NAMING both artifacts, inside the write budget — never a silently exhausted 24 turns', async () => {
-  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  const { project, projectRoot, logsRoot, sessionId, repoPath } = setup();
   const passes: Pass[] = [];
 
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+      sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
       queryFn: recordingQueryFn(null, passes), logger: logger(logsRoot, sessionId),
     }),
     (err: Error) => {
@@ -126,11 +126,11 @@ test('6.11.49: an agent that writes NOTHING fails NAMING both artifacts, inside 
 });
 
 test('6.11.49: once both artifacts exist, a SECOND pass runs WITH Bash and the rest of the budget, to ground the sample', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
 
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(1, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -146,11 +146,11 @@ test('6.11.49: once both artifacts exist, a SECOND pass runs WITH Bash and the r
 });
 
 test('6.11.49: the two passes carry DIFFERENT instructions — the write pass is not told to run the project', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
 
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(1, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -170,7 +170,7 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   // removed run-instead-of-write; Read, Glob, Grep and TodoWrite were still
   // open, and that is where the budget went. A deny list that leaves ANY read
   // door open is #558 again, so this pins the whole list rather than one entry.
-  const { projectRoot, repoPath, logsRoot, sessionId } = setup();
+  const { project, projectRoot, repoPath, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
   // Row 212 follow-up (bead forge-8vfn.8.5.48): this call (and the two below
   // it in this file) used to pass `logger: logger(logsRoot, ...)` — a
@@ -182,7 +182,7 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   // this tree on every run. `logger` and `logsRoot` are two independent
   // inputs; passing one does not imply the other.
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -246,10 +246,10 @@ test('forge-a9o9: the write pass denies the doors the PRODUCT NEVER DECLARED —
   // that is the point of the structural fix (`forge-a9o9`, T1 ruling 662(ii)):
   // deny by default, from the SDK's real surface, so an undeclared tool is
   // refused without anyone having to name it here first.
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
   });
 
@@ -280,10 +280,10 @@ test('forge-a9o9: the write pass is TOLD what it holds, so it stops hunting for 
   // The read pass has said `## This turn: READ ONLY` since #630. The write pass
   // was given no such header and inherited the contradiction instead. This pins
   // the matching one.
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
   });
 

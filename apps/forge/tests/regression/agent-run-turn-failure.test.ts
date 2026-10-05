@@ -94,7 +94,8 @@ function setupTurnspecFixture(): { forgeRoot: string; projectArg: string; projec
   const projectArg = 'fixtureproj';
   const projectRoot = join(forgeRoot, 'projects', projectArg);
   const sessionId = '2026-08-23T00-00-00-forgepoc';
-  const sessionDir = join(projectRoot, TURNSPEC_KIND_DIR, sessionId);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, TURNSPEC_KIND_DIR, sessionId);
+  mkdirSync(projectRoot, { recursive: true });
   mkdirSync(sessionDir, { recursive: true });
 
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
@@ -199,7 +200,8 @@ test('forge-poc AT-4 (legacy AGENT_RUNNERS road, architect): a runArchitectTurn 
   const projectArg = 'legacyproj';
   const projectRoot = join(forgeRoot, 'projects', projectArg);
   const sessionId = '2026-08-23T00-01-00-forgepoc-legacy';
-  const sessionDir = join(projectRoot, '_architect', sessionId);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, '_architect', sessionId);
+  mkdirSync(projectRoot, { recursive: true });
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, {
     session_id: sessionId,

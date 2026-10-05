@@ -97,7 +97,7 @@ test('AT-B6-13 (positive control) a ROSTER project still starts: architect 200, 
   const { status, json } = await post('/api/architect/start', { project: 'realproj', idea: 'a real idea' });
   assert.equal(status, 200, `expected 200 — got ${status}: ${JSON.stringify(json)}`);
   const sid = String(json['sessionId']);
-  const statusPath = join(forgeRoot, 'projects', 'realproj', '_architect', sid, 'status.json');
+  const statusPath = join(forgeRoot, '_logs', '_sessions', 'realproj', '_architect', sid, 'status.json');
   assert.ok(existsSync(statusPath), 'session status.json must be written for a real project');
 });
 
@@ -110,7 +110,7 @@ test('AT-B6-14 (RED) architect costCeilingUsd: invalid shapes → 400; a valid c
   assert.equal(status, 200, `valid ceiling must 200 — got ${status}: ${JSON.stringify(json)}`);
   const sid = String(json['sessionId']);
   const persisted = JSON.parse(
-    readFileSync(join(forgeRoot, 'projects', 'realproj', '_architect', sid, 'status.json'), 'utf8'),
+    readFileSync(join(forgeRoot, '_logs', '_sessions', 'realproj', '_architect', sid, 'status.json'), 'utf8'),
   ) as Record<string, unknown>;
   assert.equal(persisted['costCeilingUsd'], 2.5, 'the ceiling must be persisted in the session status (the runner reads it at every turn start)');
 });

@@ -235,7 +235,7 @@ test('lifecycle unit (W7-FIX-A2): isTurnAlive recognises the dispatch runner\'s 
   const sid = '2026-08-19T09-00-00';
   const child = spawn(
     process.execPath,
-    ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', `/tmp/whatever/projects/p/_onboarding/${sid}`],
+    ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', `/tmp/whatever/_logs/_sessions/p/_onboarding/${sid}`],
     { detached: true, stdio: 'ignore' },
   );
   child.unref();
@@ -256,6 +256,8 @@ test('lifecycle unit (W7-FIX-A2): isTurnAlive recognises the dispatch runner\'s 
 
 let forgeRoot: string;
 let projectsRoot: string;
+/** Session dirs live under the logs root (`_logs/_sessions/<project>/<kindDir>/<sid>`), never in the project checkout. */
+let sessionsRoot: string;
 let logsRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
@@ -324,6 +326,9 @@ before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-lifecycle-'));
   projectsRoot = join(forgeRoot, 'projects');
   logsRoot = join(forgeRoot, '_logs');
+  sessionsRoot = join(logsRoot, '_sessions');
+  // The routes still validate the project against projects/<name> (the checkout holds no session state).
+  for (const p of ['proja', 'projb', 'projc', 'victimproj', 'attackerproj']) mkdirSync(join(projectsRoot, p), { recursive: true });
   for (const state of ['in-flight', 'done', 'failed', 'pending']) mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
   mkdirSync(logsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
@@ -350,11 +355,11 @@ before(async () => {
   const T = { statusOld: now - 10 * MIN, crash: now - 8 * MIN, recent: now - 5_000, stale: now - 30 * MIN };
 
   // --- the operator's three crashed sessions (dot-anchor projects) --------
-  writeStatus(join(projectsRoot, '.kb-cycles', '_kb-cleanup', CRASHED_KB_SID), {
+  writeStatus(join(sessionsRoot, '.kb-cycles', '_kb-cleanup', CRASHED_KB_SID), {
     session_id: CRASHED_KB_SID, project: '.kb-cycles', phase: 'drafting', kb_id: 'cycles', findings: [], modelTier: 'sonnet',
   }, T.statusOld);
   writeLog('kb-cleanup', CRASHED_KB_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': new Date(T.crash).toISOString(), 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
-  writeStatus(join(projectsRoot, '.kb-cycles', '_kb-cleanup', CRASHED_KB_SID_2), {
+  writeStatus(join(sessionsRoot, '.kb-cycles', '_kb-cleanup', CRASHED_KB_SID_2), {
     session_id: CRASHED_KB_SID_2, project: '.kb-cycles', phase: 'drafting', kb_id: 'cycles', findings: [],
   }, T.statusOld);
   writeLog('kb-cleanup', CRASHED_KB_SID_2, { 'events.jsonl': '{"event_type":"start"}\n', 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
@@ -362,19 +367,19 @@ before(async () => {
   // fixture (see this file's header note): a real project (authoring has no
   // dot-anchor/pseudo-project shape), analyzing phase, writes: [staging] —
   // same crash-detection coverage shape as the incident it replaces.
-  writeStatus(join(projectsRoot, 'proja', '_authoring', CRASHED_AUTHORING_SID), {
+  writeStatus(join(sessionsRoot, 'proja', '_authoring', CRASHED_AUTHORING_SID), {
     session_id: CRASHED_AUTHORING_SID, project: 'proja', phase: 'analyzing', modelTier: 'opus', updated_at: '2026-08-18T12:54:32.132Z',
   }, T.statusOld);
   writeLog('authoring', CRASHED_AUTHORING_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': AUTHORING_AGENT_STDERR }, T.crash);
 
   // --- architect at awaiting-verdict: an operator gate the OLD needsYou never flagged
-  writeStatus(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID), {
+  writeStatus(join(sessionsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID), {
     session_id: ARCHITECT_VERDICT_SID, project: 'proja', phase: 'awaiting-verdict', updated_at: '2026-08-01T10:00:00.000Z',
   });
-  writeFileSync(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'idea.md'), 'An idea.\n');
+  writeFileSync(join(sessionsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'idea.md'), 'An idea.\n');
 
   // --- kb-cleanup drafting, live log dir, EMPTY stderr, silent 30 min ⇒ stalled
-  writeStatus(join(projectsRoot, 'projc', '_kb-cleanup', STALLED_KB_SID), {
+  writeStatus(join(sessionsRoot, 'projc', '_kb-cleanup', STALLED_KB_SID), {
     session_id: STALLED_KB_SID, project: 'projc', phase: 'drafting', kb_id: 'k', findings: [],
   }, T.stale);
   writeLog('kb-cleanup', STALLED_KB_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': '' }, T.stale);
@@ -386,27 +391,27 @@ before(async () => {
   // progress (never on a `tool_progress`/`system`/… SDK message), so its
   // mtime IS the last-progress fact this reads.
   const architectStaleMs = now - 150_000;
-  writeStatus(join(projectsRoot, 'proja', '_architect', ARCHITECT_STALLED_SID), {
+  writeStatus(join(sessionsRoot, 'proja', '_architect', ARCHITECT_STALLED_SID), {
     session_id: ARCHITECT_STALLED_SID, project: 'proja', phase: 'drafting', updated_at: new Date(T.statusOld).toISOString(),
   }, T.statusOld);
   writeLog('architect', ARCHITECT_STALLED_SID, { 'events.jsonl': '{"event_type":"start"}\n', 'stderr.log': '' }, T.statusOld);
   writeLog('architect', ARCHITECT_STALLED_SID, { '.heartbeat': new Date(architectStaleMs).toISOString() }, architectStaleMs);
 
   // --- kb-cleanup drafting, OLD stderr, then a fresh heartbeat/status (re-run) ⇒ working
-  writeStatus(join(projectsRoot, 'projc', '_kb-cleanup', RERUN_KB_SID), {
+  writeStatus(join(sessionsRoot, 'projc', '_kb-cleanup', RERUN_KB_SID), {
     session_id: RERUN_KB_SID, project: 'projc', phase: 'drafting', kb_id: 'k', findings: [],
   }, T.recent);
   const rerunDir = writeLog('kb-cleanup', RERUN_KB_SID, { 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
   writeFileSync(join(rerunDir, '.heartbeat'), 'x');
 
   // --- demo generating with NO log dir: the OLD needsYou said true (staged-review/next-turn), truth is working/false
-  writeStatus(join(projectsRoot, 'projb', '_demo', DEMO_WORKING_SID), {
+  writeStatus(join(sessionsRoot, 'projb', '_demo', DEMO_WORKING_SID), {
     session_id: DEMO_WORKING_SID, project: 'projb', phase: 'generating', updated_at: '2026-08-03T12:00:00.000Z', iteration: 0,
   });
 
   // --- instructions: verdict gate (positive control), terminal, crashed-at-drafting
   const instr = (sid: string, phase: string, extra: Record<string, unknown> = {}) => {
-    const dir = join(projectsRoot, 'proja', '_instructions', sid);
+    const dir = join(sessionsRoot, 'proja', '_instructions', sid);
     writeStatus(dir, { session_id: sid, project: 'proja', phase, updated_at: '2026-08-02T11:00:00.000Z', ...extra }, T.statusOld);
     writeFileSync(join(dir, 'prompt.md'), 'Author AGENTS.md.\n');
   };
@@ -417,13 +422,13 @@ before(async () => {
   instr(CANCEL_TERMINAL_SID, 'rejected');
 
   // --- the SAME session id under two projects (deep-link ambiguity probe)
-  writeStatus(join(projectsRoot, 'proja', '_demo', AMBIGUOUS_SID), { session_id: AMBIGUOUS_SID, project: 'proja', phase: 'briefing', updated_at: 'x' });
-  writeStatus(join(projectsRoot, 'projb', '_demo', AMBIGUOUS_SID), { session_id: AMBIGUOUS_SID, project: 'projb', phase: 'briefing', updated_at: 'x' });
+  writeStatus(join(sessionsRoot, 'proja', '_demo', AMBIGUOUS_SID), { session_id: AMBIGUOUS_SID, project: 'proja', phase: 'briefing', updated_at: 'x' });
+  writeStatus(join(sessionsRoot, 'projb', '_demo', AMBIGUOUS_SID), { session_id: AMBIGUOUS_SID, project: 'projb', phase: 'briefing', updated_at: 'x' });
 
   // --- a session with a LIVE tracked turn process (kill test): a real
   // detached child whose argv carries the session id (what isTurnAlive's
   // ownership check reads from /proc/<pid>/cmdline).
-  writeStatus(join(projectsRoot, 'projb', '_demo', KILL_SID), { session_id: KILL_SID, project: 'projb', phase: 'generating', updated_at: 'x' });
+  writeStatus(join(sessionsRoot, 'projb', '_demo', KILL_SID), { session_id: KILL_SID, project: 'projb', phase: 'generating', updated_at: 'x' });
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', KILL_SID], { detached: true, stdio: 'ignore' });
   child.unref();
   killChildPid = child.pid ?? null;
@@ -436,7 +441,7 @@ before(async () => {
   // this session log dir has no heartbeat/events channel), status.json OLD
   // (30 min > the 180 s ceiling): must read working, not stalled — and cancel
   // must kill it.
-  const onbSessionDir = join(projectsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID);
+  const onbSessionDir = join(sessionsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID);
   writeStatus(onbSessionDir, { phase: 'running', project: 'projb', runId: '_agent-onboarding-agent-2026-08-12T08-00-00-000', startedAt: '2026-08-12T08:00:00.000Z' }, T.stale);
   const onbChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', onbSessionDir], { detached: true, stdio: 'ignore' });
   onbChild.unref();
@@ -626,7 +631,7 @@ test('cancel: a terminal session is 409 — never re-terminalised', async () => 
   assert.equal(res.status, 409);
   const body = (await res.json()) as { error: string; phase: string };
   assert.equal(body.phase, 'rejected');
-  const status = JSON.parse(readFileSync(join(projectsRoot, 'proja', '_instructions', CANCEL_TERMINAL_SID, 'status.json'), 'utf8')) as { phase: string };
+  const status = JSON.parse(readFileSync(join(sessionsRoot, 'proja', '_instructions', CANCEL_TERMINAL_SID, 'status.json'), 'utf8')) as { phase: string };
   assert.equal(status.phase, 'rejected', 'status.json must be byte-unchanged on a refused cancel');
 });
 
@@ -639,7 +644,7 @@ test('cancel: a working demo session (no live turn) → 200 phase=cancelled, pre
   assert.equal(body.killed, false);
   assert.equal(body.project, 'projb');
 
-  const status = JSON.parse(readFileSync(join(projectsRoot, 'projb', '_demo', DEMO_WORKING_SID, 'status.json'), 'utf8')) as Record<string, unknown>;
+  const status = JSON.parse(readFileSync(join(sessionsRoot, 'projb', '_demo', DEMO_WORKING_SID, 'status.json'), 'utf8')) as Record<string, unknown>;
   assert.equal(status.phase, CANCELLED_PHASE);
   assert.equal(status.cancelled_from, 'generating');
   assert.equal(typeof status.cancelled_at, 'string');
@@ -679,7 +684,7 @@ test('cancel: body.project omitted → the anchor project is resolved server-sid
 test('cancel: an ARCHITECT session (no panel/turnSpec — the "permanently bespoke" kind) cancels through the SAME generic route', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'proja' }) });
   await expectJson<unknown>(res, 200);
-  const status = JSON.parse(readFileSync(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'status.json'), 'utf8')) as { phase: string };
+  const status = JSON.parse(readFileSync(join(sessionsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'status.json'), 'utf8')) as { phase: string };
   assert.equal(status.phase, CANCELLED_PHASE);
   const r = row(await indexRows(), 'architect', ARCHITECT_VERDICT_SID);
   assert.equal(r.terminal, true, 'LEGACY terminal derivation must also honour the universal cancelled phase');
@@ -727,7 +732,7 @@ test('W7-FIX-A2 cancel: an ONBOARDING session (spawnAgentDispatch child, `--sess
     await new Promise((r) => setTimeout(r, 100));
   }
   assert.equal(alive, false, 'the onboarding dispatch child must be dead after cancel');
-  const status = JSON.parse(readFileSync(join(projectsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID, 'status.json'), 'utf8')) as { phase: string };
+  const status = JSON.parse(readFileSync(join(sessionsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID, 'status.json'), 'utf8')) as { phase: string };
   assert.equal(status.phase, CANCELLED_PHASE);
 });
 
@@ -736,7 +741,7 @@ test('cancel: turn.pid pointing at a pid whose argv does NOT carry the session i
   const stranger = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'not-this-session'], { detached: true, stdio: 'ignore' });
   stranger.unref();
   const sid = '2026-08-12T12-00-00';
-  writeStatus(join(projectsRoot, 'projb', '_demo', sid), { session_id: sid, project: 'projb', phase: 'generating', updated_at: 'x' });
+  writeStatus(join(sessionsRoot, 'projb', '_demo', sid), { session_id: sid, project: 'projb', phase: 'generating', updated_at: 'x' });
   writeLog('demo', sid, { 'events.jsonl': '', '.heartbeat': 'x', 'stderr.log': '', 'turn.pid': `${stranger.pid}\n` });
   try {
     const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${sid}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
@@ -751,10 +756,10 @@ test('cancel: turn.pid pointing at a pid whose argv does NOT carry the session i
 });
 
 test('cancel: a symlinked session dir (the AT-47 escape shape) is 404 and the victim status.json is byte-unchanged', async () => {
-  const victimDir = join(projectsRoot, 'victimproj', '_demo', '2026-08-13T13-00-00');
+  const victimDir = join(sessionsRoot, 'victimproj', '_demo', '2026-08-13T13-00-00');
   writeStatus(victimDir, { session_id: 'v', project: 'victimproj', phase: 'generating' });
   const beforeBytes = readFileSync(join(victimDir, 'status.json'));
-  const attackerKindDir = join(projectsRoot, 'attackerproj', '_demo');
+  const attackerKindDir = join(sessionsRoot, 'attackerproj', '_demo');
   mkdirSync(attackerKindDir, { recursive: true });
   const { symlinkSync } = await import('node:fs');
   symlinkSync(victimDir, join(attackerKindDir, 'evil-session'));

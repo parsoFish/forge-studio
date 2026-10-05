@@ -14,7 +14,7 @@
  *   const rest = url.slice(prefix.length).split('/').map(decodeURIComponent);
  *   const [project, sessionId] = rest;
  *   if (!project || !sessionId) { ...400... }   // truthiness ONLY
- *   demoSessionDir(join(ctx.projectsRoot, project), sessionId)
+ *   demoSessionDir(ctx.logsRoot, project, sessionId)  // (session dirs now live under the logs root)
  * — the campaign's headline pattern verbatim: the guard exists, five POST
  * siblings + the GET generation route call it, these two never did (the
  * module's own docstring at ~1426-2432 discloses this as a stated, unfixed
@@ -86,6 +86,7 @@ function tmp(prefix: string): string {
 
 let forgeRoot: string;
 let projectsRoot: string;
+let logsRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
 const outsideDirs: string[] = [];
@@ -147,6 +148,16 @@ function plantDemoHtml(repoPath: string, content: string): void {
   writeFileSync(join(dir, 'DEMO.html'), content);
 }
 
+/** `<logsRoot>/_sessions/<project>/_demo/<sid>` — where a demo session dir lives. */
+function demoDirOf(project: string, sid: string): string {
+  return join(logsRoot, '_sessions', project, '_demo', sid);
+}
+
+/** `<logsRoot>/_sessions/<project>/_demo` — the parent of a project's demo sessions. */
+function demoKindDirOf(project: string): string {
+  return join(logsRoot, '_sessions', project, '_demo');
+}
+
 function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
   if (symlinksUnavailable) {
     t.skip('symlink creation unavailable in this environment');
@@ -160,7 +171,8 @@ before(async () => {
   projectsRoot = join(forgeRoot, 'projects');
   mkdirSync(projectsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, '_queue', 'pending'), { recursive: true });
-  mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+  logsRoot = join(forgeRoot, '_logs');
+  mkdirSync(logsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
 
@@ -169,7 +181,7 @@ before(async () => {
   mkdirSync(join(projectsRoot, 'legit-project'), { recursive: true });
   plantDemoHtml(join(projectsRoot, 'legit-project'), 'REAL-DEMO-CONTENT-4f81c');
   plantStatus(
-    join(projectsRoot, 'legit-project', '_demo', 'legit-session'),
+    demoDirOf('legit-project', 'legit-session'),
     makeStatus({ session_id: 'legit-session', project: 'legit-project', project_repo_path: join(projectsRoot, 'legit-project') }),
   );
 
@@ -179,10 +191,11 @@ before(async () => {
   mkdirSync(join(projectsRoot, 'victim-project'), { recursive: true });
   plantDemoHtml(join(projectsRoot, 'victim-project'), 'VICTIM-PROJECT-DEMO-CONTENT-2e77a');
   plantStatus(
-    join(projectsRoot, 'victim-project', '_demo', 'victim-session'),
+    demoDirOf('victim-project', 'victim-session'),
     makeStatus({ session_id: 'victim-session', project: 'victim-project', project_repo_path: join(projectsRoot, 'victim-project') }),
   );
-  mkdirSync(join(projectsRoot, 'attacker-project', '_demo'), { recursive: true });
+  mkdirSync(join(projectsRoot, 'attacker-project'), { recursive: true });
+  mkdirSync(demoKindDirOf('attacker-project'), { recursive: true });
 
   // Probe symlink availability once.
   const probeDir = tmp('demo-builder-symlink-probe-');
@@ -227,8 +240,8 @@ test('(RED) [Defect 4, %2F traversal in project, /demo/ route] a raw request wit
   plantStatus(join(outside, '_demo', 'x'), makeStatus({ session_id: 'x', project: 'irrelevant', project_repo_path: outside }));
   plantDemoHtml(outside, 'PWNED-DEMO-CONTENT-a1f30');
 
-  const rel = relative(projectsRoot, outside);
-  assert.ok(rel.split(sep)[0] === '..', 'sanity: the traversal string must genuinely step outside projectsRoot');
+  const rel = relative(join(logsRoot, '_sessions'), outside);
+  assert.ok(rel.split(sep)[0] === '..', 'sanity: the traversal string must genuinely step outside <logsRoot>/_sessions');
   const rawPath = `/api/demo-builder/demo/${encodeSlashes(rel)}/x`;
 
   const { status, body } = await rawGet(bridgeUrl, rawPath);
@@ -249,10 +262,10 @@ test('(RED) [Defect 4, %2F traversal in sessionId, /demo/ route] a raw request w
   plantStatus(join(outside, '_demo', 'ignored'), makeStatus({ session_id: 'ignored', project: 'irrelevant', project_repo_path: outside }));
   plantDemoHtml(outside, 'PWNED-DEMO-CONTENT-SESSIONID-c3f52');
 
-  // demoSessionDir(join(projectsRoot,'legit-project'), sessionId) =
-  // join(projectsRoot,'legit-project','_demo', sessionId) — compute the
+  // demoSessionDir(logsRoot, 'legit-project', sessionId) =
+  // join(logsRoot,'_sessions','legit-project','_demo', sessionId) — compute the
   // EXACT relative string that lands back on `outside/_demo/ignored`.
-  const demoDir = join(projectsRoot, 'legit-project', '_demo');
+  const demoDir = demoKindDirOf('legit-project');
   const relToSession = relative(demoDir, join(outside, '_demo', 'ignored'));
   const rawPath = `/api/demo-builder/demo/legit-project/${encodeSlashes(relToSession)}`;
 
@@ -275,7 +288,7 @@ test('(RED) [Defect 4, symlinked session dir, /demo/ route] a legitimately-named
   const outside = newOutsideDir('demo-builder-symlink-demo-outside-');
   plantStatus(outside, makeStatus({ session_id: 'symlinked-session', project: 'legit-project', project_repo_path: outside }));
   plantDemoHtml(outside, 'PWNED-DEMO-CONTENT-SYMLINK-e5b74');
-  symlinkSync(outside, join(projectsRoot, 'legit-project', '_demo', 'symlinked-session'), 'dir');
+  symlinkSync(outside, demoDirOf('legit-project', 'symlinked-session'), 'dir');
 
   const res = await fetch(`${bridgeUrl}/api/demo-builder/demo/legit-project/symlinked-session`);
   const text = await res.text();
@@ -297,8 +310,8 @@ test('(RED) [Defect 4, symlinked session dir, /demo/ route] a legitimately-named
 test('(RED) [Defect 4, cross-project symlink, /demo/ route] attacker-project aliasing victim-project must not serve victim content through the WRONG project route', async (t) => {
   if (skipIfNoSymlinks(t)) return;
   symlinkSync(
-    join(projectsRoot, 'victim-project', '_demo', 'victim-session'),
-    join(projectsRoot, 'attacker-project', '_demo', 'cross-session'),
+    demoDirOf('victim-project', 'victim-session'),
+    demoDirOf('attacker-project', 'cross-session'),
     'dir',
   );
 
@@ -358,7 +371,7 @@ test('(RED) ["guard that cannot fail", live] a completely ordinary, non-traversi
   // legit-project — no ".." anywhere, no symlink anywhere. The only thing
   // wrong is the CONTENT of status.json, which the route trusts blindly.
   plantStatus(
-    join(projectsRoot, 'legit-project', '_demo', 'guard-cannot-fail-session'),
+    demoDirOf('legit-project', 'guard-cannot-fail-session'),
     makeStatus({ session_id: 'guard-cannot-fail-session', project: 'legit-project', project_repo_path: outside }),
   );
 

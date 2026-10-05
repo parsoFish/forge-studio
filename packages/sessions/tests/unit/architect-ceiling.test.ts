@@ -24,7 +24,7 @@ const MARKER = 'MARKER: past the ceiling guard';
 function plantSession(over: Partial<ArchitectStatus>, spentUsd: number | null): { projectRoot: string; logsRoot: string; root: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-ceiling-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
   const status: ArchitectStatus = {
     session_id: 'sess-1',
@@ -60,7 +60,7 @@ test('AT-B6-15 (RED) a turn at/past the ceiling REFUSES with the reason — the 
   const { projectRoot, logsRoot, root } = plantSession({ costCeilingUsd: 0.05 }, 0.11);
   try {
     await assert.rejects(
-      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
+      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
       (err: Error) => {
         assert.match(err.message, /cost ceiling reached/i, `expected the ceiling refusal — got: ${err.message}`);
         assert.doesNotMatch(err.message, new RegExp(MARKER), 'the turn must never start (queryFn unreached)');
@@ -76,7 +76,7 @@ test('AT-B6-16 (positive control) under the ceiling the guard stands aside — t
   const { projectRoot, logsRoot, root } = plantSession({ costCeilingUsd: 5 }, 0.02);
   try {
     await assert.rejects(
-      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
+      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
       new RegExp(MARKER),
     );
   } finally {
@@ -88,7 +88,7 @@ test('AT-B6-17 (positive control) NO ceiling declared — spend never trips the 
   const { projectRoot, logsRoot, root } = plantSession({}, 999);
   try {
     await assert.rejects(
-      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
+      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
       new RegExp(MARKER),
     );
   } finally {

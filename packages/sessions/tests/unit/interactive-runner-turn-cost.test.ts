@@ -75,10 +75,9 @@ test('a spine turn records what it spent where the session route reads it', asyn
   const forgeRoot = join(root, 'forge');
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
-  const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-09-07T00-00-00-turncost';
-  const sessionDir = join(projectRoot, '_turncost', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_turncost', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, {
     session_id: sessionId,
@@ -92,7 +91,7 @@ test('a spine turn records what it spent where the session route reads it', asyn
   // co-location ratchet exists for.
   await runInteractiveTurn(descriptorFor(forgeRoot, 'turncostkind'), {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn: pricedQueryFn(sessionDir),
@@ -110,10 +109,9 @@ test('a turn the SDK never priced records no figure — null, not a fabricated 0
   const forgeRoot = join(root, 'forge');
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
-  const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-09-07T00-00-00-unpriced';
-  const sessionDir = join(projectRoot, '_turncost', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_turncost', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, {
     session_id: sessionId,
@@ -132,7 +130,7 @@ test('a turn the SDK never priced records no figure — null, not a fabricated 0
 
   await runInteractiveTurn(descriptorFor(forgeRoot, 'turncostkind'), {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn: unpricedQueryFn,

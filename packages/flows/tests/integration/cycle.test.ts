@@ -645,12 +645,15 @@ test('snapshotCycleArtefacts: mirrors demo.json + DEMO.html + PLAN.html into _lo
   mkdirSync(join(worktree, 'demo', initiativeId), { recursive: true });
   writeFileSync(join(worktree, 'demo', initiativeId, 'demo.json'), '{"title":"t"}');
   writeFileSync(join(worktree, 'demo', initiativeId, 'DEMO.html'), '<html></html>');
-  // architect session whose manifests/ holds this initiative
-  mkdirSync(join(projectRepo, '_architect', 'sid1', 'manifests'), { recursive: true });
-  writeFileSync(join(projectRepo, '_architect', 'sid1', 'manifests', `${initiativeId}.md`), '# manifest');
-  writeFileSync(join(projectRepo, '_architect', 'sid1', 'PLAN.html'), '<html>plan</html>');
-
   const logsRoot = join(root, '_logs'); // forge-8vfn.8.1.10: never the repo's own _logs
+  // architect session whose manifests/ holds this initiative — session dirs live
+  // under the logs root (`_sessions/<project>/_architect/<sid>`), the project
+  // segment being basename(projectRepoPath) when the input names none.
+  const archSession = join(logsRoot, '_sessions', 'proj', '_architect', 'sid1');
+  mkdirSync(join(archSession, 'manifests'), { recursive: true });
+  writeFileSync(join(archSession, 'manifests', `${initiativeId}.md`), '# manifest');
+  writeFileSync(join(archSession, 'PLAN.html'), '<html>plan</html>');
+
   const artifacts = join(logsRoot, cycleId, 'artifacts');
   try {
     await snapshotCycleArtefacts(

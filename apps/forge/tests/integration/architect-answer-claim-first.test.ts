@@ -41,7 +41,7 @@ const sid = `claim-first-${Date.now()}`;
 const project = 'demoproj';
 
 function sessionDir(): string {
-  return join(forgeRoot, 'projects', project, '_architect', sid);
+  return join(forgeRoot, '_logs', '_sessions', project, '_architect', sid);
 }
 
 function logDir(): string {
@@ -111,6 +111,7 @@ before(async () => {
 
   const dir = sessionDir();
   mkdirSync(dir, { recursive: true });
+  mkdirSync(join(forgeRoot, 'projects', project), { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
     JSON.stringify({

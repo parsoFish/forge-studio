@@ -58,7 +58,7 @@ test('M6-A row 1: a modelTier inside onboarding-agent\'s declared envelope is ac
   assert.equal(res.status, 200, text);
   const body = JSON.parse(text) as { sessionId: string };
   const status = JSON.parse(
-    readFileSync(join(forgeRoot, 'projects', 'demoproj', '_onboarding', body.sessionId, 'status.json'), 'utf8'),
+    readFileSync(join(forgeRoot, '_logs', '_sessions', 'demoproj', '_onboarding', body.sessionId, 'status.json'), 'utf8'),
   ) as { modelTier?: string };
   assert.equal(status.modelTier, 'opus', 'every turn runner reads the tier back off status.json — a route that drops it silently runs the default');
 });

@@ -70,7 +70,7 @@ after(async () => {
 // already seeds, so it does not interfere with the boundary this test pins.
 test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn attempted', async () => {
   const realSessionId = 'sess1';
-  const dir = join(forgeRoot, 'projects', PROJECT, '_project-brain', realSessionId);
+  const dir = join(forgeRoot, '_logs', '_sessions', PROJECT, '_project-brain', realSessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),

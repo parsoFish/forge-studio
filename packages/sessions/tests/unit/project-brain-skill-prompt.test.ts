@@ -90,10 +90,10 @@ function setupSession(opts: {
   project: string;
   prompt?: string;
   kb_binding?: ProjectBrainStatus['kb_binding'];
-}): { projectRoot: string; sessionDir: string; sessionId: string } {
+}): { project: string; projectRoot: string; sessionDir: string; sessionId: string } {
   const projectRoot = join(opts.forgeRoot, 'projects', opts.project);
   const sessionId = '2026-08-14T00-00-00';
-  const sessionDir = projectBrainSessionDir(projectRoot, sessionId);
+  const sessionDir = projectBrainSessionDir(join(opts.forgeRoot, '_logs'), opts.project, sessionId);
   mkdirSync(projectRoot, { recursive: true });
   writeSessionStatus<ProjectBrainStatus>(sessionDir, {
     session_id: sessionId,
@@ -104,7 +104,7 @@ function setupSession(opts: {
     updated_at: new Date().toISOString(),
     ...(opts.kb_binding ? { kb_binding: opts.kb_binding } : {}),
   } as ProjectBrainStatus);
-  return { projectRoot, sessionDir, sessionId };
+  return { project: opts.project, projectRoot, sessionDir, sessionId };
 }
 
 /** Captures the prompt + `options.cwd` a `runAgentTurn` call handed to `queryFn`,
@@ -257,6 +257,7 @@ test('AT-3: analyze-step selects analyze-project-repo (ordinary branch) vs analy
     const cap1: { prompt?: string; cwd?: unknown } = {};
     await runProjectBrainTurn({
       sessionId: ordinary.sessionId,
+      project: ordinary.project,
       projectRoot: ordinary.projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -293,6 +294,7 @@ test('AT-3: analyze-step selects analyze-project-repo (ordinary branch) vs analy
     const cap2: { prompt?: string; cwd?: unknown } = {};
     await runProjectBrainTurn({
       sessionId: band.sessionId,
+      project: band.project,
       projectRoot: band.projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -344,7 +346,8 @@ test('AT-4: fail-loud — a skillPromptPath fixture with no turn markers makes r
     try {
       await runProjectBrainTurn({
         sessionId: ordinary.sessionId,
-        projectRoot: ordinary.projectRoot,
+        project: ordinary.project,
+      projectRoot: ordinary.projectRoot,
         forgeRoot,
         logsRoot: join(forgeRoot, '_logs'),
         skillPromptPath,
@@ -372,7 +375,8 @@ test('AT-4: fail-loud — a skillPromptPath fixture with no turn markers makes r
     try {
       await runProjectBrainTurn({
         sessionId: band.sessionId,
-        projectRoot: band.projectRoot,
+        project: band.project,
+      projectRoot: band.projectRoot,
         forgeRoot,
         logsRoot: join(forgeRoot, '_logs'),
         skillPromptPath,
@@ -412,6 +416,7 @@ test('AT-5: data-half preserved — Project / working-dir / staging-dir / operat
     const cap1: { prompt?: string } = {};
     await runProjectBrainTurn({
       sessionId: ordinary.sessionId,
+      project: ordinary.project,
       projectRoot: ordinary.projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -448,6 +453,7 @@ test('AT-5: data-half preserved — Project / working-dir / staging-dir / operat
     const cap2: { prompt?: string } = {};
     await runProjectBrainTurn({
       sessionId: withGuidance.sessionId,
+      project: withGuidance.project,
       projectRoot: withGuidance.projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -473,6 +479,7 @@ test('AT-5: data-half preserved — Project / working-dir / staging-dir / operat
     const cap3: { prompt?: string } = {};
     await runProjectBrainTurn({
       sessionId: band.sessionId,
+      project: band.project,
       projectRoot: band.projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -531,11 +538,11 @@ function setupRealSkillSession(opts: {
   project: string;
   prompt?: string;
   kb_binding?: ProjectBrainStatus['kb_binding'];
-}): { projectRoot: string; forgeRoot: string; sessionDir: string; sessionId: string } {
+}): { project: string; projectRoot: string; forgeRoot: string; sessionDir: string; sessionId: string } {
   const scratchRoot = mkdtempSync(join(tmpdir(), 'pbrain-realskill-'));
   const projectRoot = join(scratchRoot, 'projects', opts.project);
   const sessionId = '2026-08-14T00-00-00';
-  const sessionDir = projectBrainSessionDir(projectRoot, sessionId);
+  const sessionDir = projectBrainSessionDir(join(scratchRoot, '_logs'), opts.project, sessionId);
   mkdirSync(projectRoot, { recursive: true });
   writeSessionStatus<ProjectBrainStatus>(sessionDir, {
     session_id: sessionId,
@@ -546,7 +553,7 @@ function setupRealSkillSession(opts: {
     updated_at: new Date().toISOString(),
     ...(opts.kb_binding ? { kb_binding: opts.kb_binding } : {}),
   } as ProjectBrainStatus);
-  return { projectRoot, forgeRoot: scratchRoot, sessionDir, sessionId };
+  return { project: opts.project, projectRoot, forgeRoot: scratchRoot, sessionDir, sessionId };
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +735,7 @@ test('AT-7 (Round-2, Part B): the theme-CATEGORY guidance concept reaches BOTH a
 // ---------------------------------------------------------------------------
 
 test('AT-8 (Round-2, Part C): the analyze-cycle-archives composed prompt must not call the Cycle-archives data line "above" — it is emitted below the turn section (expected RED today)', async () => {
-  const { projectRoot, forgeRoot, sessionDir, sessionId } = setupRealSkillSession({
+  const { project, projectRoot, forgeRoot, sessionDir, sessionId } = setupRealSkillSession({
     project: 'review-insights-proj',
     kb_binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
   });
@@ -737,6 +744,7 @@ test('AT-8 (Round-2, Part C): the analyze-cycle-archives composed prompt must no
 
   await runProjectBrainTurn({
     sessionId,
+    project,
     projectRoot,
     forgeRoot,
     logsRoot: join(forgeRoot, '_logs'),

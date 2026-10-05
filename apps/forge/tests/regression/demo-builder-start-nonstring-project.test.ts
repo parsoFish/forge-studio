@@ -4,7 +4,7 @@
  * e.g. an array) with its ORDINARY 400 rejection, never a 500.
  *
  * The route (`apps/forge/ui-bridge.ts`, ~L4180) calls `resolveDemoSessionDir`,
- * which calls `resolveGuardedPath(projectsRoot, [project, '_demo',
+ * which calls `resolveGuardedPath(logsRoot, ['_sessions', project, '_demo',
  * sessionId])` (`cli/studio-path-guard.ts`). `project` is typed
  * `project?: string` in the handler's local cast of the parsed JSON body,
  * but that is a compile-time-only annotation — nothing validates the
@@ -56,6 +56,15 @@ function snapshotTree(root: string): string[] {
 }
 
 let forgeRoot: string;
+
+/** Session dirs live under `<logsRoot>/_sessions/` (never in the ground), so a
+ *  "nothing created" proof must cover BOTH the projects root and the logs root. */
+function snapshotState(): string[] {
+  return [
+    ...snapshotTree(join(forgeRoot, 'projects')),
+    ...snapshotTree(join(forgeRoot, '_logs')).map((e) => `_logs/${e}`),
+  ].sort();
+}
 let projectsRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
@@ -92,7 +101,7 @@ after(async () => {
 // ---------------------------------------------------------------------------
 
 test('positive control (passes before AND after any fix): POST /api/demo-builder/start with a legitimate string project succeeds (200)', async () => {
-  const before = snapshotTree(projectsRoot);
+  const before = snapshotState();
   const res = await post('/api/demo-builder/start', { project: 'legit-project' });
   const body = (await res.json()) as { ok?: boolean; sessionId?: string; error?: string };
   assert.equal(res.status, 200, `expected a legitimate project to succeed — got ${res.status}: ${JSON.stringify(body)}`);
@@ -102,7 +111,7 @@ test('positive control (passes before AND after any fix): POST /api/demo-builder
   // A NEW session dir must have been created for the legitimate request —
   // proves the before/after snapshot technique used below actually detects
   // session-directory creation, not just a no-op comparison.
-  const after = snapshotTree(projectsRoot);
+  const after = snapshotState();
   assert.notDeepEqual(after, before, 'expected a new session directory to be created for a legitimate, accepted project');
 });
 
@@ -112,7 +121,7 @@ test('positive control (passes before AND after any fix): POST /api/demo-builder
 // ---------------------------------------------------------------------------
 
 test('(RED at base — currently 500) POST /api/demo-builder/start with project=["abc"] (a JSON array) must be rejected 400, not 500', async () => {
-  const before = snapshotTree(projectsRoot);
+  const before = snapshotState();
   const res = await post('/api/demo-builder/start', { project: ['abc'] });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
 
@@ -127,11 +136,11 @@ test('(RED at base — currently 500) POST /api/demo-builder/start with project=
   assert.equal(typeof body.error, 'string', `expected a JSON body with a string "error" property — got ${JSON.stringify(body)}`);
   assert.ok(body.error!.length > 0, 'expected a non-empty error message');
 
-  assert.deepEqual(snapshotTree(projectsRoot), before, 'a rejected request must never create a session directory anywhere under projectsRoot');
+  assert.deepEqual(snapshotState(), before, 'a rejected request must never create a session directory anywhere under projectsRoot or the logs root (_logs/_sessions)');
 });
 
 test('POST /api/demo-builder/start with project={} (a JSON object) must be rejected 400, not 500', async () => {
-  const before = snapshotTree(projectsRoot);
+  const before = snapshotState();
   const res = await post('/api/demo-builder/start', { project: {} });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
 
@@ -140,11 +149,11 @@ test('POST /api/demo-builder/start with project={} (a JSON object) must be rejec
   assert.equal(typeof body.error, 'string', `expected a JSON body with a string "error" property — got ${JSON.stringify(body)}`);
   assert.ok(body.error!.length > 0, 'expected a non-empty error message');
 
-  assert.deepEqual(snapshotTree(projectsRoot), before, 'a rejected request must never create a session directory anywhere under projectsRoot');
+  assert.deepEqual(snapshotState(), before, 'a rejected request must never create a session directory anywhere under projectsRoot or the logs root (_logs/_sessions)');
 });
 
 test('POST /api/demo-builder/start with project=42 (a JSON number) must be rejected 400, not 500', async () => {
-  const before = snapshotTree(projectsRoot);
+  const before = snapshotState();
   const res = await post('/api/demo-builder/start', { project: 42 });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
 
@@ -153,5 +162,5 @@ test('POST /api/demo-builder/start with project=42 (a JSON number) must be rejec
   assert.equal(typeof body.error, 'string', `expected a JSON body with a string "error" property — got ${JSON.stringify(body)}`);
   assert.ok(body.error!.length > 0, 'expected a non-empty error message');
 
-  assert.deepEqual(snapshotTree(projectsRoot), before, 'a rejected request must never create a session directory anywhere under projectsRoot');
+  assert.deepEqual(snapshotState(), before, 'a rejected request must never create a session directory anywhere under projectsRoot or the logs root (_logs/_sessions)');
 });

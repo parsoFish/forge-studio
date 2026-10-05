@@ -102,7 +102,7 @@ function setUp(sessionId: string): { forgeRoot: string; projectRoot: string; log
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
   const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
-  const sessionDir = join(projectRoot, '_unpriced', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_unpriced', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, {
     session_id: sessionId,
@@ -114,14 +114,14 @@ function setUp(sessionId: string): { forgeRoot: string; projectRoot: string; log
 
 test('7.6.55: a turn that dies mid-stream writes a terminal row naming the reason', async () => {
   const sessionId = '2026-09-12T00-00-00-died';
-  const { forgeRoot, projectRoot, logsRoot, sessionDir } = setUp(sessionId);
+  const { forgeRoot, logsRoot, sessionDir } = setUp(sessionId);
 
   // The turn MUST still fail — this fix makes a failure visible to spend, it
   // does not swallow one. A version that stopped throwing would be a far worse
   // bug than the one being fixed.
   await assert.rejects(
     () => runInteractiveTurn(descriptorFor(forgeRoot, 'unpricedkind'), {
-      sessionId, projectRoot, forgeRoot, logsRoot, queryFn: dyingQueryFn(sessionDir),
+      sessionId, project: 'proj', forgeRoot, logsRoot, queryFn: dyingQueryFn(sessionDir),
     }),
     /synthetic mid-stream death/,
     'the original error must reach the caller unchanged',
@@ -145,10 +145,10 @@ test('7.6.55: a turn that dies mid-stream writes a terminal row naming the reaso
 
 test('7.6.55: the unpriced row carries NO cost_usd — absent, never zeroed', async () => {
   const sessionId = '2026-09-12T00-00-00-nocost';
-  const { forgeRoot, projectRoot, logsRoot, sessionDir } = setUp(sessionId);
+  const { forgeRoot, logsRoot, sessionDir } = setUp(sessionId);
 
   await assert.rejects(() => runInteractiveTurn(descriptorFor(forgeRoot, 'unpricedkind'), {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn: dyingQueryFn(sessionDir),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn: dyingQueryFn(sessionDir),
   }));
 
   const unpriced = eventsUnder(logsRoot).filter((r) => r['message'] === 'interactive.turn-ended-unpriced');

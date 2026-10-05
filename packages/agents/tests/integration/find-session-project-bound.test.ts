@@ -19,7 +19,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { findSessionProject } from '../../find-session-project.ts';
@@ -41,7 +41,7 @@ test('a separator-shaped session id is bounded out (returns null)', async () => 
   mkdirSync(join(fixture, 'projects'), { recursive: true });
   try {
     await withCwd(fixture, async () => {
-      assert.equal(findSessionProject('a/b/c'), null, 'a session id containing a separator must be bounded out');
+      assert.equal(findSessionProject(join(fixture, '_logs'), 'a/b/c'), null, 'a session id containing a separator must be bounded out');
     });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
@@ -53,7 +53,7 @@ test('a traversal-shaped session id is bounded out (returns null)', async () => 
   mkdirSync(join(fixture, 'projects'), { recursive: true });
   try {
     await withCwd(fixture, async () => {
-      assert.equal(findSessionProject('..'), null, 'a ".." session id must be bounded out');
+      assert.equal(findSessionProject(join(fixture, '_logs'), '..'), null, 'a ".." session id must be bounded out');
     });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
@@ -64,15 +64,12 @@ test('a legitimate session id still resolves to its project dir (the bound does 
   const fixture = mkdtempSync(join(tmpdir(), 'sec07-findsession-'));
   const project = 'realproj';
   const legitSid = 'sec07-legit-sid';
-  const sessionDir = join(fixture, 'projects', project, '_architect', legitSid);
+  const sessionDir = join(fixture, '_logs', '_sessions', project, '_architect', legitSid);
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'drafting' }));
   try {
     await withCwd(fixture, async () => {
-      // findSessionProject builds `candidate = join(resolve('projects'), name)`
-      // — compute the expected value the identical way under the same cwd.
-      const expected = join(resolve('projects'), project);
-      assert.equal(findSessionProject(legitSid), expected, 'a legitimate session id must resolve to its containing project dir');
+      assert.equal(findSessionProject(join(fixture, '_logs'), legitSid), project, 'a legitimate session id must resolve to its containing project name');
     });
   } finally {
     rmSync(fixture, { recursive: true, force: true });

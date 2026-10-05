@@ -65,7 +65,7 @@
  * reached: the `project` shape gate (`invalidProjectReason`, a single-segment
  * charset rule with no `/` or `.` in its alphabet — EXACT_ID_RE), `isSafeRunId`
  * on the sessionId (charset + no `..`), and `resolveGuardedPath`'s per-segment
- * identity walk over `[project, "_"+kind, sessionId]`. The project-traversal
+ * identity walk over `['_sessions', project, "_"+kind, sessionId]` under the logs root. The project-traversal
  * case is caught by the FIRST of those, ahead of the other two; the
  * sessionId-traversal case reaches the second and third. Removing any one
  * check still leaves the others standing between the request and the real
@@ -138,12 +138,19 @@ function victimSid(kind: string): string {
   return `victim-${kind}`;
 }
 
-/** Seeds `<root>/<project>/_<kind>/<sid>/status.json` — the minimal shape
+/** Where a session of `kind` lives: `<root>/_logs/_sessions/<project>/_<kind>/<sid>`
+ *  (under the logs root, never in the project checkout). */
+function sessionDirOf(root: string, project: string, kind: string, sid: string): string {
+  return join(root, '_logs', '_sessions', project, `_${kind}`, sid);
+}
+
+/** Seeds `<root>/_logs/_sessions/<project>/_<kind>/<sid>/status.json` — the minimal shape
  *  every route reads: `session_id`, `project`, `phase`, `kind`. Generalizes
  *  the old authoring-only `seedAuthoringSession` across every registered kind
  *  (the directory is `_${kind}`, never special-cased). */
 function seedSession(root: string, project: string, kind: string, sid: string, phase: string): void {
-  const dir = join(root, 'projects', project, `_${kind}`, sid);
+  mkdirSync(join(root, 'projects', project), { recursive: true });
+  const dir = sessionDirOf(root, project, kind, sid);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({
     session_id: sid, project, phase, kind,
@@ -151,7 +158,7 @@ function seedSession(root: string, project: string, kind: string, sid: string, p
 }
 
 function sessionStatusBytes(root: string, project: string, kind: string, sid: string): string {
-  return readFileSync(join(root, 'projects', project, `_${kind}`, sid, 'status.json'), 'utf8');
+  return readFileSync(join(sessionDirOf(root, project, kind, sid), 'status.json'), 'utf8');
 }
 
 function newOutsideDir(prefix: string): string {
@@ -202,20 +209,26 @@ after(async () => {
   for (const d of outsideDirs) rmSync(d, { recursive: true, force: true });
 });
 
-/** Every directory now under the project, at any session-kind depth. The door
- *  compares this before and after: a route may 4xx and still have mkdir'd. */
+/** Every directory now under the project's session home (`_logs/_sessions/<p>`)
+ *  AND under the project checkout itself (the ground), at any session-kind
+ *  depth. The door compares this before and after: a route may 4xx and still
+ *  have mkdir'd — and no session dir may ever appear in the ground. */
 function sessionDirsUnderProject(): string[] {
-  const root = join(forgeRoot, 'projects', PROJECT);
   const out: string[] = [];
-  let kinds: string[] = [];
-  try { kinds = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return out; }
-  for (const k of kinds) {
-    out.push(k);
-    try {
-      for (const s of readdirSync(join(root, k), { withFileTypes: true })) {
-        if (s.isDirectory()) out.push(`${k}/${s.name}`);
-      }
-    } catch { /* a file where a dir was expected is not this door's business */ }
+  for (const [tag, root] of [
+    ['sessions', join(forgeRoot, '_logs', '_sessions', PROJECT)],
+    ['ground', join(forgeRoot, 'projects', PROJECT)],
+  ] as const) {
+    let kinds: string[] = [];
+    try { kinds = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { continue; }
+    for (const k of kinds) {
+      out.push(`${tag}:${k}`);
+      try {
+        for (const s of readdirSync(join(root, k), { withFileTypes: true })) {
+          if (s.isDirectory()) out.push(`${tag}:${k}/${s.name}`);
+        }
+      } catch { /* a file where a dir was expected is not this door's business */ }
+    }
   }
   return out.sort();
 }
@@ -301,8 +314,8 @@ describe('7.6.47 — a session id that becomes a path segment is validated at th
     // stay untouched.
     test(`project traversal (${kind}/${affordance}): a "../" project is refused, and the real victim outside the root is untouched`, async () => {
       const outside = newOutsideDir(`sec04-sid-segment-project-outside-${kind}-`);
-      const rel = relative(join(forgeRoot, 'projects'), outside);
-      assert.equal(rel.split(sep)[0], '..', 'sanity: the traversal string must genuinely step outside projectsRoot');
+      const rel = relative(join(forgeRoot, '_logs', '_sessions'), outside);
+      assert.equal(rel.split(sep)[0], '..', 'sanity: the traversal string must genuinely step outside <logsRoot>/_sessions');
       const sid = victimSid(kind);
       const dir = join(outside, `_${kind}`, sid);
       mkdirSync(dir, { recursive: true });

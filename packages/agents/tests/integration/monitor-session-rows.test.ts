@@ -36,7 +36,7 @@ const COST = 0.71176675;
 function plant(): { forgeRoot: string; projectsRoot: string; logsRoot: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'b6af-'));
   const projectsRoot = join(forgeRoot, 'projects');
-  const sessionDir = join(projectsRoot, 'p1', `_${KIND}`, SESSION_ID);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', 'p1', `_${KIND}`, SESSION_ID);
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'working', project: 'p1' }), 'utf8');
   const logsRoot = join(forgeRoot, '_logs');

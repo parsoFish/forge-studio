@@ -27,7 +27,7 @@
  *     export named ...").
  *
  * Fixture layout, exactly as the F6 spec's step 2/3 describe:
- *   <root>/projects/<p>/_<kind>/<sid>/status.json
+ *   <root>/_logs/_sessions/<p>/_<kind>/<sid>/status.json
  *   <root>/_logs/_<kind>-<sid>/events.jsonl
  *
  * The legacy arm's project-validation fallback ('' on an invalid
@@ -68,7 +68,6 @@ const REPO_ROOT = new URL('../../../..', import.meta.url).pathname;
 // ---------------------------------------------------------------------------
 
 let root: string;
-let projectsRoot: string;
 let logsRoot: string;
 
 const KIND = 'architect';
@@ -107,13 +106,11 @@ function writeEventsJsonl(dir: string, lines: Array<Record<string, unknown>>): v
 
 before(() => {
   root = mkdtempSync(join(tmpdir(), 'session-readability-resolve-'));
-  projectsRoot = join(root, 'projects');
   logsRoot = join(root, '_logs');
-  mkdirSync(projectsRoot, { recursive: true });
   mkdirSync(logsRoot, { recursive: true });
 
   // status-backed: a real status.json with a string phase.
-  const statusDir = join(projectsRoot, PROJ_STATUS, `_${KIND}`, SID_STATUS);
+  const statusDir = join(logsRoot, '_sessions', PROJ_STATUS, `_${KIND}`, SID_STATUS);
   mkdirSync(statusDir, { recursive: true });
   writeFileSync(join(statusDir, 'status.json'), JSON.stringify({ session_id: SID_STATUS, project: PROJ_STATUS, phase: 'awaiting-verdict' }), 'utf8');
 
@@ -124,24 +121,24 @@ before(() => {
   ]);
 
   // Shape B: project-side dir exists (NO status.json) + a companion log dir.
-  mkdirSync(join(projectsRoot, PROJ_SHAPE_B, `_${KIND}`, SID_SHAPE_B), { recursive: true });
+  mkdirSync(join(logsRoot, '_sessions', PROJ_SHAPE_B, `_${KIND}`, SID_SHAPE_B), { recursive: true });
   writeEventsJsonl(join(logsRoot, sessionLogDirName(KIND, SID_SHAPE_B)), [
     { event_id: 'e1', metadata: { session_id: SID_SHAPE_B, phase: 'analyzing' } },
   ]);
 
   // status-missing: a malformed status.json, and NO log dir.
-  const missingDir = join(projectsRoot, PROJ_STATUS_MISSING, `_${KIND}`, SID_STATUS_MISSING);
+  const missingDir = join(logsRoot, '_sessions', PROJ_STATUS_MISSING, `_${KIND}`, SID_STATUS_MISSING);
   mkdirSync(missingDir, { recursive: true });
   writeFileSync(join(missingDir, 'status.json'), 'not valid json {{{', 'utf8');
 
   // status-no-phase: valid JSON object, non-string phase, and NO log dir.
-  const noPhaseDir = join(projectsRoot, PROJ_STATUS_NOPHASE, `_${KIND}`, SID_STATUS_NOPHASE);
+  const noPhaseDir = join(logsRoot, '_sessions', PROJ_STATUS_NOPHASE, `_${KIND}`, SID_STATUS_NOPHASE);
   mkdirSync(noPhaseDir, { recursive: true });
   writeFileSync(join(noPhaseDir, 'status.json'), JSON.stringify({ session_id: SID_STATUS_NOPHASE, project: PROJ_STATUS_NOPHASE, phase: 42 }), 'utf8');
 
   // ambiguous: the SAME _<kind>/<sid> exists under TWO different projects.
-  mkdirSync(join(projectsRoot, PROJ_AMBIG_A, `_${KIND}`, SID_AMBIGUOUS), { recursive: true });
-  mkdirSync(join(projectsRoot, PROJ_AMBIG_B, `_${KIND}`, SID_AMBIGUOUS), { recursive: true });
+  mkdirSync(join(logsRoot, '_sessions', PROJ_AMBIG_A, `_${KIND}`, SID_AMBIGUOUS), { recursive: true });
+  mkdirSync(join(logsRoot, '_sessions', PROJ_AMBIG_B, `_${KIND}`, SID_AMBIGUOUS), { recursive: true });
 
   // empty events.jsonl, no project-side dir.
   mkdirSync(join(logsRoot, sessionLogDirName(KIND, SID_EMPTY_EVENTS)), { recursive: true });
@@ -168,7 +165,7 @@ after(() => {
 // ---------------------------------------------------------------------------
 
 test('AT-F6-RR-01: resolveReadableSession — status.json present with a string phase -> {ok:true, source:"status", phase, project}', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_STATUS, project: PROJ_STATUS });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_STATUS, project: PROJ_STATUS });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'status');
@@ -177,7 +174,7 @@ test('AT-F6-RR-01: resolveReadableSession — status.json present with a string 
 });
 
 test('AT-F6-RR-02: resolveReadableSession — Shape A (log dir only, no project-side dir anywhere, NO ?project=) -> legacy-readable with derived phase/project', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_A });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_SHAPE_A });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
@@ -186,7 +183,7 @@ test('AT-F6-RR-02: resolveReadableSession — Shape A (log dir only, no project-
 });
 
 test('AT-F6-RR-03: resolveReadableSession — Shape B (project-side dir exists, no status.json, log dir with events.jsonl), explicit project -> legacy-readable', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
@@ -197,7 +194,7 @@ test('AT-F6-RR-03: resolveReadableSession — Shape B (project-side dir exists, 
 });
 
 test('AT-F6-RR-04: resolveReadableSession — Shape B WITHOUT an explicit project, exactly ONE enumeration hit -> still resolves via single-hit auto-resolution', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_SHAPE_B });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
@@ -206,29 +203,29 @@ test('AT-F6-RR-04: resolveReadableSession — Shape B WITHOUT an explicit projec
 });
 
 test('AT-F6-RR-05: resolveReadableSession — project-side dir with a MALFORMED status.json and NO log dir -> {ok:false, reason:"status-missing"}', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_STATUS_MISSING, project: PROJ_STATUS_MISSING });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_STATUS_MISSING, project: PROJ_STATUS_MISSING });
   assert.deepEqual(result, { ok: false, reason: 'status-missing', project: PROJ_STATUS_MISSING });
 });
 
 test('AT-F6-RR-06: resolveReadableSession — valid JSON but a non-string phase, and NO log dir -> {ok:false, reason:"status-no-phase"}', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_STATUS_NOPHASE, project: PROJ_STATUS_NOPHASE });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_STATUS_NOPHASE, project: PROJ_STATUS_NOPHASE });
   assert.deepEqual(result, { ok: false, reason: 'status-no-phase', project: PROJ_STATUS_NOPHASE });
 });
 
 test('AT-F6-RR-07: resolveReadableSession — nothing anywhere -> {ok:false, reason:"not-found"}', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_NOT_FOUND });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_NOT_FOUND });
   if (result.ok) throw new Error('unreachable: expected ok:false');
   assert.equal(result.reason, 'not-found');
 });
 
 test('AT-F6-RR-08: resolveReadableSession — the SAME _<kind>/<sid> exists under TWO projects, no explicit project -> {ok:false, reason:"ambiguous"}', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_AMBIGUOUS });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_AMBIGUOUS });
   if (result.ok) throw new Error('unreachable: expected ok:false');
   assert.equal(result.reason, 'ambiguous');
 });
 
 test('AT-F6-RR-09: resolveReadableSession — an EMPTY (0-byte) events.jsonl still counts as present -> {ok:true, source:"legacy", phase:""}', () => {
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_EMPTY_EVENTS });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_EMPTY_EVENTS });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
@@ -237,7 +234,7 @@ test('AT-F6-RR-09: resolveReadableSession — an EMPTY (0-byte) events.jsonl sti
 
 test('AT-F6-RR-10: resolveReadableSession — a legacy-derived project of "../../etc" never reaches the wire; invalidProjectReason rejects it and the field falls back to \'\'', () => {
   assert.notEqual(invalidProjectReason('../../etc'), null, 'sanity: ../../etc must be invalid per invalidProjectReason');
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_BADPROJECT_TRAVERSAL });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_BADPROJECT_TRAVERSAL });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
@@ -246,7 +243,7 @@ test('AT-F6-RR-10: resolveReadableSession — a legacy-derived project of "../..
 
 test('AT-F6-RR-11: resolveReadableSession — a legacy-derived project of "a/b" never reaches the wire; falls back to \'\'', () => {
   assert.notEqual(invalidProjectReason('a/b'), null, 'sanity: a/b must be invalid per invalidProjectReason');
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_BADPROJECT_SLASH });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_BADPROJECT_SLASH });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.project, '');
@@ -254,7 +251,7 @@ test('AT-F6-RR-11: resolveReadableSession — a legacy-derived project of "a/b" 
 
 test('AT-F6-RR-12: resolveReadableSession — a legacy-derived project of ".kb-<id>" (the seeding-anchor carve-out) IS accepted verbatim — the fallback is not a blanket reject-anything-with-a-dot rule', () => {
   assert.equal(invalidProjectReason('.kb-validkb'), null, 'sanity: .kb-validkb is the accepted dot-anchor carve-out');
-  const result = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_KB_ANCHOR_PROJECT });
+  const result = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_KB_ANCHOR_PROJECT });
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.project, '.kb-validkb');
@@ -262,15 +259,15 @@ test('AT-F6-RR-12: resolveReadableSession — a legacy-derived project of ".kb-<
 
 test('AT-F6-RR-13: sessionIsReadable agrees with resolveReadableSession(...).ok for every fixture scenario', () => {
   const scenarios: Array<{ label: string; args: Parameters<typeof resolveReadableSession>[0] }> = [
-    { label: 'status-backed', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_STATUS, project: PROJ_STATUS } },
-    { label: 'shape-a', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_A } },
-    { label: 'shape-b (explicit project)', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B } },
-    { label: 'shape-b (auto-resolved)', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B } },
-    { label: 'status-missing', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_STATUS_MISSING, project: PROJ_STATUS_MISSING } },
-    { label: 'status-no-phase', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_STATUS_NOPHASE, project: PROJ_STATUS_NOPHASE } },
-    { label: 'not-found', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_NOT_FOUND } },
-    { label: 'ambiguous', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_AMBIGUOUS } },
-    { label: 'empty-events', args: { projectsRoot, logsRoot, kind: KIND, sessionId: SID_EMPTY_EVENTS } },
+    { label: 'status-backed', args: { logsRoot, kind: KIND, sessionId: SID_STATUS, project: PROJ_STATUS } },
+    { label: 'shape-a', args: { logsRoot, kind: KIND, sessionId: SID_SHAPE_A } },
+    { label: 'shape-b (explicit project)', args: { logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B } },
+    { label: 'shape-b (auto-resolved)', args: { logsRoot, kind: KIND, sessionId: SID_SHAPE_B } },
+    { label: 'status-missing', args: { logsRoot, kind: KIND, sessionId: SID_STATUS_MISSING, project: PROJ_STATUS_MISSING } },
+    { label: 'status-no-phase', args: { logsRoot, kind: KIND, sessionId: SID_STATUS_NOPHASE, project: PROJ_STATUS_NOPHASE } },
+    { label: 'not-found', args: { logsRoot, kind: KIND, sessionId: SID_NOT_FOUND } },
+    { label: 'ambiguous', args: { logsRoot, kind: KIND, sessionId: SID_AMBIGUOUS } },
+    { label: 'empty-events', args: { logsRoot, kind: KIND, sessionId: SID_EMPTY_EVENTS } },
   ];
   for (const { label, args } of scenarios) {
     const resolved = resolveReadableSession(args);
@@ -290,7 +287,7 @@ test('AT-F6-RR-13: sessionIsReadable agrees with resolveReadableSession(...).ok 
 
 test('AT-F6-RR-14: legacy arm — a bogus explicit ?project= never reaches the wire; the log-derived project wins', () => {
   const r = resolveReadableSession({
-    projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_A, project: 'no-such-project-anywhere',
+    logsRoot, kind: KIND, sessionId: SID_SHAPE_A, project: 'no-such-project-anywhere',
   });
   assert.equal(r.ok, true, JSON.stringify(r));
   if (!r.ok) throw new Error('unreachable');
@@ -300,7 +297,7 @@ test('AT-F6-RR-14: legacy arm — a bogus explicit ?project= never reaches the w
 
 test('AT-F6-RR-15: legacy arm — when the log names NO project, the callers explicit ?project= is still the fallback (honest-absent, not discarded)', () => {
   const r = resolveReadableSession({
-    projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B,
+    logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B,
   });
   assert.equal(r.ok, true, JSON.stringify(r));
   if (!r.ok) throw new Error('unreachable');
@@ -320,7 +317,7 @@ test('AT-F6-RR-15: legacy arm — when the log names NO project, the callers exp
 
 test('AT-F6-RR-16: an unconfirmed ?project= NEVER reaches the wire — a real but unrelated project cannot displace the confirmed owner', () => {
   // PROJ_STATUS is a genuinely existing project; it just does not own SID_SHAPE_B.
-  const r = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_STATUS });
+  const r = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_STATUS });
   assert.equal(r.ok, true, JSON.stringify(r));
   if (!r.ok) throw new Error('unreachable');
   assert.equal(r.source, 'legacy');
@@ -329,8 +326,8 @@ test('AT-F6-RR-16: an unconfirmed ?project= NEVER reaches the wire — a real bu
 });
 
 test('AT-F6-RR-17: the two shapes of "cannot evidence a project" are INDISTINGUISHABLE — a nonexistent name and a real-but-unrelated one give the same answer (no project-existence oracle)', () => {
-  const unrelatedReal = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_STATUS });
-  const nonexistent = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: 'no-such-project-anywhere' });
+  const unrelatedReal = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_STATUS });
+  const nonexistent = resolveReadableSession({ logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: 'no-such-project-anywhere' });
   assert.deepEqual(unrelatedReal, nonexistent);
 });
 

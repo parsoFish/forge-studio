@@ -53,7 +53,7 @@ type TestStatus = ProjectBrainAnalyzeInput & {
 };
 
 const FORGE_ROOT = '/fake/forge-root';
-const STAGING = '/fake/forge-root/projects/demoproj/_project-brain/2026-08-10T00-00-00/themes';
+const STAGING = '/fake/forge-root/_logs/_sessions/demoproj/_project-brain/2026-08-10T00-00-00/themes';
 const SKILL = 'You are the forge project-brain builder.';
 
 /**

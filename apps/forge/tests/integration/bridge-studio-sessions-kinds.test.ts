@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sessionDirSegments } from '@forge/kernel';
 import { handleStudioSessionsRoutes, type SessionsRouteContext } from '../../../../packages/sessions/bridge-studio-sessions.ts';
 import { isPseudoProjectAnchor } from '../../../../packages/sessions/session-resolution.ts';
 
@@ -306,7 +307,7 @@ test('isPseudoProjectAnchor: ANY leading-"." value is a pseudo-anchor, including
 
 test('C2-SHELL-1: awaiting-answers + questions.json -> the question-form affordance carries meta.questions (text + options)', async () => {
   const sessionId = '2026-08-21T09-00-00-c2q1';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-answers', round: 1 }), 'utf8');
   writeFileSync(join(dir, 'questions.json'), JSON.stringify([
@@ -330,7 +331,7 @@ test('C2-SHELL-1: awaiting-answers + questions.json -> the question-form afforda
 
 test('C2-SHELL-2: a stale questions.json OUTSIDE awaiting-answers attaches nothing (mirrors the transcript pending rule)', async () => {
   const sessionId = '2026-08-21T09-00-00-c2q2';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-verdict', round: 2 }), 'utf8');
   writeFileSync(join(dir, 'AGENTS.draft.md'), '# AGENTS.md\n', 'utf8');
@@ -354,7 +355,7 @@ test('C2-SHELL-3: `finalized` is ALWAYS on the wire — null when the session pr
   assert.equal(bareBody.finalized, null);
 
   const sessionId = '2026-08-21T09-00-00-c2fin';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({
     session_id: sessionId, project: 'demoproj', phase: 'committed',
@@ -373,7 +374,7 @@ test('C2-SHELL-3: `finalized` is ALWAYS on the wire — null when the session pr
 
 test('C2-FIX-P04-1: `finalized.exists` is DERIVED from the object on disk — true once the skill is really installed, false again when it is removed', async () => {
   const sessionId = '2026-08-21T09-00-00-c2finex';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({
     session_id: sessionId, project: 'demoproj', phase: 'committed',
@@ -396,7 +397,7 @@ test('C2-FIX-P04-1: `finalized.exists` is DERIVED from the object on disk — tr
 
 test('C2-FIX-P03-1: a corrupt verdicts.json scopes its fail-closed refusal to the TRANSCRIPT — the shell still renders WITH its verdict affordance', async () => {
   const sessionId = '2026-08-21T09-00-00-c2vbad';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-verdict', round: 2 }), 'utf8');
   writeFileSync(join(dir, 'AGENTS.draft.md'), '# AGENTS.md\n', 'utf8');
@@ -414,7 +415,7 @@ test('C2-FIX-P03-1: a corrupt verdicts.json scopes its fail-closed refusal to th
 
 test('C2-FIX-A4-1: a MALFORMED option entry degrades the WHOLE questions field to absent (fail closed) — never a question shown with fewer options than the agent asked for', async () => {
   const sessionId = '2026-08-21T09-00-00-c2badopt';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-answers', round: 1 }), 'utf8');
   writeFileSync(join(dir, 'questions.json'), JSON.stringify([
@@ -431,7 +432,7 @@ test('C2-FIX-A4-1: a MALFORMED option entry degrades the WHOLE questions field t
 
 test('C2-FIX-A3-1: each pending question carries a server-derived positional `id` — the answer-correlation handle', async () => {
   const sessionId = '2026-08-21T09-00-00-c2qid';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-answers', round: 1 }), 'utf8');
   writeFileSync(join(dir, 'questions.json'), JSON.stringify([
@@ -447,7 +448,7 @@ test('C2-FIX-A3-1: each pending question carries a server-derived positional `id
 
 test('C2-SHELL-4: a malformed status.finalized (wrong shape) collapses to null — never echoed raw', async () => {
   const sessionId = '2026-08-21T09-00-00-c2finbad';
-  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  const dir = join(forgeRoot, '_logs', ...sessionDirSegments('demoproj', '_instructions', sessionId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({
     session_id: sessionId, project: 'demoproj', phase: 'committed', finalized: 'c2-authored-skill',

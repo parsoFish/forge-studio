@@ -439,7 +439,7 @@ test('M7-C U8: GET /api/studio/kbs/:id/runs drops a cleanup row the probe calls 
   try {
     seedCleanKb(iso.root, 'ledger-kb');
     const sid = '2026-08-20T09-00-00-ab12';
-    const anchorDir = join(iso.root, 'projects', '.kb-ledger-kb', '_kb-cleanup', sid);
+    const anchorDir = join(iso.root, '_logs', '_sessions', '.kb-ledger-kb', '_kb-cleanup', sid);
     mkdirSync(anchorDir, { recursive: true });
     writeFileSync(join(anchorDir, 'status.json'), JSON.stringify({ phase: 'awaiting-approval', kb_id: 'ledger-kb' }), 'utf8');
 

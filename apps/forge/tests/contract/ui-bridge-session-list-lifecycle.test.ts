@@ -86,6 +86,7 @@ before(async () => {
   logsRoot = join(forgeRoot, '_logs');
   for (const state of ['in-flight', 'done', 'failed', 'pending']) mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
   mkdirSync(logsRoot, { recursive: true });
+  mkdirSync(join(projectsRoot, 'proja'), { recursive: true }); // the routes validate the project; sessions live under logsRoot
   mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'));
   // The REAL registry — real kinds, real phase tables (the four routes now
@@ -95,7 +96,7 @@ before(async () => {
   // --- (1) A crashed architect session: real stderr.log NEWER than
   // status.json, no live turn pid at all. ---
   writeStatus(
-    join(projectsRoot, 'proja', '_architect', ARCH_SID),
+    join(logsRoot, '_sessions', 'proja', '_architect', ARCH_SID),
     { session_id: ARCH_SID, project: 'proja', project_repo_path: join(projectsRoot, 'proja'), phase: 'drafting', round: 1, idea: 'an idea', updated_at: new Date(NOW - 10 * MIN).toISOString() },
     NOW - 10 * MIN,
   );
@@ -104,25 +105,25 @@ before(async () => {
   // --- (2a) A second, WORKING (not crashed) architect session — proves the
   // route carries `lifecycle` on a non-crashed row too. ---
   writeStatus(
-    join(projectsRoot, 'proja', '_architect', ARCH_SID_WORKING),
+    join(logsRoot, '_sessions', 'proja', '_architect', ARCH_SID_WORKING),
     { session_id: ARCH_SID_WORKING, project: 'proja', project_repo_path: join(projectsRoot, 'proja'), phase: 'drafting', round: 1, idea: 'a second idea', updated_at: new Date(NOW).toISOString() },
   );
 
   // --- (2b) instructions ---
   writeStatus(
-    join(projectsRoot, 'proja', '_instructions', INSTR_SID),
+    join(logsRoot, '_sessions', 'proja', '_instructions', INSTR_SID),
     { session_id: INSTR_SID, project: 'proja', project_repo_path: join(projectsRoot, 'proja'), phase: 'drafting', round: 1, prompt: 'brief', updated_at: new Date(NOW).toISOString() },
   );
 
   // --- (2c) demo-builder ---
   writeStatus(
-    join(projectsRoot, 'proja', '_demo', DEMO_SID),
+    join(logsRoot, '_sessions', 'proja', '_demo', DEMO_SID),
     { session_id: DEMO_SID, project: 'proja', project_repo_path: join(projectsRoot, 'proja'), phase: 'generating', iteration: 0, prompt: 'demo it', updated_at: new Date(NOW).toISOString() },
   );
 
   // --- (2d) project-brain ---
   writeStatus(
-    join(projectsRoot, 'proja', '_project-brain', PB_SID),
+    join(logsRoot, '_sessions', 'proja', '_project-brain', PB_SID),
     { session_id: PB_SID, project: 'proja', project_repo_path: join(projectsRoot, 'proja'), phase: 'analyzing', prompt: 'focus', updated_at: new Date(NOW).toISOString() },
   );
 
@@ -252,7 +253,7 @@ const STALE_CLAIM_SID = '2026-08-23T00-00-05-staleclaim';
 test('architect staleMs comes from the runner\'s updated_at, not status.json mtime (fresh file, old claim, no heartbeat)', async () => {
   // Written NOW — fresh mtime, deliberately — with a 200s-old claim.
   writeStatus(
-    join(projectsRoot, 'proja', '_architect', STALE_CLAIM_SID),
+    join(logsRoot, '_sessions', 'proja', '_architect', STALE_CLAIM_SID),
     {
       session_id: STALE_CLAIM_SID, project: 'proja', project_repo_path: join(projectsRoot, 'proja'),
       phase: 'drafting', round: 2, idea: 'stale claim', updated_at: new Date(Date.now() - 200_000).toISOString(),
@@ -274,7 +275,7 @@ test('architect staleMs comes from the runner\'s updated_at, not status.json mti
 test('a LIVE heartbeat outranks an old updated_at — no false stall warning on a runner that is still beating', async () => {
   const sid = '2026-08-23T00-00-06-beating';
   writeStatus(
-    join(projectsRoot, 'proja', '_architect', sid),
+    join(logsRoot, '_sessions', 'proja', '_architect', sid),
     {
       session_id: sid, project: 'proja', project_repo_path: join(projectsRoot, 'proja'),
       phase: 'drafting', round: 2, idea: 'beating', updated_at: new Date(Date.now() - 200_000).toISOString(),

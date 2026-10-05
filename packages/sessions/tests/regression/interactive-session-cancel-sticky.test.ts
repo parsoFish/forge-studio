@@ -138,10 +138,9 @@ test('sticky-cancel runner: a session cancelled WHILE the agent turn runs stays 
   const forgeRoot = join(root, 'forge');
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_YAML);
-  const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-19T11-00-00';
-  const sessionDir = join(projectRoot, '_stickytest', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'stickyproj', '_stickytest', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   const descriptor = loadSessionKinds(forgeRoot).find((d) => d.id === 'sticky-kind')!;
@@ -161,7 +160,7 @@ test('sticky-cancel runner: a session cancelled WHILE the agent turn runs stays 
   };
 
   await assert.rejects(
-    runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: createLogger(`_sticky-${sessionId}`, logsRoot) }),
+    runInteractiveTurn(descriptor, { sessionId, project: 'stickyproj', forgeRoot, logsRoot, queryFn, logger: createLogger(`_sticky-${sessionId}`, logsRoot) }),
     (err: unknown) => {
       assert.ok(err instanceof Error, 'must throw an Error');
       assert.match(err.message, /cancelled/i, `the refusal must NAME the cancel; got: ${err.message}`);

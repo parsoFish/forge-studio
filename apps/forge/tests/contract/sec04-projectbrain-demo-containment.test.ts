@@ -4,15 +4,17 @@
  *
  * These are RED-on-current-code containment pins. The accepted SEC-04 fix
  * routes EVERY session-dir construction through the already-fixed
- * `resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId)`
+ * `resolveSessionDir(logsRoot, project, kindDirName, sessionId)` (session dirs
+ * live at `<logsRoot>/_sessions/<project>/<kindDir>/<sessionId>`, outside the
+ * project checkout; the escape root is therefore the logs root)
  * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath: per-segment
  * identity+charset+symlink, returns null on escape). The surfaces pinned here
  * bypass that guard TODAY:
  *
  *   1. POST /api/project-brain/{start,brief,approve,abandon} build the session
- *      dir as `projectBrainSessionDir(join(projectsRoot, body.project),
- *      body.sessionId)` = `join(projectsRoot, body.project, '_project-brain',
- *      body.sessionId)` with ZERO guard on `project`/`sessionId`. A body value
+ *      dir as `projectBrainSessionDir(logsRoot, body.project,
+ *      body.sessionId)` = `join(logsRoot, '_sessions', body.project,
+ *      '_project-brain', body.sessionId)` with ZERO guard on `project`/`sessionId`. A body value
  *      is a plain JSON string (never URL-normalised), so a literal ".." in it
  *      is folded straight through by `join()`.
  *        - /start: unconditioned mkdir+write (no read-precondition) — assert NO
@@ -31,7 +33,7 @@
  *      verbatim; `fetch()`'s URL parser is not trusted to preserve `%2F`).
  *
  *   3. listProjectBrainSessions / listDemoSessions (the OBSERVING surfaces,
- *      AT-47): each `readdirSync`s `projects/<p>/_project-brain` (resp.
+ *      AT-47): each `readdirSync`s `_logs/_sessions/<p>/_project-brain` (resp.
  *      `_demo`) then `readSessionStatus`es each child. A symlinked `_<kind>`
  *      entry pointing at a victim dir makes the LIST enumerate + disclose a
  *      victim's session status. The guarded resolver must refuse a symlinked
@@ -39,10 +41,9 @@
  *
  *   4. DEMO first-segment symlink fold: `resolveDemoSessionDir` (the SEC-03
  *      choke point) computes its containment baseline as
- *      `realProjectDir = realpathSync(join(projectsRoot, project))`
- *      (apps/forge/ui-bridge.ts:2256-2259) and then only checks
- *      `realAncestor.startsWith(realProjectDir + sep)`. When `projects/<attacker>`
- *      is itself a SYMLINK to a victim dir, `realProjectDir` IS the victim, so
+ *      the realpath of the project's session segment
+ *      and then only checks containment against it. When
+ *      `_logs/_sessions/<attacker>` is itself a SYMLINK to a victim dir, `realProjectDir` IS the victim, so
  *      the comparison is tautological (root-folding, verbatim from the
  *      adversarial-containment-review catalogue). The demo route's CHARSET
  *      shape is already guarded (SEC-03) — the SYMLINK first-segment shape is
@@ -91,6 +92,7 @@ function tmp(prefix: string): string {
 
 let forgeRoot: string;
 let projectsRoot: string;
+let logsRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
 const outsideDirs: string[] = [];
@@ -160,6 +162,11 @@ function plantDemoStatus(sessionDir: string, overrides: Partial<DemoBuilderStatu
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify(status, null, 2));
 }
 
+/** The directory every project's session dirs hang under — the escape root. */
+function sessionsRoot(): string {
+  return join(logsRoot, '_sessions');
+}
+
 function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
   if (symlinksUnavailable) {
     t.skip('symlink creation unavailable in this environment');
@@ -173,18 +180,20 @@ before(async () => {
   projectsRoot = join(forgeRoot, 'projects');
   mkdirSync(projectsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, '_queue', 'pending'), { recursive: true });
-  mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+  logsRoot = join(forgeRoot, '_logs');
+  mkdirSync(logsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
 
   // --- Legitimate baselines used by the positive controls. ---
   // A real project-brain session under a real project.
+  mkdirSync(join(projectsRoot, 'pb-legit'), { recursive: true });
   plantBrainStatus(
-    projectBrainSessionDir(join(projectsRoot, 'pb-legit'), 'legit-pb-session'),
+    projectBrainSessionDir(logsRoot, 'pb-legit', 'legit-pb-session'),
     { session_id: 'legit-pb-session', project: 'pb-legit', phase: 'awaiting-review' },
   );
   // Its staged themes (so the /themes/ positive control has content to return).
-  const legitThemes = join(projectBrainSessionDir(join(projectsRoot, 'pb-legit'), 'legit-pb-session'), 'themes');
+  const legitThemes = join(projectBrainSessionDir(logsRoot, 'pb-legit', 'legit-pb-session'), 'themes');
   mkdirSync(legitThemes, { recursive: true });
   writeFileSync(join(legitThemes, 'auth.md'), 'REAL-THEME-CONTENT-9f21a');
 
@@ -193,7 +202,7 @@ before(async () => {
   mkdirSync(join(projectsRoot, 'legit-demo-project', '.forge', 'demo'), { recursive: true });
   writeFileSync(join(projectsRoot, 'legit-demo-project', '.forge', 'demo', 'DEMO.html'), 'REAL-DEMO-CONTENT-3c88e');
   plantDemoStatus(
-    demoSessionDir(join(projectsRoot, 'legit-demo-project'), 'legit-demo-session'),
+    demoSessionDir(logsRoot, 'legit-demo-project', 'legit-demo-session'),
     { session_id: 'legit-demo-session', project: 'legit-demo-project', project_repo_path: join(projectsRoot, 'legit-demo-project') },
   );
 
@@ -261,8 +270,8 @@ test('(RED) POST /api/project-brain/start with a traversing body.project creates
   const outside = newOutsideDir('sec04-pb-start-outside-');
   // Precondition: the escape target is genuinely empty before the request.
   assert.deepEqual(readdirSync(outside), [], 'fixture precondition: the outside dir must start empty');
-  const project = relative(projectsRoot, outside); // e.g. "../../../<tmp>/<outside>"
-  assert.equal(join(projectsRoot, project), outside, 'sanity: join(projectsRoot, project) must fold back onto the outside dir');
+  const project = relative(sessionsRoot(), outside); // e.g. "../../../<tmp>/<outside>"
+  assert.equal(join(sessionsRoot(), project), outside, 'sanity: join(<logsRoot>/_sessions, project) must fold back onto the outside dir');
 
   const res = await post('/api/project-brain/start', { project });
   // Primary assertion is the artifact, not the status: the route must not have
@@ -289,8 +298,8 @@ test('(RED) POST /api/project-brain/brief with a traversing body.project does no
   assert.ok(existsSync(statusPath), 'fixture precondition: victim status.json must exist');
   const before = readFileSync(statusPath);
 
-  const project = relative(projectsRoot, outside);
-  assert.equal(join(projectsRoot, project, '_project-brain', 'vsess'), victimSession, 'sanity: traversal must land on the victim session');
+  const project = relative(sessionsRoot(), outside);
+  assert.equal(join(sessionsRoot(), project, '_project-brain', 'vsess'), victimSession, 'sanity: traversal must land on the victim session');
 
   const res = await post('/api/project-brain/brief', { project, sessionId: 'vsess', brief: 'PWNED-BRIEF-CONTENT-a01' });
 
@@ -314,8 +323,8 @@ test('(RED) POST /api/project-brain/brief with a real project but a traversing b
   assert.ok(existsSync(statusPath), 'fixture precondition: victim status.json must exist');
   const before = readFileSync(statusPath);
 
-  // join(projectsRoot,'pb-legit','_project-brain', sessionId) must land on victimSession.
-  const base = join(projectsRoot, 'pb-legit', '_project-brain');
+  // join(<logsRoot>/_sessions,'pb-legit','_project-brain', sessionId) must land on victimSession.
+  const base = join(sessionsRoot(), 'pb-legit', '_project-brain');
   const sessionId = relative(base, victimSession);
   assert.equal(join(base, sessionId), victimSession, 'sanity: traversal must land on the victim session');
 
@@ -333,7 +342,7 @@ test('(RED) POST /api/project-brain/approve with a traversing body.project does 
   assert.ok(existsSync(statusPath), 'fixture precondition: victim status.json must exist');
   const before = readFileSync(statusPath);
 
-  const project = relative(projectsRoot, outside);
+  const project = relative(sessionsRoot(), outside);
   const res = await post('/api/project-brain/approve', { project, sessionId: 'vsess' });
 
   assert.deepEqual(
@@ -351,7 +360,7 @@ test('(RED) POST /api/project-brain/abandon with a traversing body.project does 
   assert.ok(existsSync(statusPath), 'fixture precondition: victim status.json must exist');
   const before = readFileSync(statusPath);
 
-  const project = relative(projectsRoot, outside);
+  const project = relative(sessionsRoot(), outside);
   const res = await post('/api/project-brain/abandon', { project, sessionId: 'vsess' });
 
   assert.deepEqual(
@@ -368,14 +377,14 @@ test('(RED) POST /api/project-brain/abandon with a traversing body.project does 
 
 test('(RED) GET /api/project-brain/themes with a %2F-encoded traversing project must not disclose staged themes from outside projectsRoot', async () => {
   const outside = newOutsideDir('sec04-pb-themes-project-outside-');
-  // readStagedThemes reads join(projectsRoot, project, '_project-brain', sessionId, 'themes').
+  // readStagedThemes reads join(<logsRoot>/_sessions, project, '_project-brain', sessionId, 'themes').
   const victimThemes = join(outside, '_project-brain', 'vsess', 'themes');
   mkdirSync(victimThemes, { recursive: true });
   writeFileSync(join(victimThemes, 'secret.md'), 'PWNED-THEME-CONTENT-c03d');
   assert.ok(existsSync(join(victimThemes, 'secret.md')), 'fixture precondition: victim theme file must exist');
 
-  const projDecoded = relative(projectsRoot, outside);
-  assert.equal(join(projectsRoot, projDecoded, '_project-brain', 'vsess', 'themes'), victimThemes, 'sanity: decode-then-join must land on the victim themes dir');
+  const projDecoded = relative(sessionsRoot(), outside);
+  assert.equal(join(sessionsRoot(), projDecoded, '_project-brain', 'vsess', 'themes'), victimThemes, 'sanity: decode-then-join must land on the victim themes dir');
   // Encode the project segment so it survives the route regex's real-slash
   // boundary and is only revealed by decodeURIComponent.
   const rawPath = `/api/project-brain/themes/${encodeSlashes(projDecoded)}/vsess`;
@@ -394,8 +403,8 @@ test('(RED) GET /api/project-brain/themes with a real project but a %2F-encoded 
   writeFileSync(join(victimThemes, 'secret.md'), 'PWNED-THEME-CONTENT-d04e');
   assert.ok(existsSync(join(victimThemes, 'secret.md')), 'fixture precondition: victim theme file must exist');
 
-  // readStagedThemes: join(join(projectsRoot,'pb-legit','_project-brain', sessionId), 'themes') == victimThemes.
-  const sessionBase = join(projectsRoot, 'pb-legit', '_project-brain');
+  // readStagedThemes: join(join(<logsRoot>/_sessions,'pb-legit','_project-brain', sessionId), 'themes') == victimThemes.
+  const sessionBase = join(sessionsRoot(), 'pb-legit', '_project-brain');
   const sessDecoded = relative(sessionBase, outside);
   assert.equal(join(sessionBase, sessDecoded, 'themes'), victimThemes, 'sanity: decode-then-join must land on the victim themes dir');
   const rawPath = `/api/project-brain/themes/pb-legit/${encodeSlashes(sessDecoded)}`;
@@ -419,9 +428,10 @@ test('(RED) GET /api/project-brain/sessions must not enumerate sessions reached 
   plantBrainStatus(join(outside, 'victim-pb-sess'), { session_id: 'PWNED-PB-LIST-SESSION-e05f', project: 'victim', phase: 'awaiting-review' });
   assert.ok(existsSync(join(outside, 'victim-pb-sess', 'status.json')), 'fixture precondition: victim session status must exist');
 
-  // Plant projects/attacker-pb/_project-brain as a SYMLINK to the victim dir.
+  // Plant _logs/_sessions/attacker-pb/_project-brain as a SYMLINK to the victim dir.
   mkdirSync(join(projectsRoot, 'attacker-pb'), { recursive: true });
-  symlinkSync(outside, join(projectsRoot, 'attacker-pb', '_project-brain'), 'dir');
+  mkdirSync(join(sessionsRoot(), 'attacker-pb'), { recursive: true });
+  symlinkSync(outside, join(sessionsRoot(), 'attacker-pb', '_project-brain'), 'dir');
 
   const res = await fetch(`${bridgeUrl}/api/project-brain/sessions`);
   const json = (await res.json()) as { sessions: ProjectBrainStatus[] };
@@ -442,7 +452,8 @@ test('(RED) GET /api/demo-builder/sessions must not enumerate sessions reached t
   assert.ok(existsSync(join(outside, 'victim-demo-sess', 'status.json')), 'fixture precondition: victim demo session status must exist');
 
   mkdirSync(join(projectsRoot, 'attacker-demo-list'), { recursive: true });
-  symlinkSync(outside, join(projectsRoot, 'attacker-demo-list', '_demo'), 'dir');
+  mkdirSync(join(sessionsRoot(), 'attacker-demo-list'), { recursive: true });
+  symlinkSync(outside, join(sessionsRoot(), 'attacker-demo-list', '_demo'), 'dir');
 
   const res = await fetch(`${bridgeUrl}/api/demo-builder/sessions`);
   const json = (await res.json()) as { sessions: Array<{ sessionId: string }> };
@@ -475,10 +486,12 @@ test('(RED) GET /api/demo-builder/demo/<project>/<sid> must not traverse a proje
   // Independent proof the served bytes could only come from the folded read:
   assert.equal(readFileSync(join(projectsRoot, 'legit-demo-project', '.forge', 'demo', 'DEMO.html'), 'utf8'), 'REAL-DEMO-CONTENT-3c88e');
 
-  // projects/attacker-fold is a SYMLINK to the outside victim project dir.
-  symlinkSync(outside, join(projectsRoot, 'attacker-fold'), 'dir');
-  // Sanity: the symlinked project's realpath is genuinely outside projectsRoot.
-  assert.ok(relative(projectsRoot, outside).split(sep)[0] === '..', 'sanity: the symlink target must be outside projectsRoot');
+  // _logs/_sessions/attacker-fold is a SYMLINK to the outside victim dir
+  // (the project itself still exists in the registry).
+  mkdirSync(join(projectsRoot, 'attacker-fold'), { recursive: true });
+  symlinkSync(outside, join(sessionsRoot(), 'attacker-fold'), 'dir');
+  // Sanity: the symlinked project's realpath is genuinely outside the logs root.
+  assert.ok(relative(logsRoot, outside).split(sep)[0] === '..', 'sanity: the symlink target must be outside the logs root');
 
   const res = await fetch(`${bridgeUrl}/api/demo-builder/demo/attacker-fold/vsess`);
   const text = await res.text();

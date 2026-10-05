@@ -394,7 +394,8 @@ test('W8-F1 (was: adversarial round 1): a PROSE rewrite that also deletes a vali
       undefined,
       'an unsound prose edit must NOT be parked as an approvable draft — approving it would destroy the edge',
     );
-    assert.ok(!existsSync(join(root, 'projects', GITPULSE_KB, '_kb-cleanup')), 'no kb-cleanup session may be minted at all');
+    assert.ok(!existsSync(join(root, '_logs', '_sessions', GITPULSE_KB, '_kb-cleanup')), 'no kb-cleanup session may be minted at all');
+    assert.ok(!existsSync(join(root, 'projects', GITPULSE_KB, '_kb-cleanup')), 'the ground holds no session dir');
     // …and the operator still SEES what was proposed and why it was refused.
     const proposals = row.proposedChanges ?? [];
     assert.equal(proposals.length, 1, `the refused proposal must still be shown — got ${JSON.stringify(proposals)}`);

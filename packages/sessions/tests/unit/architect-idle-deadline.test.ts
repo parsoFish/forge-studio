@@ -55,7 +55,7 @@ function readMessage(path: string): unknown {
 function plantSession(): { projectRoot: string; logsRoot: string; root: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-idle-'));
   const projectRoot = join(root, 'projects', 'p1');
-  mkdirSync(join(projectRoot, '_architect', 'sess-1'), { recursive: true });
+  mkdirSync(join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1'), { recursive: true });
   const status: ArchitectStatus = {
     session_id: 'sess-1',
     project: 'p1',
@@ -65,7 +65,7 @@ function plantSession(): { projectRoot: string; logsRoot: string; root: string }
     idea: 'measure where the idle deadline lands',
     updated_at: new Date().toISOString(),
   };
-  writeFileSync(join(projectRoot, '_architect', 'sess-1', 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+  writeFileSync(join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'status.json'), JSON.stringify(status, null, 2), 'utf8');
   const logsRoot = join(root, '_logs');
   mkdirSync(join(logsRoot, '_architect-sess-1'), { recursive: true });
   return { projectRoot, logsRoot, root };
@@ -98,6 +98,7 @@ test('AT-6.11.17-1 a silent SDK stream on the ARCHITECT path throws StreamDeadli
       manifestPorts: stubArchitectManifestPorts(),
       sessionId: 'sess-1',
       projectRoot,
+      project: 'p1',
       logsRoot,
       brainCwd: root,
       queryFn: silentAfterReads as never,
@@ -150,6 +151,7 @@ test('AT-6.11.17-2 (positive control) a stream that keeps PRODUCING is never kil
       manifestPorts: stubArchitectManifestPorts(),
       sessionId: 'sess-1',
       projectRoot,
+      project: 'p1',
       logsRoot,
       brainCwd: root,
       queryFn: productive as never,
