@@ -27,8 +27,8 @@
  * `@forge/knowledge` would still mint the forbidden row.
  *
  * Every other symbol below is a byte-for-byte move: same body, same
- * comments, same guard ordering. `docs/reference/request-path-sinks.md`
- * records five separate incidents in this exact code; a "tidy" that reorders
+ * comments, same guard ordering. five separate containment
+ * incidents were fixed in this exact code; a "tidy" that reorders
  * a check before a write, or a guard rewritten to look cleaner, reopens one
  * of them.
  *
@@ -100,8 +100,7 @@ type ContractArtifactTarget = {
  * three-way git probe (a side-effecting decision this pure path-set function
  * must not absorb), so check/write parity for it is kept by both sites
  * calling the SAME `needsGitInit` predicate instead. Anyone enumerating the
- * route's full write set (docs/reference/request-path-sinks.md defers to
- * these comments): `.forge/project.json` + the two targets below + the
+ * route's full write set (these comments are the record): `.forge/project.json` + the two targets below + the
  * conditional `.gitignore`.
  *
  * `readArtifactRoot` is an injected function, not an import — see this

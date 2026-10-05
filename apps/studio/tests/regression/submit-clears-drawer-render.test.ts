@@ -4,8 +4,8 @@
  * drawer's published height.
  *
  * The drawer is open by design while a session works
- * (`docs/reference/studio-dom-contract.md`: "renders in EVERY phase once
- * events exist — open while working, collapsed otherwise"). An architect
+ * (it renders in EVERY phase once events exist — open while
+ * working, collapsed otherwise; attribute inventory: `dev/studio-dom-contract.md`). An architect
  * interview is a phase that is working AND waiting on the operator, so the
  * two overlap by design and the control must scroll clear of the drawer
  * rather than into it.

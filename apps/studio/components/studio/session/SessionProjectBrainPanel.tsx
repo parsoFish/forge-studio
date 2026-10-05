@@ -120,7 +120,7 @@ export function SessionProjectBrainPanel({
               (`scripts/stories/beats-drive.mjs`). S6 beat 5's act has always
               read "brief the seeding agent"; until this attribute existed no
               story could carry it out, so the beat asserted a phase nothing
-              in it caused. Contract row: `docs/reference/studio-dom-contract.md`. */}
+              in it caused. Inventory: `dev/studio-dom-contract.md`. */}
           <textarea
             data-component="brain-brief-input"
             data-field="brain-brief"

@@ -55,7 +55,7 @@ const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 
  * `/project-brain/[sessionId]` with ONE route generic over whatever kind is
  * declared in `studio/session-kinds.yaml` — chat transcript LEFT, the living
  * artifact RIGHT, this page-shell header above (the retired
- * studio-endstate-v2 views-session.jsx; docs/reference/studio-copy.md).
+ * studio-endstate-v2 views-session.jsx).
  *
  * Two independent data sources are polled:
  *   - `fetchSessionShell` (lib/session-client.ts) — the new, read-only

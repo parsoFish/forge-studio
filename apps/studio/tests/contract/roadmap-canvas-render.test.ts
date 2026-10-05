@@ -408,8 +408,8 @@ test('[W6-RV-2] AT7: an empty roadmap still renders the canvas + drawer shell wi
 // `status` leaves `'pending'`, `unplanned` goes false, and the attribute
 // reports `planned` without ever consulting the work items again. An
 // attribute derived from the ABSENCE of one state rather than the PRESENCE of
-// the thing it names — and `studio-dom-contract.md` had documented the honest
-// rule all along ("`unplanned` = the … `workItems === undefined` proxy").
+// the thing it names — and the documented rule was always
+// the honest one (`unplanned` = the `workItems === undefined` proxy).
 //
 // `planning` is not invented here: it is already in the published vocabulary
 // (`planned | planning | error | needs-confirm | unplanned`), and it is what a

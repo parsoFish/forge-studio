@@ -703,8 +703,8 @@ export function guardedReadDir(root: string, segments: readonly string[]): strin
  * `resolveGuardedPath` performs for a read/write applies here, separately,
  * to `fromSegments` AND `toSegments`.
  *
- * CHECK-THEN-ACT (the same two-phase shape `seedProjectBrain` was fixed into
- * — `docs/reference/request-path-sinks.md`): both endpoints are resolved and
+ * CHECK-THEN-ACT (the same two-phase shape `seedProjectBrain` was fixed into):
+ * both endpoints are resolved and
  * validated FIRST, with zero filesystem writes; `renameSync` runs only after
  * BOTH have passed every check below. On any rejection this throws
  * `PathGuardContainmentError` naming which endpoint failed and why (internal

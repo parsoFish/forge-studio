@@ -13,7 +13,7 @@ import type { ContractStageRow } from '@/lib/session-client';
 // component.
 //
 // Mirrors the retired studio-endstate-v2 views-session.jsx's stage-aware
-// sub-views exactly (provenance: docs/reference/studio-copy.md): the `contract` stage's CHECKLIST (`:139-157`, the
+// sub-views exactly: the `contract` stage's CHECKLIST (`:139-157`, the
 // "which components are present" readiness overview — reuses the SAME
 // `.readiness-list`/`.readiness-item`/`.ri-dot` classes ReadinessPanel.tsx
 // already ships, not a bespoke checklist styling); every other stage's own

@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
 | `kernel` | 36 | 6,530 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 48 | 11,216 | **9,423** | ratified 9,423 — row 206 (forge-8vfn.8.5.56): collision-free preflight-fix run ids, a crashed fix reads failed; +11, lane-ratified (≤100, ruling 666). |
+| `projects` | 48 | 11,215 | **9,423** | ratified 9,423 — row 206 (forge-8vfn.8.5.56): collision-free preflight-fix run ids, a crashed fix reads failed; +11, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,460 | **12,884** | ratified 12,884 — row 206 (forge-8vfn.8.5.56): brain-fix claims the run id through the dispatch seam, fix-agent checks the active-job derivation, a crashed fix reads failed; +52, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,909 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
@@ -68,7 +68,7 @@ operator-ratified new cap — never a silent raise.
 | `apps/forge` | 35 | 8,543 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **493** | **132,542** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **493** | **132,541** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -128,7 +128,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
 | packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 305 |
 | packages/knowledge/brain-lint-checks-graph.ts | knowledge | verbatim | 247 |
-| packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 501 |
+| packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 502 |
 | packages/knowledge/brain-lint-checks-truth.ts | knowledge | verbatim | 219 |
 | packages/knowledge/brain-lint-theme-paths.ts | knowledge | verbatim | 145 |
 | packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
@@ -211,7 +211,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-job-state.ts | knowledge | verbatim | 224 |
 | packages/knowledge/kb-drain-routes.ts | knowledge | verbatim | 409 |
 | packages/knowledge/kb-drain-model.ts | knowledge | verbatim | 553 |
-| packages/knowledge/kb-drain-store.ts | knowledge | verbatim | 484 |
+| packages/knowledge/kb-drain-store.ts | knowledge | verbatim | 483 |
 | packages/knowledge/routes.ts | knowledge | verbatim | 337 |
 | packages/library/routes.ts | library | verbatim | 495 |
 | packages/knowledge/kb-lint-summary.ts | knowledge | verbatim | 548 |
@@ -603,7 +603,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |
 | packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 682 |
 | packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 299 |
-| packages/projects/project-contract-scaffold.ts | projects | verbatim | 557 |
+| packages/projects/project-contract-scaffold.ts | projects | verbatim | 556 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 229 |
 | packages/projects/routes.ts | projects | verbatim | 389 |
 | apps/forge/cli-gate.ts | apps/forge | rewritten | 70 |
