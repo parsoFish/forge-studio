@@ -11,7 +11,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { isSafeRunId, resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
+import { isSafeRunId } from '@forge/kernel';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger } from '@forge/kernel';
 import { requireValidKbId } from './bridge-studio-kbs.ts';
@@ -31,14 +31,6 @@ import {
   runKbDrain,
   type KbDrainRunFixTurnFn,
 } from './bridge-studio-kb-drain.ts';
-
-/** M7-C U8 — `projectsRoot`/`logsRoot`, derived the SAME way `kb-drain-store.ts`'s `listKbRuns` does. */
-function readabilityRoots(forgeRoot: string): { projectsRoot: string; logsRoot: string } {
-  return {
-    projectsRoot: resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot))),
-    logsRoot: join(forgeRoot, '_logs'),
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -250,11 +242,11 @@ export async function handleKbDrainRun(
     if (status.state === 'running') tail?.ensureAgentRunTail?.(kbDrainCycleId(runId));
     else tail?.releaseAgentRunTail?.(kbDrainCycleId(runId));
     // M7-C U8 — never mint a link for a `draftSession` pointer that resolves
-    // nowhere. `readabilityRoots` reads config, so this arm is try/catched
+    // nowhere. this arm is try/catched
     // like its siblings (unlike its neighbours above, it had none before).
     try {
-      const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
-      const perFinding = withReadableDraftSessions(status.perFinding, sessionIsReadable, projectsRoot, logsRoot);
+      const logsRoot = join(ctx.forgeRoot, '_logs');
+      const perFinding = withReadableDraftSessions(status.perFinding, sessionIsReadable, logsRoot);
       sendJson(res, 200, { ok: true, runId, ...status, perFinding }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -398,8 +390,8 @@ export async function handleKbDrainStatus(
         return true;
       }
       // M7-C U8 — same drop as `handleKbDrainRun`, for the reattach path.
-      const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
-      const perFinding = withReadableDraftSessions(chosen.status.perFinding, sessionIsReadable, projectsRoot, logsRoot);
+      const logsRoot = join(ctx.forgeRoot, '_logs');
+      const perFinding = withReadableDraftSessions(chosen.status.perFinding, sessionIsReadable, logsRoot);
       sendJson(res, 200, { ok: true, runId: chosen.runId, ...chosen.status, perFinding }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

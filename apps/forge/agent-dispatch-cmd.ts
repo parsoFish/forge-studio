@@ -63,62 +63,46 @@ import type { FlowDefinition } from '@forge/contracts';
  * `status.json` turns out to be a symlink escaping that resolved directory
  * the write is refused (never followed).
  *
- * The containment root is `projectsRoot`, matching EXACTLY the boundary the
- * write ROUTE above enforces: `POST /api/studio/onboarding/start` is the only
- * real sender of `--session-dir` and it always creates `sessionDir` under
- * `<projectsRoot>/<project>/_onboarding/<sessionId>`, so a `projectsRoot`
- * guard is provably a no-op for every legitimate caller (measured, not
- * assumed). An earlier revision of this function used the WIDER `forgeRoot`
- * purely because the AT-D7 fixtures then built their session dirs under
- * `<forgeRoot>/_logs/…`; T2 ruled that the rule stands and the FIXTURE was
- * the incomplete thing (the R2-10 gate precedent, where a fail-closed
- * registry check broke a synthetic `tmpRoot()` and the fixture was fixed,
- * not the rule). `forgeRoot` would have accepted a `status.json` write
- * anywhere in the forge tree — `brain/`, `skills/`, `studio/`, `docs/`,
- * `.git/` — which no caller needs. AT-D7-4 pins the narrowing with a
- * `sessionDir` inside `forgeRoot` but outside `projectsRoot`, asserting on
- * the FILESYSTEM (the planted `status.json` keeps its pre-run phase), because
- * an exit code cannot distinguish "refused" from "wrote it and carried on".
+ * The containment root is the LOGS root: a session dir lives at
+ * `<logsRoot>/_sessions/<project>/<kindDir>/<sessionId>` (forge-8vfn.8.5.58),
+ * never inside the managed project's checkout, so a `logsRoot` guard is
+ * provably a no-op for every legitimate caller. `forgeRoot` would accept a
+ * `status.json` write anywhere in the forge tree — `brain/`, `skills/`,
+ * `studio/`, `docs/`, `.git/` — which no caller needs. AT-D7-4 pins the
+ * narrowing with a `sessionDir` inside `forgeRoot` but outside `logsRoot`,
+ * asserting on the FILESYSTEM (the planted `status.json` keeps its pre-run
+ * phase), because an exit code cannot distinguish "refused" from "wrote it
+ * and carried on".
  *
  * Both checks use the same realpath + `startsWith(root + sep)` boundary
  * shape used throughout this initiative (`resolveContainedProjectDir`,
- * `packages/projects/contract-stages.ts`; `resolveSafeSessionDir`, `cli/bridge-studio-
- * sessions.ts`) — not reused verbatim, because both of those build their
- * candidate path by joining validated components onto a root, whereas
- * `sessionDir` here arrives as a single, already-composed absolute path (the
- * CLI flag itself), with no components to reassemble. Best-effort: any
- * failure here is swallowed — it must never mask the dispatch's own
- * outcome/exit code.
+ * `packages/projects/contract-stages.ts`) — not reused verbatim, because
+ * those build their candidate path by joining validated components onto a
+ * root, whereas `sessionDir` here arrives as a single, already-composed
+ * absolute path (the CLI flag itself), with no components to reassemble.
+ * Best-effort: any failure here is swallowed — it must never mask the
+ * dispatch's own outcome/exit code.
  *
- * Bead forge-c6h / R4-17 round-4: the `resolveProjectsDir(...)` RE-DERIVATION
- * above is exactly the defect. The bridge creates `sessionDir` under its OWN
- * snapshot `ctx.projectsRoot` (resolved once at `startBridge`), then spawns
- * this dispatch as a detached subprocess with no shared memory — so this
- * function re-deriving the projects root from `forge.config.json`/env AT
- * WRITE TIME can silently disagree with the root the bridge actually used,
- * if the config changed (or a differently-configured process invokes this
- * CLI) in between. The fix is `trustedProjectsRoot`: when the CALLER (
- * `cmdAgentDispatch`, via its own `--projects-root` flag — see that
- * function's docstring for the accept/reject contract enforced BEFORE this
- * is ever called) hands in an already-validated root, it is honoured
- * VERBATIM here — no config read, no re-derivation, no room for the two to
- * drift apart. Omitting `--projects-root` leaves this byte-identical to
- * before (self-resolving via `resolveProjectsDir`), so every caller that
- * predates the flag (and every caller that simply doesn't pass it) is
- * unaffected.
+ * Bead forge-c6h / R4-17 round-4: re-deriving the root from
+ * `forge.config.json`/env AT WRITE TIME can silently disagree with the root
+ * the bridge actually used, so the bridge threads its own root through
+ * `--logs-root` and it is honoured VERBATIM here (`trustedLogsRoot`, already
+ * validated by `cmdAgentDispatch` — see that function's docstring). Omitting
+ * `--logs-root` falls back to `<forgeRoot>/_logs`, the same root the bridge
+ * derives.
  */
 export function writeSessionTerminalPhase(
   forgeRoot: string,
   sessionDir: string,
   phase: 'complete' | 'failed',
   /** Bead forge-c6h — an already argv-validated (absolute, existing
-   *  directory, contained within `forgeRoot`) projects root, forwarded from
-   *  `cmdAgentDispatch`'s own `--projects-root` flag. When present, this
+   *  directory, contained within `forgeRoot`) logs root, forwarded from
+   *  `cmdAgentDispatch`'s own `--logs-root` flag. When present, this
    *  becomes the containment root VERBATIM (still realpath-resolved here, to
    *  stay symmetric with `realSessionDir`'s own realpath resolution below —
    *  nothing else about the guard changes). When absent, behaviour is
    *  byte-identical to before this parameter existed. */
-  trustedProjectsRoot?: string,
+  trustedLogsRoot?: string,
   /** bead forge-poc (ON-7) — the real caught error's `.message` (or its
    *  `String(err)` fallback). Carried into the written status as `error`
    *  ALONGSIDE `phase` — the operator's whole complaint about a silently-
@@ -134,22 +118,16 @@ export function writeSessionTerminalPhase(
     if (!existsSync(sessionDir) || !statSync(sessionDir).isDirectory()) return;
     const realSessionDir = realpathSync(sessionDir);
 
-    let realProjectsRoot: string;
+    let realLogsRoot: string;
     try {
-      if (trustedProjectsRoot !== undefined) {
-        // Bead forge-c6h — honoured verbatim; no config re-derivation.
-        realProjectsRoot = realpathSync(trustedProjectsRoot);
-      } else {
-        // R4-17 round-3 BLOCKER (pin 5, item 2): forge-root-anchored config
-        // path, not loadConfig()'s cwd-relative default — see
-        // defaultConfigPath's docstring (packages/kernel/config.ts).
-        realProjectsRoot = realpathSync(resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot))));
-      }
+      // Bead forge-c6h — the bridge's own root is honoured verbatim; absent,
+      // the forge-root-anchored `<forgeRoot>/_logs` (never a cwd-relative one).
+      realLogsRoot = realpathSync(trustedLogsRoot ?? resolve(forgeRoot, '_logs'));
     } catch {
-      return; // no resolvable projects root at all — refuse rather than guess
+      return; // no resolvable logs root at all — refuse rather than guess
     }
-    if (realSessionDir !== realProjectsRoot && !realSessionDir.startsWith(realProjectsRoot + sep)) {
-      return; // sessionDir escapes projectsRoot — refuse the write
+    if (realSessionDir !== realLogsRoot && !realSessionDir.startsWith(realLogsRoot + sep)) {
+      return; // sessionDir escapes logsRoot — refuse the write
     }
 
     // SEC-04 (bd forge-ebj): route the WHOLE status.json path through the
@@ -158,15 +136,15 @@ export function writeSessionTerminalPhase(
     // `status.json` (a genuine, non-symlink directory entry sharing an inode
     // with an out-of-dir file; `realpathSync` returns it unchanged, so the
     // startsWith check passed and the write mutated the shared inode). `guarded*`
-    // adds the `nlink === 1` leaf check that closes it. `realProjectsRoot` is the
+    // adds the `nlink === 1` leaf check that closes it. `realLogsRoot` is the
     // TRUSTED root; the already-contained, realpath-resolved session directory
     // rides as its OWN `segments[]` elements (relative to that root), leaf
     // included — never folded into the root.
-    const relFromRoot = relative(realProjectsRoot, realSessionDir);
+    const relFromRoot = relative(realLogsRoot, realSessionDir);
     const dirSegments = relFromRoot === '' ? [] : relFromRoot.split(sep);
 
     let existing: Record<string, unknown> = {};
-    const rawExisting = guardedReadFile(realProjectsRoot, [...dirSegments, 'status.json']);
+    const rawExisting = guardedReadFile(realLogsRoot, [...dirSegments, 'status.json']);
     if (rawExisting !== null) {
       try {
         const parsed: unknown = JSON.parse(rawExisting);
@@ -186,7 +164,7 @@ export function writeSessionTerminalPhase(
     // is the reserved terminal `cancelled` and this late `complete`/`failed`
     // is refused — the session is never resurrected. Best-effort, never masks
     // the dispatch outcome/exit code.
-    guardedWriteSessionStatus(realProjectsRoot, dirSegments, {
+    guardedWriteSessionStatus(realLogsRoot, dirSegments, {
       ...existing,
       phase,
       ...(errorMessage !== undefined ? { error: errorMessage } : {}),
@@ -208,12 +186,12 @@ export type ParsedAgentDispatchArgs = {
   inputs: Record<string, string>;
   sessionDir?: string;
   costCeilingUsd?: number;
-  /** Bead forge-c6h — `--projects-root <abs>`, ABSENT (not present-as-
+  /** Bead forge-c6h — `--logs-root <abs>`, ABSENT (not present-as-
    *  `undefined`) when the flag was not given. Validated as I/O (existence,
    *  absoluteness, containment within `forgeRoot`) in `cmdAgentDispatch`, not
    *  here — mirrors `costCeilingUsd`'s and `project`'s own split (this
    *  parser stays pure; `cmdAgentDispatch` owns anything that touches disk). */
-  projectsRoot?: string;
+  logsRoot?: string;
 };
 
 /**
@@ -256,8 +234,8 @@ export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs 
 
   // Bead forge-c6h — optional; I/O validation (absolute? exists? contained
   // in forgeRoot?) happens in `cmdAgentDispatch`, not here — see
-  // `ParsedAgentDispatchArgs.projectsRoot`'s own doc.
-  const projectsRoot = flagValue('--projects-root');
+  // `ParsedAgentDispatchArgs.logsRoot`'s own doc.
+  const logsRoot = flagValue('--logs-root');
 
   // `--input k=v` may repeat; each is surfaced as prompt DATA (never instructions).
   const inputs: Record<string, string> = {};
@@ -289,13 +267,13 @@ export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs 
     inputs,
     ...(sessionDir !== undefined ? { sessionDir } : {}),
     ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
-    ...(projectsRoot !== undefined ? { projectsRoot } : {}),
+    ...(logsRoot !== undefined ? { logsRoot } : {}),
   };
 }
 
-/** Bead forge-c6h — the accept/reject contract for `--projects-root <abs>`,
+/** Bead forge-c6h — the accept/reject contract for `--logs-root <abs>`,
  *  the trusted-root argv flag that lets `writeSessionTerminalPhase` skip its
- *  own config re-derivation (see that function's docstring for the defect
+ *  own re-derivation (see that function's docstring for the defect
  *  this closes). Because the flag is itself argv/operator input, it gets its
  *  OWN validation rather than being trusted the moment it parses:
  *    1. must be an ABSOLUTE path — a relative one is rejected outright (no
@@ -303,7 +281,7 @@ export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs 
  *    2. must EXIST and be a DIRECTORY;
  *    3. must be CONTAINED within `forgeRoot` (the same realpath +
  *       `startsWith(root + sep)` boundary shape `writeSessionTerminalPhase`
- *       already uses for `sessionDir` vs `projectsRoot`) — an argv-supplied
+ *       already uses for `sessionDir` vs `logsRoot`) — an argv-supplied
  *       root pointing outside the forge tree is refused. This is the check
  *       that stops the flag itself from becoming a containment bypass: an
  *       operator (or a compromised spawner) could otherwise point
@@ -314,17 +292,17 @@ export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs 
  *  fallback would reintroduce the exact re-derivation-drift bug this flag
  *  closes.
  */
-function checkProjectsRootFlag(forgeRoot: string, rawProjectsRoot: string): { ok: true; realRoot: string } | { ok: false; reason: string } {
-  if (!isAbsolute(rawProjectsRoot)) {
+function checkLogsRootFlag(forgeRoot: string, rawLogsRoot: string): { ok: true; realRoot: string } | { ok: false; reason: string } {
+  if (!isAbsolute(rawLogsRoot)) {
     return { ok: false, reason: 'must be an absolute path' };
   }
-  if (!existsSync(rawProjectsRoot) || !statSync(rawProjectsRoot).isDirectory()) {
+  if (!existsSync(rawLogsRoot) || !statSync(rawLogsRoot).isDirectory()) {
     return { ok: false, reason: 'must exist and be a directory' };
   }
   let realRoot: string;
   let realForgeRoot: string;
   try {
-    realRoot = realpathSync(rawProjectsRoot);
+    realRoot = realpathSync(rawLogsRoot);
     realForgeRoot = realpathSync(resolve(forgeRoot));
   } catch {
     return { ok: false, reason: 'failed to resolve (realpath)' };
@@ -399,13 +377,13 @@ function loadFlowRosterBestEffort(forgeRoot: string): Array<Pick<FlowDefinition,
  * `kickoffCeilingUsd` (which itself wins over the agent's own declared
  * budget — see `packages/agents/run-agent.ts`).
  *
- * `--projects-root <abs>` (bead forge-c6h, optional) — validated via
- * `checkProjectsRootFlag` (absolute, exists, contained in `forgeRoot`)
+ * `--logs-root <abs>` (bead forge-c6h, optional) — validated via
+ * `checkLogsRootFlag` (absolute, exists, contained in `forgeRoot`)
  * immediately after parsing, BEFORE any project resolution or dispatch
  * attempt; a rejection exits 2 and never runs the dispatch at all (no
  * partial writes, no fallback to the derived root). When accepted, the
  * validated root is threaded to every `writeSessionTerminalPhase` call
- * below as `trustedProjectsRoot`, replacing that function's own config
+ * below as `trustedLogsRoot`, replacing that function's own config
  * re-derivation for THIS invocation. Omitted ⇒ byte-identical to before.
  *
  * `deps.dispatch` (R6-04, WI-2, round 4, optional) — test-injection only,
@@ -430,22 +408,22 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
     process.exit(2);
     return;
   }
-  const { slug, runId, project: projectArg, inputs, sessionDir, costCeilingUsd, projectsRoot: projectsRootArg } = parsed;
+  const { slug, runId, project: projectArg, inputs, sessionDir, costCeilingUsd, logsRoot: logsRootArg } = parsed;
 
-  // Bead forge-c6h — validate `--projects-root` at the boundary BEFORE any
+  // Bead forge-c6h — validate `--logs-root` at the boundary BEFORE any
   // project resolution or dispatch attempt: a rejection must fail the whole
   // dispatch loudly (exit 2, no partial work), never silently fall back to
   // `writeSessionTerminalPhase`'s own derived root (see that function's
   // header for exactly the drift a silent fallback would reintroduce).
-  let trustedProjectsRoot: string | undefined;
-  if (projectsRootArg !== undefined) {
-    const check = checkProjectsRootFlag(forgeRoot, projectsRootArg);
+  let trustedLogsRoot: string | undefined;
+  if (logsRootArg !== undefined) {
+    const check = checkLogsRootFlag(forgeRoot, logsRootArg);
     if (!check.ok) {
-      console.error(`forge agent dispatch: --projects-root "${projectsRootArg}" is invalid — ${check.reason}`);
+      console.error(`forge agent dispatch: --logs-root "${logsRootArg}" is invalid — ${check.reason}`);
       process.exit(2);
       return;
     }
-    trustedProjectsRoot = check.realRoot;
+    trustedLogsRoot = check.realRoot;
   }
 
   // CONTAINMENT (SEC-07): the untrusted `--project` value must ride as a guarded
@@ -478,7 +456,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
   // forge-8vfn.5.38 — a SIGTERM ran neither the success path below nor its
   // catch, so a run cut short ended with no terminus. See `packages/agents/dispatch-terminal.ts` (reached through the `@forge/agents` door).
   const writePhase = sessionDir
-    ? (o: 'failed', d: string) => writeSessionTerminalPhase(forgeRoot, sessionDir, o, trustedProjectsRoot, d)
+    ? (o: 'failed', d: string) => writeSessionTerminalPhase(forgeRoot, sessionDir, o, trustedLogsRoot, d)
     : undefined;
   const uninstallSignalGuard = installDispatchSignalGuard({ runId, slug, forgeRoot, ...(writePhase ? { writePhase } : {}) });
 
@@ -493,7 +471,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
       const band = await dispatchStandaloneBand({ slug, initiativeId: inputs.initiative, runId, forgeRoot }, deps?.band);
       if (!band.ok) { console.error(`forge agent dispatch: ${band.usage}`); process.exit(2); return; }
       console.log(band.summary);
-      if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete', trustedProjectsRoot);
+      if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete', trustedLogsRoot);
       return;
     }
 
@@ -545,7 +523,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
     }
     // D7 — the run ended (successfully, whether or not spawn was suppressed
     // under the dry-bridge seam): write the terminal phase now.
-    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete', trustedProjectsRoot);
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete', trustedLogsRoot);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`forge agent dispatch: ${msg}`);
@@ -558,7 +536,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
     // reason the sibling agent-dispatch.failed log event above already
     // carries it — a terminal status.json that only says "failed" forces the
     // operator back to stderr.log for the one thing they actually need.
-    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', trustedProjectsRoot, msg);
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', trustedLogsRoot, msg);
     process.exit(1);
   } finally {
     uninstallSignalGuard();

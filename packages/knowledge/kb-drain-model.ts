@@ -527,7 +527,6 @@ export function requireSessionStatusIo<T>(fn: T | undefined, caller: string): T 
  *  argument-for-argument. REQUIRED everywhere in this file, never optional
  *  — see `design.md` ("The session-readability port"). */
 export type SessionReadabilityProbe = (args: {
-  projectsRoot: string;
   logsRoot: string;
   kind: string;
   sessionId: string;
@@ -542,13 +541,12 @@ export const KB_CLEANUP_SESSION_KIND = 'kb-cleanup';
 export function withReadableDraftSessions(
   perFinding: readonly KbDrainPerFinding[],
   probe: SessionReadabilityProbe,
-  projectsRoot: string,
   logsRoot: string,
 ): KbDrainPerFinding[] {
   return perFinding.map((f) => {
     const d = f.draftSession;
     if (d === undefined) return f;
-    if (probe({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: d.id, project: d.project })) return f;
+    if (probe({ logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: d.id, project: d.project })) return f;
     const { draftSession: _unreadable, ...rest } = f;
     return rest;
   });

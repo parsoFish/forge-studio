@@ -91,7 +91,7 @@ import { makeHeartbeatWriter } from './heartbeat.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
 import { sessionSpentUsd, turnBudgetUsd } from './turn-budget.ts';
-import { createLogger, resolveGuardedPath } from '@forge/kernel';
+import { createLogger, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents';
 import type { SessionKindDescriptor, TurnSpecPhase } from './studio/session-kinds.ts';
 import {
@@ -119,12 +119,14 @@ export async function runInteractiveTurn(
   }
 
   // -------------------------------------------------------------------------
-  // SEC-04 containment preamble — BEFORE any read/write. `kindDir` and
+  // SEC-04 containment preamble — BEFORE any read/write. `project`, `kindDir` and
   // `sessionId` each ride as their OWN segment against the trusted
-  // `projectRoot` root; never folded into it (the guard's own CONTRACT).
+  // `logsRoot` root; never folded into it (the guard's own CONTRACT).
   // -------------------------------------------------------------------------
-  const dirSegments = [turnSpec.kindDir, ctx.sessionId];
-  const guarded = resolveGuardedPath(ctx.projectRoot, dirSegments);
+  const forgeRoot = ctx.forgeRoot ?? resolve('.');
+  const logsRoot = ctx.logsRoot ?? resolve(forgeRoot, '_logs');
+  const dirSegments = sessionDirSegments(ctx.project, turnSpec.kindDir, ctx.sessionId);
+  const guarded = resolveGuardedPath(logsRoot, dirSegments);
   if (!guarded.ok) {
     throw new Error(
       `runInteractiveTurn: session dir failed containment for session kind "${descriptor.id}" / session "${ctx.sessionId}" (${guarded.reason}). Has the session been started?`,
@@ -135,7 +137,7 @@ export async function runInteractiveTurn(
   // SEC-04 leaf: route the status.json READ through the guarded sibling
   // (leaf included) so a symlinked/hardlinked status.json inside the real,
   // contained session dir is refused too.
-  const status = guardedReadSessionStatus<InteractiveTurnStatus>(ctx.projectRoot, dirSegments);
+  const status = guardedReadSessionStatus<InteractiveTurnStatus>(logsRoot, dirSegments);
   if (!status) {
     throw new Error(
       `runInteractiveTurn: no status.json at ${sessionDir} for session kind "${descriptor.id}". Has the session been started?`,
@@ -154,8 +156,6 @@ export async function runInteractiveTurn(
     );
   }
 
-  const forgeRoot = ctx.forgeRoot ?? resolve('.');
-  const logsRoot = ctx.logsRoot ?? resolve(forgeRoot, '_logs');
   // The event-log DIRECTORY is `_<descriptor.id>-<sessionId>` — the convention
   // every consumer of an interactive session's live log already derives
   // independently, and which the spine must therefore match rather than invent:
@@ -238,7 +238,7 @@ export async function runInteractiveTurn(
 
     case 'agent': { // factored so a same-turn fall-through hop (below) reuses the primary call's turn-cost/unpriced emitters.
       const runAgentPhase = (row: TurnSpecPhase, st: InteractiveTurnStatus) => runAgentStyleStep({
-        descriptor, turnSpec, phaseRow: row, ctx, sessionDir, dirSegments, status: st,
+        descriptor, turnSpec, phaseRow: row, ctx, logsRoot, sessionDir, dirSegments, status: st,
         queryFn: ctx.queryFn, logger, onToolUse: sink.onToolUse, onHeartbeat, onText, onThinking,
         // Row 193b — the same per-call cap every `runKindTurn` kind gets (`turn-budget.ts`).
         turnBudgetUsd: () => turnBudgetUsd({
@@ -274,6 +274,7 @@ export async function runInteractiveTurn(
         turnSpec,
         phaseRow,
         ctx,
+        logsRoot,
         sessionDir,
         dirSegments,
         status,

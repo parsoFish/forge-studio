@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
-import type { EventLogger } from '@forge/kernel';
+import type { EventLogger, SessionHome } from '@forge/kernel';
 import { hooksSpreadForAgent } from './kind-turn.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -349,6 +349,8 @@ function buildManifestsSummary(manifestsDir: string, parseManifest: ArchitectMan
  */
 export async function runCompletenessCriticStep(args: {
   input: RunArchitectTurnInput;
+  /** Where the session's `answers.json` lives (`<logsRoot>/_sessions/<project>/…`). */
+  home: SessionHome;
   paths: ReturnType<typeof sessionPaths>;
   status: ArchitectStatus;
   logger: EventLogger;
@@ -364,7 +366,7 @@ export async function runCompletenessCriticStep(args: {
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
 }): Promise<CompletenessCriticStatus> {
-  const { input, paths, status, logger, queryFn, turnBudgetUsd, round, onToolUse, onHeartbeat, onText } = args;
+  const { input, home, paths, status, logger, queryFn, turnBudgetUsd, round, onToolUse, onHeartbeat, onText } = args;
   const initiativeId = `architect-session-${input.sessionId}`;
 
   const critStart = logger.emit({
@@ -382,7 +384,7 @@ export async function runCompletenessCriticStep(args: {
   });
 
   const interviewSummary = renderInterviewSummary(
-    readInterview(input.projectRoot, input.sessionId),
+    readInterview(home, input.sessionId),
     '(no interview — the operator drafted directly)',
   );
   const planMarkdown = existsSync(paths.planPath) ? readFileSync(paths.planPath, 'utf8') : null;

@@ -9,10 +9,15 @@
  */
 import type { SessionStatusIoPort } from './kb-drain-model.ts';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   resolveGuardedPath,
+  guardedReadDir,
+  guardedReadFile,
+  sessionDirSegments,
+  sessionKindSegments,
+  SESSIONS_DIRNAME,
   defaultConfigPath,
   loadConfig,
   resolveProjectsDir,
@@ -25,6 +30,7 @@ import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
 import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession, requireValidKbId } from './bridge-studio-kbs.ts';
+import { KB_CLEANUP_KIND_DIR } from './kb-drain-store.ts';
 
 // ---------------------------------------------------------------------------
 // Guidance size cap
@@ -296,7 +302,7 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
       // is no such import anywhere in the package — the guarded writer arrives
       // as a port the assembly supplies, so the KB surface has ZERO edges to
       // sessions rather than one shared one.
-      const sessionId = mintProjectBrainSeedingSession(projectsRoot, sessionProject, id, binding, sessionStatusIo.write);
+      const sessionId = mintProjectBrainSeedingSession(projectsRoot, ctx.logsRoot, sessionProject, id, binding, sessionStatusIo.write);
 
       // W7-B2 (knowledge-23): `project` (the seeding session's anchor) rides
       // along so the create form can LINK the operator to the session it
@@ -377,29 +383,32 @@ export async function handleKbDelete(
       // sessions are only REPORTED (their kb_id names a dead KB now), never
       // swept along with the project's own state.
       const projectsRootForDelete = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      const anchorGuard = resolveGuardedPath(projectsRootForDelete, [`${KB_SEEDING_ANCHOR_PREFIX}${id}`]);
+      // The seeding session's cwd anchor under projects/ (an empty dot-dir) and
+      // its session dirs under the logs root (forge-8vfn.8.5.58).
       let removedSessionAnchor = false;
-      if (anchorGuard.ok && anchorGuard.exists) {
-        rmSync(anchorGuard.realPath, { recursive: true, force: true });
-        removedSessionAnchor = true;
+      for (const [root, segs] of [
+        [projectsRootForDelete, [`${KB_SEEDING_ANCHOR_PREFIX}${id}`]],
+        [ctx.logsRoot, [SESSIONS_DIRNAME, `${KB_SEEDING_ANCHOR_PREFIX}${id}`]],
+      ] as const) {
+        const anchorGuard = resolveGuardedPath(root, segs);
+        if (anchorGuard.ok && anchorGuard.exists) {
+          rmSync(anchorGuard.realPath, { recursive: true, force: true });
+          removedSessionAnchor = true;
+        }
       }
       const orphanedSessions: string[] = [];
-      try {
-        for (const projName of readdirSync(projectsRootForDelete)) {
-          if (projName.startsWith('.')) continue; // dot-anchors handled above
-          const cleanupDir = join(projectsRootForDelete, projName, '_kb-cleanup');
-          if (!existsSync(cleanupDir)) continue;
-          for (const sid of readdirSync(cleanupDir)) {
-            try {
-              const st = JSON.parse(readFileSync(join(cleanupDir, sid, 'status.json'), 'utf8')) as { kb_id?: unknown };
-              if (st.kb_id === id) orphanedSessions.push(`${projName}/_kb-cleanup/${sid}`);
-            } catch {
-              // unreadable session — not attributable to this KB
-            }
+      for (const projName of guardedReadDir(ctx.logsRoot, [SESSIONS_DIRNAME]) ?? []) {
+        if (projName.startsWith('.')) continue; // dot-anchors handled above
+        for (const sid of guardedReadDir(ctx.logsRoot, sessionKindSegments(projName, KB_CLEANUP_KIND_DIR)) ?? []) {
+          const raw = guardedReadFile(ctx.logsRoot, [...sessionDirSegments(projName, KB_CLEANUP_KIND_DIR, sid), 'status.json']);
+          if (raw === null) continue; // unreadable session - not attributable to this KB
+          try {
+            const st = JSON.parse(raw) as { kb_id?: unknown };
+            if (st.kb_id === id) orphanedSessions.push(`${projName}/${KB_CLEANUP_KIND_DIR}/${sid}`);
+          } catch {
+            // malformed status - not attributable to this KB
           }
         }
-      } catch {
-        // best-effort reporting only — the delete itself already succeeded
       }
       sendJson(res, 200, { ok: true, id, removedSessionAnchor, orphanedSessions }, origin);
     } catch (err) {

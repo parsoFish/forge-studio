@@ -27,9 +27,8 @@
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
 
-import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
+import { deriveSessionCostUsd, guardedReadDir, resolveGuardedPath, sessionDirSegments, sessionKindSegments, SESSIONS_DIRNAME } from '@forge/kernel';
 
 import {
   deriveStandaloneStateFromEvents,
@@ -441,7 +440,7 @@ function readSessionLogFacts(deps: AgentHistoryDeps, logsRoot: string, kind: str
 }
 
 /**
- * Guarded read of `<projectsRoot>/<project>/<kindDirName>/<sessionId>/status.json`
+ * Guarded read of `<logsRoot>/_sessions/<project>/<kindDirName>/<sessionId>/status.json`
  * (R6-06 round 6 — replaces the former direct `readSessionStatus(join(kindDir,
  * sessionId))` call, a plain `existsSync`/`readFileSync` with zero identity
  * or nlink check).
@@ -460,14 +459,13 @@ function readSessionLogFacts(deps: AgentHistoryDeps, logsRoot: string, kind: str
  * names) before being wired in here; see the task report for the executed
  * results.
  *
- * `root` (`projectsRoot`) is a fixed, config-derived constant
- * (`resolveProjectsDir`), never request-derived — satisfying
+ * `root` (`logsRoot`) is a fixed, bridge-derived constant, never request-derived — satisfying
  * `resolveGuardedPath`'s own root-trust contract. A rejected guard, an
  * absent leaf, and a malformed/non-object JSON body all collapse into the
  * SAME `null` — indistinguishable outcomes, per the no-oracle rule this
  * route's other two collectors already follow. */
-function readGuardedSessionStatus(projectsRoot: string, project: string, kindDirName: string, sessionId: string): { phase?: unknown } | null {
-  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
+function readGuardedSessionStatus(logsRoot: string, project: string, kindDirName: string, sessionId: string): { phase?: unknown } | null {
+  const guarded = resolveGuardedPath(logsRoot, [...sessionDirSegments(project, kindDirName, sessionId), 'status.json']);
   if (!guarded.ok || !guarded.exists) return null;
   try {
     const parsed: unknown = JSON.parse(readFileSync(guarded.realPath, 'utf8'));
@@ -498,28 +496,16 @@ export function collectSessionRows(deps: AgentHistoryDeps, ctx: { forgeRoot: str
   const matching = deps.loadSessionKinds(ctx.forgeRoot).filter((d) => d.agent === slug);
   if (matching.length === 0) return [];
 
-  let projects: string[];
-  try {
-    projects = existsSync(ctx.projectsRoot) ? readdirSync(ctx.projectsRoot) : [];
-  } catch {
-    projects = [];
-  }
+  const projects = guardedReadDir(ctx.logsRoot, [SESSIONS_DIRNAME]) ?? [];
 
   const rows: AgentHistoryRow[] = [];
   for (const descriptor of matching) {
     const kindDirName = `_${descriptor.id}`;
     for (const project of projects) {
-      const kindDir = join(ctx.projectsRoot, project, kindDirName);
-      if (!existsSync(kindDir)) continue;
-      let sessionIds: string[];
-      try {
-        sessionIds = readdirSync(kindDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-      } catch {
-        continue;
-      }
+      const sessionIds = guardedReadDir(ctx.logsRoot, sessionKindSegments(project, kindDirName)) ?? [];
       for (const sessionId of sessionIds) {
         if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors listInstructionsSessions
-        const status = readGuardedSessionStatus(ctx.projectsRoot, project, kindDirName, sessionId);
+        const status = readGuardedSessionStatus(ctx.logsRoot, project, kindDirName, sessionId);
         if (!status || typeof status.phase !== 'string') continue; // unreadable/missing/escaping/hardlinked phase -> not a real session row
         const template = descriptor.legacyRoutes[0];
         const href = template

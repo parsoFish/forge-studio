@@ -6,7 +6,7 @@
  * `<projectRepoPath>/_architect/<session-id>/` for the operator to review."
  *
  * Contracts honoured:
- *  - C12  — PLAN.md location is `<projectRoot>/_architect/<session-id>/PLAN.md`.
+ *  - C12  — PLAN.md location is `<logsRoot>/_sessions/<project>/_architect/<session-id>/PLAN.md`.
  *  - C19  — aggregate footprint is INFORMATIONAL ONLY (no gate, no threshold,
  *           no auto-escalation). The renderer pins this in the section title
  *           and body language; the test suite asserts the vocabulary.
@@ -32,7 +32,7 @@
 import { mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { guardedWriteFile, resolveGuardedPath, PathGuardContainmentError, type PathGuardOk } from '@forge/kernel';
+import { guardedWriteFile, resolveGuardedPath, sessionDirSegments, sessionKindSegments, PathGuardContainmentError, ARCHITECT_KIND_DIR, type PathGuardOk, type SessionHome } from '@forge/kernel';
 import { renderPlanHtml } from './architect-plan-html.ts';
 
 
@@ -275,22 +275,22 @@ export function renderPlanDoc(session: ArchitectSession): string {
 /**
  * Write PLAN.md + sibling PLAN.html for a session. Returns the absolute path
  * to the written `PLAN.md`. Creates the parent directory as needed.
- * C12: location is `<projectRoot>/_architect/<sid>/`.
+ * C12: location is `<logsRoot>/_sessions/<project>/_architect/<sid>/` (never in the ground).
  *
  * Two artefacts per session:
  *  - `PLAN.md`   — operator's annotation surface (parsed by the CLI)
  *  - `PLAN.html` — read-only rich viewer (cwc Amendment 2)
  */
-export function writePlanDoc(session: ArchitectSession, projectRoot: string): string {
+export function writePlanDoc(session: ArchitectSession, home: SessionHome): string {
   // SEC-04 leaf: `session.session_id` is request-derived — contain it (and the
-  // `_architect` kind-dir + each leaf) as their OWN guarded segments against the
-  // TRUSTED `projectRoot`, NEVER folded into the root (the root-folding bypass
+  // project, the `_architect` kind-dir + each leaf) as their OWN guarded segments
+  // against the TRUSTED `logsRoot`, NEVER folded into the root (the root-folding bypass
   // the guard cannot self-detect). guardedWriteFile mkdirs the parent and routes
   // the WHOLE opened path (leaf included) through the guard, so a symlinked
   // PLAN.md / PLAN.html leaf cannot escape the session dir.
   const planPath = guardedWriteFile(
-    projectRoot,
-    ['_architect', session.session_id, 'PLAN.md'],
+    home.logsRoot,
+    [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, session.session_id), 'PLAN.md'],
     renderPlanDoc(session),
   );
   if (planPath === null) {
@@ -301,8 +301,8 @@ export function writePlanDoc(session: ArchitectSession, projectRoot: string): st
   // Sibling rich viewer (cwc Amendment 2). Operator opens in browser; never
   // read back as input — PLAN.md is the only parse target.
   const htmlPath = guardedWriteFile(
-    projectRoot,
-    ['_architect', session.session_id, 'PLAN.html'],
+    home.logsRoot,
+    [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, session.session_id), 'PLAN.html'],
     renderPlanHtml(session),
   );
   if (htmlPath === null) {
@@ -328,12 +328,14 @@ export type SessionPaths = {
   manifestsDir: string;
 };
 
-const ARCHITECT_DIRNAME = '_architect';
-const ARCHIVED_DIRNAME = '_archived';
+/** The architect session kind's on-disk kind dir, under `<logsRoot>/_sessions/<project>/`. */
+export { ARCHITECT_KIND_DIR };
+/** Archived (rejected) sessions move under `<kindDir>/_archived/<sessionId>`. */
+export const ARCHIVED_DIRNAME = '_archived';
 
 /**
  * `sessionId` is request-derived — contain it as its OWN guarded segment
- * against the TRUSTED `projectRoot`, the same ruling-102 shape
+ * against the TRUSTED `logsRoot`, the same ruling-102 shape
  * `archiveSessionDir` below already carries, NEVER a bare lexical
  * `resolve()`. A bare `resolve()` never touches the filesystem and never
  * refuses anything: it silently returns a path outside the intended session
@@ -344,10 +346,10 @@ const ARCHIVED_DIRNAME = '_archived';
  * `feedback.md` are fixed literal leaves, safe to `join()` onto the
  * already-guarded, already-identity-verified `sessionDir`.
  */
-export function sessionPaths(projectRoot: string, sessionId: string): SessionPaths {
+export function sessionPaths(home: SessionHome, sessionId: string): SessionPaths {
   const guarded = guardedOrRefuse(
-    projectRoot,
-    [ARCHITECT_DIRNAME, sessionId],
+    home.logsRoot,
+    sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId),
     'sessionPaths: refusing to resolve session dir',
   );
   const sessionDir = guarded.realPath;
@@ -376,25 +378,26 @@ function guardedOrRefuse(root: string, segments: readonly string[], context: str
 }
 
 /**
- * Move a session dir to `_architect/_archived/<session-id>/`. Used by the
+ * Move a session dir to `<logsRoot>/_sessions/<project>/_architect/_archived/<session-id>/`. Used by the
  * CLI on `reject`. Returns the archived path.
  *
  * `sessionId` rides as its OWN guarded segment, for the source AND the target.
  * Containment a function inherits from its callers is not containment it can
  * rely on: this one is exported, and the next caller need not be a runner.
  */
-export function archiveSessionDir(projectRoot: string, sessionId: string): string {
-  const source = guardedOrRefuse(projectRoot, [ARCHITECT_DIRNAME, sessionId], 'archiveSessionDir: refusing to archive');
+export function archiveSessionDir(home: SessionHome, sessionId: string): string {
+  const source = guardedOrRefuse(home.logsRoot, sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId), 'archiveSessionDir: refusing to archive');
   if (!source.exists) throw new Error(`archiveSessionDir: session dir not found: ${sessionId}`);
-  const archived = guardedOrRefuse(projectRoot, [ARCHITECT_DIRNAME, ARCHIVED_DIRNAME], 'archiveSessionDir: refusing to archive');
+  const archivedSegs = [...sessionKindSegments(home.project, ARCHITECT_KIND_DIR), ARCHIVED_DIRNAME];
+  const archived = guardedOrRefuse(home.logsRoot, archivedSegs, 'archiveSessionDir: refusing to archive');
   if (!archived.exists) mkdirSync(archived.realPath, { recursive: true });
-  // The target walks from `projectRoot` with ALL THREE segments, not from
+  // The target walks from `logsRoot` with ALL segments, not from
   // `archived.realPath`. A derived root is trusted IMPLICITLY — the guard runs
   // no identity check on its own root — so re-entering it would leave `_archived`
   // verified before the mkdir and unverified after it, and a symlink planted in
   // that window would be adopted as the trusted root. Re-walking is what the
   // guard's own docstring calls the defect this repo has closed five times.
-  const target = guardedOrRefuse(projectRoot, [ARCHITECT_DIRNAME, ARCHIVED_DIRNAME, sessionId], 'archiveSessionDir: refusing to archive');
+  const target = guardedOrRefuse(home.logsRoot, [...archivedSegs, sessionId], 'archiveSessionDir: refusing to archive');
   if (target.exists) throw new Error(`archiveSessionDir: target already exists: ${sessionId}`);
   renameSync(source.realPath, target.realPath);
   return target.realPath;

@@ -20,11 +20,11 @@ import { readFileSync } from 'node:fs';
 
 
 import { allowedOrigin, sendJson } from '@forge/kernel';
-import { guardedFile, guardedReadFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedFile, guardedReadFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import { readAgentInstructionsFile } from '@forge/projects';
 
-import { DRAFT_FILENAME, type InstructionsStatus } from './kinds/instructions.ts';
+import { DRAFT_FILENAME, INSTRUCTIONS_KIND_DIR, type InstructionsStatus } from './kinds/instructions.ts';
 import { listInstructionsSessions } from './bridge-studio-session-index.ts';
 import { guardedWriteSessionStatus, type InterviewQuestion } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
@@ -62,7 +62,7 @@ export async function handleInstructionsRoutes(
 
   // GET /api/instructions/sessions — list every session with its current state.
   if (method === 'GET' && url === '/api/instructions/sessions') {
-    const statuses = listInstructionsSessions(ctx.projectsRoot);
+    const statuses = listInstructionsSessions(ctx.logsRoot);
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
@@ -77,13 +77,13 @@ export async function handleInstructionsRoutes(
       // SEC-04 (bd forge-ebj) — route each leaf through the guard (the dir was
       // already contained, but the `questions.json`/draft leaves were then
       // raw-appended and would follow a symlinked leaf).
-      const dirSegs = [s.project, '_instructions', s.session_id];
+      const dirSegs = sessionDirSegments(s.project, INSTRUCTIONS_KIND_DIR, s.session_id);
       const questionsRaw =
         s.phase === 'awaiting-answers'
-          ? guardedReadFile(ctx.projectsRoot, [...dirSegs, 'questions.json'])
+          ? guardedReadFile(ctx.logsRoot, [...dirSegs, 'questions.json'])
           : null;
       const questions = questionsRaw !== null ? ctx.safeParseJson<InterviewQuestion[]>(questionsRaw) : null;
-      const draftUrl = guardedFile(ctx.projectsRoot, [...dirSegs, DRAFT_FILENAME], 'read') !== null
+      const draftUrl = guardedFile(ctx.logsRoot, [...dirSegs, DRAFT_FILENAME], 'read') !== null
         ? `/api/instructions/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/${encodeURIComponent(DRAFT_FILENAME)}`
         : null;
 
@@ -131,7 +131,7 @@ export async function handleInstructionsRoutes(
     // SEC-04 — same self-defeating `startsWith(base)` defect as the architect
     // /file route; resolve the whole path (project, `_instructions`, sessionId,
     // filename) through the per-segment identity guard instead.
-    const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_instructions', sessionId, ...filename.split('/')]);
+    const guarded = resolveGuardedPath(ctx.logsRoot, [...sessionDirSegments(project, INSTRUCTIONS_KIND_DIR, sessionId), ...filename.split('/')]);
     if (!guarded.ok) {
       // A containment escape — rejected BEFORE any existence probe, so
       // out-of-root existence is never leaked.
@@ -210,14 +210,14 @@ export async function handleInstructionsRoutes(
       const sessionId = newArchitectSessionId();
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write: a traversal
       // `project` must create no out-of-root `_instructions` session.
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, INSTRUCTIONS_KIND_DIR, sessionId);
       if (!dir) {
         sendJson(res, 400, { error: 'invalid project' }, origin);
         return true;
       }
       // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf
       // sibling (leaf included; mkdirs the parent, refuses a symlinked leaf).
-      if (guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, [body.project, '_instructions', sessionId], {
+      if (guardedWriteSessionStatus<InstructionsStatus>(ctx.logsRoot, sessionDirSegments(body.project, INSTRUCTIONS_KIND_DIR, sessionId), {
         session_id: sessionId,
         project: body.project,
         project_repo_path: repoPath,

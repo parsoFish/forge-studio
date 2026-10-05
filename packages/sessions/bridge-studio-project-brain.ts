@@ -16,7 +16,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
 import { allowedOrigin, sendJson, sendIfDispatchRefused } from '@forge/kernel';
-import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
+import { PROJECT_BRAIN_KIND_DIR } from '@forge/knowledge';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
@@ -106,7 +107,7 @@ export async function handleProjectBrainRoutes(
   // provides notes; POST /api/demo-builder/brief then kicks off the agent.
   // R1-3b — project-brain builder ops (analyze → review → commit).
   if (method === 'GET' && url === '/api/project-brain/sessions') {
-    const statuses = listProjectBrainSessions(ctx.projectsRoot);
+    const statuses = listProjectBrainSessions(ctx.logsRoot);
     for (const s of statuses) {
       if (!LEGACY_SESSION_TERMINAL_PHASES['project-brain'].has(s.phase)) ctx.ensureSessionTail(ctx.spawnAgentSpecs['project-brain'].logPrefix, s.session_id);
     }
@@ -137,12 +138,12 @@ export async function handleProjectBrainRoutes(
       // project/sessionId resolves to null and discloses no out-of-root theme.
       const project = decodeURIComponent(themesMatch[1]);
       const sessionId = decodeURIComponent(themesMatch[2]);
-      const dir = guardedSessionDir(ctx.projectsRoot, project, '_project-brain', sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, project, PROJECT_BRAIN_KIND_DIR, sessionId);
       if (!dir) {
         sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
         return true;
       }
-      sendJson(res, 200, { themes: readStagedThemes(ctx.projectsRoot, [project, '_project-brain', sessionId]) }, origin);
+      sendJson(res, 200, { themes: readStagedThemes(ctx.logsRoot, sessionDirSegments(project, PROJECT_BRAIN_KIND_DIR, sessionId)) }, origin);
       return true;
     }
   }
@@ -190,13 +191,13 @@ export async function handleProjectBrainRoutes(
       }
       const sessionId = newArchitectSessionId();
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write.
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, PROJECT_BRAIN_KIND_DIR, sessionId);
       if (!dir) {
         sendJson(res, 400, { error: 'invalid project' }, origin);
         return true;
       }
       // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf sibling.
-      if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, [body.project, '_project-brain', sessionId], {
+      if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, sessionDirSegments(body.project, PROJECT_BRAIN_KIND_DIR, sessionId), {
         session_id: sessionId, project: body.project, project_repo_path: repoPath,
         phase: 'briefing', prompt: '', updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
@@ -215,10 +216,10 @@ export async function handleProjectBrainRoutes(
       if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
       // SEC-04 (bd forge-ebj) — guard the dir, and route each leaf (prompt.md,
       // status.json) through the guarded leaf siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_project-brain', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', body.sessionId);
+      const dirSegs = sessionDirSegments(body.project, PROJECT_BRAIN_KIND_DIR, body.sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, PROJECT_BRAIN_KIND_DIR, body.sessionId);
       if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
-      const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs);
+      const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       // Row 206 (forge-8vfn.8.5.56) — this arm spawns only from the
       // `briefing` phase, so a stale/duplicate brief press after the
@@ -235,8 +236,8 @@ export async function handleProjectBrainRoutes(
       // Row 206 part (a) — claim BEFORE either write below.
       ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', body.sessionId);
       if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], body.brief ?? '') === null ||
-        guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs, { ...status, phase: 'analyzing', prompt: body.brief ?? '' }) === null
+        guardedWriteFile(ctx.logsRoot, [...dirSegs, 'prompt.md'], body.brief ?? '') === null ||
+        guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs, { ...status, phase: 'analyzing', prompt: body.brief ?? '' }) === null
       ) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
@@ -256,10 +257,10 @@ export async function handleProjectBrainRoutes(
       if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
       // SEC-04 (bd forge-ebj) — guard the dir, and route status.json read+write
       // through the guarded leaf siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_project-brain', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', body.sessionId);
+      const dirSegs = sessionDirSegments(body.project, PROJECT_BRAIN_KIND_DIR, body.sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, PROJECT_BRAIN_KIND_DIR, body.sessionId);
       if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
-      const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs);
+      const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       // Row 206 — ONLY `approve` spawns (the line below, inside `if
       // (approve)`), so only `approve` carries row 206's exposure: a
@@ -278,7 +279,7 @@ export async function handleProjectBrainRoutes(
       // Row 206 part (a) — claim BEFORE the write, but only on the `approve`
       // path: `abandon` never spawns, so it has no claim to protect.
       if (approve) ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', body.sessionId);
-      if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.projectsRoot, dirSegs, { ...status, phase: approve ? 'committing' : 'abandoned' }) === null) {
+      if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs, { ...status, phase: approve ? 'committing' : 'abandoned' }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
       }
@@ -298,20 +299,20 @@ export async function handleProjectBrainRoutes(
  *  DIRECTORY, but the `themes/` subdir and each `<name>.md` LEAF were then
  *  raw-appended and `readdir`/`readFileSync`'d — a symlinked `themes/` subdir
  *  (git-plantable inside a project repo) OR a symlinked theme leaf was followed
- *  out of root. Takes the TRUSTED `projectsRoot` plus the request-derived
- *  `dirSegments` (project / `_project-brain` / sessionId) as their OWN
+ *  out of root. Takes the TRUSTED `logsRoot` plus the request-derived
+ *  `dirSegments` (`_sessions` / project / `_project-brain` / sessionId) as their OWN
  *  elements, and routes the `themes/` readdir + every leaf read through the
  *  per-segment identity guard (leaf included). */
 function readStagedThemes(
-  projectsRoot: string,
+  logsRoot: string,
   dirSegments: readonly string[],
 ): Array<{ name: string; content: string }> {
   const themeSegs = [...dirSegments, 'themes'];
-  const names = guardedReadDir(projectsRoot, themeSegs);
+  const names = guardedReadDir(logsRoot, themeSegs);
   if (names === null) return [];
   const out: Array<{ name: string; content: string }> = [];
   for (const name of names.filter((f) => f.endsWith('.md')).sort()) {
-    const content = guardedReadFile(projectsRoot, [...themeSegs, name]);
+    const content = guardedReadFile(logsRoot, [...themeSegs, name]);
     if (content !== null) out.push({ name, content });
   }
   return out;

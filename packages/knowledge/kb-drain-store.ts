@@ -12,11 +12,11 @@
  */
 import { requireSessionStatusIo } from './kb-drain-model.ts';
 import type { GuardedWriteSessionStatusFn, SessionStatusIoPort } from './kb-drain-model.ts';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile, guardedReadDir, createLogger } from '@forge/kernel';
+import { guardedWriteFile, guardedReadDir, guardedReadFile, createLogger, sessionDirSegments, sessionKindSegments } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors } from './bridge-studio-kbs.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
@@ -207,19 +207,15 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
       // fall through to the dot anchor
     }
   }
-  const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
-  const cleanupDir = join(projectsRoot, anchor, '_kb-cleanup');
-  let sids: string[] = [];
-  try {
-    sids = existsSync(cleanupDir) ? readdirSync(cleanupDir) : [];
-  } catch {
-    sids = [];
-  }
+  const logsRoot = join(forgeRoot, '_logs');
+  const sids = guardedReadDir(logsRoot, sessionKindSegments(anchor, KB_CLEANUP_KIND_DIR)) ?? [];
   for (const sid of sids) {
     let phase = 'unknown';
     let sessionKbId: string | null = null;
     try {
-      const parsed = JSON.parse(readFileSync(join(cleanupDir, sid, 'status.json'), 'utf8')) as { phase?: unknown; kb_id?: unknown };
+      const raw = guardedReadFile(logsRoot, [...sessionDirSegments(anchor, KB_CLEANUP_KIND_DIR, sid), 'status.json']);
+      if (raw === null) continue;
+      const parsed = JSON.parse(raw) as { phase?: unknown; kb_id?: unknown };
       if (typeof parsed.phase === 'string') phase = parsed.phase;
       if (typeof parsed.kb_id === 'string') sessionKbId = parsed.kb_id;
     } catch {
@@ -233,7 +229,7 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
     // resolves nowhere. Same predicate, same reason, as `withReadableDraftSessions`.
     // logsRoot inlined: the consolidate loop's own local went with it into
     // consolidateRunIdsFor (kb-job-state.ts); no other user in this function.
-    if (!sessionIsReadable({ projectsRoot, logsRoot: join(forgeRoot, '_logs'), kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
+    if (!sessionIsReadable({ logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
     rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
   }
 
@@ -249,6 +245,10 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
  *  class as `DRY_BRIDGE_LOG_BUCKET` (packages/kernel/dry-bridge.ts): no
  *  natural per-cycle id exists for a reconcile that runs once at process
  *  start, across every project. */
+/** The kb-cleanup session kind's on-disk kind dir (`studio/session-kinds.yaml`
+ *  `turnSpec.kindDir`) under `<logsRoot>/_sessions/<project>/`. */
+export const KB_CLEANUP_KIND_DIR = '_kb-cleanup';
+
 export const KB_CLEANUP_RECONCILE_LOG_BUCKET = '_kb-cleanup-reconcile';
 
 /**
@@ -275,20 +275,20 @@ export const KB_CLEANUP_RECONCILE_LOG_BUCKET = '_kb-cleanup-reconcile';
  */
 export function releaseInterruptedKbCleanupApplies(
   forgeRoot: string,
-  projectsRoot: string,
+  logsRoot: string,
   sessionStatusIo: SessionStatusIoPort | undefined,
 ): number {
   const io = requireSessionStatusIo(sessionStatusIo, 'releaseInterruptedKbCleanupApplies');
-  const logger = createLogger(KB_CLEANUP_RECONCILE_LOG_BUCKET, join(forgeRoot, '_logs'));
+  const logger = createLogger(KB_CLEANUP_RECONCILE_LOG_BUCKET, logsRoot);
   let released = 0;
   for (const kb of loadKbDescriptors(forgeRoot)) {
     const anchor = kb.binding.kind === 'project' ? kb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${kb.id}`;
-    const sids = guardedReadDir(projectsRoot, [anchor, '_kb-cleanup']) ?? [];
+    const sids = guardedReadDir(logsRoot, sessionKindSegments(anchor, KB_CLEANUP_KIND_DIR)) ?? [];
     for (const sid of sids) {
-      const dirSegs = [anchor, '_kb-cleanup', sid];
-      const status = io.read<{ phase?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
+      const dirSegs = sessionDirSegments(anchor, KB_CLEANUP_KIND_DIR, sid);
+      const status = io.read<{ phase?: unknown } & Record<string, unknown>>(logsRoot, dirSegs);
       if (!status || status.phase !== 'applying') continue; // never touch any other phase
-      const written = io.write(projectsRoot, dirSegs, {
+      const written = io.write(logsRoot, dirSegs, {
         ...status,
         phase: 'awaiting-approval',
         apply_error: 'apply interrupted: the bridge restarted before the draft finished; whole-file writes make a retry safe',
@@ -301,7 +301,7 @@ export function releaseInterruptedKbCleanupApplies(
         skill: 'kb-cleanup-reconcile',
         event_type: 'log',
         input_refs: [],
-        output_refs: [`${anchor}/_kb-cleanup/${sid}`],
+        output_refs: [`${anchor}/${KB_CLEANUP_KIND_DIR}/${sid}`],
         message: 'kb-cleanup.apply-released',
         metadata: { project: anchor, sessionId: sid, kbId: kb.id },
       });
@@ -405,10 +405,10 @@ export function mintKbCleanupDraftSession(
     } catch {
       // No/unparseable kb.yaml — the dot-anchor fallback above still works.
     }
-    const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
-    // The guarded write realpath-walks projectsRoot itself — which may not
+    const logsRoot = join(forgeRoot, '_logs');
+    // The guarded write realpath-walks logsRoot itself — which may not
     // exist yet on a fresh install (or an isolated test root).
-    mkdirSync(projectsRoot, { recursive: true });
+    mkdirSync(logsRoot, { recursive: true });
     const sessionId = newDraftSessionId();
 
     const draftApply: Array<{ file: string; draft: string }> = [];
@@ -423,7 +423,7 @@ export function mintKbCleanupDraftSession(
     }
     if (draftApply.length === 0) return null;
 
-    const written = write(projectsRoot, [project, '_kb-cleanup', sessionId], {
+    const written = write(logsRoot, sessionDirSegments(project, KB_CLEANUP_KIND_DIR, sessionId), {
       session_id: sessionId,
       project,
       phase: 'awaiting-approval',
@@ -443,7 +443,7 @@ export function mintKbCleanupDraftSession(
     // rule), which also creates the parent dir.
     let draftsOk = true;
     draftBodies.forEach((body, i) => {
-      const p = guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'drafts', `${i}.md`], body);
+      const p = guardedWriteFile(logsRoot, [...sessionDirSegments(project, KB_CLEANUP_KIND_DIR, sessionId), 'drafts', `${i}.md`], body);
       if (p === null) draftsOk = false;
     });
     if (!draftsOk) return null;
@@ -476,7 +476,7 @@ export function mintKbCleanupDraftSession(
       '```',
       '',
     ].join('\n');
-    if (guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'plan', 'cleanup-plan.md'], plan) === null) return null;
+    if (guardedWriteFile(logsRoot, [...sessionDirSegments(project, KB_CLEANUP_KIND_DIR, sessionId), 'plan', 'cleanup-plan.md'], plan) === null) return null;
 
     return { id: sessionId, project };
   } catch {

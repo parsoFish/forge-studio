@@ -87,6 +87,7 @@ import { createStageTwo } from './verify-cycle-stage2.mjs';
 import { captureHandle, killGroupIfLive, runGuarded } from './verify-cycle-teardown.mjs';
 import { getPaths } from '@forge/flows';
 import { runPreflight } from '@forge/projects';
+import { ARCHITECT_KIND_DIR, sessionDirSegments, sessionKindSegments } from '@forge/kernel';
 import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs, serveContractEnv } from './lib/verify-outcomes.mjs';
 import { refuseUnlessContractReady } from './lib/verify-cycle-preflight.mjs';
 
@@ -245,8 +246,9 @@ function cleanProjectRunState(project, repoPath) {
       }
     }
   }
-  // Drop stale architect sessions so the fresh interview starts clean.
-  const archRoot = join(repoPath, '_architect');
+  // Drop stale architect sessions so the fresh interview starts clean. They
+  // live under the logs root, never in the ground (forge-8vfn.8.5.58).
+  const archRoot = join(logsRoot, ...sessionKindSegments(project, ARCHITECT_KIND_DIR));
   rmSync(archRoot, { recursive: true, force: true });
   if (existsSync(join(repoPath, '.git'))) git(repoPath, ['worktree', 'prune']);
   log(`cleaned prior run state for project ${project} (${ids.size} non-terminal manifest(s) + worktrees + stale logs + architect sessions)`);
@@ -774,7 +776,7 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
       throw new Error(`architect start failed (${start.status}): ${JSON.stringify(start.body)}`);
     }
     sessionId = start.body.sessionId;
-    sessionDir = join(repoPath, '_architect', sessionId);
+    sessionDir = join(FORGE_ROOT, '_logs', ...sessionDirSegments(project, ARCHITECT_KIND_DIR, sessionId));
     log(`architect session ${sessionId}`);
 
     // Best-effort: focus the dedicated architect screen for the frame gallery.

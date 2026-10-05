@@ -21,11 +21,11 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
-  writePlanDoc, sessionPaths,
+  ARCHITECT_KIND_DIR, writePlanDoc, sessionPaths,
   type ArchitectSession, type ProposedInitiative, type CouncilTranscript, type InterviewRound,
 } from './architect-plan.ts';
 import { loadBrainIndex } from '@forge/knowledge';
-import { guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { guardedFile, guardedReadFile, guardedWriteFile, sessionDirSegments, type SessionHome } from '@forge/kernel';
 import { renderInterviewSummary, runCompletenessCriticStep, type CompletenessCriticFinding } from './architect-critic.ts';
 import { requirePorts } from './architect-ports.ts';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
@@ -61,12 +61,17 @@ export type ArchitectStepArgs = {
   paths: ReturnType<typeof sessionPaths>;
 };
 
+/** Where this turn's session files are homed: the turn's logs root + project. */
+export function homeOf(args: { input: { project: string }; plumbing: { logsRoot: string } }): SessionHome {
+  return { logsRoot: args.plumbing.logsRoot, project: args.input.project };
+}
+
 /** Adds this turn's `paths` to a step's args — the single `sessionPaths` call
  *  site for the whole kind. */
 export function withPaths<T>(
   step: (args: ArchitectStepArgs) => Promise<T>,
 ): (args: Omit<ArchitectStepArgs, 'paths'>) => Promise<T> {
-  return (args) => step({ ...args, paths: sessionPaths(args.input.projectRoot, args.input.sessionId) });
+  return (args) => step({ ...args, paths: sessionPaths(homeOf(args), args.input.sessionId) });
 }
 
 /**
@@ -87,7 +92,7 @@ export async function runExploreThenDraft(args: ArchitectStepArgs): Promise<RunA
   // SEC-04 leaf: resolve the stale `edge-cases.json` through the guard before
   // removing it — never rm THROUGH a symlinked/escaping leaf (null ⇒ absent or
   // out-of-root, both a safe no-op).
-  const staleEdge = guardedFile(input.projectRoot, ['_architect', input.sessionId, 'edge-cases.json'], 'read');
+  const staleEdge = guardedFile(plumbing.logsRoot, [...sessionDirSegments(input.project, ARCHITECT_KIND_DIR, input.sessionId), 'edge-cases.json'], 'read');
   if (staleEdge) {
     try {
       rmSync(staleEdge, { force: true });
@@ -269,8 +274,8 @@ const EXPLORE_SCHEMA = {
 
 /** SEC-04: the `edge-cases.json` leaf rides through the guard (read mode); a
  *  symlinked leaf collapses to `null`, indistinguishable from absent. */
-export function readExploreFindings(projectsRoot: string, sessionId: string): ExploreFindings | null {
-  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'edge-cases.json']);
+export function readExploreFindings(home: SessionHome, sessionId: string): ExploreFindings | null {
+  const raw = guardedReadFile(home.logsRoot, [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId), 'edge-cases.json']);
   if (raw === null) return null;
   try {
     return JSON.parse(raw) as ExploreFindings;
@@ -290,12 +295,12 @@ export function readExploreFindings(projectsRoot: string, sessionId: string): Ex
 async function runExploreStep(args: ArchitectStepArgs): Promise<ExploreFindings | null> {
   const { input, status, plumbing } = args;
   const { queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText, onThinking } = plumbing;
-  const projectRoot = input.projectRoot;
+  const home = homeOf(args);
   const sessionId = input.sessionId;
   const skillPromptPath = input.skillPromptPath;
   const brainIndex = architectBrainIndex(input, status);
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'explore', skillPromptPath });
-  const interview = readInterview(projectRoot, sessionId);
+  const interview = readInterview(home, sessionId);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(operator drafted directly)_';
@@ -364,7 +369,7 @@ async function runExploreStep(args: ArchitectStepArgs): Promise<ExploreFindings 
   // `edge-cases.json` leaf is refused (null) — this stage is advisory
   // enrichment, so a refused write is fail-open (findings still returned for
   // THIS turn; the draft step simply finds no persisted explore block).
-  guardedWriteFile(projectRoot, ['_architect', sessionId, 'edge-cases.json'], JSON.stringify(findings, null, 2));
+  guardedWriteFile(home.logsRoot, [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId), 'edge-cases.json'], JSON.stringify(findings, null, 2));
   return findings;
 }
 
@@ -453,7 +458,7 @@ export async function runDraftStep(
   const brainIndex = architectBrainIndex(input, status);
   // W8-B6 — the same initiative id every event in this session already uses.
   const initiativeId = `architect-session-${input.sessionId}`;
-  const interview = readInterview(input.projectRoot, input.sessionId);
+  const interview = readInterview(homeOf(args), input.sessionId);
   /** This step's two log events, which differed only in message, refs and
    *  metadata — said once so a third one cannot drift from the other two. */
   const emitLog = (message: string, over: Record<string, unknown> = {}): void => {
@@ -495,7 +500,7 @@ export async function runDraftStep(
       ? ['', 'A completeness critic reviewed your previous draft and found these gaps. Close every one of them in this draft:',
          ...criticFindings.map((f) => `- (${f.severity}${f.initiativeId ? `, ${f.initiativeId}` : ''}) ${f.gap}`)]
       : []),
-    ...renderExploreBlock(readExploreFindings(input.projectRoot, input.sessionId)),
+    ...renderExploreBlock(readExploreFindings(homeOf(args), input.sessionId)),
   ].join('\n');
 
   // One binding for BOTH draft turns — the forced-emit retry below had a
@@ -618,7 +623,7 @@ export async function runDraftStep(
   // agent's Read content is not parsed here.
   const brain_context = [...new Set(brainReads)].map((p) => ({ path: p, summary: 'consulted during architect draft' }));
 
-  const exploreFindings = readExploreFindings(input.projectRoot, input.sessionId);
+  const exploreFindings = readExploreFindings(homeOf(args), input.sessionId);
   const session: ArchitectSession = {
     session_id: status.session_id,
     project: status.project,
@@ -633,7 +638,7 @@ export async function runDraftStep(
 
   // The phase is NOT written here: `runDraftRounds` owns the promotion to
   // `awaiting-verdict` and writes it once, after the critic has passed.
-  const planPath = writePlanDoc(session, input.projectRoot);
+  const planPath = writePlanDoc(session, homeOf(args));
 
   emitLog(`plan-emitted (${manifests.length} initiative(s), 0 escalation(s))`, {
     output_refs: [planPath],
@@ -692,7 +697,7 @@ export async function runDraftRounds(
     // own `architect.completeness-critic.start` around that call.
     writeStatus({ ...status, phase: 'critiquing' });
     const record = await runCompletenessCriticStep({
-      input, paths, status, logger, queryFn: plumbing.queryFn, turnBudgetUsd: plumbing.turnBudgetUsd, round,
+      input, home: homeOf(args), paths, status, logger, queryFn: plumbing.queryFn, turnBudgetUsd: plumbing.turnBudgetUsd, round,
       onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat, onText: plumbing.onText,
     });
     // Durable BEFORE the next round: the flag records that THIS round was

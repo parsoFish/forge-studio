@@ -44,7 +44,7 @@ import {
   type KindTurnPlumbing,
   type SessionKindVariant,
 } from './kind-turn.ts';
-import { guardedReadFile, guardedWriteFile, sendJson } from '@forge/kernel';
+import { guardedReadFile, guardedWriteFile, sendJson, sessionDirSegments } from '@forge/kernel';
 import { withStudioWrite } from '@forge/projects';
 // Deep paths, not the door (bead forge-8vfn.5.31): this file is eagerly
 // re-exported by `sessions/index.ts`, and going through `@forge/agents`'s
@@ -152,11 +152,11 @@ export type RunInstructionsTurnResult = {
 
 const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 
-/** The kind-dir under a project root that holds instructions sessions. */
-const INSTRUCTIONS_KIND_DIR = '_instructions';
+/** The kind-dir under `<logsRoot>/_sessions/<project>/` that holds instructions sessions. */
+export const INSTRUCTIONS_KIND_DIR = '_instructions';
 
-export function instructionsSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, INSTRUCTIONS_KIND_DIR, sessionId);
+export function instructionsSessionDir(logsRoot: string, project: string, sessionId: string): string {
+  return join(logsRoot, ...sessionDirSegments(project, INSTRUCTIONS_KIND_DIR, sessionId));
 }
 
 // ---------------------------------------------------------------------------
@@ -204,13 +204,13 @@ export const instructionsKind: SessionKindVariant<
       // SEC-04 leaf: answers.json READ routed through the guard (leaf included) — a
       // symlinked answers.json inside the real, contained session dir collapses to
       // [] rather than leaking out-of-root content into the interview prompt.
-      const interview = readAnswerRounds(input.projectRoot, plumbing.dirSegments);
+      const interview = readAnswerRounds(plumbing.logsRoot, plumbing.dirSegments);
       const decision = await runInterviewStep({ input, status, interview, plumbing, seeds });
 
       if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
         // SEC-04 leaf: questions.json WRITE routed through the guard (leaf
         // included); a symlinked/escaping leaf ⇒ null ⇒ the runner refuses.
-        const questionsPath = writeQuestions(input.projectRoot, plumbing.dirSegments, decision.questions);
+        const questionsPath = writeQuestions(plumbing.logsRoot, plumbing.dirSegments, decision.questions);
         if (questionsPath === null) {
           throw new Error(
             'instructions runner: questions.json write failed containment (symlinked/escaping leaf) — refusing to write.',
@@ -393,7 +393,7 @@ async function runDraftStep(args: {
   const { input, status, plumbing, writeStatus, seeds: matchedSeeds } = args;
   const { logger, initiativeId } = plumbing;
   // SEC-04 leaf: answers.json READ routed through the guard (leaf included).
-  const interview = readAnswerRounds(input.projectRoot, plumbing.dirSegments);
+  const interview = readAnswerRounds(plumbing.logsRoot, plumbing.dirSegments);
   // CONSUME-ONCE: the driver reads feedback.md, runs this step, and deletes the
   // note only once the step RESOLVES. Before the port this runner read it and
   // never cleared it, so one revise kept steering every later turn.
@@ -454,8 +454,8 @@ async function runDraftStep(args: {
   // included) so a symlinked/hardlinked draft leaf cannot escape the session
   // dir. guardedWriteFile mkdirs the parent, so the manual mkdir is gone.
   const draftPath = guardedWriteFile(
-    input.projectRoot,
-    [INSTRUCTIONS_KIND_DIR, input.sessionId, DRAFT_FILENAME],
+    plumbing.logsRoot,
+    [...plumbing.dirSegments, DRAFT_FILENAME],
     `${agentsMd}\n${footer}`,
   );
   if (draftPath === null) {
@@ -501,8 +501,8 @@ function runFinalizeStep(args: {
   // symlinked AGENTS.draft.md pointing out of root collapses to null (no
   // oracle: absent and rejected are indistinguishable) and finalize refuses.
   const content = guardedReadFile(
-    input.projectRoot,
-    [INSTRUCTIONS_KIND_DIR, input.sessionId, DRAFT_FILENAME],
+    plumbing.logsRoot,
+    [...plumbing.dirSegments, DRAFT_FILENAME],
   );
   if (content === null) {
     throw new Error(
@@ -580,7 +580,7 @@ export async function handleInstructionsAnswer(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -609,7 +609,7 @@ export async function handleInstructionsAnswer(
   // free-text single-box submission (a round whose questions never reached
   // the wire) has nothing to correlate and carries no id — and cannot,
   // because there is no question list to name.
-  const pendingRaw = guardedReadFile(projectsRoot, [...dirSegs, 'questions.json']);
+  const pendingRaw = guardedReadFile(logsRoot, [...dirSegs, 'questions.json']);
   const pending = pendingRaw !== null ? parsePendingQuestions(pendingRaw) : null;
   if (pending !== null && pending.length > 0) {
     for (const [i, a] of answers.entries()) {
@@ -635,7 +635,7 @@ export async function handleInstructionsAnswer(
     answer: a.answer,
   }));
 
-  const priorRaw = guardedReadFile(projectsRoot, [...dirSegs, 'answers.json']);
+  const priorRaw = guardedReadFile(logsRoot, [...dirSegs, 'answers.json']);
   const prior = (priorRaw !== null ? safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
   const round = prior.length + 1;
 
@@ -646,8 +646,8 @@ export async function handleInstructionsAnswer(
   // Row 206 part (a) — claim BEFORE either write below.
   ctx.claimAgentTurnSlot(ctx.forgeRoot, 'instructions', sessionId);
   if (
-    guardedWriteFile(projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: recordedAnswers }], null, 2)) === null ||
-    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
+    guardedWriteFile(logsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: recordedAnswers }], null, 2)) === null ||
+    guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
   ) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
@@ -674,7 +674,7 @@ export async function handleInstructionsBrief(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -706,8 +706,8 @@ export async function handleInstructionsBrief(
   // see this file's header note.
   ctx.claimAgentTurnSlot(ctx.forgeRoot, 'instructions', sessionId);
   if (
-    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
-    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
+    guardedWriteFile(logsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+    guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
   ) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
@@ -730,7 +730,7 @@ export async function handleInstructionsVerdict(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -742,7 +742,7 @@ export async function handleInstructionsVerdict(
   // between the caller's status read and this write — see this file's
   // header note.
   ctx.claimAgentTurnSlot(ctx.forgeRoot, 'instructions', sessionId);
-  if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: nextPhase }) === null) {
+  if (guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: nextPhase }) === null) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
   }

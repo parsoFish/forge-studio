@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedReadFile, resolveGuardedPath, sessionDirSegments, type SessionHome } from '@forge/kernel';
 import { runAgentTurn } from '../interactive-session.ts';
 import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
@@ -85,7 +85,7 @@ export async function runGenerateStep(args: {
   const byId = new Map(listDemoElements(forgeRoot).map((e) => [e.id, e]));
   const target = status.targetElement && byId.has(status.targetElement) ? status.targetElement : undefined;
   const skill = loadSkillTurnPrompt({ name: 'demo-builder', turnId: 'generate-declaration', skillPromptPath: input.skillPromptPath, root: forgeRoot });
-  const taskLines = demoTaskLines({ steps: currentDeclaration(input.projectRoot, input.sessionId, status), target, byId });
+  const taskLines = demoTaskLines({ steps: currentDeclaration({ logsRoot: plumbing.logsRoot, project: input.project }, input.sessionId, status), target, byId });
 
   const prompt = [
     skill,
@@ -227,10 +227,10 @@ export async function runGenerateStep(args: {
   // written through the guard (leaf included) so a symlinked snapshot slot
   // cannot escape; the demoPath/declarationPath READS are repo-side
   // (project-repo root) byte copies.
-  const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(status.iteration)];
-  const demoSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'generation DEMO.html snapshot');
+  const genSegs = [...plumbing.dirSegments, GENERATIONS_DIRNAME, String(status.iteration)];
+  const demoSnapPath = guardedGenerationWritePath(plumbing.logsRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'generation DEMO.html snapshot');
   writeFileSync(demoSnapPath, readFileSync(demoPath));
-  const declarationSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_DECLARATION_FILENAME], 'generation declaration snapshot');
+  const declarationSnapPath = guardedGenerationWritePath(plumbing.logsRoot, [...genSegs, GENERATION_DECLARATION_FILENAME], 'generation declaration snapshot');
   writeFileSync(declarationSnapPath, readFileSync(declarationPath));
   // The draft LEAVES the repo once snapshotted (forge-mfv5.2.8): left there it
   // would be committed beside `demoProcess` as a second declared source. The
@@ -250,7 +250,7 @@ export async function runGenerateStep(args: {
     feedback,
     targetElement: target ?? null,
   };
-  const metaSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_META_FILENAME], 'generation meta.json');
+  const metaSnapPath = guardedGenerationWritePath(plumbing.logsRoot, [...genSegs, GENERATION_META_FILENAME], 'generation meta.json');
   writeFileSync(metaSnapPath, `${JSON.stringify(generationMeta, null, 2)}\n`);
 
   writeStatus({ ...status, phase: 'awaiting-review' });
@@ -267,11 +267,12 @@ export async function runGenerateStep(args: {
 }
 
 /** Ruling 1973fa — forge's own prefixes in a ground: its config + this pass's
- *  root (`.forge/`), the session kinds' dirs (`_demo/`, `_onboarding/`),
- *  forge's logs (`_logs/`) and its history (`forge/history/`). Not
+ *  root (`.forge/`), forge's logs (`_logs/`) and its history (`forge/history/`).
+ *  Session dirs are NOT among them any more: they live under
+ *  `<logsRoot>/_sessions/` (forge-8vfn.8.5.58), never in a ground. Not
  *  `project-repo-tx.ts`'s `SCRATCH_EXCLUDES`: that set names what forge
- *  never COMMITS and lacks `.forge/`, `_onboarding/`, `_logs/`, `forge/history/`. */
-const FORGE_OWNED_GROUND_PREFIXES: readonly string[] = [`.forge/`, `${DEMO_KIND_DIR}/`, '_onboarding/', '_logs/', 'forge/history/'];
+ *  never COMMITS and lacks `.forge/`, `_logs/`, `forge/history/`. */
+const FORGE_OWNED_GROUND_PREFIXES: readonly string[] = [`.forge/`, '_logs/', 'forge/history/'];
 
 /**
  * Row 190 (forge-8vfn.8.5.28, T1 ruling 1973en) — the GROUND fence. Measured on
@@ -335,11 +336,11 @@ function assertGroundUnchanged(a: { ground: GroundSnapshot | null; repo: string;
  * project already declares. A draft that no longer parses is shown as nothing
  * rather than guessed at — the project's own steps stand in for it.
  */
-function currentDeclaration(projectRoot: string, sessionId: string, status: DemoBuilderStatus): DemoStep[] {
-  const earlier = listExistingGenerationNumbers(projectRoot, sessionId).filter((n) => n < status.iteration);
+function currentDeclaration(home: SessionHome, sessionId: string, status: DemoBuilderStatus): DemoStep[] {
+  const earlier = listExistingGenerationNumbers(home, sessionId).filter((n) => n < status.iteration);
   const latest = earlier.length > 0 ? earlier[earlier.length - 1] : undefined;
   if (latest !== undefined) {
-    const raw = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME, String(latest), GENERATION_DECLARATION_FILENAME]);
+    const raw = guardedReadFile(home.logsRoot, [...sessionDirSegments(home.project, DEMO_KIND_DIR, sessionId), GENERATIONS_DIRNAME, String(latest), GENERATION_DECLARATION_FILENAME]);
     try {
       const parsed: unknown = raw === null ? null : JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed as DemoStep[];

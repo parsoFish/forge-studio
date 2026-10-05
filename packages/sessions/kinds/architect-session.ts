@@ -20,12 +20,12 @@
  * modules form a DAG: session <- manifest <- steps <- parent.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { QueryFn } from '../interactive-session.ts';
-import type { InterviewRound } from './architect-plan.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
-import type { EventLogger } from '@forge/kernel';
+import { ARCHITECT_KIND_DIR, type InterviewRound } from './architect-plan.ts';
+import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, sessionDirSegments, sessionKindSegments, SESSIONS_DIRNAME } from '@forge/kernel';
+import type { EventLogger, SessionHome } from '@forge/kernel';
 import type { ArchitectManifestPorts } from './architect-ports.ts';
 import { parseGuardedEventsJsonl, sessionLogDirName } from '../session-readability.ts';
 import { deriveSessionCostUsd } from '@forge/kernel';
@@ -152,6 +152,10 @@ export type AnswerRound = {
 
 export type RunArchitectTurnInput = {
   sessionId: string;
+  /** The managed project's id — names the session dir's home under `logsRoot`. */
+  project: string;
+  /** The managed project's checkout (the agent's cwd) — NOT where the session
+   *  dir lives (`<logsRoot>/_sessions/<project>/_architect/<sid>/`). */
   projectRoot: string;
   /** Manifest functions bound at `apps/forge` — see ArchitectManifestPorts.
    *  Absent ⇒ any turn reaching manifest work REFUSES (never a fallback). */
@@ -227,8 +231,8 @@ export type DraftInitiative = {
 // ---------------------------------------------------------------------------
 // SEC-04 — the ONLY architect status accessors.
 //
-// These take the TRUSTED `projectsRoot` plus the request-derived directory
-// segments (`project`, `'_architect'`, `sessionId`) as their OWN `segments[]`
+// These take the TRUSTED `logsRoot` plus the request-derived directory
+// segments (`sessionDirSegments(project, ARCHITECT_KIND_DIR, sessionId)`) as their OWN `segments[]`
 // elements — never folded into the root — and route the WHOLE path,
 // `status.json` leaf included, through `guardedFile`, so a symlinked or
 // hardlinked status leaf is rejected. Return `null` on a containment rejection
@@ -244,11 +248,11 @@ export type DraftInitiative = {
 // ---------------------------------------------------------------------------
 
 export function guardedReadStatus(
-  projectsRoot: string,
+  logsRoot: string,
   dirSegments: readonly string[],
   leaf = 'status.json',
 ): ArchitectStatus | null {
-  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'read');
+  const p = guardedFile(logsRoot, [...dirSegments, leaf], 'read');
   if (p === null) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf8')) as ArchitectStatus;
@@ -258,12 +262,12 @@ export function guardedReadStatus(
 }
 
 export function guardedWriteStatus(
-  projectsRoot: string,
+  logsRoot: string,
   dirSegments: readonly string[],
   status: ArchitectStatus,
   leaf = 'status.json',
 ): string | null {
-  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'write');
+  const p = guardedFile(logsRoot, [...dirSegments, leaf], 'write');
   if (p === null) return null;
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
@@ -272,17 +276,17 @@ export function guardedWriteStatus(
 
 
 // SEC-04 leaf: `questions.json`/`answers.json`/`edge-cases.json`/`feedback.md`
-// each ride the WHOLE `<projectsRoot>/_architect/<sessionId>/<leaf>` path
-// (leaf included) through `guardedFile` — the trusted `projectsRoot` root plus
+// each ride the WHOLE `<logsRoot>/_sessions/<project>/_architect/<sessionId>/<leaf>` path
+// (leaf included) through `guardedFile` — the trusted `logsRoot` root plus
 // the request-derived `sessionId` as its OWN segment (never folded into root).
 // A symlinked/hardlinked LEAF inside a genuinely real, contained session dir is
 // refused: writes throw (fail closed, runner contract), reads collapse to
 // empty/null (no out-of-root disclosure). Replaces the former raw
 // `join(sessionDir, leaf)` helpers that guarded neither dir nor leaf.
-export function writeQuestions(projectsRoot: string, sessionId: string, questions: ArchitectQuestion[]): string {
+export function writeQuestions(home: SessionHome, sessionId: string, questions: ArchitectQuestion[]): string {
   const p = guardedWriteFile(
-    projectsRoot,
-    ['_architect', sessionId, 'questions.json'],
+    home.logsRoot,
+    [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId), 'questions.json'],
     JSON.stringify(questions, null, 2),
   );
   if (p === null) {
@@ -298,8 +302,8 @@ export function writeQuestions(projectsRoot: string, sessionId: string, question
  *  shape the renderer expects. SEC-04: the `answers.json` leaf rides through the
  *  guard (read mode) so a symlinked leaf discloses nothing — a rejected or
  *  absent file both collapse to `[]`. */
-export function readInterview(projectsRoot: string, sessionId: string): InterviewRound[] {
-  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'answers.json']);
+export function readInterview(home: SessionHome, sessionId: string): InterviewRound[] {
+  const raw = guardedReadFile(home.logsRoot, [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId), 'answers.json']);
   if (raw === null) return [];
   try {
     const parsed = JSON.parse(raw) as AnswerRound[] | AnswerRound;
@@ -318,54 +322,31 @@ export function readInterview(projectsRoot: string, sessionId: string): Intervie
 
 /** Read `feedback.md` into a markdown block the draft step bakes into the
  *  regenerated manifests. Returns the trimmed content or null if absent/empty. */
-export function readResolvedDecisions(projectsRoot: string, sessionId: string): string | null {
-  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'feedback.md']);
+export function readResolvedDecisions(home: SessionHome, sessionId: string): string | null {
+  const raw = guardedReadFile(home.logsRoot, [...sessionDirSegments(home.project, ARCHITECT_KIND_DIR, sessionId), 'feedback.md']);
   if (raw === null) return null;
   const fb = raw.trim();
   return fb || null;
 }
 
-/** Discover every architect session under `projects/<name>/_architect/<sid>/`
+/** Discover every architect session under `<logsRoot>/_sessions/<name>/_architect/<sid>/`
  *  — used by the bridge's `GET /api/architect/sessions`. Best-effort; never
  *  throws on a malformed dir. */
-export function listArchitectSessions(projectsRoot: string): ArchitectStatus[] {
+export function listArchitectSessions(logsRoot: string): ArchitectStatus[] {
   const out: ArchitectStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  for (const project of safeReaddir(projectsRoot)) {
-    // SEC-04: guard the `_architect` dir as its OWN segment against the fixed
-    // `projectsRoot` base — a symlinked `projects/<p>/_architect` (a plain
-    // 120000 blob committable to a project repo) resolves to an identity
-    // mismatch and yields NO enumeration/disclosure. This was THE reproduced
-    // escape: `GET /api/architect/sessions` enumerated an out-of-root session
-    // and disclosed its status.json (idea / session_id / project_repo_path).
-    const archGuard = resolveGuardedPath(projectsRoot, [project, '_architect']);
-    if (!archGuard.ok) continue;
-    const archDir = archGuard.realPath;
-    for (const sid of safeReaddir(archDir)) {
+  for (const project of guardedReadDir(logsRoot, [SESSIONS_DIRNAME]) ?? []) {
+    // SEC-04: the kind dir rides as its OWN segment against the fixed
+    // `logsRoot` base, so a symlinked `_sessions/<p>/_architect` resolves to an
+    // identity mismatch (`guardedReadDir` -> null) and yields NO enumeration.
+    for (const sid of guardedReadDir(logsRoot, sessionKindSegments(project, ARCHITECT_KIND_DIR)) ?? []) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      // Guard each session id as its own segment too — a symlinked `<sid>`
-      // resolving out of root is refused, never read.
       // SEC-04 leaf: route the WHOLE `<sid>/status.json` path (leaf included)
-      // through the guard — the earlier pass guarded the sid DIR but read the
-      // status.json leaf raw via `readStatus(sidGuard.realPath)`, so a symlinked
-      // `status.json` inside a real, contained sid dir still disclosed an
-      // out-of-root file. `guardedReadStatus` refuses that leaf (null), so it is
-      // never enumerated.
-      const status = guardedReadStatus(projectsRoot, [project, '_architect', sid]);
+      // through the guard, so a symlinked `status.json` is never enumerated.
+      const status = guardedReadStatus(logsRoot, sessionDirSegments(project, ARCHITECT_KIND_DIR, sid));
       if (status) out.push(status);
     }
   }
   return out;
-}
-
-function safeReaddir(dir: string): string[] {
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
-  } catch {
-    return [];
-  }
 }
 
 // ---------------------------------------------------------------------------

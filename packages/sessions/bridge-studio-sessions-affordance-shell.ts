@@ -115,7 +115,7 @@ export type AffordanceRouteContext = StudioContext & {
    *  runtime, which is §15.66's defect. */
   spawnAgentDispatch: (
     forgeRoot: string, agentId: string, runId: string, project: string,
-    inputs: Record<string, string>, sessionDir: string, unused: undefined, projectsRoot: string,
+    inputs: Record<string, string>, sessionDir: string, unused: undefined, logsRoot: string,
   ) => void;
   /** Row 206 part (a) — the CLAIM half of `spawnAgentDispatch`, mirroring
    *  `claimAgentTurnSlot` above for onboarding's brief (the one write path
@@ -125,7 +125,7 @@ export type AffordanceRouteContext = StudioContext & {
    *  slot — NEVER claims again. */
   spawnClaimedAgentDispatch: (
     forgeRoot: string, agentId: string, runId: string, project: string,
-    inputs: Record<string, string>, sessionDir: string, unused: undefined, projectsRoot: string,
+    inputs: Record<string, string>, sessionDir: string, unused: undefined, logsRoot: string,
   ) => void;
   /** The projects root this bridge resolved once at start — the root the
    *  session dir was created under, handed to the dispatch so the subprocess's
@@ -271,7 +271,7 @@ export function handleGenericRevise(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   descriptor: SessionKindDescriptor,
   affordance: SessionAffordance,
@@ -309,8 +309,8 @@ export function handleGenericRevise(
   // operator last saw them, not half-applied to a turn that never spawned.
   ctx.claimAgentTurnSlot(ctx.forgeRoot, agentId, sessionId);
   if (
-    guardedWriteFile(projectsRoot, [...dirSegs, 'feedback.md'], feedback) === null ||
-    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: producer.phase, ...iterationBump }) === null
+    guardedWriteFile(logsRoot, [...dirSegs, 'feedback.md'], feedback) === null ||
+    guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: producer.phase, ...iterationBump }) === null
   ) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
@@ -326,7 +326,7 @@ export function handleGenericRevise(
   // above is already held, so this spawns UNDER it rather than re-claiming.
   const spawn = ctx.spawnClaimedAgentTurn(ctx.forgeRoot, agentId, project, sessionId);
   if (!spawn.ok) {
-    guardedWriteSessionStatus(projectsRoot, dirSegs, status);
+    guardedWriteSessionStatus(logsRoot, dirSegs, status);
     ctx.broadcastKindChanged(descriptor.id);
     sendJson(res, 500, { error: `your feedback was saved to this session but no agent turn could be started — ${spawn.error}. The session is back on its review gate; send the revision again once the cause is cleared.`, phase: affordance.phase }, origin);
     return;

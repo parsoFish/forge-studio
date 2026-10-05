@@ -30,11 +30,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { resolve } from 'node:path';
-
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, sendIfDispatchRefused } from '@forge/kernel';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile, sessionDirSegments } from '@forge/kernel';
 import {
   loadSessionKinds,
   verdictValueState,
@@ -111,8 +108,8 @@ type VerdictHistory =
 /** Parse the session's existing verdicts.json. An ABSENT file is an empty
  *  history (the ordinary first-verdict case); a present-but-unparseable one
  *  is an explicit refusal — never silently reset to []. */
-function readVerdictHistory(projectsRoot: string, dirSegs: readonly string[]): VerdictHistory {
-  const priorRaw = guardedReadFile(projectsRoot, [...dirSegs, VERDICTS_FILENAME]);
+function readVerdictHistory(logsRoot: string, dirSegs: readonly string[]): VerdictHistory {
+  const priorRaw = guardedReadFile(logsRoot, [...dirSegs, VERDICTS_FILENAME]);
   if (priorRaw === null) return { ok: true, prior: [] };
   const parsed = safeParseJson<unknown>(priorRaw);
   if (!Array.isArray(parsed)) {
@@ -125,7 +122,7 @@ function readVerdictHistory(projectsRoot: string, dirSegs: readonly string[]): V
 }
 
 function appendVerdictRecord(
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   prior: readonly unknown[],
   verdict: string,
@@ -138,7 +135,7 @@ function appendVerdictRecord(
     ...(notes.length > 0 ? { notes } : {}),
     ...(feedback.length > 0 ? { feedback } : {}),
   };
-  if (guardedWriteFile(projectsRoot, [...dirSegs, VERDICTS_FILENAME], JSON.stringify([...prior, record], null, 2)) === null) {
+  if (guardedWriteFile(logsRoot, [...dirSegs, VERDICTS_FILENAME], JSON.stringify([...prior, record], null, 2)) === null) {
     // Never swallowed: the verdict itself already landed (the phase write IS
     // the source of truth, and the response is already sent), but a lost
     // record is a real gap in the audit trail and says so on the bridge's
@@ -233,10 +230,10 @@ export async function handleStudioAffordanceRoutes(
       sendJson(res, 404, { error: 'session not found' }, origin);
       return true;
     }
-    const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+    const logsRoot = ctx.logsRoot;
     const kindDirName = `_${descriptor.id}`;
-    const dirSegs = [project, kindDirName, sessionId];
-    const sessionGuard = resolveGuardedPath(projectsRoot, dirSegs);
+    const dirSegs = sessionDirSegments(project, kindDirName, sessionId);
+    const sessionGuard = resolveGuardedPath(logsRoot, dirSegs);
     if (!sessionGuard.ok || !sessionGuard.exists) {
       // Collapses "malformed", "escaping symlink", and "genuinely absent"
       // into one message — never a filesystem oracle.
@@ -244,7 +241,7 @@ export async function handleStudioAffordanceRoutes(
       return true;
     }
 
-    const status = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegs);
+    const status = guardedReadSessionStatus<Record<string, unknown>>(logsRoot, dirSegs);
     if (!status || typeof status.phase !== 'string') {
       sendJson(res, 404, { error: 'session not found' }, origin);
       return true;
@@ -274,21 +271,21 @@ export async function handleStudioAffordanceRoutes(
         // SAME server-derived field the client already reads, never a
         // second phase read.
         if (affordance.phase === 'briefing') {
-          await handleInstructionsBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+          await handleInstructionsBrief(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, b);
         } else {
-          await handleInstructionsAnswer(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+          await handleInstructionsAnswer(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, b);
         }
         return true;
       }
       // W6-B10: demo's own `briefing` row (studio/session-kinds.yaml).
       if (descriptor.id === 'demo') {
-        await handleDemoBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        await handleDemoBrief(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, b);
         return true;
       }
       // Ruling 441 — onboarding's pre-dispatch brief. The only question-form
       // write that starts an agent RUN rather than a session turn.
       if (descriptor.id === 'onboarding') {
-        await handleOnboardingBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        await handleOnboardingBrief(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, b);
         return true;
       }
       // Structurally unreachable today (instructions/demo are the only
@@ -425,7 +422,7 @@ export async function handleStudioAffordanceRoutes(
       // its own fail-closed transcript error to the transcript pane), so the
       // operator can still see the session — they just cannot record a new
       // decision until the history is repaired.
-      const history = readVerdictHistory(projectsRoot, dirSegs);
+      const history = readVerdictHistory(logsRoot, dirSegs);
       if (!history.ok) {
         sendJson(res, 409, { ok: false, error: history.message }, origin);
         return true;
@@ -436,7 +433,7 @@ export async function handleStudioAffordanceRoutes(
       // producer phase + the kind's own turn spawner).
       let dispatched = false;
       if (verdict === 'revise') {
-        handleGenericRevise(ctx, res, origin, projectsRoot, dirSegs, descriptor, affordance, status, project, sessionId, feedback);
+        handleGenericRevise(ctx, res, origin, logsRoot, dirSegs, descriptor, affordance, status, project, sessionId, feedback);
         dispatched = true;
       } else if (verdict === 'approve' || verdict === 'reject') {
         // W7-C2 T1 review (A8) — an explicit narrow, not an `else`. A value
@@ -446,19 +443,19 @@ export async function handleStudioAffordanceRoutes(
         // into the approve/reject switch as a best guess.
         switch (descriptor.id) {
           case 'instructions':
-            await handleInstructionsVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict);
+            await handleInstructionsVerdict(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, verdict);
             dispatched = true;
             break;
           case 'demo':
-            await handleDemoVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
+            await handleDemoVerdict(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, verdict, b);
             dispatched = true;
             break;
           case 'kb-cleanup':
-            await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, status, sessionId, project, verdict);
+            await handleKbCleanupVerdict(ctx, res, origin, logsRoot, dirSegs, status, sessionId, project, verdict);
             dispatched = true;
             break;
           case 'authoring':
-            await handleAuthoringVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
+            await handleAuthoringVerdict(ctx, res, origin, logsRoot, dirSegs, status, project, sessionId, verdict, b);
             dispatched = true;
             break;
           default:
@@ -478,7 +475,7 @@ export async function handleStudioAffordanceRoutes(
         // Best-effort on the WRITE only: the phase write is the source of
         // truth, and a failed append is logged, never silent.
         if (verdictWasAccepted(res)) {
-          appendVerdictRecord(projectsRoot, dirSegs, history.prior, verdict, notes, feedback);
+          appendVerdictRecord(logsRoot, dirSegs, history.prior, verdict, notes, feedback);
         }
         return true;
       }

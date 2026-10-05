@@ -43,12 +43,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 import { CANCELLED_PHASE } from './session-status-io.ts';
-import { resolveGuardedPath } from '@forge/kernel';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTerminalPhase } from './session-resolution.ts';
@@ -143,7 +141,6 @@ export async function handleSessionCancelRoute(
       return true;
     }
 
-    const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
     const kindDirName = `_${descriptor.id}`;
 
     // --- 3. project: supplied and valid, or resolved server-side ---------
@@ -151,7 +148,7 @@ export async function handleSessionCancelRoute(
     if (typeof projectRaw === 'string') {
       project = projectRaw;
     } else {
-      const found = findSessionProject(projectsRoot, kindDirName, sessionId);
+      const found = findSessionProject(ctx.logsRoot, kindDirName, sessionId);
       if (!found.ok) {
         if (found.reason === 'ambiguous') {
           sendJson(res, 409, { error: `session "${sessionId}" (kind "${kind}") exists under more than one project — pass body.project to disambiguate` }, origin);
@@ -164,13 +161,13 @@ export async function handleSessionCancelRoute(
     }
 
     // --- 4. session dir + status through the guard (404 collapse) --------
-    const dirSegs = [project, kindDirName, sessionId];
-    const guard = resolveGuardedPath(projectsRoot, dirSegs);
+    const dirSegs = sessionDirSegments(project, kindDirName, sessionId);
+    const guard = resolveGuardedPath(ctx.logsRoot, dirSegs);
     if (!guard.ok || !guard.exists) {
       sendJson(res, 404, { error: 'session not found' }, origin);
       return true;
     }
-    const status = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegs);
+    const status = guardedReadSessionStatus<Record<string, unknown>>(ctx.logsRoot, dirSegs);
     if (!status || typeof status.phase !== 'string') {
       sendJson(res, 404, { error: 'session not found' }, origin);
       return true;
@@ -194,7 +191,7 @@ export async function handleSessionCancelRoute(
     // concurrent cancels cannot interleave; the second reads `cancelled`
     // and 409s above.
     const killed = killTrackedTurn(ctx.logsRoot, descriptor.id, sessionId);
-    const written = guardedWriteSessionStatus(projectsRoot, dirSegs, {
+    const written = guardedWriteSessionStatus(ctx.logsRoot, dirSegs, {
       ...status,
       phase: CANCELLED_PHASE,
       cancelled_at: new Date().toISOString(),

@@ -53,7 +53,7 @@ import { resolve, join } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
-import { createLogger, guardedReadFile, resolveGuardedPath, errorEndMetadata, type EventLogger, type Phase } from '@forge/kernel';
+import { createLogger, guardedReadFile, resolveGuardedPath, sessionDirSegments, errorEndMetadata, type EventLogger, type Phase } from '@forge/kernel';
 
 import { makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
 import { makeHeartbeatWriter } from '../heartbeat.ts';
@@ -92,7 +92,12 @@ export type KindTurnResult = { phase: string; wrote: string[] };
  */
 export type KindTurnInput = {
   sessionId: string;
-  /** Managed-project dir under forge `projects/` (holds the session dir). */
+  /** The managed project's id (its dir name under forge `projects/`) — names
+   *  the session dir's home under the logs root. */
+  project: string;
+  /** Managed-project checkout (the "ground"): the agent's cwd. The session dir
+   *  does NOT live here — it lives under `<logsRoot>/_sessions/<project>/…`
+   *  (forge-8vfn.8.5.58). */
   projectRoot: string;
   /** Forge root. Defaults to cwd, as every bespoke runner did. */
   forgeRoot?: string;
@@ -116,7 +121,8 @@ export type KindTurnInput = {
 export type KindTurnPlumbing = {
   /** The CONTAINED real path of the session dir (guard already applied). */
   sessionDir: string;
-  /** `[kindDir, sessionId]` — the guarded segments, for further guarded writes. */
+  /** `sessionDirSegments(project, kindDir, sessionId)` — the guarded segments,
+   *  resolved against `logsRoot`, for further guarded writes. */
   dirSegments: readonly string[];
   forgeRoot: string;
   logsRoot: string;
@@ -228,12 +234,12 @@ export type SessionKindVariant<
    *
    * Exactly one kind needs this and the hook exists for that measured
    * behaviour alone: architect's ARCH-6 idempotency, where a rejected session
-   * has been MOVED to `_architect/_archived/<sid>`, so a repeat reject turn
+   * has been MOVED to `<kindDir>/_archived/<sid>`, so a repeat reject turn
    * finds no live status and must return `{phase:'rejected'}` rather than
    * throw. Reading the archived copy is a second request-derived path, so an
    * implementation must contain it the same way the live read is contained.
    */
-  onMissingStatus?: (input: I) => R | null;
+  onMissingStatus?: (input: I, logsRoot: string) => R | null;
   /**
    * Turn-boundary work that must happen for EVERY phase — including terminal
    * ones — after the logger exists and BEFORE the start event. May THROW to
@@ -274,12 +280,14 @@ export async function runKindTurn<
   input: I,
 ): Promise<R> {
   // SEC-04 runner leg: contain the session dir before the first read.
-  // `kindDir` and `sessionId` each ride as their OWN segment against the
-  // trusted `projectRoot` root, never folded into it (the guard's CONTRACT),
+  // `project`, `kindDir` and `sessionId` each ride as their OWN segment against
+  // the trusted `logsRoot` root, never folded into it (the guard's CONTRACT),
   // so a traversal sessionId or a symlinked kind-dir resolves to a reject and
   // the turn REFUSES rather than read out-of-root content.
-  const dirSegments = [variant.kindDir, input.sessionId];
-  const guarded = resolveGuardedPath(input.projectRoot, dirSegments);
+  const forgeRoot = input.forgeRoot ?? resolve('.');
+  const logsRoot = input.logsRoot ?? resolve(forgeRoot, '_logs');
+  const dirSegments = sessionDirSegments(input.project, variant.kindDir, input.sessionId);
+  const guarded = resolveGuardedPath(logsRoot, dirSegments);
   if (!guarded.ok) {
     throw new Error(
       `${variant.label}: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
@@ -290,17 +298,15 @@ export async function runKindTurn<
   // SEC-04 leaf: route the status.json READ through the guarded sibling (leaf
   // included) so a symlinked status.json inside the real, contained session
   // dir is refused too. A rejected leaf collapses to null → the turn refuses.
-  const status = guardedReadSessionStatus<S>(input.projectRoot, dirSegments);
+  const status = guardedReadSessionStatus<S>(logsRoot, dirSegments);
   if (!status) {
     // A kind may define a missing status as something other than a refusal
     // (see `onMissingStatus`); anything else fails loud, as it always has.
-    const recovered = variant.onMissingStatus?.(input) ?? null;
+    const recovered = variant.onMissingStatus?.(input, logsRoot) ?? null;
     if (recovered !== null) return recovered;
     throw new Error(`${variant.label}: no status.json at ${sessionDir}. Has the session been started?`);
   }
 
-  const forgeRoot = input.forgeRoot ?? resolve('.');
-  const logsRoot = input.logsRoot ?? resolve(forgeRoot, '_logs');
   const cycleId = `_${variant.id}-${input.sessionId}`;
   const initiativeId = variant.initiativeId(input.sessionId);
   const logger = input.logger ?? createLogger(cycleId, logsRoot);
@@ -349,7 +355,7 @@ export async function runKindTurn<
   });
 
   const withOperatorFeedback = async <T,>(run: (feedback: string | null) => Promise<T>): Promise<T> => {
-    const raw = guardedReadFile(input.projectRoot, [...dirSegments, FEEDBACK_FILENAME]);
+    const raw = guardedReadFile(logsRoot, [...dirSegments, FEEDBACK_FILENAME]);
     const feedback = raw === null ? null : (raw.trim() || null);
     const out = await run(feedback);
     if (feedback !== null) {
@@ -395,7 +401,7 @@ export async function runKindTurn<
   };
 
   const writeStatus = (next: S): void => {
-    writeKindStatus(variant, input.projectRoot, dirSegments, next);
+    writeKindStatus(variant, logsRoot, dirSegments, next);
   };
 
   // Row 206 follow-on — every `start` gets exactly one `end`, including when
@@ -442,7 +448,7 @@ export async function runKindTurn<
 
 /**
  * SEC-04 leaf: guarded status.json write, shared by every variant. Routes the
- * WHOLE `<projectRoot>/<kindDir>/<sid>/status.json` path (leaf included)
+ * WHOLE `<logsRoot>/_sessions/<project>/<kindDir>/<sid>/status.json` path (leaf included)
  * through the containment guard and THROWS — fail closed, the runner contract
  * — if the leaf escapes.
  *
@@ -453,13 +459,13 @@ export async function runKindTurn<
  */
 export function writeKindStatus<S extends KindTurnStatus>(
   variant: Pick<SessionKindVariant<S, KindTurnResult>, 'label'>,
-  projectRoot: string,
+  logsRoot: string,
   dirSegments: readonly string[],
   status: S,
 ): void {
-  const written = guardedWriteSessionStatus(projectRoot, dirSegments, status as unknown as Record<string, unknown>);
+  const written = guardedWriteSessionStatus(logsRoot, dirSegments, status as unknown as Record<string, unknown>);
   if (written === null) {
-    if (statusWriteRefusalReason(projectRoot, dirSegments, status.phase) === 'cancelled') {
+    if (statusWriteRefusalReason(logsRoot, dirSegments, status.phase) === 'cancelled') {
       throw new Error(
         `${variant.label}: the session was cancelled while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
       );

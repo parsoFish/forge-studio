@@ -38,14 +38,14 @@
  */
 
 import { readResolvedDecisions, writeQuestions } from './architect-session.ts';
-import { runDraftRounds, runDraftStep, runExploreThenDraft, runInterviewStep, withPaths } from './architect-steps.ts';
+import { homeOf, runDraftRounds, runDraftStep, runExploreThenDraft, runInterviewStep, withPaths } from './architect-steps.ts';
 import { emitArchitectStageStart } from './architect-stage-events.ts';
 import type { ArchitectStepArgs } from './architect-steps.ts';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { QueryFn } from '../interactive-session.ts';
-import { PathGuardContainmentError, type EventLogger } from '@forge/kernel';
-import { archiveSessionDir } from './architect-plan.ts';
+import { PathGuardContainmentError, sessionKindSegments, type EventLogger } from '@forge/kernel';
+import { ARCHITECT_KIND_DIR, ARCHIVED_DIRNAME, archiveSessionDir } from './architect-plan.ts';
 import { requirePorts } from './architect-ports.ts';
 import { runKindTurn } from './kind-turn.ts';
 import { withBrainReadTracking } from './architect-brain-read.ts';
@@ -84,14 +84,14 @@ const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 // runner invoked directly by the Studio bridge, not a flow DAG node — so it
 // is not, and should not become, an executor-enum consumer.
 /**
- * ARCH-6 idempotency: a rejected session is MOVED to `_architect/_archived/`,
+ * ARCH-6 idempotency: a rejected session is MOVED to `<kindDir>/_archived/`,
  * so a repeat reject turn finds no live `status.json`. That is not a refusal —
  * it is a no-op. The archived read is a SECOND request-derived path
  * construction, contained the same way the live one is (a symlinked
  * `_archived` must not disclose out-of-root content).
  */
-function architectMissingStatus(input: RunArchitectTurnInput): RunArchitectTurnResult | null {
-  const archived = guardedReadStatus(input.projectRoot, ['_architect', '_archived', input.sessionId]);
+function architectMissingStatus(input: RunArchitectTurnInput, logsRoot: string): RunArchitectTurnResult | null {
+  const archived = guardedReadStatus(logsRoot, [...sessionKindSegments(input.project, ARCHITECT_KIND_DIR), ARCHIVED_DIRNAME, input.sessionId]);
   return archived?.phase === 'rejected' ? { phase: 'rejected', wrote: [] } : null;
 }
 
@@ -150,7 +150,7 @@ export const architectKind: SessionKindVariant<
   RunArchitectTurnInput
 > = {
   id: 'architect',
-  kindDir: '_architect',
+  kindDir: ARCHITECT_KIND_DIR,
   label: 'architect runner',
   eventLabel: 'architect turn',
   eventPhase: 'architect',
@@ -168,11 +168,11 @@ export const architectKind: SessionKindVariant<
     // forge-8vfn.8.3.5 — withBrainReadTracking (architect-brain-read.ts) emits brain.read per KB at turn end.
     interviewing: withBrainReadTracking(withPaths(async ({ input, status, plumbing, writeStatus, paths }) => {
       const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
-      const interview = readInterview(input.projectRoot, input.sessionId);
+      const interview = readInterview(homeOf({ input, plumbing }), input.sessionId);
       const decision = await runInterviewStep({ input, status, interview, plumbing, writeStatus, paths });
 
       if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
-        const questionsPath = writeQuestions(input.projectRoot, input.sessionId, decision.questions);
+        const questionsPath = writeQuestions(homeOf({ input, plumbing }), input.sessionId, decision.questions);
         writeStatus({ ...status, phase: 'awaiting-answers' });
         plumbing.logger.emit({
           initiative_id: plumbing.initiativeId, phase: 'architect', skill: 'architect-runner',
@@ -199,7 +199,7 @@ export const architectKind: SessionKindVariant<
       // session dir moves to _architect/_archived/ so it leaves
       // listArchitectSessions. Best-effort — already archived or missing is fine.
       try {
-        const archivedPath = archiveSessionDir(input.projectRoot, input.sessionId);
+        const archivedPath = archiveSessionDir(homeOf({ input, plumbing }), input.sessionId);
         plumbing.logger.emit({
           initiative_id: plumbing.initiativeId, phase: 'architect', skill: 'architect-runner',
           event_type: 'log', input_refs: [], output_refs: [archivedPath],
@@ -259,7 +259,7 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
   });
   // Refuses here, before any work, if the ports were never injected.
   const ports = requirePorts(input);
-  const resolved = readResolvedDecisions(input.projectRoot, input.sessionId);
+  const resolved = readResolvedDecisions(homeOf(args), input.sessionId);
 
   // DETERMINISTIC FINALIZE (#3, 2026-06-01). "Approve" must promote EXACTLY the
   // plan the operator saw. Previously this ran a SECOND LLM draft with the
@@ -290,7 +290,7 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
   // stamp them onto every promoted manifest so `runCycle` can emit real (not
   // synthetic/hardcoded) architect start/end events into the cycle log.
   const archStats = readArchitectSessionStats(
-    input.logsRoot ?? resolve('_logs'),
+    plumbing.logsRoot,
     input.sessionId,
   );
   if (archStats !== null) {

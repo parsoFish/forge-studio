@@ -27,6 +27,7 @@ directly.
 | GitHub host identity for outward gh actions | `ghTokenFor` · `assertGhOwner` · `ghRunnerFor` |
 | first-run scaffolding (`forge init`) | `QUEUE_SUBDIRS` · `layoutDirs` · `defaultConfigJson` · `ghAuthed` · `ensureLayoutDirs` · `ensureDefaultConfig` · `runInit` |
 | the path-containment guard + guarded fs primitives | `PathGuardContainmentError` · `isSafeSegment` · `isSafeSubPath` · `resolveGuardedPath` · `guardedFile` · `guardedReadFile` · `guardedWriteFile` · `guardedWriteFileExclusive` · `guardedUnlink` · `guardedReadDir` · `guardedRename` |
+| where a session dir lives: under the logs root, never in the ground | `SESSIONS_DIRNAME` · `ARCHITECT_KIND_DIR` · `sessionDirSegments` · `sessionKindSegments` · `resolveSessionDir` |
 | the session/project-dir realpath-guarded single-file read | `safeReadFileInSession` |
 | case-folding probe (duplicate-target detection) | `CaseFoldingProbeError` · `detectVolumeCaseFolding` |
 | guarded scan (bounded mtime + tail reads) | `guardedMtime` · `selectRecentEntries` · `guardedReadFileTail` |
@@ -50,7 +51,7 @@ directly.
 | the one emergency halt record (ADR 011) | `haltPath` · `readHalt` · `writeHalt` · `releaseHalt` · `forgeQueueRoot` |
 | the dispatch claim every detached-agent spawn seam shares (row 206) | `claimDispatchSlot` · `releaseDispatchSlot` · `CLAIM_PLACEHOLDER_STALE_MS` · `newRunStamp` · `randomRunSuffix` |
 
-### Types (45)
+### Types (46)
 
 `BandExecutor` · `BandRegistry` · `CanUseTool` · `CaseFoldingProbe` ·
 `ClauseId` · `ClauseResult` · `ConfigResult` · `CostStreamFacts` ·
@@ -63,7 +64,7 @@ directly.
 `PhaseExecutor` · `PreflightOptions` · `PreflightReport` · `ProjectGate` ·
 `ProjectStarterDescription` · `Provenance` · `RefGuardInstallOutcome` ·
 `RootMatch` · `RouteContext` · `RouteEntry` · `RouteMethod` · `RouteTable` ·
-`StudioContext` · `ToolFenceOptions`
+`SessionHome` · `StudioContext` · `ToolFenceOptions`
 
 ## Crash and recovery
 

@@ -29,7 +29,7 @@
  * type-only import of it is a layer violation from this package. The runner's
  * wider status satisfies both shapes structurally and passes straight through.
  */
-import { guardedReadFile, guardedWriteFile, guardedReadDir } from '@forge/kernel';
+import { guardedReadFile, guardedWriteFile, guardedReadDir, sessionDirSegments } from '@forge/kernel';
 import type { KbBinding } from '@forge/contracts';
 
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
@@ -125,20 +125,22 @@ export function buildAnalyzePlan(
 
 /** SEC-04 leaf: the staged-themes readdir routed through the guard (leaf dir
  *  included) — a symlinked `themes/` collapses to null → []. */
-export function listStagedThemes(projectRoot: string, sessionId: string): string[] {
-  const entries = guardedReadDir(projectRoot, [PROJECT_BRAIN_KIND_DIR, sessionId, 'themes']);
+export function listStagedThemes(logsRoot: string, project: string, sessionId: string): string[] {
+  const entries = guardedReadDir(logsRoot, [...sessionDirSegments(project, PROJECT_BRAIN_KIND_DIR, sessionId), 'themes']);
   if (entries === null) return [];
   return entries.filter((f) => f.endsWith('.md')).sort();
 }
 
 export function commitProjectBrain(args: {
-  projectRoot: string;
+  /** `<forgeRoot>/_logs` — where the staged themes' session dir lives. */
+  logsRoot: string;
   sessionId: string;
   forgeRoot: string;
+  /** `status.project` is the session's home segment under `<logsRoot>/_sessions`. */
   status: ProjectBrainCommitInput;
 }): { wrote: string[]; themes: string[] } {
-  const { projectRoot, sessionId, forgeRoot, status } = args;
-  const staged = listStagedThemes(projectRoot, sessionId);
+  const { logsRoot, sessionId, forgeRoot, status } = args;
+  const staged = listStagedThemes(logsRoot, status.project, sessionId);
 
   // R1-06 WI-2 (T1 ruling Q4 option (a)): honor a descriptor-derived binding
   // when this session carries one (the POST /api/studio/kbs create hand-off,
@@ -174,7 +176,7 @@ export function commitProjectBrain(args: {
     // and route the central-brain WRITE through the guard too (kb id +
     // filename as guarded segments). `file` is a readdir entry name, so it is a
     // single safe path component by construction.
-    const contents = guardedReadFile(projectRoot, [PROJECT_BRAIN_KIND_DIR, sessionId, 'themes', file]);
+    const contents = guardedReadFile(logsRoot, [...sessionDirSegments(status.project, PROJECT_BRAIN_KIND_DIR, sessionId), 'themes', file]);
     if (contents === null) continue; // unreadable / escaping staged leaf — skip
     const destSegs = file === 'profile.md' ? [...brainSegs, 'profile.md'] : [...brainSegs, 'themes', file];
     const dest = guardedWriteFile(forgeRoot, destSegs, contents);

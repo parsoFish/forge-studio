@@ -33,11 +33,12 @@
  */
 
 import { requireSessionStatusIo } from './kb-drain-model.ts';
+import { PROJECT_BRAIN_KIND_DIR } from './project-brain-build.ts';
 import { type ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, KB_ID_RE, sendJson, type Provenance } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, sessionDirSegments, provenanceOfOrigin, KB_ID_RE, sendJson, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
@@ -158,7 +159,7 @@ export type ApproveKbCleanupOutcome = { ok: true; runId: string } | { ok: false;
 
 export async function approveKbCleanup(
   forgeRoot: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   /**
    * `runFixTurn` (M4 ruling 86) is the real brain-fix turn, supplied by the
@@ -179,7 +180,7 @@ export async function approveKbCleanup(
 
   // --- SYNC INVARIANT SPAN START — see header. No await until the
   //     phase:'applying' write below has returned. ---
-  const status = guardedReadSessionStatus<{ phase?: unknown; kb_id?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
+  const status = guardedReadSessionStatus<{ phase?: unknown; kb_id?: unknown } & Record<string, unknown>>(logsRoot, dirSegs);
   if (!status || typeof status.phase !== 'string') {
     return { ok: false, status: 404, error: 'session not found' };
   }
@@ -253,7 +254,7 @@ export async function approveKbCleanup(
       // The draft body is read through the SAME guarded read the session
       // status came through — a draft path escaping the session dir reads
       // null and refuses.
-      const content = guardedReadFile(projectsRoot, [...dirSegs, ...draft.split('/')]);
+      const content = guardedReadFile(logsRoot, [...dirSegs, ...draft.split('/')]);
       if (content === null) {
         return { ok: false, status: 422, error: `kb-cleanup apply: draft file unreadable or escapes the session dir: ${draft}` };
       }
@@ -265,7 +266,7 @@ export async function approveKbCleanup(
   // check: any concurrent caller reading status AFTER this line observes
   // 'applying', never 'awaiting-approval', so at most one caller ever passes
   // the gate above.
-  const claimed = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applying' });
+  const claimed = guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'applying' });
   if (claimed === null) {
     return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applying" failed containment' };
   }
@@ -332,10 +333,10 @@ export async function approveKbCleanup(
       // replacement, so a retry after the operator fixes the underlying
       // problem is idempotent. The failure itself is recorded on the session
       // AND returned — never only one of the two.
-      guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'awaiting-approval', apply_error: writeError });
+      guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'awaiting-approval', apply_error: writeError });
       return { ok: false, status: 500, error: `kb-cleanup apply: draft write failed: ${writeError}` };
     }
-    const draftDone = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied', finalized });
+    const draftDone = guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'applied', finalized });
     if (draftDone === null) {
       return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
     }
@@ -374,7 +375,7 @@ export async function approveKbCleanup(
   // drain ever being enqueued in the first place for one approval.
   await enqueueConsolidate(kbId, () => runBrainConsolidateNow(forgeRoot, kbId, runId, opts.runFixTurn));
 
-  const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied', finalized });
+  const written = guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'applied', finalized });
   if (written === null) {
     return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
   }
@@ -711,6 +712,7 @@ type ProjectBrainSeedingSessionStatus = {
 
 export function mintProjectBrainSeedingSession(
   projectsRoot: string,
+  logsRoot: string,
   sessionProject: string,
   kbId: string,
   binding: KbBinding,
@@ -732,9 +734,14 @@ export function mintProjectBrainSeedingSession(
   if (!guardedProject.ok) {
     throw new Error(`kb create: hand-off session project "${sessionProject}" failed containment`);
   }
+  // The session dir lives under the logs root (forge-8vfn.8.5.58); the anchor
+  // dir under projects/ is only the agent's cwd, so it must exist — a dot-
+  // prefixed anchor is filtered out of project discovery, never a phantom.
+  mkdirSync(guardedProject.realPath, { recursive: true });
+  mkdirSync(logsRoot, { recursive: true });
   const written = write<ProjectBrainSeedingSessionStatus>(
-    projectsRoot,
-    [sessionProject, '_project-brain', sessionId],
+    logsRoot,
+    sessionDirSegments(sessionProject, PROJECT_BRAIN_KIND_DIR, sessionId),
     {
       session_id: sessionId,
       project: sessionProject,

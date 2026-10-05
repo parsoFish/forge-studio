@@ -31,7 +31,7 @@ import { statSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import { LEGACY_SESSION_AWAITS_PHASES, LEGACY_SESSION_WORKING_PHASES } from './session-phases.ts';
-import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, sessionDirSegments } from '@forge/kernel';
 import { sessionLogDirName } from './session-readability.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 
@@ -269,14 +269,13 @@ export function isSessionOwnershipMark(argvElement: string, sessionId: string): 
 }
 
 export function readSessionLifecycleFacts(args: {
-  projectsRoot: string;
   logsRoot: string;
   project: string;
   kind: string;
   sessionId: string;
 }): SessionLifecycleFacts {
-  const { projectsRoot, logsRoot, project, kind, sessionId } = args;
-  const statusMtimeMs = guardedMtime(projectsRoot, [project, `_${kind}`, sessionId, 'status.json']);
+  const { logsRoot, project, kind, sessionId } = args;
+  const statusMtimeMs = guardedMtime(logsRoot, [...sessionDirSegments(project, `_${kind}`, sessionId), 'status.json']);
   const logDir = sessionLogDirName(kind, sessionId);
   const logDirGuard = resolveGuardedPath(logsRoot, [logDir]);
   if (!logDirGuard.ok || !logDirGuard.exists) {
@@ -346,11 +345,10 @@ export function deriveSessionLifecycleFor(args: {
   terminal: boolean;
   project: string;
   sessionId: string;
-  projectsRoot: string;
   logsRoot: string;
   nowMs?: number;
 }): SessionLifecycle {
-  const { descriptor, phase, terminal, project, sessionId, projectsRoot, logsRoot } = args;
+  const { descriptor, phase, terminal, project, sessionId, logsRoot } = args;
   // W7A2-08: a terminal phase's verdict is fixed by rule 1 — no on-disk fact
   // can change it, so none is read (the index derives one lifecycle per row
   // on every poll, BEFORE the 200-row cap; terminal history dominates it).
@@ -360,7 +358,7 @@ export function deriveSessionLifecycleFor(args: {
     return { state: 'terminal', needsYou: false, error: null, idleMs: null, cancellable: false };
   }
   const shape = phaseShapeFor(descriptor, phase);
-  const facts = readSessionLifecycleFacts({ projectsRoot, logsRoot, project, kind: descriptor.id, sessionId });
+  const facts = readSessionLifecycleFacts({ logsRoot, project, kind: descriptor.id, sessionId });
   return deriveSessionLifecycle({
     terminal,
     awaits: shape.awaits,
