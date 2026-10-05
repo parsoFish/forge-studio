@@ -5,14 +5,14 @@ enumerated class rather than a bug to fix when found — the escape shapes, the
 rules a guard must satisfy, and the ratchet that keeps the enumeration true.
 
 The per-sink enumeration itself is the companion reference page,
-[`request-path-sinks.md`](../reference/request-path-sinks.md): every read and
+[`request-path-sinks.md`](../docs/reference/request-path-sinks.md): every read and
 write in `packages/` and `apps/` whose path derives from request data,
 classified `guarded` / `unguarded` / `accidentally-safe`. **When the ratchet
 tells you to add a row, that is the page it means.**
 
 **Why this document exists.** Between 2026-07 and 2026-08 the same defect was found twelve times across seven initiatives, always opportunistically: a lexical `resolve(base, id).startsWith(base + sep)` containment check on an *unresolved* path. That shape is worthless — `resolve()`/`join()` normalise `..` before the comparison ever runs, and a symlink's own on-disk location is lexically inside the allowed root even when it points somewhere else entirely. Ten instances found by luck means discovery was luck-driven and the class was open-ended. This table closes it: the set of request-derived path sites is now enumerated, so the question "have we found them all?" has an answer that is checked rather than hoped.
 
-The guard those fixes converge on is [`packages/kernel/path-guard.ts`](../../packages/kernel/path-guard.ts). Read its module docstring before using this table — in particular the **CONTRACT** section, which defines the *root-folding* bypass, and the escape-shape catalogue this document classifies against.
+The guard those fixes converge on is [`packages/kernel/path-guard.ts`](../packages/kernel/path-guard.ts). Read its module docstring before using this table — in particular the **CONTRACT** section, which defines the *root-folding* bypass, and the escape-shape catalogue this document classifies against.
 
 ## Escape shapes
 

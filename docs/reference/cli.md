@@ -28,7 +28,7 @@ recovery (cycle / enqueue / metrics / review / report / log / requeue) now live 
 UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
 Run `forge studio` and drive everything from the browser.
 
-For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see [DECISIONS.md](../../DECISIONS.md).
+For how the develop factory's stations work see apps/docs/src/content/docs/how-forge-works.md. For decisions see [DECISIONS.md](../../DECISIONS.md).
 ```
 
 ## Other verbs (daemon, scaffolding, phase entry points)

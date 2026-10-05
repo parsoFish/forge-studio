@@ -45,7 +45,7 @@ import {
 // attribution note. Kind is fixed to "skill" — the index sources every other
 // kind outside the registry (F1).
 //
-// Commit policy (decision, recorded in docs/explanation/community-registry.md):
+// Commit policy (decision, recorded in ARCHITECTURE.md):
 // Studio writes the repo-tracked file; the operator commits via their normal
 // git flow. /community shows the uncommitted-changes state.
 //

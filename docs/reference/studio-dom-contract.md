@@ -1963,7 +1963,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `<a href="/community/new">` in the header slot) plus per-row controls on
   the detail page (below). Trust decisions still never live here; the
   registry file is repo-tracked, Studio writes it and the operator commits
-  via their normal git flow (see `docs/explanation/community-registry.md`).
+  via their normal git flow (see `ARCHITECTURE.md`).
   Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
   [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]
   [data-hub-filter="all"|<hubId>]

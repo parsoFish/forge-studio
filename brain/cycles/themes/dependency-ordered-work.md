@@ -37,7 +37,7 @@ Forge implements this via `git worktree` (one worktree per claimed work unit, is
 ## Sources
 
 - [`agentic-engineering-best-practices.chat.md`](../../_raw/web/agentic-engineering-best-practices.chat.md) — synthesis section 3.
-- [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) — `_graph.md` mermaid view.
+- [`apps/docs/src/content/docs/how-forge-works.md`](../../../apps/docs/src/content/docs/how-forge-works.md) — `_graph.md` mermaid view.
 
 ## See also
 

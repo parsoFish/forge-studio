@@ -12,7 +12,7 @@ layout; individual historical rows are left as the audit trail they are.)
 **This is the page the ratchet means.** When `scripts/check-request-path-sinks.mjs`
 reports a new sink or a new caller, add its row here. The model behind the
 classifications — the escape shapes, what a guard must satisfy, the standing
-rules — is [`security-model.md`](../explanation/security-model.md); read it
+rules — is [`security-model.md`](../../dev/security-model.md); read it
 before adding a row.
 
 ## Summary

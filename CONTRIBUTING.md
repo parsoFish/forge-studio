@@ -1,6 +1,6 @@
 # Contributing to Forge
 
-> **New here?** Read [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) first — it maps every path
+> **New here?** Read [`ARCHITECTURE.md`](ARCHITECTURE.md) first — it maps every path
 > to one of forge's three scopes (framework · cycles/agents · projects) and states the
 > cross-scope rule. Which scope a file is in tells you the rule that governs changes there.
 
