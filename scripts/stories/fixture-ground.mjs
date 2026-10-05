@@ -34,6 +34,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { groundManifest } from './ground-hash.mjs';
 import { storyFixtureNames, assertSafeStoryId } from './sweep.mjs';
+import { captureAndClearFixtureSessions } from './fixture-sessions-clear.mjs';
 
 export const FIXTURE_ROOT = 'tests/stories/grounds';
 
@@ -326,19 +327,22 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
  *  the run just produced. Brain 3 is removed even when the ground directory
  *  is already gone — an orphaned profile is still this story's own residue
  *  (`sweep.mjs`'s `productFixturePathsFor` already lists it as such). */
-export function teardownFixtureGround(root, { storyId, project }) {
+export function teardownFixtureGround(root, { storyId, project, runStamp = new Date().toISOString().replace(/[:.]/g, '-') }) {
   assertOwnNamespace('teardownFixtureGround', storyId, project);
   const dest = join(root, 'projects', project);
   const brainDest = projectBrainDestDir(root, project);
   const destExists = existsSync(dest);
   const brainExists = existsSync(brainDest);
-  if (!destExists && !brainExists) return Object.freeze({ removed: false });
+  // The story's own sessions live under _logs/, outside the ground, and go
+  // with it (forge-8vfn.30.8) — whether or not the ground itself was present.
+  const sessions = Object.freeze(captureAndClearFixtureSessions(root, { storyId, project, runStamp }));
+  if (!destExists && !brainExists) return Object.freeze({ removed: false, sessions });
   try {
     if (destExists) rmSync(dest, { recursive: true, force: true });
     if (brainExists) rmSync(brainDest, { recursive: true, force: true });
-    return Object.freeze({ removed: true });
+    return Object.freeze({ removed: true, sessions });
   } catch (e) {
-    return Object.freeze({ removed: false, error: e?.message ?? String(e) });
+    return Object.freeze({ removed: false, sessions, error: e?.message ?? String(e) });
   }
 }
 
@@ -580,14 +584,20 @@ export function describeRealFence(realFence) {
  * to remove: a silent no-op reads the same as a teardown nobody wired in.
  */
 export function describeFixtureTeardown(teardown, { storyId, project }) {
-  if (teardown.removed) return { level: 'log', line: `[stories] fixture ground: torn down projects/${project}` };
+  const s = teardown.sessions;
+  const sessionsNote = s && (s.cleared.length > 0 || s.refused.length > 0)
+    ? `; its sessions: cleared ${s.cleared.join(', ') || 'none'}${s.refused.map((r) => `, NOT cleared ${r.dir} (${r.reason})`).join('')}`
+    : '';
+  if (teardown.removed) {
+    return { level: s?.refused.length ? 'warn' : 'log', line: `[stories] fixture ground: torn down projects/${project}${sessionsNote}` };
+  }
   if (teardown.error !== undefined) {
     return {
       level: 'warn',
       line:
         `[stories] fixture ground: could not tear down projects/${project}: ${teardown.error} — ` +
-        `the leading sweep of the next run that includes ${storyId} removes it`,
+        `the leading sweep of the next run that includes ${storyId} removes it${sessionsNote}`,
     };
   }
-  return { level: 'log', line: `[stories] fixture ground: projects/${project} already absent` };
+  return { level: 'log', line: `[stories] fixture ground: projects/${project} already absent${sessionsNote}` };
 }
