@@ -83,7 +83,7 @@
     //                 run against the live system (e.g.
     //                 ["TF_ACC","AZDO_ORG_SERVICE_URL"]). These are looked up
     //                 in the project's gitignored secrets.env (see
-    //                 docs/tutorials/getting-started.md). If a matching gate runs with
+    //                 apps/docs/src/content/docs/guides/getting-started.md). If a matching gate runs with
     //                 one of these unset, the dev-loop ERRORS the gate (no
     //                 false pass).
     // , "acceptance": {

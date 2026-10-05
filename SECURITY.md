@@ -2,7 +2,7 @@
 
 Forge Studio orchestrates autonomous agents that can hold **live credentials**
 — GitHub (`gh`) and Azure DevOps (ADO) tokens, supplied per-project via a
-gitignored `secrets.env` (see [`docs/tutorials/getting-started.md`](./docs/tutorials/getting-started.md)).
+gitignored `secrets.env` (see [`apps/docs/src/content/docs/guides/getting-started.md`](./apps/docs/src/content/docs/guides/getting-started.md)).
 Treat any credential-handling, prompt-injection, or supply-chain finding as a
 security issue, not an ordinary bug.
 

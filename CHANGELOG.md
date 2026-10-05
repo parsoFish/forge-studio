@@ -601,7 +601,7 @@ seams (Zep, graphify) and stale framing (forge-v2).
 - **`projects/mdtoc`** — a neutral, creds-free reference project (the default
   `verify:cycle` ground; betterado remains the live tier).
 - **Getting-started guide + onboarding scaffolding** —
-  [`docs/tutorials/getting-started.md`](docs/tutorials/getting-started.md),
+  [`apps/docs/src/content/docs/guides/getting-started.md`](apps/docs/src/content/docs/guides/getting-started.md),
   [`studio/starters/project.json.example`](studio/starters/project.json.example),
   and the per-project `secrets.env` convention.
 - **Runtime-adapter `runtime.sdk` threading** — the resolved SDK id flows through

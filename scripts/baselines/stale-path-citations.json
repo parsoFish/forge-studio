@@ -1524,61 +1524,61 @@
     "count": 1
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "path",
     "cited": "docs/operator-journey.md",
     "count": 2
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "path",
     "cited": "scripts/journeys/sessions-index.mjs",
     "count": 1
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "path",
     "cited": "studio/starters/project.json",
     "count": 1
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "demo-showcase",
     "count": 2
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "flows-author",
     "count": 4
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "flows-onboard",
     "count": 1
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "flows-run",
     "count": 3
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "sessions-index",
     "count": 2
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "stand-up-create",
     "count": 1
   },
   {
-    "file": "docs/product/user-stories.md",
+    "file": "dev/user-stories.md",
     "kind": "stem",
     "cited": "stand-up-onboard",
     "count": 2
@@ -1672,18 +1672,6 @@
     "kind": "stem",
     "cited": "story-registry",
     "count": 1
-  },
-  {
-    "file": "docs/tutorials/getting-started.md",
-    "kind": "path",
-    "cited": "brain/profile.md",
-    "count": 1
-  },
-  {
-    "file": "docs/tutorials/getting-started.md",
-    "kind": "path",
-    "cited": "studio/starters/project.json",
-    "count": 2
   },
   {
     "file": "packages/agents/agents-md-compose.ts",
