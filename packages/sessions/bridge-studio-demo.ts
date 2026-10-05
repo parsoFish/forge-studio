@@ -14,7 +14,7 @@
  * (since retired) `/fragment/` routes' containment is still LEXICAL only — they compare a built
  * path against a built base rather than resolving each untrusted segment
  * through a guard, which is the self-defeating idiom
- * `docs/reference/request-path-sinks.md` already records against bd `forge-28o`.
+ * already recorded as `unguarded` in scripts/request-path-sinks.classes.json.
  * The `/generation/` route beside them IS fully guarded. A carve is the wrong
  * place to change a guard: fixing it here would hide a security change inside a
  * move. It is recorded on the way past, with its row unchanged.

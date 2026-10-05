@@ -121,6 +121,7 @@ import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MOVED_PATHS, MOVED_BASELINE, applyMoved } from './check-stale-path-moved.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -161,7 +162,7 @@ const EXCLUDED_PROSE_FILES = new Map([
  * one of them is the shape this guard exists to catch.
  */
 const KNOWN_ROOTS = [
-  'apps', 'packages', 'scripts', 'skills', 'docs', 'tests', 'demos',
+  'apps', 'packages', 'scripts', 'skills', 'docs', 'tests', 'demos', 'dev',
   'brain', 'projects', 'studio', 'bin',
   'cli', 'orchestrator', 'loops', 'forge-ui',
 ];
@@ -553,9 +554,10 @@ export function groupFindings(findings) {
  * ratchet has room to tighten, reported non-fatally so `--write` has
  * something to shrink.
  */
-export function audit(root, baselineRows, stemsBaselinePath) {
+export function audit(root, baselineRows, stemsBaselinePath, movedTable = { rows: [], baseline: 0 }) {
   const scan = scanAll(root, stemsBaselinePath);
-  const grouped = groupFindings(scan.findings);
+  const { moved, rest, problems: movedProblems } = applyMoved(root, scan.findings, movedTable);
+  const grouped = groupFindings(rest);
   const budgets = new Map(baselineRows.map((row) => [contentKey(row), row.count]));
 
   const introduced = [];
@@ -587,7 +589,9 @@ export function audit(root, baselineRows, stemsBaselinePath) {
     scannedCode: scan.scannedCode,
     scannedProse: scan.scannedProse,
     retiredStems: scan.retiredStemCount,
-    totalFindings: scan.findings.length,
+    totalFindings: rest.length,
+    movedCount: moved.length,
+    movedProblems,
     totalKeys: grouped.size,
     baselinedKeys: baselineRows.length,
     currentRows,
@@ -658,6 +662,12 @@ function main(argv) {
     : resolve(argv[atS + 1]);
   const atR = argv.indexOf('--root');
   const root = atR === -1 ? ROOT : resolve(argv[atR + 1]);
+  // The committed MOVED table describes this repo's tree; a fixture root gets
+  // an empty one unless a test pins its own through --moved-table.
+  const atM = argv.indexOf('--moved-table');
+  const movedTable = atM !== -1
+    ? JSON.parse(readFileSync(resolve(argv[atM + 1]), 'utf8'))
+    : root === ROOT ? { rows: MOVED_PATHS, baseline: MOVED_BASELINE } : { rows: [], baseline: 0 };
 
   let existing;
   let result;
@@ -677,7 +687,7 @@ function main(argv) {
       writeFileSync(stemsBaselinePath, `${JSON.stringify([...candidates].sort(), null, 2)}\n`);
     }
     existing = readBaselineRows(baselinePath);
-    result = audit(root, existing ?? [], stemsBaselinePath);
+    result = audit(root, existing ?? [], stemsBaselinePath, movedTable);
   } catch (err) {
     if (!(err instanceof CorpusUnreadable)) throw err;
     process.stderr.write(
@@ -720,13 +730,13 @@ function main(argv) {
 
   const claudeLines = claudeMdLines(root);
   const overCap = claudeLines !== null && claudeLines > CLAUDE_MD_LINE_CAP;
-  const failed = result.introduced.length + result.stale.length + (overCap ? 1 : 0);
+  const failed = result.introduced.length + result.stale.length + result.movedProblems.length + (overCap ? 1 : 0);
   if (failed === 0) {
     if (!json) {
       process.stdout.write(
         `check-stale-path-citations: PASS — ${result.totalFindings} citation(s) across ${result.totalKeys} key(s) baselined ` +
         `(${result.scannedCode} code files, ${result.scannedProse} prose files, ` +
-        `${result.retiredStems} curated retired stem(s))` +
+        `${result.retiredStems} curated retired stem(s)); MOVED (${result.movedCount})` +
         (claudeLines === null ? '' : `; CLAUDE.md ${claudeLines}/${CLAUDE_MD_LINE_CAP} lines`) + '\n',
       );
     }
@@ -750,6 +760,7 @@ function main(argv) {
         `  stale baseline entry: ${s.file} ${s.kind} "${s.cited}" — audited ${s.budget}, now ${s.current}; run --write to tighten the ratchet.\n`,
       );
     }
+    for (const p of result.movedProblems) process.stdout.write(`  ${p}\n`);
     if (overCap) {
       process.stdout.write(
         `  CLAUDE.md: OVER CAP — ${claudeLines} lines (cap ${CLAUDE_MD_LINE_CAP}); move area detail to .claude/rules/ or delete lines that fail the rule of inclusion\n`,
