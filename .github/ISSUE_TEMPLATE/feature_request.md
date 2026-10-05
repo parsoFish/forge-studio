@@ -15,8 +15,7 @@ labels: enhancement
 - [ ] Visual SWE pipeline (flow engine, phase/WI hexes, Studio UI)
 - [ ] Code-enforced gates (architect / review / reflect human moments)
 - [ ] Compounding engineering brain (`brain/`, brain-query, reflection)
-- [ ] A seam / extension point (RuntimeAdapter, KbBackend, Flow, Skill —
-      see `docs/reference/extension-seams.md`)
+- [ ] A seam / extension point (RuntimeAdapter, KbBackend, Flow, Skill)
 - [ ] Something else (describe below)
 
 ## Problem

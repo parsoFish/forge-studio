@@ -2516,7 +2516,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`[data-run-ceiling=<usd|"">]`, text "Run agent ($N cap)" / "(no cost
   cap)"), seeded from the agent's own declared `budgets.maxBudgetUsd`
   (`Agent.declaredMaxBudgetUsd`) ahead of the run-level policy default —
-  see `docs/reference/agent-cost-ceilings.md`; a ralph-loop agent renders
+  see the Agent cost ceilings reference; a ralph-loop agent renders
   `[data-component="standalone-blocked"]` with the honest refusal (the
   bridge 400s the dispatch — no run is minted just to fail); the run
   control stays DISABLED while the dispatched run is itself still running

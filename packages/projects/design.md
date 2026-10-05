@@ -10,7 +10,7 @@ checking the filesystem, and Studio's `ContractReadiness` panel checking five
 object fields independently — and unified them into **one verdict, two faces**:
 Face A is the authoring object (`northStar`, `instructions`, `demoProcess`,
 `skills`, `kb`), Face B is the operational preflight (the C-clauses,
-[`docs/reference/project-contract.md`](../../docs/reference/project-contract.md) C1–C10).
+[`SPEC.md §6`](../../SPEC.md#6-project) C1–C10).
 `project-config.ts` owns Face A's shape and validation; `preflight.ts` and its
 seven `preflight-*.ts` clause modules own Face B. Both read the same
 `.forge/project.json`, computed in one place, so "is this project ready?" has one

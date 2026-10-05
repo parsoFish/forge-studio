@@ -138,7 +138,7 @@ rather than after it — the move needed something to land against.
   doesn't cover (a guarded path, not an import path):
   [`security-model.md`](./security-model.md).
 - **The forge↔project contract** — what a managed project under `projects/`
-  must satisfy: [`../reference/project-contract.md`](../reference/project-contract.md).
+  must satisfy: [`SPEC.md` §6](../../SPEC.md#6-project).
 - **The narrative walkthrough** — [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md)
   carries the fuller story of how a cycle moves through the two flows; parts
   of it predate this restructuring and are due a refresh, but the flow

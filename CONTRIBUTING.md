@@ -54,7 +54,7 @@ If your change conflicts with or supersedes a decision in `DECISIONS.md` or `SPE
 
 ## Extension points
 
-The three seams that accept new implementations without touching core orchestration are documented in [`docs/reference/extension-seams.md`](./docs/reference/extension-seams.md):
+The three seams that accept new implementations without touching core orchestration are documented in the published Extension seams reference:
 
 1. **RuntimeAdapter** — plug in a new LLM SDK or agentic coder (`packages/agents/_adapters/`).
 2. **KbBackend** — the brain's storage seam (`packages/knowledge/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the seam is present for a future second backend.
