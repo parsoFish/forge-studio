@@ -727,7 +727,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     for (const f of held.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
   }
 
-  writeHowTo(result, ROOT);
+  const docPath = writeHowTo(result, ROOT);
 
   const row = storyRowFrom(result);
   // Row 181 (`forge-8vfn.8.5.17`) used to print this story's own
