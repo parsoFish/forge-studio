@@ -45,7 +45,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `sweep` | object | no | - | Parameter-sweep hooks. |
 | `releaseProcess` | object | no | - | Release preparation that forge does in a cycle before merge. Tagging and publishing are left to CI. |
 
-### testProcess
+### `testProcess`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -53,32 +53,32 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `ci` | object | no | - | The full CI verification, run once as the last gate before a pull request opens. It mirrors the project's CI workflow. The command runs directly, so a `["bash","-c","a && b"]` chain is allowed here. |
 | `acceptance` | object | no | - | The live-acceptance tier, for projects whose behaviour only a live system can prove. Whether an initiative must pass it depends on the acceptance setting of its change class. A `required` key is refused. |
 
-### testProcess.local
+### `testProcess.local`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `cmd` | array of string | yes | - | Command as an argv array. `forge preflight` checks that it is one command, with no `&&`, `;` or pipe chaining, and that it does not run a slow suite such as playwright, cypress, e2e or integration. |
+| `cmd` | array of string | yes | - | Command as an argument array. `forge preflight` checks that it is one command, with no `&&`, `;` or pipe chaining, and that it does not run a slow suite such as playwright, cypress, e2e or integration. |
 | `timeoutMs` | integer | no | - | Gate timeout in milliseconds. The default is 30 minutes. The `FORGE_GATE_TIMEOUT_MS` environment variable overrides this value. |
-| `perWorkItem` | array of string | no | - | Gate template as an argv array, for example `["go","test","-count=1","./{package}/..."]`. It holds exactly one `{package}` placeholder, which cannot start a token, and no shell metacharacters. A work item that sets no gate of its own runs this template, with `{package}` replaced by the common directory of the item's files. When those files share no directory below the repo root, `cmd` runs instead. |
+| `perWorkItem` | array of string | no | - | Gate template as an argument array, for example `["go","test","-count=1","./{package}/..."]`. It holds exactly one `{package}` placeholder, which cannot start a token, and no shell operators. A work item that sets no gate of its own runs this template, with `{package}` replaced by the common directory of the item's files. When those files share no directory below the repository root, `cmd` runs instead. |
 
-### testProcess.ci
+### `testProcess.ci`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `cmd` | array of string | yes | - | Command as an argv array, for example `["bash","-c","make test && make lint"]`. |
-| `fixCmd` | array of string | no | - | Formatter command as an argv array, run on a best-effort basis before `cmd` so the pull request is formatted. |
+| `cmd` | array of string | yes | - | Command as an argument array, for example `["bash","-c","make test && make lint"]`. |
+| `fixCmd` | array of string | no | - | Formatter command as an argument array, run on a best-effort basis before `cmd` so the pull request is formatted. |
 | `unsetEnv` | array of string | no | - | Environment variable names removed when running `cmd` and `fixCmd`, so the gate runs the same way as CI. Use it for variables that switch on live tests, such as `TF_ACC`. `PATH`, `HOME` and `SHELL` are refused. |
 | `timeoutMs` | integer | no | - | Gate timeout in milliseconds. The default is 20 minutes. The `FORGE_CI_GATE_TIMEOUT_MS` environment variable overrides this value. |
 
-### testProcess.acceptance
+### `testProcess.acceptance`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `match` | string | yes | - | Text that marks a work item's gate as live acceptance: a gate matches when any argv token contains it, for example `acceptancetests`. Must not be empty. |
+| `match` | string | yes | - | Text that marks a work item's gate as live acceptance: a gate matches when any argument of its command contains it, for example `acceptancetests`. Must not be empty. |
 | `requiresEnv` | array of string | no | - | Environment variables that must be set for a matching gate to run live, for example `["TF_ACC"]`. When one is unset, the gate fails instead of passing on a skipped test run. Entries must not be empty. |
 | `timeoutMs` | integer | no | - | Reserved. Acceptance gates run as work-item gates, so `FORGE_GATE_TIMEOUT_MS` applies. |
 
-### demoProcess[]
+### `demoProcess[]`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -86,36 +86,36 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `text` | string | yes | - | Description of the step. |
 | `element` | string | no | - | Name of a demo element from the demo element library, for a composed demo. |
 
-### buildProcess
+### `buildProcess`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `local` | array of string | no | - | Build command as an argv array. An empty array counts as unset. |
+| `local` | array of string | no | - | Build command as an argument array. An empty array counts as unset. |
 | `remote` | string | no | - | Worktree-relative path to the CI workflow file. No leading slash, backslash or `..` segment. |
 
-### logging
+### `logging`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `heartbeat_seconds` | number | no | - | Seconds between agent heartbeat events. Must be greater than 0. |
 
-### metrics
+### `metrics`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `command` | array of string | no | - | Command as an argv array that prints scalar metrics to stdout. |
+| `command` | array of string | no | - | Command as an argument array that prints scalar metrics to standard output. |
 | `baselines_dir` | string | no | - | Directory of locked baseline files. |
 | `tolerance_pct` | number | no | - | Percentage drift allowed before a regression is flagged. |
 
-### sweep
+### `sweep`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `start_command` | array of string | no | - | Command as an argv array that starts the test bed. |
+| `start_command` | array of string | no | - | Command as an argument array that starts the test bed. |
 | `draw_function` | string | no | - | Worktree-relative path to a module that exports a sample-draw function. |
 | `measurement_extractor` | string | no | - | Worktree-relative path to a module that parses the output of `metrics.command`. |
 
-### releaseProcess
+### `releaseProcess`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -124,14 +124,14 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `changelogPath` | string | no | - | Worktree-relative path to the changelog. No leading slash, backslash or `..` segment. |
 | `docsDir` | string | no | - | Worktree-relative directory of the project docs. No leading slash, backslash or `..` segment. |
 
-### releaseProcess.steps[]
+### `releaseProcess.steps[]`
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `kind` | string | yes | - | `docs` refreshes the project docs, `changelog` writes a changelog entry, `version` bumps the version file. |
-| `phase` | string | yes | - | `in-cycle` runs during the dev loop with the feature work. `pre-merge` runs after the dev loop, before the pull request opens. |
+| `phase` | string | yes | - | `in-cycle` runs during the build loop with the feature work. `pre-merge` runs after the build loop, before the pull request opens. |
 | `text` | string | yes | - | Description of the step. |
-| `command` | array of string | no | - | Command as an argv array that performs the step. |
+| `command` | array of string | no | - | Command as an argument array that performs the step. |
 
 ## Limits
 

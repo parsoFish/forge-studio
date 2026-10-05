@@ -89,8 +89,8 @@ test('shape is built from required fields only', () => {
 test('one table per object level with dotted headings, in schema order', () => {
   const md: string = renderProjectJson(FIXTURE);
   assert.match(md, /\| Name \| Type \| Required \| Default \| Description \|/);
-  assert.match(md, /### gate\n/);
-  assert.match(md, /### steps\[\]\n/);
+  assert.match(md, /### `gate`\n/);
+  assert.match(md, /### `steps\[\]`\n/);
   const f = md.split('## Fields')[1];
   assert.ok(f.indexOf('`gate`') < f.indexOf('`repo`') && f.indexOf('`repo`') < f.indexOf('`kb`'));
   assert.match(md, /\| `kb` \| string or null \| no \|/);

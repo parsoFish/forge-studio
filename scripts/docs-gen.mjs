@@ -131,7 +131,7 @@ export function renderProjectJson(schema) {
     ].join('\n'),
     schema.description,
     '## Shape\n\n```json\n' + JSON.stringify(example(schema), null, 2) + '\n```',
-    '## Fields\n\n' + [table(rootLevel.obj), ...nested.map((l) => `### ${l.path}\n\n${table(l.obj)}`)].join('\n\n'),
+    '## Fields\n\n' + [table(rootLevel.obj), ...nested.map((l) => `### \`${l.path}\`\n\n${table(l.obj)}`)].join('\n\n'),
   ];
   const examples = schema.examples;
   if (Array.isArray(examples) && examples.length) {

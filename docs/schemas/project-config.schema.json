@@ -19,7 +19,7 @@
             "cmd": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Command as an argv array. `forge preflight` checks that it is one command, with no `&&`, `;` or pipe chaining, and that it does not run a slow suite such as playwright, cypress, e2e or integration."
+              "description": "Command as an argument array. `forge preflight` checks that it is one command, with no `&&`, `;` or pipe chaining, and that it does not run a slow suite such as playwright, cypress, e2e or integration."
             },
             "timeoutMs": {
               "type": "integer",
@@ -29,7 +29,7 @@
             "perWorkItem": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Gate template as an argv array, for example `[\"go\",\"test\",\"-count=1\",\"./{package}/...\"]`. It holds exactly one `{package}` placeholder, which cannot start a token, and no shell metacharacters. A work item that sets no gate of its own runs this template, with `{package}` replaced by the common directory of the item's files. When those files share no directory below the repo root, `cmd` runs instead."
+              "description": "Gate template as an argument array, for example `[\"go\",\"test\",\"-count=1\",\"./{package}/...\"]`. It holds exactly one `{package}` placeholder, which cannot start a token, and no shell operators. A work item that sets no gate of its own runs this template, with `{package}` replaced by the common directory of the item's files. When those files share no directory below the repository root, `cmd` runs instead."
             }
           }
         },
@@ -41,12 +41,12 @@
             "cmd": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Command as an argv array, for example `[\"bash\",\"-c\",\"make test && make lint\"]`."
+              "description": "Command as an argument array, for example `[\"bash\",\"-c\",\"make test && make lint\"]`."
             },
             "fixCmd": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Formatter command as an argv array, run on a best-effort basis before `cmd` so the pull request is formatted."
+              "description": "Formatter command as an argument array, run on a best-effort basis before `cmd` so the pull request is formatted."
             },
             "unsetEnv": {
               "type": "array",
@@ -72,7 +72,7 @@
           "properties": {
             "match": {
               "type": "string",
-              "description": "Text that marks a work item's gate as live acceptance: a gate matches when any argv token contains it, for example `acceptancetests`. Must not be empty.",
+              "description": "Text that marks a work item's gate as live acceptance: a gate matches when any argument of its command contains it, for example `acceptancetests`. Must not be empty.",
               "minLength": 1,
               "pattern": "\\S"
             },
@@ -166,7 +166,7 @@
         "local": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Build command as an argv array. An empty array counts as unset."
+          "description": "Build command as an argument array. An empty array counts as unset."
         },
         "remote": {
           "type": "string",
@@ -192,7 +192,7 @@
         "command": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Command as an argv array that prints scalar metrics to stdout."
+          "description": "Command as an argument array that prints scalar metrics to standard output."
         },
         "baselines_dir": {
           "type": "string",
@@ -211,7 +211,7 @@
         "start_command": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Command as an argv array that starts the test bed."
+          "description": "Command as an argument array that starts the test bed."
         },
         "draw_function": {
           "type": "string",
@@ -243,7 +243,7 @@
               "phase": {
                 "type": "string",
                 "enum": ["in-cycle", "pre-merge"],
-                "description": "`in-cycle` runs during the dev loop with the feature work. `pre-merge` runs after the dev loop, before the pull request opens."
+                "description": "`in-cycle` runs during the build loop with the feature work. `pre-merge` runs after the build loop, before the pull request opens."
               },
               "text": {
                 "type": "string",
@@ -252,7 +252,7 @@
               "command": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Command as an argv array that performs the step."
+                "description": "Command as an argument array that performs the step."
               }
             }
           }
