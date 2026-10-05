@@ -3,7 +3,7 @@
     {
       "path": "DECISIONS.md",
       "digest": "0f321b6fb94869d9",
-      "why": "R-16: Beats 8/13/14 live cost/tokens per session and on the cross-run ledger, from real recorded figures"
+      "why": "R-16: Beats 8/13/14: live cost/tokens shown per-session and on the cross-run ledger"
     },
     {
       "path": "brain/forge-dev/themes/derived-never-stored-run-model.md",
@@ -18,7 +18,12 @@
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §5: Beat12 the only bare generic interview (SessionInteractivePanel). SPEC §1: Beat11 model-tier picker bound to the agent's SKILL-declared envelope"
+      "why": "SPEC §5: Beat12: \"the ONLY place in the nine stories where the BARE generic interview is exercised\" (session-answer/SessionInteractivePanel)"
+    },
+    {
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §1: Beat11: fixed vs range model-tier picker — \"the tier comes from the agent's own SKILL-declared envelope... never a UI decision\""
     }
   ]
 }

@@ -8,7 +8,12 @@
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §6: S3's mechanism is artifactRoot (skills forge/skills -> .forge/skills); beat9 walks runPreflight/checkC1b/checkC2/checkC4 directly"
+      "why": "SPEC §6: S3's mechanism IS artifactRoot: skills move forge/skills/<id>/ (old artifactRoot:\"forge\") -> .forge/skills/<id>/ (current contract) — the ADR's own subject; beat9 reads…"
+    },
+    {
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §6: Beat9 walks runPreflight/checkC1b/checkC2/checkC4 (packages/projects/preflight.ts) directly"
     },
     {
       "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",

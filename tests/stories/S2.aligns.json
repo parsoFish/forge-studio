@@ -8,7 +8,7 @@
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §6: Beat4 preflight-status ok/flow-ready true is the readiness bar. SPEC §5: Beat10 architect kind excluded from the generic SessionInteractivePanel by design"
+      "why": "SPEC §6: Beat4: preflight-status: 'ok'/flow-ready: 'true' as the unified readiness bar a starter-created project must clear"
     },
     {
       "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
@@ -18,7 +18,12 @@
     {
       "path": "DECISIONS.md",
       "digest": "0f321b6fb94869d9",
-      "why": "R-05: Beats 9-12 architect session minted, multi-round interview (no ceiling), plan gate at /artifact"
+      "why": "R-05: Beats 9-12: architect session minted, multi-round interview (round-increment, no ceiling), plan gate at /artifact"
+    },
+    {
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §5: Beat10 quotes source directly: architect kind excluded from the generic SessionInteractivePanel \"BY DESIGN... never architect (no writable affordance)\""
     },
     {
       "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",

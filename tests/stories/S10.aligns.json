@@ -3,12 +3,32 @@
     {
       "path": "DECISIONS.md",
       "digest": "0f321b6fb94869d9",
-      "why": "D-20 send-back loop; D-03/D-04 _queue claim + emergency halt (beats 7-9); D-06 resume keeps finished WIs; D-15 orchestrator-owned gates; D-17/D-18 compiled-WI quarantine (beat8)"
+      "why": "D-20: The review-loop beats (S10.review.mjs): one anchored blocking comment -> fix-WI -> same-branch re-dispatch -> re-review — \"the send-back the whole story is built around\""
+    },
+    {
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "D-04: Beats 7-9: _queue state machine and forge serve's always-on claim; the one emergency halt: ACT 1 pulls it mid-build and the run finishes, ACT 2 pulls it before resume and the run waits queued"
+    },
+    {
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "D-06: Act2 (S10.act2.mjs): stop/resume-run (ruling 1794's inferRequeueResume path) keeps the finished work item and re-runs the unfinished one — \"the second attempt starts from what the first one…"
     },
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §2: forge-develop run node ids, timeline rows, per-node status/cost; D-11: Act2's non-destructive stop-run control (M7 row 150 amendment)"
+      "why": "SPEC §2: forge-develop flow run: node ids dev/integrate/adversarial-review/review, timeline rows and per-node status/cost; Act2's non-destructive stop-run control (M7 row 150 amendment)"
+    },
+    {
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "D-15: The integrate station assembles evidence for review before any human or agent judges it; gates are orchestrator verbs (plan gate, review gate, merge)"
+    },
+    {
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "D-17: S10.constants.mjs CYCLE_BOUND comment explicitly names \"the D-17 quarantine\" as one of beat8's three distinct blockers"
     },
     {
       "path": "brain/forge-dev/themes/cost-restatement-rule.md",

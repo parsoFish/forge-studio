@@ -3,12 +3,27 @@
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §2: the whole builder (FlowDef stations/edges, validateFlow, save/lint, beats 4-7). SPEC §3: Beat4 an edge says which artifact crosses it (ArtifactPicker)"
+      "why": "SPEC §2: The whole builder: FlowDef stations/edges, validateFlow's agent-ref check, save/lint (beats 4-7)"
     },
     {
       "path": "DECISIONS.md",
       "digest": "0f321b6fb94869d9",
-      "why": "R-09: Beat4 drag-and-drop canvas handles. D-09: Beat6 flow saved as FlowDef data, roster seeding. R-05: Beats 11-12 architect interview loop, same runner as S1/S2"
+      "why": "R-09: Beat4: drag-and-drop canvas, place-station-<ref>/connect-from-<ref>/connect-into-<ref> handles"
+    },
+    {
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §3: Beat4: \"an edge has always had to say which artifact crosses it\" — the edge/artifact contract this ADR defines, held via ArtifactPicker"
+    },
+    {
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "D-09: Beat6: flow saved as FlowDef data; roster seeding (seed-starter-agents) materialises agents-as-data"
+    },
+    {
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "R-05: Beats 11-12: architect interview loop (round-increment, no ceiling) — same runner as S1/S2"
     },
     {
       "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",

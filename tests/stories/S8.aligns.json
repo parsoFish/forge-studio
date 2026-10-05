@@ -13,12 +13,12 @@
     {
       "path": "DECISIONS.md",
       "digest": "0f321b6fb94869d9",
-      "why": "D-09: community registry rows / hub declarations / install-state as data (registry.yaml)"
+      "why": "D-09: Community registry rows / hub declarations / install-state as data (registry.yaml)"
     },
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §1: Beat18 the installed hook appears in the bin an agent is built out of (composable parts, as S5/S7)"
+      "why": "SPEC §1: Beat18: the installed hook must appear \"in the bin an agent is built out of\" — same composable-parts model as S5/S7"
     },
     {
       "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
