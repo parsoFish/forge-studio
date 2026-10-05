@@ -43,7 +43,7 @@
  * `<attackerPath>/.forge/demo/DEMO.html` or
  * `<attackerPath>/.forge/demo/fragments/<element>.html`.
  *
- * "Guard that cannot fail" (docs/explanation/security-model.md's own
+ * "Guard that cannot fail" (dev/security-model.md's own
  * vocabulary; cli/studio-path-guard.ts's docstring names the same class):
  * `/demo/`'s only check is
  *   base = join(status.project_repo_path, '.forge', 'demo') + sep

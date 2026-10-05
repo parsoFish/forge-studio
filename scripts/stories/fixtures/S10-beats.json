@@ -1,0 +1,377 @@
+{
+ "story": {
+  "id": "S10",
+  "docs": {
+   "kind": "how-to",
+   "title": "Run the example factory to a merged PR"
+  }
+ },
+ "beats": [
+  {
+   "act": "Open the project forge already manages",
+   "say": "This is the ground the whole story stands on: a real CLI with a real test suite, already onboarded, already merged through once.",
+   "status": "green",
+   "frame": "frames/01-open-the-project-forge-already-manages.png"
+  },
+  {
+   "act": "Press \"Architect →\"",
+   "say": "The operator has a feature in mind and no plan for it.",
+   "status": "green",
+   "frame": "frames/02-press-architect.png"
+  },
+  {
+   "act": "Describe the work, cap what this run may spend, and press \"Start architect\"",
+   "say": "The ceiling is set before the work starts, not discovered afterwards.",
+   "status": "green",
+   "frame": "frames/03-describe-the-work-cap-what-this-run-may-.png"
+  },
+  {
+   "act": "Open the session and answer the Architect's questions",
+   "say": "The interview is where the operator's one sentence becomes something buildable.",
+   "status": "green",
+   "frame": "frames/04-open-the-session-and-answer-the-architec.png"
+  },
+  {
+   "act": "Read the plan at the gate and approve it",
+   "say": "This is the first of the two human gates.",
+   "status": "green",
+   "frame": "frames/05-read-the-plan-at-the-gate-and-approve-it.png"
+  },
+  {
+   "act": "Go back to the project the plan belongs to",
+   "say": "The plan is approved.",
+   "status": "green",
+   "frame": "frames/06-go-back-to-the-project-the-plan-belongs-.png"
+  },
+  {
+   "act": "Go to the roadmap, where the approved plan is already being worked",
+   "say": "The plan is approved, and the factory is already at work on it.",
+   "status": "green",
+   "frame": "frames/07-go-to-the-roadmap-where-the-approved-pla.png"
+  },
+  {
+   "act": "Watch the factory plan and build the initiative",
+   "say": "Approving the plan was the operator's last act for a while.",
+   "status": "green",
+   "frame": "frames/08-watch-the-factory-plan-and-build-the-ini.png"
+  },
+  {
+   "act": "Open the initiative to find the run it produced",
+   "say": "The card says the work is ready for review.",
+   "status": "green",
+   "frame": "frames/09-open-the-initiative-to-find-the-run-it-p.png"
+  },
+  {
+   "act": "Hand the plan to the build flow",
+   "say": "The architect has planned and stopped, which is where it is meant to stop — the plan is the first thing a human is asked to approve.",
+   "status": "green",
+   "frame": "frames/10-hand-the-plan-to-the-build-flow.png"
+  },
+  {
+   "act": "Open the flows index to watch the build",
+   "say": "The build flow is running the initiative now.",
+   "status": "green",
+   "frame": "frames/11-open-the-flows-index-to-watch-the-build.png"
+  },
+  {
+   "act": "Open the develop flow monitor",
+   "say": "This is the surface with per-work-item evidence while a run builds.",
+   "status": "green",
+   "frame": "frames/12-open-the-develop-flow-monitor.png"
+  },
+  {
+   "act": "Wait for the build flow to claim the run",
+   "say": "Something is genuinely running before anything is held back — the run is claimed and a work item is building.",
+   "status": "green",
+   "frame": "frames/13-wait-for-the-build-flow-to-claim-the-run.png"
+  },
+  {
+   "act": "Pull the emergency halt while the run builds",
+   "say": "One press.",
+   "status": "green",
+   "frame": "frames/14-pull-the-emergency-halt-while-the-run-bu.png"
+  },
+  {
+   "act": "The active run finishes under the halt",
+   "say": "The halt stops new work, not work in progress.",
+   "status": "green",
+   "frame": "frames/15-the-active-run-finishes-under-the-halt.png"
+  },
+  {
+   "act": "Release the halt",
+   "say": "Release is one press from the same place.",
+   "status": "green",
+   "frame": "frames/16-release-the-halt.png"
+  },
+  {
+   "act": "Watch the run build",
+   "say": "The dev station fans out over the work items the plan decomposed into.",
+   "status": "green",
+   "frame": "frames/17-watch-the-run-build.png"
+  },
+  {
+   "act": "The built work is assembled for review",
+   "say": "Between building and judging there is a step that puts the change together with the evidence for it — the diff, the acceptance criteria and what was actually demonstrated.",
+   "status": "green",
+   "frame": "frames/18-the-built-work-is-assembled-for-review.png"
+  },
+  {
+   "act": "The review station finishes its pass",
+   "say": "A machine reviewer goes first, against the acceptance criteria and the change class the plan gate confirmed.",
+   "status": "green",
+   "frame": "frames/19-the-review-station-finishes-its-pass.png"
+  },
+  {
+   "act": "The review findings are on the run page",
+   "say": "Its findings are the reviewer's starting point, not its verdict — the human decides.",
+   "status": "green",
+   "frame": "frames/20-the-review-findings-are-on-the-run-page.png"
+  },
+  {
+   "act": "Open the review verdict at its gate",
+   "say": "The review has an opinion and the operator goes to read it where the decision is made.",
+   "status": "green",
+   "frame": "frames/21-open-the-review-verdict-at-its-gate.png"
+  },
+  {
+   "act": "Anchor one blocking comment to the precedence criterion (the first criterion, said so in the log, when none names precedence) and send it back",
+   "say": "This is the send-back the whole story is built around.",
+   "status": "green",
+   "frame": "frames/22-anchor-one-blocking-comment-to-the-prece.png"
+  },
+  {
+   "act": "The fix lands on the same branch and comes back for re-review",
+   "say": "No restart, no second cycle, no lost work.",
+   "status": "green",
+   "frame": "frames/23-the-fix-lands-on-the-same-branch-and-com.png"
+  },
+  {
+   "act": "Open the re-reviewed verdict at its gate",
+   "say": "The fix came back.",
+   "status": "green",
+   "frame": "frames/24-open-the-re-reviewed-verdict-at-its-gate.png"
+  },
+  {
+   "act": "Read the fix against the criterion, and resolve the blocking comment it answers (the first criterion's, said so in the log, when none names precedence)",
+   "say": "The operator does not take the reviewer's word that the fix landed — they read it against the exact criterion the send-back named, on the same comment they anchored there, and resolve it.",
+   "status": "green",
+   "frame": "frames/25-read-the-fix-against-the-criterion-and-r.png"
+  },
+  {
+   "act": "Approve — which is the merge",
+   "say": "The second human gate, and the only one that spends something irreversible.",
+   "status": "green",
+   "frame": "frames/26-approve-which-is-the-merge.png"
+  },
+  {
+   "act": "Reflect on the cycle",
+   "say": "The cycle ends by writing down what it learned.",
+   "status": "green",
+   "frame": "frames/27-reflect-on-the-cycle.png"
+  },
+  {
+   "act": "Open the knowledge graph",
+   "say": "The cycle is done.",
+   "status": "green",
+   "frame": "frames/28-open-the-knowledge-graph.png"
+  },
+  {
+   "act": "Find what the cycle learned on the knowledge graph",
+   "say": "The theme the reflector wrote is now a node the next planner will read.",
+   "status": "green",
+   "frame": "frames/29-find-what-the-cycle-learned-on-the-knowl.png"
+  },
+  {
+   "act": "Open the flows index",
+   "say": "Before checking what the run cost, the operator opens the flows this factory runs.",
+   "status": "green",
+   "frame": "frames/30-open-the-flows-index.png"
+  },
+  {
+   "act": "Check what the run cost",
+   "say": "One figure, and it is the same figure the event log holds.",
+   "status": "green",
+   "frame": "frames/31-check-what-the-run-cost.png"
+  },
+  {
+   "act": "ACT 2 — open the projects index to start a second initiative",
+   "say": "A second, smaller change starts the same way the first one did: from the projects the operator already manages.",
+   "status": "green",
+   "frame": "frames/32-act-2-open-the-projects-index-to-start-a.png"
+  },
+  {
+   "act": "ACT 2 — open gitpulse again",
+   "say": "The same ground, a second time — nothing here was reset between the two initiatives.",
+   "status": "green",
+   "frame": "frames/33-act-2-open-gitpulse-again.png"
+  },
+  {
+   "act": "ACT 2 — press \"Architect →\" for the second idea",
+   "say": "The first change already merged.",
+   "status": "green",
+   "frame": "frames/34-act-2-press-architect-for-the-second-ide.png"
+  },
+  {
+   "act": "ACT 2 — describe the second idea and start its architect",
+   "say": "A smaller ceiling for a smaller idea, set before the work starts.",
+   "status": "green",
+   "frame": "frames/35-act-2-describe-the-second-idea-and-start.png"
+  },
+  {
+   "act": "ACT 2 — open the session and answer the second interview",
+   "say": "A smaller idea, the same interview shape — the architect decides how many rounds it needs.",
+   "status": "green",
+   "frame": "frames/36-act-2-open-the-session-and-answer-the-se.png"
+  },
+  {
+   "act": "ACT 2 — read the second plan at the gate and approve it",
+   "say": "Approving the plan is what mints the second initiative — the same act that started the first.",
+   "status": "green",
+   "frame": "frames/37-act-2-read-the-second-plan-at-the-gate-a.png"
+  },
+  {
+   "act": "ACT 2 — go back to the project for the second initiative",
+   "say": "Back to the project to start the second initiative, exactly as the first one was started.",
+   "status": "green",
+   "frame": "frames/38-act-2-go-back-to-the-project-for-the-sec.png"
+  },
+  {
+   "act": "ACT 2 — return to the roadmap, where the second plan is already being worked",
+   "say": "The factory claims queued work the same way for every initiative — there is nothing to start again.",
+   "status": "green",
+   "frame": "frames/39-act-2-return-to-the-roadmap-where-the-se.png"
+  },
+  {
+   "act": "ACT 2 — watch the factory plan and build the second initiative",
+   "say": "The second initiative is smaller, but it is planned and built the same unattended way the first one was.",
+   "status": "green",
+   "frame": "frames/40-act-2-watch-the-factory-plan-and-build-t.png"
+  },
+  {
+   "act": "ACT 2 — open the second initiative to find the run it produced",
+   "say": "A second run, with its own cycle id — nothing about it is the first run under a different name.",
+   "status": "green",
+   "frame": "frames/41-act-2-open-the-second-initiative-to-find.png"
+  },
+  {
+   "act": "ACT 2 — hand the second plan to the build flow",
+   "say": "Development starts on the second initiative too — and this time the operator does not wait for it to finish.",
+   "status": "green",
+   "frame": "frames/42-act-2-hand-the-second-plan-to-the-build-.png"
+  },
+  {
+   "act": "ACT 2 — open the flows index to watch the second run build",
+   "say": "Before catching the run mid-flight, the operator opens the flow that is building it.",
+   "status": "green",
+   "frame": "frames/43-act-2-open-the-flows-index-to-watch-the-.png"
+  },
+  {
+   "act": "ACT 2 — open the develop flow monitor",
+   "say": "This is the surface with per-work-item evidence — the run's own detail page has none.",
+   "status": "green",
+   "frame": "frames/44-act-2-open-the-develop-flow-monitor.png"
+  },
+  {
+   "act": "ACT 2 — wait for the second run's first work item to start",
+   "say": "Something is genuinely in flight before anything is interrupted — otherwise stopping mid-flight proves nothing.",
+   "status": "green",
+   "frame": "frames/45-act-2-wait-for-the-second-run-s-first-wo.png"
+  },
+  {
+   "act": "ACT 2 — open the second run's own detail page",
+   "say": "Act 2 starts where Act 1 was watched from: the operator opens the run they are about to stop.",
+   "status": "green",
+   "frame": "frames/46-act-2-open-the-second-run-s-own-detail-p.png"
+  },
+  {
+   "act": "ACT 2 — stop the second run mid-flight",
+   "say": "Things stop halfway.",
+   "status": "green",
+   "frame": "frames/47-act-2-stop-the-second-run-mid-flight.png"
+  },
+  {
+   "act": "ACT 2 — step away while the stop lands",
+   "say": "The runner needs a moment to reach the boundary it stops at.",
+   "status": "green",
+   "frame": "frames/48-act-2-step-away-while-the-stop-lands.png"
+  },
+  {
+   "act": "ACT 2 — after the stop, the running work item finished naturally",
+   "say": "The work item already in flight when the operator stopped the run is not thrown away mid-turn — it finishes, because nothing in this product aborts a live turn.",
+   "status": "green",
+   "frame": "frames/49-act-2-after-the-stop-the-running-work-it.png"
+  },
+  {
+   "act": "ACT 2 — and the next work item never started at all",
+   "say": "That is the fact a resume has to prove it does not skip — not an assumption this story is making about it.",
+   "status": "green",
+   "frame": "frames/50-act-2-and-the-next-work-item-never-start.png"
+  },
+  {
+   "act": "ACT 2 — open the second run's own detail page again",
+   "say": "Back to the run itself to confirm why it stopped, and then to resume it.",
+   "status": "green",
+   "frame": "frames/51-act-2-open-the-second-run-s-own-detail-p.png"
+  },
+  {
+   "act": "ACT 2 — confirm the stopped, resumable state",
+   "say": "The product says plainly why this run stopped — not a crash, an operator decision — and that it is still here to resume.",
+   "status": "green",
+   "frame": "frames/52-act-2-confirm-the-stopped-resumable-stat.png"
+  },
+  {
+   "act": "ACT 2 — pull the emergency halt before resuming",
+   "say": "The operator holds the factory before resuming the stopped run, to see what the halt does to queued work.",
+   "status": "green",
+   "frame": "frames/53-act-2-pull-the-emergency-halt-before-res.png"
+  },
+  {
+   "act": "ACT 2 — resume via the run's own resume control",
+   "say": "Resume is not a fresh start.",
+   "status": "green",
+   "frame": "frames/54-act-2-resume-via-the-run-s-own-resume-co.png"
+  },
+  {
+   "act": "ACT 2 — step back to the monitor before reading the queued run",
+   "say": "The run page reads its run once; a fresh load shows the state resume left behind.",
+   "status": "green",
+   "frame": "frames/55-act-2-step-back-to-the-monitor-before-re.png"
+  },
+  {
+   "act": "ACT 2 — open the resumed run's detail page",
+   "say": "A fresh read of the run the operator just resumed.",
+   "status": "green",
+   "frame": "frames/56-act-2-open-the-resumed-run-s-detail-page.png"
+  },
+  {
+   "act": "ACT 2 — the resumed run waits queued while the halt is on",
+   "say": "Resume put the run back in the queue and the halt keeps it there: the run says it starts when the halt is released, and nothing it had done is lost.",
+   "status": "green",
+   "frame": "frames/57-act-2-the-resumed-run-waits-queued-while.png"
+  },
+  {
+   "act": "ACT 2 — release the halt so the resumed run can start",
+   "say": "Releasing the halt lets the factory claim the queued run; the next beats watch it pick up where the stop left it.",
+   "status": "green",
+   "frame": "frames/58-act-2-release-the-halt-so-the-resumed-ru.png"
+  },
+  {
+   "act": "ACT 2 — step back to the monitor to watch the resumed run",
+   "say": "The second attempt starts from what the first one finished, not from nothing.",
+   "status": "green",
+   "frame": "frames/59-act-2-step-back-to-the-monitor-to-watch-.png"
+  },
+  {
+   "act": "ACT 2 — the finished work item survived the stop and the resume",
+   "say": "The work item that passed is still passed and its commits are still on the branch — that is the whole reason a stopped run is recoverable rather than wasted.",
+   "status": "green",
+   "frame": "frames/60-act-2-the-finished-work-item-survived-th.png"
+  },
+  {
+   "act": "ACT 2 — the unfinished work item resumes, not skipped",
+   "say": "A stopped run does not skip the work it never reached — it comes back and finishes it.",
+   "status": "green",
+   "frame": "frames/61-act-2-the-unfinished-work-item-resumes-n.png"
+  }
+ ]
+}

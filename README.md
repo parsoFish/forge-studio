@@ -95,7 +95,7 @@ contract file is a managed project. To get one ready:
 
 ## The example factory's gates
 
-The platform prescribes no fixed human moments: a factory declares its own gates in its flow, and Studio renders each one as a session the operator finalizes. The example develop factory ([stations and gates](./docs/explanation/example-factory.md)) is built with four operator acts; everything between them runs unattended:
+The platform prescribes no fixed human moments: a factory declares its own gates in its flow, and Studio renders each one as a session the operator finalizes. The example develop factory ([stations and gates](./apps/docs/src/content/docs/how-forge-works.md)) is built with four operator acts; everything between them runs unattended:
 
 | Act | What you do in Studio | The factory produces |
 |---|---|---|
@@ -106,13 +106,13 @@ The platform prescribes no fixed human moments: a factory declares its own gates
 
 ## Repository layout
 
-The platform is nine ranked packages and two apps, their allow-graph enforced by a boundary lint; the factory content (flows, agents, skills, brain) is data on top, and managed projects sit outside the tree. The scope column says which: platform (1), factory content (2), projects (3). See **[docs/explanation/architecture.md](./docs/explanation/architecture.md)** for the full map and why.
+The platform is nine ranked packages and two apps, their allow-graph enforced by a boundary lint; the factory content (flows, agents, skills, brain) is data on top, and managed projects sit outside the tree. The scope column says which: platform (1), factory content (2), projects (3). See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the full map.
 
 | Path | Scope | What lives here |
 |---|---|---|
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | — | Narrative architecture |
 | [`PRINCIPLES.md`](./PRINCIPLES.md) | — | The five principles that gate every decision |
-| [`docs/`](./docs/) | — | Docs — [repo map](./docs/explanation/architecture.md), decisions, phase docs, guides |
+| [`docs/`](./docs/) | — | Docs — [repo map](./ARCHITECTURE.md), decisions, phase docs, guides |
 | [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← stations ← factory` |
 | [`apps/forge/`](./apps/forge/) | 1 | The assembly — `forge` CLI entry, the UI bridge and its routes, assembly-side bindings |
 | [`apps/studio/`](./apps/studio/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |

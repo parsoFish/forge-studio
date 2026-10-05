@@ -26,7 +26,7 @@ export function KbBind({
   // forge-8vfn.5.10: the id THIS click mints, rendered before the navigation
   // that consumes it — the `SessionMinted` convention M1-G (`forge-8vfn.5.5`)
   // adopted for architect and demo. `router.push`ing from inside the click
-  // left the id observable to nothing (docs/reference/studio-dom-contract.md).
+  // left the id observable to nothing (dev/studio-dom-contract.md).
   const [mintedSessionId, setMintedSessionId] = useState<string | null>(null);
 
   // R1-3b: building a project brain is now an agentic session — the agent reads

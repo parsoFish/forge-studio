@@ -38,6 +38,7 @@ import {
   checkpointArtifactStem,
 } from '@forge/stations/demo-types.ts';
 import { isSafeDemoRoute } from '@forge/contracts';
+import { resolveCheckpointHead } from '@forge/kernel';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
   collectCapturedMedia,
@@ -227,7 +228,9 @@ export function captureCommandOutput(worktreePath: string, command: string): str
   const argv = command.trim().split(/\s+/);
   let out: string;
   try {
-    const r = spawnSync(argv[0], argv.slice(1), {
+    const head = resolveCheckpointHead(argv, worktreePath);
+    if (!head.ok) return `[command did not run: ${head.reason}]\n`;
+    const r = spawnSync(head.file, head.args, {
       cwd: worktreePath,
       encoding: 'utf8',
       timeout: 60_000,

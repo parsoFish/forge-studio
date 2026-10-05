@@ -15,4 +15,4 @@
 cycle's Brain 3 for supplemental project context). See
 SPEC §4.
 
-See [docs/explanation/architecture.md](../docs/explanation/architecture.md).
+See [ARCHITECTURE.md](../ARCHITECTURE.md).

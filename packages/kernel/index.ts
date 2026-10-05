@@ -103,3 +103,7 @@ export * from './forge-ref-guard-hook.ts';
  *  (`claimDispatchSlot`/`releaseDispatchSlot`), plus the run-id stamp
  *  helpers (`newRunStamp`/`randomRunSuffix`) — row 206 (forge-8vfn.8.5.56). */
 export * from './dispatch-claim.ts';
+
+/** The one resolver for a demo checkpoint command's head: PATH, then the
+ *  worktree package.json `bin` (contained inside the worktree). */
+export { resolveCheckpointHead } from './checkpoint-command.ts';
