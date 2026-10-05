@@ -20,7 +20,7 @@ No source means no ceiling. forge never invents a default for a run.
 
 ## Fields
 
-Agent `budgets` (in the agent's `SKILL.md` frontmatter):
+Agent `budgets` (in the agent's `SKILL.md` front matter):
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -42,14 +42,14 @@ Flow and manifest settings:
 
 ## Examples
 
-Agent frontmatter, as shipped for the architect:
+Agent front matter, as shipped for the architect:
 
 ```yaml
 budgets:
   maxBudgetUsd: 10
 ```
 
-Initiative manifest frontmatter that raises one initiative's ceiling:
+Initiative manifest front matter that raises one initiative's ceiling:
 
 ```yaml
 cost_budget_usd: 18

@@ -13,7 +13,7 @@ You extend forge by adding data (agents, flows, hooks, catalog entries) or by im
 
 | Seam | You add | Where | Checked by |
 |---|---|---|---|
-| Agent | A `SKILL.md` with agent frontmatter | `skills/<slug>/SKILL.md` | `forge studio lint` |
+| Agent | A `SKILL.md` with agent front matter | `skills/<slug>/SKILL.md` | `forge studio lint` |
 | Skill | A `SKILL.md` of instructions | `.forge/skills/<id>/SKILL.md` in a project, or `skills/<id>/SKILL.md` for every project | `forge preflight` |
 | Flow | A `flow.yaml` | `studio/flows/<id>/flow.yaml` | `forge studio lint` |
 | Hook | A `hook.yaml` and script | `studio/hooks/<id>/` | `forge studio lint`, operator approval |
@@ -25,7 +25,7 @@ Adding an agent slug to a flow's `nodes` is the only registration an agent needs
 
 ## Fields
 
-Agent `SKILL.md` frontmatter:
+Agent `SKILL.md` front matter:
 
 | Name | Type | Default | Description |
 |---|---|---|---|
@@ -56,7 +56,7 @@ Flow `flow.yaml`:
 | `origin` | string | required | `seed`, `starter` or `operator`. |
 | `accepts` | list | required, non-empty | Change classes: `code`, `docs`, `config`, `infra`. |
 | `nodes` | list | required | `id`, plus `agent` or `gate`, optional `fanOut`, `resumable`. |
-| `edges` | list | required | `from`, `to`, `artifact` (a greppable markdown artifact). |
+| `edges` | list | required | `from`, `to`, `artifact` (a markdown artifact). |
 | `triggers` | list | required, may be `[]` | `on`, `target`, and per-kind fields. |
 
 Hook `hook.yaml`:
@@ -78,7 +78,7 @@ Runtime adapter interface:
 | Member | Type | Description |
 |---|---|---|
 | `id` | string | SDK id, matching the catalog. |
-| `available` | boolean | False when the dependency or credentials are missing; registered but not selectable. |
+| `available` | true or false | False when the dependency or credentials are missing; registered but not selectable. |
 | `createAgent(opts)` | function | Returns one loop iteration. |
 | `query` | function | Raw SDK call used by single-pass agents. |
 

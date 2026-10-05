@@ -22,7 +22,7 @@ What a project provides:
 
 | What | Where |
 |---|---|
-| Contract config | `.forge/project.json` in the project |
+| Contract configuration | `.forge/project.json` in the project |
 | Gate command sidecar (optional) | `.forge/quality_gate_cmd` |
 | Project-local skills (optional) | `.forge/skills/<id>/SKILL.md` |
 | A roadmap | `roadmap.md` in the project root |
@@ -30,7 +30,7 @@ What a project provides:
 | A `.gitignore` covering forge scratch | project root |
 | A Knowledge profile | `brain/projects/<name>/profile.md` in the forge checkout |
 
-The Knowledge profile is forge-owned. Onboarding the project in Studio creates it.
+The Knowledge profile is forge-owned. Adding the project in Studio creates it.
 
 ## Fields
 
@@ -43,8 +43,8 @@ The fields of `.forge/project.json` are in that file's schema; the project build
 | `demoProcess` | list | none | Steps of kind `capture`, `verify`, `present`. Needs at least one `capture` and one `verify`. |
 | `skills` | list of slugs | none | Skills bound to the project. Required for readiness. |
 | `kb` | string or null | none | Bound Knowledge base id. Required for readiness. |
-| `testProcess.local.cmd` | argv list | none | The fast per-work-item gate. Required. |
-| `testProcess.local.perWorkItem` | argv list | none | Template with one `{package}` placeholder for a work item's omitted gate. |
+| `testProcess.local.cmd` | argument list | none | The fast per-work-item gate. Required. |
+| `testProcess.local.perWorkItem` | argument list | none | Template with one `{package}` placeholder for a work item's omitted gate. |
 | `testProcess.local.timeoutMs` | number | 30 min | Gate timeout. `FORGE_GATE_TIMEOUT_MS` wins. |
 | `testProcess.ci` | map | none | The full CI mirror: `cmd`, `fixCmd`, `unsetEnv`, `timeoutMs`. |
 | `testProcess.acceptance` | map | none | The live tier: `match`, `requiresEnv`. |
@@ -66,7 +66,7 @@ The fields of `.forge/project.json` are in that file's schema; the project build
 | Clause | Kind | Passes when |
 |---|---|---|
 | `C1` | hard | A gate exists: one command, no `&&`, `;` or pipes, no `playwright`, `cypress`, `e2e` or `integration` in it. A package-manager gate needs a `package.json` with that script. |
-| `C2` | hard | Forge scratch (`.forge/work-items/`, `.forge/.create-complete`, `.forge/live-evidence/`, `.forge/preflight.json`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`) is untracked and ignored, and `.forge/project.json`, `.forge/quality_gate_cmd` and `.forge/skills/` are not ignored. Checked with git, not file text. |
+| `C2` | hard | Scratch files (`.forge/work-items/`, `.forge/.create-complete`, `.forge/live-evidence/`, `.forge/preflight.json`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`) is not tracked and is ignored, and `.forge/project.json`, `.forge/quality_gate_cmd` and `.forge/skills/` are not ignored. Checked with git, not file text. |
 | `C4` | hard | `roadmap.md` and the Knowledge profile both exist. |
 | `SKILLS` | hard | Every declared skill resolves to a `SKILL.md` in `.forge/skills/<id>/`, the forge `skills/` directory, or under `artifactRoot`, and a project-local one is tracked by git. |
 | `DEPS` | hard | A gate that needs `node_modules` has it provisioned. |
@@ -77,7 +77,7 @@ The fields of `.forge/project.json` are in that file's schema; the project build
 | `C8` | advisory | `AGENTS.md` or `CLAUDE.md` exists and mentions the gate command. |
 | `C10` | advisory | A declared `releaseProcess` has its changelog, version and docs paths. |
 | `DEMO`, `DEMO-SKILL`, `DEMO-ALIGN` | advisory | The demo process has capture and verify steps, drives a runnable command, and references the test process. |
-| `BUILD`, `ARTIFACTS` | advisory | A declared build workflow exists; build output is gitignored. |
+| `BUILD`, `ARTIFACTS` | advisory | A declared build workflow exists; build output is ignored by git. |
 | `BRAIN` | advisory | Knowledge themes cite source paths that still exist. |
 
 `forge preflight` and the claim check both include `DEPS`.
