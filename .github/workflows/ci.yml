@@ -82,6 +82,9 @@ jobs:
       - name: ADR two-way supersedes/amends links
         run: node scripts/check-adr-links.mjs
 
+      - name: Decisions ledger (every DECISIONS.md row names an enforcement that exists)
+        run: node scripts/check-decisions.mjs
+
       - name: Docs shape check (Diataxis tree + the hand-written budget)
         run: node scripts/check-docs-shape.mjs
 
