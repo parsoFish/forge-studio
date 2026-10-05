@@ -732,7 +732,7 @@ async function main() {
       // written here — otherwise the turn we just ended reads as still working
       // on every Studio surface, forever.
       report.cancelled = recordReapedCancellations(report, {
-        projectsRoot: join(ROOT, 'projects'),
+        logsRoot: join(ROOT, '_logs'),
         reason: 'story runner: the run ended before this turn did (abort backstop)',
       });
       for (const line of describeReap(report)) console.log(line);

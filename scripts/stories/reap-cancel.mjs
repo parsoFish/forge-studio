@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { findSessionProject } from '@forge/sessions';
+import { sessionDirSegments } from '@forge/kernel';
 import {
   CANCELLED_PHASE,
   guardedReadSessionStatus,
@@ -64,11 +65,11 @@ import {
  * the verdict the run exists to write. Every refusal is returned BY NAME.
  *
  * @param {{reaped: Array<{pid:number,dir:string,signal:string,via?:string}>, skipped: Array<unknown>}} report
- * @param {{projectsRoot: string, reason: string}} opts
+ * @param {{logsRoot: string, reason: string}} opts
  * @returns {Array<{dir:string,kind:string|null,sessionId:string|null,project:string|null,cancelledFrom:string|null,written:boolean,reason:string|null}>}
  */
 export function recordReapedCancellations(report, opts) {
-  const { projectsRoot, reason } = opts;
+  const { logsRoot, reason } = opts;
   /** dir -> the ROOT signal, i.e. the first pid reaped for it. Descendants
    *  share their root's dir and are reported on their own `describeReap` line;
    *  the session was terminated once, so it is stamped once. */
@@ -79,7 +80,7 @@ export function recordReapedCancellations(report, opts) {
 
   const outcomes = [];
   for (const [dir, root] of firstByDir) {
-    outcomes.push(cancelOneSession(dir, root, projectsRoot, reason));
+    outcomes.push(cancelOneSession(dir, root, logsRoot, reason));
   }
   return outcomes;
 }
@@ -113,7 +114,7 @@ export function reapReasonFor(story, beats) {
 }
 
 /** One dir's whole decision, with every refusal named. Never throws. */
-function cancelOneSession(dir, root, projectsRoot, reason) {
+function cancelOneSession(dir, root, logsRoot, reason) {
   const miss = (kind, sessionId, why) => ({
     dir, kind, sessionId, project: null, cancelledFrom: null, written: false, reason: why,
   });
@@ -138,12 +139,12 @@ function cancelOneSession(dir, root, projectsRoot, reason) {
     }
     const { kind, sessionId } = start;
     const kindDirName = `_${kind}`;
-    const found = findSessionProject(projectsRoot, kindDirName, sessionId);
+    const found = findSessionProject(logsRoot, kindDirName, sessionId);
     if (!found.ok) {
-      return miss(kind, sessionId, `no session dir under the projects root (${found.reason})`);
+      return miss(kind, sessionId, `no session dir under the logs root (${found.reason})`);
     }
-    const segments = [found.project, kindDirName, sessionId];
-    const status = guardedReadSessionStatus(projectsRoot, segments);
+    const segments = sessionDirSegments(found.project, kindDirName, sessionId);
+    const status = guardedReadSessionStatus(logsRoot, segments);
     if (status === null || typeof status.phase !== 'string') {
       return { ...miss(kind, sessionId, 'no readable status.json'), project: found.project };
     }
@@ -153,7 +154,7 @@ function cancelOneSession(dir, root, projectsRoot, reason) {
         project: found.project,
       };
     }
-    const written = guardedWriteSessionStatus(projectsRoot, segments, {
+    const written = guardedWriteSessionStatus(logsRoot, segments, {
       ...status,
       phase: CANCELLED_PHASE,
       cancelled_at: new Date().toISOString(),
