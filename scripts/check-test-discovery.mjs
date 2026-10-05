@@ -58,6 +58,7 @@ const VITEST_ROOT = dirname(VITEST_CONFIG);
 const EXCEPTIONS = [
   { glob: 'projects/*/**', reason: 'a managed project ground — its suite is the project’s, driven by a forge cycle, not by forge’s own suite' },
   { glob: 'studio/starters/**', reason: 'starter template content copied into a NEW project on onboarding; never executed here' },
+  { glob: 'apps/docs/tests/**', reason: 'the docs site’s build-level tests: each runs a real `astro build` of a copy of the site, so they run in the CI `docs` job (`npm run test --workspace=docs`), never inside npm test' },
   { glob: 'tests/stories/grounds/*/seed/**', reason: 'a story fixture ground seed — copied into projects/story-<id> for one story run, where its suite is the fixture project’s, not forge’s' },
 ];
 

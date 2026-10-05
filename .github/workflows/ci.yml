@@ -232,6 +232,11 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
 
+      - name: Docs build refusals (missing frontmatter field, broken link)
+        run: npm run test --workspace=docs
+        env:
+          ASTRO_TELEMETRY_DISABLED: "1"
+
       - name: Docs word ceilings (blocking on apps/docs)
         run: node scripts/check-docs-budget.mjs --strict
 

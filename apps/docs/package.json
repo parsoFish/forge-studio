@@ -12,7 +12,8 @@
     "dev": "astro dev",
     "typecheck": "astro sync && tsc --noEmit -p .",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test": "node --test 'tests/*.test.mjs'"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.5",
