@@ -15,11 +15,20 @@
 
 ## Scope
 
-<!-- Which of the three scopes does this touch? See docs/explanation/architecture.md -->
+<!-- Which areas does this touch? Layout: ARCHITECTURE.md -->
 
-- [ ] Scope 1 — framework/orchestration (`orchestrator/`, `cli/`, `loops/`, `forge-ui/`)
-- [ ] Scope 2 — cycles/agents/flows (`skills/`, `studio/`, `brain/forge-dev/`, `brain/cycles/`)
-- [ ] Scope 3 — a managed project (`projects/`, `brain/projects/`)
+- [ ] Platform packages (`packages/*`)
+- [ ] Apps (`apps/forge`, `apps/studio`)
+- [ ] Definitions and knowledge (`skills/`, `studio/`, `brain/`)
+- [ ] A managed project (`projects/`, `brain/projects/`)
+- [ ] Repo tooling (`scripts/`, `.github/`, `.claude/`)
+
+## Docs impact
+
+<!-- Pick one. A user-facing change updates the page that covers it.
+     Generated pages (story how-tos) are never hand-edited: re-run the story. -->
+
+Docs impact: [ ] none — <reason>  [ ] updated: <pages>  [ ] generated (story re-run)
 
 ## Gate checklist
 

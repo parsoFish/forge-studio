@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": ["Edit(apps/docs/src/content/docs/guides/how-to/**)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/guard-paths.mjs\"", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}
