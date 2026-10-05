@@ -353,6 +353,12 @@
   "verified": "read",
   "note": "Not a route: reached from `POST /api/agents/:slug/run` via `packages/agents/materials-staging.ts` and from `POST…"
  },
+ "packages/kernel/checkpoint-command.ts": {
+  "class": "not-request-derived",
+  "guard": "resolveDeclaredBin containment + realpath re-check",
+  "verified": "exec",
+  "note": "checkpoint command head and the claim's worktree; reads the worktree package.json, never a request field"
+ },
  "packages/kernel/claude-cli-path.ts": {
   "class": "not-request-derived",
   "guard": null,

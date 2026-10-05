@@ -55,6 +55,7 @@ from are archived at the git tag `pre-docs-refactor`.
 | D-39 | The docs site is Astro + Starlight with exactly four plugins (sidebar topics, links validator, llms.txt, page actions), pinned to exact versions and bumped by Renovate; Vale and lychee lint it in CI; anything else is a new dependency | A static site from markdown needs no server, and each extra plugin is a maintenance liability (operator ruling R14) | review |
 | D-40 | `apps/docs` imports nothing from the product: no package, no other app, no legacy tree | The site documents forge and must build, move or be replaced without touching its code (operator ruling R20) | scripts/check-boundaries.mjs |
 | D-41 | A generated page (`generated_from:`, the story how-tos) is never hand-edited; change the story and re-run it | A hand edit drifts from the run that proves the page, and the next regeneration erases it | scripts/hooks/guard-paths.mjs; scripts/check-docs-shape.mjs |
+| D-43 | A demo checkpoint's bare command resolves on PATH, else to a `bin` its worktree's package.json declares, through one resolver shared by the claim check and the capture; a declared target must stay inside the worktree | A project's own CLI is producible without being installed on the host, and a command judged producible is the command capture runs | packages/flows/tests/integration/demo-checkpoint-preflight.test.ts; packages/kernel/tests/unit/checkpoint-command.test.ts |
 
 ## Rejected — don't re-propose
 
