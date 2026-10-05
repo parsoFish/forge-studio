@@ -72,7 +72,7 @@ under-specified. See [`SPEC.md §6`](../../../SPEC.md#6-project) for the project
 C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (recorded 2026-05-31; tracked as a bead). C6 is now satisfied post-Phase-6.
 
 **Clause-id collision (noted 2026-07-17, R5-07-F6):** this C7 (external-resource
-model, landed in `SPEC.md §6`) is a **different** clause from
+model, landed in `docs/reference/project-contract.md`) is a **different** clause from
 [[holistic-metrics-onboarding]]'s proposed-but-unlanded "C7 holistic metrics";
 R1-D1 resolves the numbering
 on pick-up — that clause takes the next free id (e.g. C11), never C7.
