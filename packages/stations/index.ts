@@ -2,7 +2,7 @@
  * `@forge/stations` — the public door.
  *
  * Owns ONE seam: the station executor and every band it dispatches
- * (`createPhaseExecutor`, ADR 028) — the platform's execution machinery,
+ * (`createPhaseExecutor`, SPEC §2) — the platform's execution machinery,
  * independent of any one factory's flows. `packages/factory` (the develop/plan
  * example) supplies the FlowDefs, the SKILL.mds, the artifact templates and the
  * class → gate-profile table; this package runs them. Deleting `packages/factory`
@@ -15,7 +15,7 @@
  * reads the API list out of `README.md` at run time so the two cannot drift.
  */
 
-// ---- The station executor (ADR 028) ----------------------------------------
+// ---- The station executor (SPEC §2) ----------------------------------------
 export { createPhaseExecutor, registeredBandIds } from './phases/executor-table.ts';
 export { createProjectGate, defaultRunClosure, type FlowRunnerDeps } from './phases/executor-deps.ts';
 

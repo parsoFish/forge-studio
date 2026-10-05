@@ -1,7 +1,7 @@
 /**
  * Row 122 (bead forge-8vfn.8.1.55, T1 1609/1617) — a `resumeFrom: 'pr-open'`
  * develop-flow run (an environment failure classified specifically at the
- * review node's PR-open call, ADR 019 amendment) must skip the WHOLE
+ * review node's PR-open call, D-06 amendment) must skip the WHOLE
  * post-develop band (`integrate`, `adversarial-review`) — not just the per-WI
  * dev-loop `resumeFrom: 'integrate'` already skips. Both bands already
  * succeeded before PR-open failed; re-running them would re-derive a demo

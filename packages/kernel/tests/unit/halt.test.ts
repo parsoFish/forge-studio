@@ -1,5 +1,5 @@
 /**
- * The one emergency halt record (ADR 011): `<queueRoot>/halt.json` present =
+ * The one emergency halt record (D-03): `<queueRoot>/halt.json` present =
  * halted, absent = not. An unreadable record reads as halted.
  */
 import { test } from 'node:test';

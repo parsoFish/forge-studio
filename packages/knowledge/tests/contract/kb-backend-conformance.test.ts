@@ -42,7 +42,7 @@ const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // ---------------------------------------------------------------------------
 // Fixture — a seeded brain with the shapes the real tree has: a top-level KB,
 // its NAME-PREFIX SIBLING (the live cross-KB-write defect this scoping exists
-// to prevent), a central per-project brain (ADR 035) and a forge sub-wiki.
+// to prevent), a central per-project brain (SPEC §4) and a forge sub-wiki.
 // ---------------------------------------------------------------------------
 
 const INDEX_PAGE = 'README.md';
@@ -54,9 +54,9 @@ type Fixture = {
   alpha: string;
   /** `brain/alpha-two` — the prefix sibling that must never fold into alpha. */
   sibling: string;
-  /** `brain/projects/proj` — a central per-project brain (ADR 035). */
+  /** `brain/projects/proj` — a central per-project brain (SPEC §4). */
   project: string;
-  /** `brain/cycles` — a forge sub-wiki (ADR 018 routing rules apply). */
+  /** `brain/cycles` — a forge sub-wiki (SPEC §4 routing rules apply). */
   forgeWiki: string;
 };
 
@@ -144,10 +144,10 @@ test('CONF-2a ownsTheme(): true for a file in this KB\'s OWN themes dir, false f
 });
 
 // ---------------------------------------------------------------------------
-// §3 placement() — the KB's place in the brain layout (ADR 018 / ADR 035)
+// §3 placement() — the KB's place in the brain layout (SPEC §4)
 // ---------------------------------------------------------------------------
 
-test('CONF-3a placement(): forge sub-wiki vs central project brain vs neither — kills a constant-returning implementation, and one that calls every top-level KB a forge sub-wiki (the ADR 018 category routing rules would then be enforced against a KB they do not govern)', () => {
+test('CONF-3a placement(): forge sub-wiki vs central project brain vs neither — kills a constant-returning implementation, and one that calls every top-level KB a forge sub-wiki (the SPEC §4 category routing rules would then be enforced against a KB they do not govern)', () => {
   withFixture((fx) => {
     assert.equal(getKbBackend(fx.root, 'cycles').placement(), 'forge');
     assert.equal(getKbBackend(fx.root, 'proj').placement(), 'project');

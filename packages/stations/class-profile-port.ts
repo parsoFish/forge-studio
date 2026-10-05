@@ -1,6 +1,6 @@
 /**
  * The one port `@forge/stations` uses to reach the class → gate-profile table
- * (ADR 051). The bands need `profileFor`/`readChangeClass`/`isChangeClass`/
+ * (D-34). The bands need `profileFor`/`readChangeClass`/`isChangeClass`/
  * `hollowGateGuardFor`, but the table itself — `class-profiles.ts`, and the
  * operator-authored VALUES in it — stays in `packages/factory`: the example's,
  * not the platform's (operator ruling, items 81/83). A second factory can ship
@@ -85,7 +85,7 @@ export type GateProfile = {
   reviewCeilingUsd: number;
   /**
    * Must an initiative of this class prove itself on the project's
-   * live-acceptance tier (`testProcess.acceptance`)? ADR 051 decision 2 as
+   * live-acceptance tier (`testProcess.acceptance`)? D-34 as
    * amended (bead forge-mfv5.3.5): this column replaced the project-wide
    * `testProcess.acceptance.required` flag.
    *

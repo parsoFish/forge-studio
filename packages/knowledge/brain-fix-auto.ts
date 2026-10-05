@@ -20,7 +20,7 @@ import { execFileSync } from 'node:child_process';
 import matter from 'gray-matter';
 import type { Finding } from './brain-lint.ts';
 import { parseThemeFile } from './theme-frontmatter.ts';
-// The ONE category tables (ADR 018 routing) — this file used to carry its
+// The ONE category tables (SPEC §4 routing) — this file used to carry its
 // own copy, byte-identical to these; no second copy of a routing table.
 // slugsInIndexBody: same reason — this file used to carry its own copy of
 // the exact regex scan `readIndexEntries` already does.

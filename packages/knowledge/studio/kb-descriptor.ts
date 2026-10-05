@@ -1,5 +1,5 @@
 /**
- * KB descriptor (kb.yaml) — the KB contract type (R1-01, ADR-027 §4 amendment):
+ * KB descriptor (kb.yaml) — the KB contract type (R1-01, SPEC §4 amendment):
  * a strict `binding` plus an optional four-obligation `processes` block, its
  * canonical serializer, and the default-process resolver. Extracted from
  * registry.ts to keep that file under the 800-line cap; re-exported from
@@ -142,7 +142,7 @@ export function deriveKbUsageDefaults(binding: KbBinding): KbUsagePolicy {
     return { readSurface: 'navigation-index', readers: ['planner', 'reflector', 'dev-loop', 'reviewer'] };
   }
   // R1-06, T1 ruling Q2: review-band is the ONLY band the band-role map
-  // grants an extra reader to (ADR-010 amendment "R1-06 band-scoped reviewer
+  // grants an extra reader to (SPEC §4 amendment "R1-06 band-scoped reviewer
   // grant") — a KB scoped to the review band is advisory reading material for
   // the reviewer, on top of the planner+reflector default every other
   // binding (including every other band) gets.
@@ -165,7 +165,7 @@ export function resolveKbProcesses(kb: KbDescriptor): Required<KbProcesses> {
 /**
  * Serialize a KB descriptor back to kb.yaml text (R1-01 amendment — kb.yaml
  * now has a canonical serializer, mirroring serializeFlowDefinition; the
- * historical "hand-edited, no serializer by design" note referenced ADR-027
+ * historical "hand-edited, no serializer by design" note referenced D-09
  * §4 (the KB descriptor), not §5 (the Catalog, which still has no serializer).
  */
 export function serializeKbDescriptor(kb: KbDescriptor): string {

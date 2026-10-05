@@ -1,24 +1,24 @@
 /**
- * KB read-policy predicate (R1-06, ADR-010 amendment "R1-06 band-scoped
+ * KB read-policy predicate (R1-06, SPEC §4 amendment "R1-06 band-scoped
  * reviewer grant").
  *
- * The asymmetric brain-read policy (ADR-010 as amended) governs WHO may read a
+ * The asymmetric brain-read policy (SPEC §4 as amended) governs WHO may read a
  * KB. Encoded here as a PURE, exported predicate so both `forge studio lint`
  * (apps/forge/studio-lint.ts — the production wiring) and the guard test
  * (apps/forge/tests/integration/kb-read-policy-guard.test.ts) apply the SAME single rule
  * against a real, loaded descriptor rather than a hand-rolled re-derivation.
  *
- * Placed in `cli/` (not `orchestrator/`) deliberately: ADR-042 caps the
+ * Placed in `cli/` (not `orchestrator/`) deliberately: D-31 caps the
  * surface area of `orchestrator/`, and `cli/` routes/helpers are not capped.
  * It may import from `orchestrator/studio` for the descriptor type + the
  * default-usage resolver.
  *
- * The rule (per the T1 ruling + ADR-010 amendment):
+ * The rule (per the T1 ruling + SPEC §4 amendment):
  *
  *   - A `project` binding is ALWAYS exempt. Per-project brains (Brain-3, ADR
  *     035) legitimately grant the full reader set
  *     [planner, reflector, dev-loop, reviewer] — the dev-loop and reviewer may
- *     consult the cycle's Brain 3 (advisory, ADR-010 amended 2026-05-26). This
+ *     consult the cycle's Brain 3 (advisory, SPEC §4 amended 2026-05-26). This
  *     is the exemption the previous ad-hoc helper got WRONG: it flagged every
  *     real project KB.
  *
@@ -40,19 +40,19 @@
 import { resolveKbProcesses } from './studio/kb-descriptor.ts';
 import type { KbDescriptor } from '@forge/contracts';
 
-/** The one ratified band → reader-role exception (ADR-010 amendment). */
+/** The one ratified band → reader-role exception (SPEC §4 amendment). */
 const RATIFIED_BAND_READER = { band: 'review-band', role: 'reviewer' } as const;
 
 export type KbReadPolicyResult = { ok: true } | { ok: false; reason: string };
 
 /**
- * Evaluate the ADR-010 brain-read policy against a loaded KB descriptor.
+ * Evaluate the SPEC §4 brain-read policy against a loaded KB descriptor.
  * Returns `{ ok: true }` for a compliant KB and `{ ok: false, reason }` naming
  * the offending grant otherwise. Pure — no I/O, no throw for a well-formed
  * descriptor.
  */
 export function kbReadPolicyViolation(kb: KbDescriptor): KbReadPolicyResult {
-  // Project bindings (Brain-3, ADR-035 / ADR-010) legitimately grant the full
+  // Project bindings (Brain-3, SPEC §4) legitimately grant the full
   // reader set — always compliant.
   if (kb.binding.kind === 'project') return { ok: true };
 
@@ -66,7 +66,7 @@ export function kbReadPolicyViolation(kb: KbDescriptor): KbReadPolicyResult {
       reason:
         `KB "${kb.id}" grants the "dev-loop" reader role on a non-project ` +
         `binding (kind: ${kb.binding.kind}${band ? `, band: ${band}` : ''}) — ` +
-        `the dev-loop must not read the forge brain (ADR-010); a dev-loop grant ` +
+        `the dev-loop must not read the forge brain (SPEC §4); a dev-loop grant ` +
         `is never ratified off a project binding`,
     };
   }
@@ -81,7 +81,7 @@ export function kbReadPolicyViolation(kb: KbDescriptor): KbReadPolicyResult {
           `KB "${kb.id}" grants the "reviewer" reader role on a non-project ` +
           `binding (kind: ${kb.binding.kind}${band ? `, band: ${band}` : ''}) ` +
           `without the ratified band scope — the reviewer may read a KB only when ` +
-          `it is bound { kind: flow, band: ${RATIFIED_BAND_READER.band} } (ADR-010 ` +
+          `it is bound { kind: flow, band: ${RATIFIED_BAND_READER.band} } (SPEC §4 ` +
           `amendment "R1-06 band-scoped reviewer grant")`,
       };
     }

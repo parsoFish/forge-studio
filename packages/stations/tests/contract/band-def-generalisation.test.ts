@@ -1,5 +1,5 @@
 /**
- * Seam F4 (operator item 81, ADR-039 generalisation) — TDD reds for the claim
+ * Seam F4 (operator item 81, SPEC §1 generalisation) — TDD reds for the claim
  * that a band station now spawns under the EXECUTING NODE'S OWN agent def,
  * never a hardcoded canonical slug.
  *

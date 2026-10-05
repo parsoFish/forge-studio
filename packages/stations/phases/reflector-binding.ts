@@ -27,7 +27,7 @@ export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' |
 export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
 /**
- * ADR 024 / M2-3: the reflector spec derived from SKILL.md (single source).
+ * SPEC §1 / M2-3: the reflector spec derived from SKILL.md (single source).
  * The orchestrator resolves the model from the tier declared in the frontmatter.
  */
 export const reflectorAgentSpec = deriveAgentSpec(skillPathRelative('reflector'));
@@ -76,7 +76,7 @@ function loadBrainNavigation(cwd: string): string {
  * still benefit from the within-window cache hit.
  *
  * Build the reflector system prompt: brain navigation index + the SKILL.md
- * contract (ADR 024: the single source of phase intent). All static operational
+ * contract (SPEC §1: the single source of phase intent). All static operational
  * intent lives in SKILL.md; per-cycle data (cycle id, manifest paths, worktree
  * paths) goes in the user prompt only.
  *
@@ -217,7 +217,7 @@ export type ReflectorToolUseSummary = {
  * Inspect a streamed assistant message and increment the summary in place.
  * - `brainReads`     — Read/Grep/Glob with a target containing `brain/`.
  * - `themeWrites`    — Write/Edit with a target containing `/themes/` (central Brain 3
- *                      at `brain/projects/<name>/themes/`, ADR 035) or `brain/cycles/_raw/`.
+ *                      at `brain/projects/<name>/themes/`, SPEC §4) or `brain/cycles/_raw/`.
  * - `retroWrites`    — Write/Edit with a target ending in `retro.md`.
  * - `bashCalls`      — any Bash invocation.
  */

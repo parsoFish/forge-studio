@@ -6,7 +6,7 @@
  *
  * Precedence: the WI's own `quality_gate_cmd` > the project's
  * `testProcess.local.perWorkItem` template filled with the WI's package > the
- * project-wide gate. Like ADR 037's deterministic injector, the template only
+ * project-wide gate. Like the D-17 deterministic injector, the template only
  * fills an OMITTED field — it never overrides what the plan agent wrote.
  *
  * `{package}` is the common directory of `files_in_scope` ∪ `creates`. When

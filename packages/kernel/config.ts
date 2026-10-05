@@ -1,13 +1,13 @@
 /**
- * Per-machine config loader (per ADR 009) + environment assertions.
+ * Per-machine config loader + environment assertions.
  *
  * `forge.config.json` is gitignored; it contains operator-specific settings
  * (projectsDir, model overrides, scheduler concurrency, notification config).
- * Schema deliberately small — anything more durable belongs in an ADR or a
+ * Schema deliberately small — anything more durable belongs in DECISIONS.md or a
  * SKILL.md, anything more per-cycle belongs in the manifest frontmatter.
  *
  * F-10 / F-18: prior to this module, `forge.config.json` was documented in
- * ADR 009 but never read by any code path. This module wires it.
+ * the operator docs but never read by any code path. This module wires it.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -55,7 +55,7 @@ export type ForgeConfig = {
     desktop?: boolean;
     webhook_url?: string | null;
   };
-  /** Unifier tuning (G4, ADR 009 as amended 2026-07-11). */
+  /** Unifier tuning (G4 as amended 2026-07-11). */
   /** Dev-loop tuning (Phase 4 step 6 — concurrent WI dispatch). */
   dev?: {
     /**
@@ -79,7 +79,7 @@ export type ForgeConfig = {
     pollIntervalMs?: number;
   };
   /**
-   * R4-08-F2 (ADR-040): review send-back loop bounds. A verdict's send-back
+   * R4-08-F2 (D-20): review send-back loop bounds. A verdict's send-back
    * appends fix work items and re-runs the dev-loop/unifier spine; either cap
    * exhausting PARKS the initiative needs-operator (`.forge/REVIEW-CAP-EXHAUSTED.md`)
    * rather than looping forever.
@@ -91,7 +91,7 @@ export type ForgeConfig = {
     maxTotalFixWorkItems?: number;
   };
   /**
-   * R2-04 (ADR-041): budgets stamped onto initiatives MINTED by external
+   * R2-04 (D-23): budgets stamped onto initiatives MINTED by external
    * triggers (cron/webhook origination — no architect sized them). Spend
    * policy: conservative defaults, operator-tunable.
    */
@@ -307,7 +307,7 @@ export const DEV_WI_CONCURRENCY_CEILING = 8;
 
 /**
  * Resolve the dev-loop's per-WI concurrency cap. Precedence (preserves
- * ADR-009's operator levers: an explicit env/config value still wins):
+ * the operator levers: an explicit env/config value still wins):
  *   1. `FORGE_DEV_WI_CONCURRENCY` env var (operator/CI override)
  *   2. `dev.maxConcurrentWorkItems` from `forge.config.json` (operator lever)
  *   3. `definitionCap` — the fanout AGENT's declared `fanout.concurrencyCap`
@@ -363,13 +363,13 @@ export function resolvePostMergeCiConfig(
 }
 
 /**
- * R4-08-F2 (ADR-040): default cap on send-back rounds per initiative before
+ * R4-08-F2 (D-20): default cap on send-back rounds per initiative before
  * the loop parks needs-operator instead of re-invoking the reviewer/dev-loop
  * spine again.
  */
 export const DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS = 6;
 /**
- * R4-08-F2 (ADR-040): default cap on total fix work items appended across
+ * R4-08-F2 (D-20): default cap on total fix work items appended across
  * all send-back rounds of an initiative — the `UNIFIER_MAX_TOTAL_ITEMS`
  * analogue for the send-back loop, now operator-tunable.
  */
@@ -529,7 +529,7 @@ export function gitIdentityConfigArgs(identity: GitIdentity): string[] {
 }
 
 /**
- * R2-04 (ADR-041): default budgets for trigger-minted initiatives (no
+ * R2-04 (D-23): default budgets for trigger-minted initiatives (no
  * architect sized them). Conservative on purpose — an unattended cron/webhook
  * fire must not carry architect-scale spend authority by default.
  */

@@ -1,7 +1,7 @@
 /**
  * `rootManagesProject` — bead `forge-8vfn.6.11.26`, T1 rulings 309 and 315.
  *
- * Brain 3 is CENTRAL: it lives under the forge root (ADR 035) while a project's
+ * Brain 3 is CENTRAL: it lives under the forge root (SPEC §4) while a project's
  * own files live under its project dir. A writer handed both is only coherent
  * when the root manages that project. S1 run 5 (M5-B session 8) was handed a
  * mismatched pair and split ONE fix across two trees — `roadmap.md` into the
@@ -66,5 +66,5 @@ test('6.11.26: the refusal names BOTH roots — one log line must be enough', ()
   const reason = rootMismatchReason('/home/parso/forge', '/home/parso/forge-m5-b/projects/gitweave');
   assert.ok(reason.includes('/home/parso/forge'), 'names the root that was handed in');
   assert.ok(reason.includes('/home/parso/forge-m5-b/projects/gitweave'), 'names the project refused');
-  assert.ok(reason.includes('ADR 035'), 'cites why Brain 3 is central at all');
+  assert.ok(reason.includes('SPEC §4'), 'cites why Brain 3 is central at all');
 });

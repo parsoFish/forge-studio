@@ -109,7 +109,7 @@ test('collectKbFindings — a project KB\'s own theme findings come from the ONE
     // passing NO full-scan findings at all (`collectKbFindings(root,'pkb',[])`)
     // and relying on a second lens over the KB's own theme files, because
     // readThemeFiles never walked brain/projects/<id>/themes. It does now
-    // (ADR 035), so the finding must be in the scan itself — one lens, and no
+    // (SPEC §4), so the finding must be in the scan itself — one lens, and no
     // way for the drain's view and `forge brain lint` to disagree.
     const scan = runBrainLint({ cwd: root, scope: 'full' }).findings;
     const findings = collectKbFindings(root, 'pkb', scan);

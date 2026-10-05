@@ -10,7 +10,7 @@
  * hold the derivations; this module does the filesystem, the capture and the
  * commit, and reports each failure with the reason a triager needs.
  *
- * WHAT THE CLASS DECIDES. `capture` (the class → gate-profile table, ADR 051)
+ * WHAT THE CLASS DECIDES. `capture` (the class → gate-profile table, D-34)
  * selects the evidence: `checkpoints` runs the project's declared demo commands
  * under the orchestrated capture, `plan-output` records the gate's own output,
  * `none` records the diff alone. A class that asks for checkpoints against a

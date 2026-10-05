@@ -32,7 +32,7 @@
  *    so it can never collide with a real cycle, and the whole `tmp` dir
  *    (manifest + `_logs/`) is removed in `finally` regardless of outcome.
  *
- * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * Fixture-move note (SPEC §1 R3-03 amendment, `composition.hooks` →
  * `composition.guards`, 2026-08-04): `reflector.json` moved by exactly one
  * byte — `hook` → `guard` at a single site — because `renderReflectorUserPrompt`
  * (via `reflector-binding.ts`) reads the canonical `reflector` agent's RAW

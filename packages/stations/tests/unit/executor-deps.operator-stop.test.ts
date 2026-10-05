@@ -1,5 +1,5 @@
 /**
- * M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — ADR 028's
+ * M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — SPEC §2
  * amendment: `raceWithWedge` now also polls the operator-stop flag from the
  * SAME 100ms interval the wedge-kill timer already runs, aborting the SAME
  * shared `AbortController` — never a second poller thread.

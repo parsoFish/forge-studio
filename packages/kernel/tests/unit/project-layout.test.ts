@@ -2,7 +2,7 @@
  * Tests for `packages/kernel/project-layout.ts` — the project-layout SSOT
  * moved verbatim from `orchestrator/studio/registry.ts` (id normalisation +
  * disk discovery) and `packages/knowledge/brain-paths.ts` (the per-project
- * brain dirs, ADR 035). Behaviour-preserving move: these cases pin the same
+ * brain dirs, SPEC §4). Behaviour-preserving move: these cases pin the same
  * shapes the pre-move implementations pinned (see `orchestrator/studio/
  * registry.test.ts`'s `discoverProjects` describe block and `packages/
  * knowledge/tests/unit/brain-paths.test.ts`), plus one case proving all four

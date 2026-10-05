@@ -10,7 +10,7 @@ function scaffoldBrain(): string {
   const root = mkdtempSync(join(tmpdir(), 'brain-index-test-'));
   mkdirSync(join(root, 'brain', 'cycles'), { recursive: true });
   mkdirSync(join(root, 'brain', 'forge-dev'), { recursive: true });
-  // Brain 3 (per-project) is forge-owned and CENTRAL (ADR 035) at
+  // Brain 3 (per-project) is forge-owned and CENTRAL (SPEC §4) at
   // brain/projects/<name>/ — not inside the managed project's own repo.
   mkdirSync(join(root, 'brain', 'projects', 'sample'), { recursive: true });
 
@@ -104,7 +104,7 @@ function scaffoldBrainForRegen(): string {
   mkdirSync(join(root, 'brain', 'forge-dev', 'themes'), { recursive: true });
   writeFileSync(join(root, 'brain', 'forge-dev', 'themes', 'd1.md'), '# d1\n');
 
-  // Brain 3 (per-project) is forge-owned and CENTRAL (ADR 035) at
+  // Brain 3 (per-project) is forge-owned and CENTRAL (SPEC §4) at
   // brain/projects/<name>/ — not inside the managed project's own repo.
   mkdirSync(join(root, 'brain', 'projects', 'alpha', 'themes'), { recursive: true });
   writeFileSync(

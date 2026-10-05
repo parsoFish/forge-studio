@@ -187,11 +187,11 @@ export const CHECK_NAMES = FULL_SCOPE_CHECKS.map(([name]) => name) as readonly s
  * declared-data-fails-open defect this hardens against.
  *
  *   - `themes`          — `readThemeFiles`-based; scans EVERY theme dir
- *                          `themeScanDirs` yields, which since ADR 035
+ *                          `themeScanDirs` yields, which since SPEC §4
  *                          includes `brain/projects/<name>/themes/`. Applicable
  *                          to any KB whose own `themes/` dir the scan walks.
  *   - `forge-themes`    — `readThemeFiles`-based, but the rule itself is the
- *                          ADR 018 category→sub-wiki routing convention, which
+ *                          SPEC §4 category→sub-wiki routing convention, which
  *                          governs `brain/cycles` and `brain/forge-dev` alone.
  *                          Genuinely inapplicable to any other KB — a project
  *                          brain indexes its own themes in its own dir and gets
@@ -265,7 +265,7 @@ export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
 // The per-KB checks lintThemeFiles gives a REAL verdict on for a KB's OWN
 // themes, regardless of KB type. checkCategoryScope is deliberately EXCLUDED:
 // the category→sub-wiki routing rule (pattern→cycles, decision→forge-dev) is a
-// three-brain (ADR 018) convention that governs ONLY the forge brains, so it is
+// three-brain (SPEC §4) convention that governs ONLY the forge brains, so it is
 // meaningful per-KB solely for the forge KBs (cycles/forge-dev) via the
 // forge-themes scoped path. Running it over a band/flow KB's own themes would
 // false-FAIL every category-bearing theme (lintThemeFiles exempts only
@@ -306,7 +306,7 @@ export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
     const actualSubdir = parts[0] ?? '';
     const isProjectTheme = actualSubdir === 'projects';
     // checkCategoryScope governs ONLY the forge sub-wikis (three-brain
-    // routing, ADR 018) — see LINT_THEME_FILE_CHECKS's own exclusion note.
+    // routing, SPEC §4) — see LINT_THEME_FILE_CHECKS's own exclusion note.
     // W7 FIX-B-KB: this used to fire for ANY non-`projects` location, so a
     // top-level scratch/flow/band KB's category-bearing themes were all
     // flagged mis-routed — an AUTO-tier finding whose fixer (`fixMisRouted`,
@@ -461,7 +461,7 @@ function filterFindingsByScope(
       );
     }
     case 'project-only': {
-      // Brain 3 is forge-owned and central (ADR 035): `brain/projects/<name>/`.
+      // Brain 3 is forge-owned and central (SPEC §4): `brain/projects/<name>/`.
       // This arm returned [] while that was still believed to live in the
       // managed project's own repo.
       const prefix = join(brainRoot, 'projects') + sep;
@@ -557,7 +557,7 @@ export type AutoFixStableResult = {
  * It also took an `extraFindings` source (W7-B2, knowledge-10), through which
  * the per-KB own-theme lens rode in so a project KB's own auto-tier findings
  * were visible to the fixed-point loop — the full-scope scan structurally
- * never surfaced them. The scan covers every theme dir now (ADR 035), so that
+ * never surfaced them. The scan covers every theme dir now (SPEC §4), so that
  * option had no caller and no test; it is gone rather than left as a second
  * way for a finding to reach the fixers.
  */

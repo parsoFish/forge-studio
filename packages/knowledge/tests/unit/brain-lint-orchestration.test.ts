@@ -273,9 +273,9 @@ test('CHECK_NAMES: exactly the 12 expected full-scope check names (kills a regis
 });
 
 test('CHECK_SCOPE: every CHECK_NAMES entry has a CHECK_SCOPE mapping, and every mapping is a known scope (kills a registration that updates CHECK_NAMES but forgets CHECK_SCOPE, silently defaulting per-KB health to a false verdict)', () => {
-  // `themes` = the readThemeFiles domain, which since ADR 035 includes
+  // `themes` = the readThemeFiles domain, which since SPEC §4 includes
   // brain/projects/<name>/themes. `forge-themes` is narrower and means the
-  // RULE — the ADR 018 category→sub-wiki routing — governs the two forge
+  // RULE — the SPEC §4 category→sub-wiki routing — governs the two forge
   // sub-wikis only. The split is what lets a per-KB consumer tell "scanned and
   // clean" from "does not apply here"; before it, all ten theme checks claimed
   // the forge-only domain and a project brain could only be reported n/a.
@@ -403,7 +403,7 @@ test('lintThemeFiles: checkCategoryScope governs ONLY the forge sub-wikis — a 
   try {
     // A category-bearing theme in a top-level NON-forge KB dir (the shape
     // every flow/band/scratch KB has): the category→sub-wiki routing rule is
-    // a three-brain (ADR 018) convention for the forge brains only, so no
+    // a three-brain (SPEC §4) convention for the forge brains only, so no
     // mis-routed finding may fire here — classify() maps it to the AUTO tier
     // whose fixer git-mv's the file into brain/<sub>/themes/.
     const scratchThemes = join(root, 'brain', 'scratch-kb', 'themes');
@@ -456,7 +456,7 @@ test('classifyFinding: checkDanglingEdges/checkDuplicateThemes classify as agent
   assert.deepEqual(counts, { auto: 0, agent: 2, user: 0 });
 });
 
-test('runBrainLint(full): a broken source link in a project brain (Brain 3) is REPORTED — ADR 035', () => {
+test('runBrainLint(full): a broken source link in a project brain (Brain 3) is REPORTED — SPEC §4', () => {
   const root = buildBrainFixture({
     themes: [
       {

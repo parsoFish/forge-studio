@@ -149,7 +149,7 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
         return true;
       }
       // W7-B2 (knowledge-22): the form has ALWAYS marked Description
-      // optional — honour it. The KB descriptor contract (ADR-027 §4 / R1-01)
+      // optional — honour it. The KB descriptor contract (SPEC §4 / R1-01)
       // keeps `desc` a required non-empty field, so an omitted description
       // gets an honest, binding-derived default instead of a 400.
       const descInput = typeof b['desc'] === 'string' ? b['desc'].trim() : '';
@@ -247,7 +247,7 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
       }
       // 6b. W7-B2 (knowledge-V01): the id must be unique across BOTH
       // containment roots — brain/<id> (checked above) AND the central
-      // per-project root brain/projects/<id> (ADR 035). Without this, a new
+      // per-project root brain/projects/<id> (SPEC §4). Without this, a new
       // KB named after an already-onboarded project scaffolded a second,
       // empty kb.yaml at brain/<id> that the resolver (roots tried in order
       // [brain/, brain/projects/]) then resolved FIRST — silently shadowing
@@ -453,7 +453,7 @@ export async function handleKbGuidance(
       // vacuous `resolve(brainBase, kbId).startsWith(...)` check AND fixes a
       // second, latent bug it was hiding — that check built `brain/<id>`
       // unconditionally, so guidance for a per-project brain
-      // (`brain/projects/<id>`, ADR 035) was written to the wrong directory.
+      // (`brain/projects/<id>`, SPEC §4) was written to the wrong directory.
       const kbDir = tryGetKbBackend(ctx.forgeRoot, kbId)?.rootDir() ?? null;
       if (!kbDir) {
         sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);

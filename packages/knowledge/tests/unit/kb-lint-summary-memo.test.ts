@@ -1,9 +1,9 @@
 /**
- * PROOF TESTS — W6-P2 (ADR 044, read-path memoization): memoizing the
+ * PROOF TESTS — W6-P2 (D-27, read-path memoization): memoizing the
  * full-tree brain lint behind `packages/knowledge/kb-lint-summary.ts`'s
  * `runBrainLintFullMemoized`/`runBrainLintFullFresh`.
  *
- * ADR 044's four rules, and where each is proven here:
+ * D-27 four rules, and where each is proven here:
  *   1. Same derivation      → "rule 1 — output is byte-identical...".
  *   2. Real-input keying    → the fingerprint unit tests below (count/mtime/
  *                              size isolated individually, node_modules/.git
@@ -56,7 +56,7 @@ function tmp(prefix: string): string {
  * checkFrontmatter reports it MISSING. Swapping between the two variants is a
  * REAL content change (`runBrainLint` sees a different error count) that is
  * nonetheless invisible to a stat-walk fingerprint when the mtime is pinned
- * back — exactly the blind spot ADR 044 accepts as inherent to stat-based
+ * back — exactly the blind spot D-27 accepts as inherent to stat-based
  * memoization, and exactly what the "genuine cache hit" test below exploits
  * to prove a hit actually happened (not just that the output is correct).
  */
@@ -311,10 +311,10 @@ describe('statWalkFingerprint — pure stat-walk fingerprint (unit)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)
+// runBrainLintFullMemoized — D-27 read-path memo (proof tests)
 // ---------------------------------------------------------------------------
 
-describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', () => {
+describe('runBrainLintFullMemoized — D-27 read-path memo (proof tests)', () => {
   test('rule 1 — output is byte-identical to a direct, uncached runBrainLint call over the same tree', () => {
     const { forgeRoot } = makeCleanRoot('memo-identical-');
     try {
@@ -323,7 +323,7 @@ describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', ()
       assert.deepEqual(
         memoized,
         direct,
-        'the memo must never produce a value runBrainLint itself would not — same derivation either way (ADR 044 rule 1)',
+        'the memo must never produce a value runBrainLint itself would not — same derivation either way (D-27)',
       );
     } finally {
       rmSync(forgeRoot, { recursive: true, force: true });
@@ -567,7 +567,7 @@ describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', ()
     }
   });
 
-  test("invalidates when _queue/done changes — checkReflectorLoss's OTHER real input outside brain/ (ADR 044 rule 2)", () => {
+  test("invalidates when _queue/done changes — checkReflectorLoss's OTHER real input outside brain/ (D-27)", () => {
     const { forgeRoot } = makeCleanRoot('memo-queue-');
     try {
       mkdirSync(join(forgeRoot, '_queue', 'done'), { recursive: true });
@@ -601,7 +601,7 @@ describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', ()
       writeFileSync(brokenForgeRoot, 'i am a file, not a forge root');
       assert.doesNotThrow(
         () => runBrainLintFullMemoized(brokenForgeRoot),
-        'a broken fingerprint walk must fall through to an uncached run, never throw (ADR 044 rule 4)',
+        'a broken fingerprint walk must fall through to an uncached run, never throw (D-27)',
       );
       const broken = runBrainLintFullMemoized(brokenForgeRoot);
       assert.equal(typeof broken.exitCode, 'number');

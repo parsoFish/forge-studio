@@ -1,10 +1,10 @@
 /**
- * Contract test for the KbBackend seam (ADR-027 §4).
+ * Contract test for the KbBackend seam (SPEC §4).
  *
  * Asserts what every KbBackend must satisfy and that the default
  * FilesystemKbBackend delegates correctly to kb-graph.ts. A future second
  * backend must pass an equivalent suite before registration — this is the KB
- * analogue of the RuntimeAdapter conformance suite (ADR-029).
+ * analogue of the RuntimeAdapter conformance suite (SPEC §1).
  *
  * Tests run against the REAL `cycles` brain (filesystem reads, no fixtures).
  */

@@ -1,5 +1,5 @@
 /**
- * Seam F4 (operator item 81, ADR-039 generalisation) — read an agent
+ * Seam F4 (operator item 81, SPEC §1 generalisation) — read an agent
  * definition's OWN `SKILL.md` text.
  *
  * Every band binding (PM/dev-loop/reflector/adversarial-review) used to read

@@ -26,14 +26,14 @@ by a held backend.
 
 ## Three graphs, three readerships
 
-[ADR 018](../../docs/decisions/018-three-brain-model.md) scopes the graphs: forge
+SPEC §4 scopes the graphs: forge
 engineering, cross-cycle patterns (with archives), and one per managed project.
-[ADR 035](../../docs/decisions/035-forge-owned-central-artifacts.md) puts the per-project
+SPEC §4 puts the per-project
 graph **in this repo**, under forge's ownership rather than the managed project's — which
 is why `brain-paths.ts` resolves a project's brain from forge's root and never from the
 project checkout.
 
-Who may read what is [ADR 010](../../docs/decisions/010-brain-first.md) **as amended**:
+Who may read what is SPEC §4 **as amended**:
 planners and the reflector must read; the dev loop and reviewer must not, because the
 planner has already encoded the relevant conventions into the work items. This package
 **reports** a violation (`kb-read-policy.ts`) and does not enforce one — enforcement

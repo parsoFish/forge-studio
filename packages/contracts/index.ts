@@ -1,7 +1,7 @@
 /**
  * @forge/contracts — browser-safe types and constants only.
  *
- * The ONE package `apps/studio` may import (`docs/roadmaps/1.0.md` §0, ADR 046
+ * The ONE package `apps/studio` may import (`docs/roadmaps/1.0.md` §0, D-29
  * rule 2). Nothing here may touch the filesystem, the network, a child process
  * or a node builtin: a value that needs any of those is not a contract, and the
  * boundary lint will not stop it from being wrong here — only review will.
@@ -17,7 +17,7 @@
  * it proved before, which is the trap.
  */
 
-/** The Studio object model (ADR 027) — pure types, moved here with history. */
+/** The Studio object model (D-09) — pure types, moved here with history. */
 export * from './studio-types.ts';
 /** The initiative manifest shape — the SSOT flows, factory and sessions all
  *  read and write (M4-sessions s3, T1 ruling 81). */
@@ -26,7 +26,7 @@ export * from './manifest-types.ts';
  *  manifest for a flow, plus the develop flow's id (forge-8vfn.7.6.132). */
 export * from './runnable-source.ts';
 
-/** The run view's shape (ADR 028 §3) — moved from `packages/flows`, forge-8vfn.5.17. */
+/** The run view's shape (SPEC §2) — moved from `packages/flows`, forge-8vfn.5.17. */
 export * from './run-view-types.ts';
 /** The demo declaration's pure extraction rules — shared by stations, factory
  *  and projects (bead forge-mfv5.2.2), plus the presentation-only skill-id
@@ -34,7 +34,7 @@ export * from './run-view-types.ts';
 export * from './demo-declaration.ts';
 
 /** Pseudo-project session anchors — pure transfer from `packages/sessions`
- *  (ADR 046 `studio-beyond-contracts` edge 3, ratchet fix). */
+ *  (D-29 `studio-beyond-contracts` edge 3, ratchet fix). */
 export * from './session-anchors.ts';
 
 // ── Work items ──
@@ -44,7 +44,7 @@ export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-pro
 
 /**
  * `WI-<n>` are dev work items (PM-emitted); `UWI-<n>` are unifier work items
- * (ADR 026). The trailing `[a-z]?` is the SPLIT SUFFIX (ADR 015, 2026-08-23
+ * (D-20). The trailing `[a-z]?` is the SPLIT SUFFIX (SPEC §3, 2026-08-23
  * amendment / ON-7): the plan agent names the halves of a split work item
  * `WI-4a` / `WI-4b` unprompted, and the pattern admits exactly that — ONE
  * optional lowercase letter. `WI-4a1`, `WI-4-a`, `wi-4a`, `WI-4A` and
@@ -62,7 +62,7 @@ export const DEV_WORK_ITEM_ID_PATTERN = /^WI-\d+[a-z]?$/;
 /**
  * The NUMERIC STEM of a dev work-item id — `WI-4a` and `WI-4b` both stem 4 —
  * or null when the id is not a dev work item. This is the ordering primitive
- * ADR 037's hidden-coupling reject->compile derives its `depends_on`
+ * D-17 hidden-coupling reject->compile derives its `depends_on`
  * direction from, and the one `nextDevWorkItemId` counts from; a split
  * sibling must not be invisible to either.
  */
@@ -71,7 +71,7 @@ export function devWorkItemIdStem(id: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-// ── Trigger payloads (ADR 041) ──
+// ── Trigger payloads (D-23) ──
 
 /** The owner/repo regex — strict-charset validator for a GitHub-shaped
  *  `"owner/name"` full name. The SAME object every repo-shaped field is
@@ -125,7 +125,7 @@ export type ContractStageRow = {
   readonly bytes: number | null;
 };
 
-// ── Trigger kinds (ADR 041) ──
+// ── Trigger kinds (D-23) ──
 
 /**
  * The trigger-kind registry. `status: 'reserved'` rows are vocabulary-reserved:
@@ -150,7 +150,7 @@ export const SHIPPED_TRIGGER_KIND_IDS: readonly TriggerKindId[] = TRIGGER_KINDS.
   (k) => k.status === 'shipped',
 ).map((k) => k.id);
 
-// ── Agent bands (ADR 039) ──
+// ── Agent bands (SPEC §1) ──
 
 /**
  * A band key selects an orchestrator-implemented pre/post band around the
@@ -165,7 +165,7 @@ export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'integrate-ban
 export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
 
 /**
- * The toggle-style guard ids (ADR-027 R3-03 amendment) — platform behaviours
+ * The toggle-style guard ids (SPEC §1 R3-03 amendment) — platform behaviours
  * an agent switches on/off, as opposed to `BAND_GUARD_IDS`'s dispatch-routing
  * ids. Each has a display row in `studio/catalog.yaml`'s `guards:` section
  * but, unlike a band guard, resolves nothing through `resolveBandGuard` —
@@ -181,7 +181,7 @@ export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
 export const TOGGLE_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip'] as const;
 
 /**
- * The full closed set of platform guard ids (ADR-027 R3-03 amendment) — the
+ * The full closed set of platform guard ids (SPEC §1 R3-03 amendment) — the
  * union of the 5 toggle ids and the 5 band ids. This is the "is this id
  * platform machinery, not a library hook" check `lintHookComposition`
  * (`packages/library/studio/hook-library.ts`) needs to enforce the
@@ -204,7 +204,7 @@ export const MAX_KICKOFF_COST_CEILING_USD = 500;
 
 /**
  * The fixed bridge port, so one browser tab stays pinned across re-runs
- * (CLAUDE.md, ADR 031). Previously pinned by a SOURCE-TEXT comparison because
+ * (CLAUDE.md, D-12). Previously pinned by a SOURCE-TEXT comparison because
  * `apps/forge/forge-watch.ts` is a CLI entry point the UI cannot safely import; a
  * shared constant replaces a text pin with a real import.
  */
@@ -250,7 +250,7 @@ export const OPERATOR_STOP_MESSAGE_PREFIX = 'operator-stop:' as const;
 /**
  * Row 157 (bead forge-8vfn.8.1.45, ruling 1873): the project-manager phase
  * (`packages/stations/phases/project-manager.ts`) prefixes its rejection
- * summary with this literal when an acceptance-gate violation (ADR 051
+ * summary with this literal when an acceptance-gate violation (D-34
  * decision 2) survives the ONE bounded revise turn — `failure-classifier.ts`
  * scans for it to classify the failure as PM-phase, deterministic and
  * resumable from the plan node, instead of "could not be classified".
@@ -260,7 +260,7 @@ export const PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX = 'pm-acceptance-gate-unresolv
  * Row 159 (bead forge-8vfn.8.1.47, ruling 1891): the architect runner
  * (`packages/sessions/kinds/architect-draft-repair.ts`) prefixes its
  * classified throw with this literal when a draft's manifest-validation
- * error (ADR 051's `requireDraftAcceptanceCriteria` / `requireChangeClass`,
+ * error (D-34 `requireDraftAcceptanceCriteria` / `requireChangeClass`,
  * `architect-manifest.ts`) survives the ONE bounded repair turn —
  * `failure-classifier.ts` scans an `architect`-phase error event for it, the
  * same convention as `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` above.

@@ -1,5 +1,5 @@
 /**
- * Unit tests for packages/stations/phases/reflector-binding.ts — ADR 024 seam.
+ * Unit tests for packages/stations/phases/reflector-binding.ts — SPEC §1 seam.
  *
  * Verifies:
  *   1. `reflectorAgentSpec` is well-formed (phase / skill / tier / tools).
@@ -229,12 +229,12 @@ test('reflector SKILL contract (system prompt) writes the CENTRAL forge-owned br
   const { dir, cleanup } = makeFakeBrainCwd();
   try {
     const sys = buildReflectorSystemPrompt(dir, canonicalDef('reflector'));
-    // F3/ADR-035: project themes are central under brain/projects/<name>/themes.
+    // F3/SPEC §4: project themes are central under brain/projects/<name>/themes.
     assert.ok(sys.includes('brain/projects/<project>/themes'), 'should point themes at the central brain/projects/<project>/themes/');
-    // The retired ADR-018 in-repo path must be gone everywhere in the contract.
+    // The retired SPEC §4 in-repo path must be gone everywhere in the contract.
     assert.ok(
       !sys.includes('projects/<project>/brain/'),
-      'must not reference the retired in-repo path projects/<project>/brain/ (ADR-035)',
+      'must not reference the retired in-repo path projects/<project>/brain/ (SPEC §4)',
     );
     // The deeper retro is part of the durable contract too.
     assert.ok(sys.toLowerCase().includes('repeated action'), 'contract should cover repeated actions');

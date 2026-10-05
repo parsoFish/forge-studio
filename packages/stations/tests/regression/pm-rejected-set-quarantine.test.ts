@@ -2,7 +2,7 @@
  * bead forge-8vfn.6.1 (P0) — the validation gate with no teeth, reproduced live by
  * G1 run 3 on 2026-09-04 and merged to a real project because of it.
  *
- * WHAT HAPPENED. The PM's own ADR-037 validation failed the set it had just
+ * WHAT HAPPENED. The PM's own D-17 validation failed the set it had just
  * written (`WI-3: creates is required … unless verification_artifact is set`) and
  * the phase correctly returned `{kind: 'failure'}`. Nine seconds later the
  * scheduler claimed the same initiative, the dev-loop ran those three work items
@@ -50,7 +50,7 @@ test('AT-1: after a rejected set is quarantined, NOTHING is claimable — the pr
   const { root, dir } = seedSet();
   try {
     assert.equal(hasWorkItemFiles(dir), true, 'precondition: the set is claimable before the fix runs');
-    quarantineRejectedSet(dir, ['WI-3: creates is required (ADR 037)']);
+    quarantineRejectedSet(dir, ['WI-3: creates is required']);
     assert.equal(hasWorkItemFiles(dir), false,
       'a rejected set that still satisfies hasWorkItemFiles is the live defect: the dev-loop claims it');
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -59,7 +59,7 @@ test('AT-1: after a rejected set is quarantined, NOTHING is claimable — the pr
 test('AT-2: the work items are MOVED, not deleted — a rejected set is evidence and must stay readable', () => {
   const { root, dir } = seedSet();
   try {
-    const res = quarantineRejectedSet(dir, ['WI-3: creates is required (ADR 037)']);
+    const res = quarantineRejectedSet(dir, ['WI-3: creates is required']);
     assert.ok(res.movedTo && existsSync(res.movedTo), 'the quarantine directory must exist');
     const moved = readdirSync(res.movedTo as string).sort();
     assert.deepEqual(moved.filter((f) => WORK_ITEM_FILE_PATTERN.test(f)).sort(), ['WI-1.md', 'WI-2.md', 'WI-3.md'],
@@ -71,7 +71,7 @@ test('AT-2: the work items are MOVED, not deleted — a rejected set is evidence
 test('AT-3: the quarantine records WHY, so the next reader is not left guessing at three plausible work items', () => {
   const { root, dir } = seedSet();
   try {
-    const res = quarantineRejectedSet(dir, ['WI-3: creates is required (ADR 037)', 'WI-1: duplicate id']);
+    const res = quarantineRejectedSet(dir, ['WI-3: creates is required', 'WI-1: duplicate id']);
     assert.ok(res.movedTo, 'a seeded set must have been moved');
     const names = readdirSync(res.movedTo);
     const reasonFile = names.find((n) => /reject|reason|errors/i.test(n)) as string;
@@ -108,7 +108,7 @@ test('AT-5: an empty or missing directory is a no-op, not a throw — the failur
 test('AT-6: rejectWorkItemSet IS the failure — it quarantines and returns failure in one act, so neither can be forgotten', () => {
   const { root, dir } = seedSet();
   try {
-    const res = rejectWorkItemSet(dir, 'set errors: WI-3: creates is required (ADR 037)');
+    const res = rejectWorkItemSet(dir, 'set errors: WI-3: creates is required');
     assert.equal(res.kind, 'failure');
     assert.match(res.summary, /creates is required/, 'the original reason survives');
     assert.match(res.summary, /not claimable/, 'the caller is told the set was withdrawn');

@@ -220,7 +220,7 @@ export type ClaimDispatchSlotOpts = {
  * with no `await` before the caller's own `spawn()` — a single-threaded
  * bridge can never interleave between this claim and the spawn it guards.
  *
- * While the emergency halt is on (`<forgeRoot>/_queue/halt.json`, ADR 011) the
+ * While the emergency halt is on (`<forgeRoot>/_queue/halt.json`, D-03) the
  * claim throws `Halted` before it writes anything: a refused dispatch leaves
  * the session dir byte-identical.
  *

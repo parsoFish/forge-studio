@@ -1,6 +1,6 @@
 /**
  * Project-layout SSOT: id normalisation, on-disk discovery, and the central
- * per-project brain directories (ADR 035) — shared by three rank-2 packages
+ * per-project brain directories (SPEC §4) — shared by three rank-2 packages
  * (`projects`, `knowledge`, `library`).
  *
  * MOVED VERBATIM (M4 layout PR): `normalizeProjectId`, `discoverProjects` and
@@ -11,7 +11,7 @@
  *
  * `projectBrainDir`/`projectThemesDir` stay RE-EXPORTED from
  * `packages/knowledge/brain-paths.ts` — that module's "one place to drift
- * from" claim (ADR 035 brain-path layout) still holds for every brain path;
+ * from" claim (SPEC §4 brain-path layout) still holds for every brain path;
  * it is the door, kernel is the owner.
  */
 
@@ -113,14 +113,14 @@ export function discoverProjects(projectsDir: string, forgeRoot: string): Discov
 
 /**
  * Brain 3 (project) — the project's brain root, CENTRAL in the forge brain wiki
- * at `brain/projects/<name>/` (ADR 035, reversing ADR 018's in-repo location so
+ * at `brain/projects/<name>/` (SPEC §4, reversing the earlier in-repo location so
  * the reflector can write it post-merge without an open project worktree).
  */
 export function projectBrainDir(forgeRoot: string, projectName: string): string {
   return resolve(forgeRoot, 'brain', 'projects', projectName);
 }
 
-/** Brain 3 (project) — a managed project's theme dir, central (ADR 035). */
+/** Brain 3 (project) — a managed project's theme dir, central (SPEC §4). */
 export function projectThemesDir(forgeRoot: string, projectName: string): string {
   return resolve(projectBrainDir(forgeRoot, projectName), 'themes');
 }
@@ -190,13 +190,13 @@ export function rootManagesProject(forgeRoot: string, projectDir: string): boole
  * Why a `(forgeRoot, projectDir)` pair was refused — the sentence a caller
  * surfaces instead of writing into a tree that does not own the project. It
  * lives here because it explains a KERNEL invariant (Brain 3 is central to the
- * forge root, ADR 035) using paths only this module computes, and because the
+ * forge root, SPEC §4) using paths only this module computes, and because the
  * next incident is attributable from one log line only if both roots are named.
  */
 export function rootMismatchReason(forgeRoot: string, projectDir: string): string {
   return (
     `forgeRoot ${forgeRoot} does not manage ${projectDir} (its projects live at ` +
-    `${resolveProjectsDir(forgeRoot)}). Brain 3 is central to the forge root (ADR 035), so ` +
+    `${resolveProjectsDir(forgeRoot)}). Brain 3 is central to the forge root (SPEC §4), so ` +
     'writing here would put this project\'s profile in an unrelated tree.'
   );
 }

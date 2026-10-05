@@ -62,7 +62,7 @@ export type RunProjectManagerOptions = {
    */
   signal?: AbortSignal;
   /**
-   * ADR 037 test seam (same DI category as `queryFn`): overrides the root the
+   * D-17 test seam (same DI category as `queryFn`): overrides the root the
    * wi-spec-compiler loads `forge:constraint` sources from
    * (`<root>/brain/projects/<project>/…`). Defaults to the forge repo root.
    */
@@ -79,13 +79,13 @@ export type RunProjectManagerOptions = {
   heartbeatTimers?: HeartbeatTimers;
 };
 
-// The live turn/budget caps are DECLARED DATA now (R4-01-F2, ADR-039):
+// The live turn/budget caps are DECLARED DATA now (R4-01-F2, SPEC §1):
 // `budgets.maxTurns: 70` + `maxBudgetUsd: 2.5` + `maxBudgetUsdShare: 0.2` in
 // skills/project-manager/SKILL.md, resolved by `runAgent`'s one-shot path as
 // `max(2.50 floor, 0.2 × manifest.cost_budget_usd)`. History of the values
 // (F-42 floor bump after a $1.01 pm-budget-exhausted 0-WI cycle; F-43
 // proportional share after terraform-provider-betterado blew the flat floor
-// and stalled 18 dependents) lives with the fields in the SKILL.md + ADR-039.
+// and stalled 18 dependents) lives with the fields in the SKILL.md + SPEC §1.
 //
 // Plan 2.11 part 3: emit `pm.turn-budget-warning` once when the streamed
 // assistant-turn count crosses this fraction of the declared turn cap.
@@ -136,7 +136,7 @@ type PmPassInput = {
   parentEventId: string;
   queryFn: PmQueryFn;
   signal?: AbortSignal;
-  /** ADR 037 test seam — see RunProjectManagerOptions.constraintSourcesRoot. */
+  /** D-17 test seam — see RunProjectManagerOptions.constraintSourcesRoot. */
   constraintSourcesRoot?: string;
   /** The one port (operator ruling, items 81/83) — see RunProjectManagerOptions.classProfiles. */
   classProfiles?: ClassProfilePort;
@@ -266,7 +266,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     });
   }
 
-  // R4-01-F2 (ADR-039): the spawn goes through the generic one-shot primitive
+  // R4-01-F2 (SPEC §1): the spawn goes through the generic one-shot primitive
   // with `lifecycle: 'caller'` — this pipeline owns the event lifecycle and
   // every judgment (brain gate, WI validation, checkpoint classification);
   // only the literal SDK call moved. Options are pinned byte-identical to the
@@ -433,7 +433,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       message: 'pm.work-item-emitted',
       metadata: {
         work_item_id: item.work_item_id,
-        // historical: carried for the Studio hex-detail drawer (ADR 031 removed it)
+        // historical: carried for the Studio hex-detail drawer (D-12 removed it)
         // + the WI dependency graph (observability #11): the WI's deps, scope size, and a one-line task.
         depends_on: item.depends_on,
         files_in_scope: item.files_in_scope.length,
@@ -471,7 +471,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     ...releaseDraftAcs(projectConfig?.releaseProcess),
   ];
 
-  // ADR 037 (wi-spec-compiler) + A2b's standing-ACs, composed into ONE step
+  // D-17 (wi-spec-compiler) + A2b's standing-ACs, composed into ONE step
   // in `runCompileStage` (pm-acceptance-gate.ts — see its own doc comment for
   // why it is safe to run TWICE: once here, and again over the revised set a
   // row-157 acceptance-gate turn (below) produces). `compileOpts` carries
@@ -494,7 +494,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     expectedInitiativeId: manifest.initiative_id,
   });
   let setErrors = [...validationSetErrors, ...firstStage.compileErrors];
-  // ADR 051 / ruling 229 half A — a FLAG, never a failure. The gate for this
+  // D-34 / ruling 229 half A — a FLAG, never a failure. The gate for this
   // column runs at the plan gate, on the declared criteria, before any spend.
   const underDecomposed = underDecomposedFlag(manifest, items, p.classProfiles);
   if (underDecomposed !== null) {
@@ -508,7 +508,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   let itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
   // A2a (2026-06-06): live-acceptance-WI requirement (contract C7), decided
-  // by class (ADR 051 decision 2 as amended, bead forge-mfv5.3.5 — a phase
+  // by class (D-34, bead forge-mfv5.3.5 — a phase
   // reads the class → gate-profile table; branching on a class NAME is a
   // conformance failure). The project declares the tier (`match`,
   // `requiresEnv`); the class profile's `acceptance` column says whether this

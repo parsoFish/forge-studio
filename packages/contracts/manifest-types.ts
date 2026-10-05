@@ -40,14 +40,14 @@ export type ManifestPhase = 'pending' | 'in-flight' | 'ready-for-review' | 'merg
  * Defaults to `architect` when absent (back-compat for manifests authored
  * before this field existed — NOT a feature flag, just a schema default).
  */
-/** `triggered` = born from an external trigger fire (cron/webhook — ADR-041). */
+/** `triggered` = born from an external trigger fire (cron/webhook — D-22). */
 export type InitiativeOrigin = 'architect' | 'human-directed' | 'triggered';
-/** ADR 051's four classes, shared by `FlowDefinition.accepts`/`FlowTrigger.class` (seam F6). */
+/** The four change classes (D-34), shared by `FlowDefinition.accepts`/`FlowTrigger.class` (seam F6). */
 export type ManifestClass = 'code' | 'docs' | 'config' | 'infra';
 export type InitiativeManifest = {
   initiative_id: string;       // INIT-<YYYY-MM-DD>-<slug>
   /**
-   * W6-RV-1 (mock finding I3), additive-optional field per ADR-042's
+   * W6-RV-1 (mock finding I3), additive-optional field
    * disclose-not-park rule: an explicit author-supplied title, read
    * straight off frontmatter. `initiativeTitle()` (packages/flows/manifest.ts) is the ONE display
    * derivation every surface uses (W7-A4 / W7-FIX-A4): this field when
@@ -109,10 +109,10 @@ export type InitiativeManifest = {
    */
   specs?: string[];
   body: string;                // markdown initiative spec
-  /** The change class (ADR 051): set by the architect, confirmed at the plan
+  /** The change class (D-34): set by the architect, confirmed at the plan
    *  gate, inherited by every work item; it selects the gate profile. No default. */
   class: ManifestClass;
-  /** Typed acceptance criteria (ADR 051), shared by architect, PM, review and
+  /** Typed acceptance criteria (SPEC §3), shared by architect, PM, review and
    *  PLAN.html. An entry that does not parse is an error, not an absence. */
   acceptance_criteria: ReadonlyArray<{ given: string; when: string; then: string }>;
   /**
@@ -133,13 +133,13 @@ export type InitiativeManifest = {
    * Resume a stalled/redirected cycle from a sub-phase, reusing the preserved
    * worktree + branch rather than re-running the full cycle from scratch.
    * Two distinct callers set this field, for two distinct reasons:
-   *   - `'integrate'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
+   *   - `'integrate'` — D-06 (successor develop flow, R4-10-F6): crash / env-failure
    *     recovery when every WI is already `complete`. Skips architect/PM/per-WI
    *     dev-loop and resumes at the `integrate` node — the post-develop band that is
    *     the flow's declared `resumable` re-entry point (dev→integrate→review) — reusing
    *     the completed per-WI commits. Set by `forge requeue --resume-from=integrate`.
    *     (Was `'demo'` pre-rename, forge-8vfn.6.10.18; `'unifier'` pre-cutover.)
-   *   - `'develop'` — ADR 040: review send-back re-entry. The PM phase
+   *   - `'develop'` — D-20: review send-back re-entry. The PM phase
    *     rebases onto main and skips (no re-decomposition); the dev loop
    *     RUNS (prior WIs re-verify cheaply via the iter-0 already-complete
    *     shortcut, new review-fix WIs build); then the post-develop spine
@@ -163,7 +163,7 @@ export type InitiativeManifest = {
    */
   resume_from?: 'integrate' | 'develop' | 'plan' | 'pr-open';
   /**
-   * ADR 040: send-back round counter. Incremented by the review verdict
+   * D-20: send-back round counter. Incremented by the review verdict
    * handler (`persistManifestSendBack`) each time review feedback compiles
    * into fix work-items and re-dispatches the develop agent. Absent ⇒ no
    * send-back has happened yet. Checked against `review.maxSendBackRounds`
@@ -183,7 +183,7 @@ export type InitiativeManifest = {
   claimed_by?: string;
   worktree_path?: string;
   /**
-   * ADR 026: the durable cycle id for this initiative, persisted on the manifest
+   * D-20: the durable cycle id for this initiative, persisted on the manifest
    * at FIRST claim (`runCycle` mints it once). Every later re-entry — a crash-
    * recovery resume, the review→unifier drain, or the merge finalizer — threads
    * this SAME id so the initiative stays on ONE `_logs/<cycleId>` dir. Reusing
@@ -194,7 +194,7 @@ export type InitiativeManifest = {
    */
   cycle_id?: string;
   /**
-   * The Studio flow this initiative runs under (ADR-028 / J5). The run-model
+   * The Studio flow this initiative runs under (SPEC §2 / J5). The run-model
    * associates the run with this flow so it surfaces under `/flows/<flow_id>` in
    * the monitor. S8/DEC-3 retired the forge-cycle monolith + its implicit
    * default: every NEW manifest names a flow (architect → forge-architect,
@@ -226,7 +226,7 @@ export type InitiativeManifest = {
    */
   architect_duration_ms?: number;
   /**
-   * R2-08-F4 (ADR-027 amendment): trigger provenance for a MINTED run
+   * R2-08-F4 (D-10 amendment): trigger provenance for a MINTED run
    * (cron / webhook / agent-complete origination only — chaining and merged
    * dispatch never mint a manifest, so their provenance is derived instead
    * from the run's own `*.trigger-firing` event; see run-model.ts). Persisted

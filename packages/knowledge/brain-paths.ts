@@ -1,14 +1,14 @@
 /**
  * Single source of truth for forge-side brain filesystem paths.
  *
- * The three-brain restructure (2026-05-26, ADR 018) moved several brain
+ * The three-brain restructure (2026-05-26, SPEC §4) moved several brain
  * directories. Before this module, the new locations were re-derived ad hoc
  * with `resolve(...)`/`join(...)` in half a dozen modules, and a later
  * rename left some readers pointing at directories that no longer exist
  * (e.g. the empty `brain/_raw/cycles/`). Route every brain-path lookup
  * through here so a future move is a one-file change.
  *
- * Layout (forge repo) — ADR 035: per-project brain + history + contract are
+ * Layout (forge repo) — SPEC §4: per-project brain + history + contract are
  * forge-owned and CENTRAL (no longer in the managed project's repo):
  *   brain/cycles/themes/                  — Brain 2: forge-level cycle-derived themes
  *   brain/cycles/_raw/                     — Brain 2: raw cycle archives
@@ -75,13 +75,13 @@ export function deriveKbIdFromBrainPath(path: string): string | null {
 }
 
 // Brain 3 (project) dirs — kernel owns these now (M4 ruling 18); this
-// re-export keeps this module the one brain-path door (ADR 035).
+// re-export keeps this module the one brain-path door (SPEC §4).
 export { projectBrainDir, projectThemesDir } from '@forge/kernel';
 
 /**
  * Resolve a kbId to its on-disk brain directory, supporting BOTH top-level
  * brains (`brain/<id>` — e.g. `cycles`, `forge-dev`) AND central per-project
- * brains (`brain/projects/<id>` — ADR 035). The id stays flat + URL-safe (no
+ * brains (`brain/projects/<id>` — SPEC §4). The id stays flat + URL-safe (no
  * slash, so the Studio `/api/studio/kbs/:id` routes are unaffected): it is tried
  * at `brain/<id>` first, then falls back to `brain/projects/<id>`. Returns the
  * directory that actually carries a `kb.yaml`, or `null` if neither does.

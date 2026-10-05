@@ -1,6 +1,6 @@
 /**
  * `forge gate docs` — the docs class's merge-boundary gate, as an ORCHESTRATOR
- * VERB (spec §5 item 6, ADR 036).
+ * VERB (spec §5 item 6, D-15).
  *
  * WHY A VERB AND NOT A `quality_gate_cmd`. The class profile gives `docs` an
  * EMPTY `mergeBoundaryTest` — there is no `testProcess.*` to run, because a

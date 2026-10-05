@@ -3,7 +3,7 @@
  * one-shot critique spawn.
  *
  * Band order: assemble (orchestrator-derived diff.patch / diffstat /
- * changed-files into `.forge/review-input/` + head SHA — ADR-036: the agent
+ * changed-files into `.forge/review-input/` + head SHA — D-15: the agent
  * judges, evidence assembly is orchestrator-owned) → spawn (`runAgent`,
  * `lifecycle: 'caller'`) → harvest (`.forge/review-findings.json`: schema +
  * identity-echo verification, ONE bounded authoring retry) → persist (the
@@ -18,7 +18,7 @@
  * fail-loud at startup.
  *
  * The findings are agent CLAIMS weighed by the operator at the verdict gate —
- * never a gate by themselves (ADR-021: approve IS the merge). Not wired into
+ * never a gate by themselves (D-07: approve IS the merge). Not wired into
  * any seed flow; R4-10 assembles. Input mirrors the flow-node executor shape.
  */
 
@@ -68,7 +68,7 @@ export type AdversarialReviewInput = {
   cycleId: string;
   logsRoot: string;
   /**
-   * The initiative's change class (ADR 051). It selects the review lenses from
+   * The initiative's change class (D-34). It selects the review lenses from
    * the class → gate-profile table — the whole reason this pipeline is ONE agent
    * rather than a fixed four-lens critique (spec §5 item 5).
    */
@@ -92,7 +92,7 @@ export type AdversarialReviewResult =
       detail: string;
     };
 
-/** ADR-039 declared-data fail-loud guard (exported so tests pin the throws). */
+/** SPEC §1 declared-data fail-loud guard (exported so tests pin the throws). */
 /**
  * The reviewer's entire tool set. Read-only by construction: it can look at the
  * tree and write its one findings file, and there is nothing here through which
@@ -127,7 +127,7 @@ export function assertAdversarialReviewDeclaration(def: {
   disallowedTools: string[];
 }): void {
   if (def.budgets.maxTurns === undefined) {
-    throw new Error('adversarial-review SKILL.md must declare budgets.maxTurns — the live turn cap is frontmatter data (ADR-039)');
+    throw new Error('adversarial-review SKILL.md must declare budgets.maxTurns — the live turn cap is frontmatter data (SPEC §1)');
   }
   if (def.budgets.maxBudgetUsd === undefined && def.budgets.maxBudgetUsdShare === undefined) {
     throw new Error(
@@ -151,13 +151,13 @@ export function assertAdversarialReviewDeclaration(def: {
   const extra = def.allowedTools.filter((t) => !REVIEW_ALLOWED_TOOLS.includes(t));
   if (extra.length > 0) {
     throw new Error(
-      `adversarial-review SKILL.md grants ${extra.join(', ')} — the reviewer judges and never runs or edits, so its tools are exactly ${REVIEW_ALLOWED_TOOLS.join(', ')} (ADR 036). Execution reached by delegation (Task/Agent) or by a cell (NotebookEdit) is still execution.`,
+      `adversarial-review SKILL.md grants ${extra.join(', ')} — the reviewer judges and never runs or edits, so its tools are exactly ${REVIEW_ALLOWED_TOOLS.join(', ')} (D-15). Execution reached by delegation (Task/Agent) or by a cell (NotebookEdit) is still execution.`,
     );
   }
   for (const t of REVIEW_EXECUTION_TOOLS) {
     if (!def.disallowedTools.includes(t)) {
       throw new Error(
-        `adversarial-review SKILL.md must DISALLOW ${t} explicitly — an empty allow-list is not a fence when the runtime's default tool set is not empty (ADR 036)`,
+        `adversarial-review SKILL.md must DISALLOW ${t} explicitly — an empty allow-list is not a fence when the runtime's default tool set is not empty (D-15)`,
       );
     }
   }

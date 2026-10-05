@@ -1,7 +1,7 @@
 /**
  * KB descriptor sites — the ONE enumeration of "where a kb.yaml may live".
  *
- * Two containment roots (ADR 035): the top-level brains `brain/<id>/kb.yaml`
+ * Two containment roots (SPEC §4): the top-level brains `brain/<id>/kb.yaml`
  * (cycles, forge-dev) and the central per-project brains
  * `brain/projects/<id>/kb.yaml` (gitpulse, mdtoc, trafficGame, …). Both
  * `loadKbDescriptors` (packages/knowledge/bridge-studio-kbs.ts — the roster + every per-KB
@@ -48,7 +48,7 @@ export function kbSites(forgeRoot: string): KbSite[] {
   // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
   // own, so it is naturally skipped here).
   for (const name of subDirs(brainRoot)) sites.push({ base: brainRoot, name });
-  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035) — a
+  // Central per-project brains: brain/projects/<id>/kb.yaml (SPEC §4) — a
   // SECOND containment root with the identical treatment.
   const projectsRoot = join(brainRoot, 'projects');
   for (const name of subDirs(projectsRoot)) sites.push({ base: projectsRoot, name });

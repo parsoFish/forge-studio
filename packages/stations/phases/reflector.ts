@@ -52,7 +52,7 @@ import { emitReflectionLost, runReflectorBrainWrites, listFreshThemes } from './
 // forge-8vfn.8.1.37 / ruling 1770 row 147, after a real S10 run hit
 // error_max_budget_usd at $1.5376) are DECLARED DATA now: `budgets.maxTurns`
 // / `budgets.maxBudgetUsd` in skills/reflector/SKILL.md, resolved by
-// `runAgent`'s one-shot path (R4-01-F2, ADR-039).
+// `runAgent`'s one-shot path (R4-01-F2, SPEC §1).
 
 /**
  * Optional injectables for testing. The brain-lint runner is the only one

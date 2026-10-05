@@ -1,5 +1,5 @@
 /**
- * Unified structured demo model (ADR 021).
+ * Unified structured demo model (D-07).
  *
  * The unifier authors ONE structured `demo.json` to this schema — the schema is
  * the contract that fixes the previous free-form `DEMO.md` inconsistency. The
@@ -629,7 +629,7 @@ export function renderDemoMarkdown(model: DemoModel): string {
   const lines: string[] = [];
   lines.push(`# ${model.title}`);
   lines.push('');
-  lines.push(`> _Derived from \`demo.json\` (ADR 021). Essence:_ ${model.essence}`);
+  lines.push(`> _Derived from \`demo.json\` (D-07). Essence:_ ${model.essence}`);
   lines.push('');
 
   if (model.summary) {

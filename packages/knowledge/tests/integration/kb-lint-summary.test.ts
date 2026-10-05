@@ -172,7 +172,7 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
       '# Cycles — Patterns\n\n## Theme pages\n\n- [Broken FM](./themes/broken-fm.md)\n',
     );
 
-    // KB "alpha" (central project brain, ADR 035) — themes/ dir EXISTS but is
+    // KB "alpha" (central project brain, SPEC §4) — themes/ dir EXISTS but is
     // EMPTY. checkProjectBrainIndexes (CHECK_SCOPE 'project-indexes') is the
     // ONLY check whose scan domain even reaches a project KB's dir, and it
     // skips an empty themes dir with zero findings — so alpha's lint is
@@ -182,7 +182,7 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
     mkdirSync(join(alphaDir, 'themes'), { recursive: true });
     writeFileSync(
       join(alphaDir, 'kb.yaml'),
-      'id: alpha\nname: Alpha Project Brain\nbinding: { kind: project, ref: alpha }\ndesc: AT-1/AT-3 fixture (ADR 035 central project brain).\n',
+      'id: alpha\nname: Alpha Project Brain\nbinding: { kind: project, ref: alpha }\ndesc: AT-1/AT-3 fixture (SPEC §4 central project brain).\n',
     );
 
   });
@@ -426,7 +426,7 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
 
     // Kills: an N-fan-out that re-runs the full brain lint once per KB — the
     // exact cost _wave5/parks/R6-07-kb-skew-report-dont-patch.md option (a)
-    // refused. W6-P2 (ADR 044) moved the ONE call site behind
+    // refused. W6-P2 (D-27) moved the ONE call site behind
     // runBrainLintFullMemoized's cache; W6-P2 round 2 added a SECOND,
     // deliberately-uncached sibling (runBrainLintFullFresh) for post-mutation
     // re-lints that cannot trust the memo — attachKbLintSummaries and every
@@ -697,7 +697,7 @@ describe('kb-lint-summary — the CLI and Studio derive from ONE scan (M1-D)', (
     writeFileSync(join(cyclesDir, 'patterns.md'), '# Patterns\n\n- [`forge-theme`](./themes/forge-theme.md) — d\n');
     writeFileSync(join(cyclesDir, 'themes', 'forge-theme.md'), themeMd({ title: 'Forge Theme', desc: 'clean.' }));
 
-    // A project brain (Brain 3, ADR 035) carrying the shape of the real
+    // A project brain (Brain 3, SPEC §4) carrying the shape of the real
     // incident: a theme whose relative link points at a file that is not there.
     const demoDir = join(forgeRoot, 'brain', 'projects', 'demo');
     mkdirSync(join(demoDir, 'themes'), { recursive: true });
@@ -754,7 +754,7 @@ describe('kb-lint-summary — the CLI and Studio derive from ONE scan (M1-D)', (
     const { checks } = computeKbLintChecks(forgeRoot, 'demo', cliFindings);
     const na = checks.filter((c) => c.status === 'n/a').map((c) => c.check).sort();
     // Only the three that genuinely cannot apply to a project brain:
-    // the two ADR 018 category→sub-wiki routing checks, and the global one.
+    // the two SPEC §4 category→sub-wiki routing checks, and the global one.
     assert.deepEqual(na, ['checkCategoryScope', 'checkIndexSync', 'checkReflectorLoss']);
   });
 });

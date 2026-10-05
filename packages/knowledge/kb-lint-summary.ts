@@ -31,7 +31,7 @@ import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, type 
  * KB's health lint COUNT (read) and its consolidate/fix-auto obligation (WRITE)
  * share. A finding belongs to `kbId` iff its file resolves to a path AT or
  * nested UNDER the KB's OWN brain dir, covering BOTH `brain/<id>` and the
- * central per-project `brain/projects/<id>` (ADR 035). This entry point takes
+ * central per-project `brain/projects/<id>` (SPEC §4). This entry point takes
  * an already-resolved `brainDir` (the drain and the bridge hold one); the
  * kbId-shaped question is `KbBackend.contains`, and both route through the ONE
  * comparison in `brain-paths.ts::pathUnderDir` so read scope and write scope
@@ -80,7 +80,7 @@ export function scopeFindingsToKb(
  * (`lintThemeFiles(listOwnThemeFiles(brainDir))`), because the shared
  * `readThemeFiles` scan walked `brain/cycles` + `brain/forge-dev` only and a
  * project or band KB was therefore never scanned at all. The scan now covers
- * every theme dir (ADR 035), so the compensator is not merely redundant but
+ * every theme dir (SPEC §4), so the compensator is not merely redundant but
  * actively wrong: `lintThemeFiles` resolves a project theme's category index in
  * the project's own dir and emits `checkIndexSync` for it, a finding the
  * full-scope lint does not report — Studio counted a flag `forge brain lint`
@@ -160,11 +160,11 @@ export function computeKbLintChecks(
         // Applicable iff the full-scope scan actually READ a theme of this KB.
         return scanReadThisKb;
       case 'forge-themes':
-        // The ADR 018 category→sub-wiki routing rules; forge sub-wikis only.
+        // The SPEC §4 category→sub-wiki routing rules; forge sub-wikis only.
         return backend.placement() === 'forge';
       case 'project-indexes':
         // checkProjectBrainIndexes walks brain/projects/* — applicable iff
-        // this KB is a central per-project brain (ADR 035).
+        // this KB is a central per-project brain (SPEC §4).
         return backend.placement() === 'project';
       case 'global':
       default:
@@ -195,7 +195,7 @@ export function computeKbLintChecks(
 }
 
 // ---------------------------------------------------------------------------
-// Full-scope lint memoization (ADR 044 — read-path memoization, W6-P2)
+// Full-scope lint memoization (D-27 — read-path memoization, W6-P2)
 // ---------------------------------------------------------------------------
 
 /**
@@ -203,7 +203,7 @@ export function computeKbLintChecks(
  * (packages/knowledge/brain-lint.ts), enumerated from each check's OWN code, not assumed
  * from a walk. Re-verify this table by hand whenever a check in that
  * registry changes what it reads — it is the proof that `statWalkFingerprint`
- * below actually covers the derivation's real inputs (ADR 044 rule 2), not
+ * below actually covers the derivation's real inputs (D-27), not
  * documentation of what a walk happens to do.
  *
  *   checkFrontmatter          readThemeFiles(brain/)                              → confined to brain/
@@ -301,7 +301,7 @@ const FINGERPRINT_SKIP_TOPLEVEL_RE = /^_wave\d+$/;
  * Throws on any unexpected `readdir`/`stat` failure (permission error,
  * ENOTDIR from a path component that turned out to be a plain file, a TOCTOU
  * unlink between listing and stat) — every caller (`runBrainLintFullMemoized`,
- * `runBrainLintFullFresh`) treats a throw as ADR 044 rule 4's "any doubt" and
+ * `runBrainLintFullFresh`) treats a throw as D-27's "any doubt" and
  * falls straight through to (or forces) an uncached `runBrainLint` call. A
  * directory that legitimately does not exist yet (`_queue/done` before any
  * cycle has completed, or a `brain/` subdir not yet created) is NOT an error
@@ -369,14 +369,14 @@ function fingerprintKey(fp: BrainTreeFingerprint): string {
   return `${fp.fileCount}:${fp.maxMtimeMs}:${fp.totalSize}`;
 }
 
-/** Memory-only, keyed per forgeRoot (ADR 044 rule 3 — dies with the process,
+/** Memory-only, keyed per forgeRoot (D-27 — dies with the process,
  *  never persisted). A test process spinning up many isolated `forgeRoot`
  *  fixtures never collides across them. */
 const brainLintFullMemoByRoot = new Map<string, { key: string; result: RunBrainLintResult }>();
 
 /**
  * Memory-only, mtime-keyed memo of `runBrainLint({ cwd: forgeRoot, scope:
- * 'full' })` (ADR 044). Every full-scope read path behind the Studio bridge
+ * 'full' })` (D-27). Every full-scope read path behind the Studio bridge
  * — `GET /api/studio/kbs` (via `attachKbLintSummaries` below), the per-KB
  * detail/health route, the kb-cleanup session's live findings, and the KB
  * maintenance `op:'lint'` action, all in packages/knowledge/bridge-studio-kbs.ts — shares
@@ -384,7 +384,7 @@ const brainLintFullMemoByRoot = new Map<string, { key: string; result: RunBrainL
  * many requests against an unchanged brain tree pays the full ~500-file lint
  * once, not once per request.
  *
- * Same derivation, always (ADR 044 rule 1): a cache hit and a cache miss
+ * Same derivation, always (D-27): a cache hit and a cache miss
  * return the exact `RunBrainLintResult` `runBrainLint` itself would produce
  * for the current on-disk state — this function never computes anything
  * `runBrainLint` doesn't. On any doubt about the fingerprint (the stat-walk
@@ -437,7 +437,7 @@ export function runBrainLintFullMemoized(forgeRoot: string): RunBrainLintResult 
  * function (`runBrainConsolidateNow`, packages/knowledge/bridge-studio-kbs.ts) cannot trust
  * the memo it may have just seeded — a size-neutral write landing in the
  * same millisecond as the pre-mutation read is exactly the blind spot
- * `statWalkFingerprint` accepts by design (same trade-off ADR 044 names for
+ * `statWalkFingerprint` accepts by design (same trade-off D-27 names for
  * every stat-based fingerprint in this codebase), and this call is the one
  * place that blind spot would silently corrupt an operator-visible count
  * (`clearedCount`) rather than just serve a page a beat late.
@@ -497,7 +497,7 @@ export function summarizeKbLintChecks(r: ReturnType<typeof computeKbLintChecks>)
  * for the WHOLE list (never a per-KB re-run, the exact cost
  * `_wave5/parks/R6-07-kb-skew-report-dont-patch.md` option (a) refused), then
  * `computeKbLintChecks` + `summarizeKbLintChecks` per kb over the shared
- * findings. `runBrainLintFullMemoized` (ADR 044, above) serves this from the
+ * findings. `runBrainLintFullMemoized` (D-27, above) serves this from the
  * in-process memo when the brain tree hasn't changed since the last call —
  * the SAME `runBrainLint({ scope: 'full' })` derivation either way, so this
  * function's own output is unaffected by whether the call underneath it was

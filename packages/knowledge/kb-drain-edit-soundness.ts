@@ -103,7 +103,7 @@ export type KbEditUnsoundness = {
 
 export type KbEditSoundnessCtx = {
   /** Containment root for link resolution. A brain theme legitimately links
-   *  anywhere inside the repo (`../../../docs/decisions/...`, `_logs/...`), so
+   *  anywhere inside the repo (`../../../docs/...`, `_logs/...`), so
    *  `brain/` is too narrow a root — but nothing it names is ever OUTSIDE the
    *  repo, and a link target is agent-written text. */
   forgeRoot: string;

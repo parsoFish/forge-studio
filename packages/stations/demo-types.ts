@@ -1,5 +1,5 @@
 /**
- * Shared demo-artifact schema types (ADR 021 / ADR 035 / F4).
+ * Shared demo-artifact schema types (D-07 / SPEC §4 / F4).
  *
  * The `demo.json` the unifier authors is the single source of truth for a
  * cycle's demo; the review surface renders it natively and forge derives the

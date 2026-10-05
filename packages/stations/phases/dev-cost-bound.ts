@@ -7,7 +7,7 @@
  * displayed "cost budget remaining" — unconditionally, whether or not the
  * cycle actually had a ceiling configured. The comments at those sites cited
  * "CONTRACTS.md C19" as the reason; that document was deleted from the repo
- * 2026-06-07 (commit d5d947c3) and ADR 015 disclaims it, so the citation was
+ * 2026-06-07 (commit d5d947c3) and SPEC §3 disclaims it, so the citation was
  * stale as well as the number being wrong. Measured consequence: a work item
  * declared at $12 spent $84 inside its own Ralph loop, because nothing
  * inside that loop could ever see the cycle running out of budget.

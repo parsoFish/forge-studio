@@ -1,5 +1,5 @@
 /**
- * KbBackend — the pluggable knowledge-base seam (ADR-027 §4).
+ * KbBackend — the pluggable knowledge-base seam (SPEC §4).
  *
  * A backend is bound to one `kbId` and exposes the read/query operations the
  * bridge (and, in a later pass, the planners) need. The only implementation is
@@ -42,8 +42,8 @@ import {
 
 /**
  * Where a KB sits in the brain layout. `'forge'` = one of the two forge
- * sub-wikis the ADR 018 category→sub-wiki routing rules govern; `'project'` =
- * a central per-project brain under `brain/projects/` (ADR 035); `'other'` =
+ * sub-wikis the SPEC §4 category→sub-wiki routing rules govern; `'project'` =
+ * a central per-project brain under `brain/projects/` (SPEC §4); `'other'` =
  * any other top-level KB. A per-KB consumer asks for this instead of comparing
  * directory paths itself — which is how a caller once came to hardcode the two
  * forge sub-wikis and report `n/a` for four checks that scan a project brain
@@ -76,7 +76,7 @@ export type KbSearchHit = {
  * The pluggable knowledge-base contract. Every backend is bound to one kbId.
  * A future second implementation must satisfy this interface; the
  * `kb-backend.test.ts` contract test is the admission gate (mirrors the
- * RuntimeAdapter conformance suite, ADR-029).
+ * RuntimeAdapter conformance suite, SPEC §1).
  */
 export interface KbBackend {
   /** The kb this backend is bound to. */
@@ -121,7 +121,7 @@ export interface KbBackend {
    */
   ownsTheme(file: string): boolean;
 
-  /** Where this KB sits in the brain layout (ADR 018 / ADR 035). */
+  /** Where this KB sits in the brain layout (SPEC §4). */
   placement(): KbPlacement;
 
   /**

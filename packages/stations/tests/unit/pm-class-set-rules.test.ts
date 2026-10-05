@@ -1,5 +1,5 @@
 /**
- * ADR 051 — `singleWiAllowed` as a FLAG at the project manager (ruling 229 half
+ * D-34 — `singleWiAllowed` as a FLAG at the project manager (ruling 229 half
  * A). The GATE for this column runs at the plan gate on the declared criteria,
  * before any spend; these tests cover the observation made afterwards.
  *
@@ -52,31 +52,31 @@ function wi(id: string): WorkItem {
   };
 }
 
-test('ADR 051: a ONE-item code decomposition produces a flag naming the class and the work item', () => {
+test('D-34: a ONE-item code decomposition produces a flag naming the class and the work item', () => {
   const flag = underDecomposedFlag(manifest('code'), [wi('WI-1')], cp);
   assert.ok(flag, 'expected a flag');
   assert.match(flag, /code initiative decomposed to ONE work item \(WI-1\)/);
   assert.match(flag, /not enforced here/, 'the message says it is an observation, not a verdict');
 });
 
-test('ADR 051: the same one-item set is CLEAN for docs — kills "if (items.length === 1)"', () => {
+test('D-34: the same one-item set is CLEAN for docs — kills "if (items.length === 1)"', () => {
   assert.equal(underDecomposedFlag(manifest('docs'), [wi('WI-1')], cp), null);
   assert.equal(underDecomposedFlag(manifest('config'), [wi('WI-1')], cp), null);
 });
 
-test('ADR 051: two items are clean for every class — the rule is about ONE, not about "few"', () => {
+test('D-34: two items are clean for every class — the rule is about ONE, not about "few"', () => {
   for (const cls of ['code', 'docs', 'config', 'infra'] as const) {
     assert.equal(underDecomposedFlag(manifest(cls), [wi('WI-1'), wi('WI-2')], cp), null, cls);
   }
 });
 
-test('ADR 051: an EMPTY set is not this rule\'s business — "the PM produced nothing" is its own failure', () => {
+test('D-34: an EMPTY set is not this rule\'s business — "the PM produced nothing" is its own failure', () => {
   for (const cls of ['code', 'docs', 'config', 'infra'] as const) {
     assert.equal(underDecomposedFlag(manifest(cls), [], cp), null, cls);
   }
 });
 
-test('ADR 051: the verdict follows the TABLE, not a list in this file — change the table and the rule changes with it', () => {
+test('D-34: the verdict follows the TABLE, not a list in this file — change the table and the rule changes with it', () => {
   // Reads the profile the rule reads. If someone re-derived `singleWiAllowed`
   // from a class name here, this test would still pass — so it is paired with
   // the conformance test's no-branching check, which fails on exactly that.

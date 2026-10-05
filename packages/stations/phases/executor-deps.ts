@@ -256,7 +256,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
 }
 
 /**
- * Race an executor promise against a concurrent wedge-kill timer, AND (ADR 028
+ * Race an executor promise against a concurrent wedge-kill timer, AND (SPEC §2
  * amendment, ruling 1774) an operator-stop flag — the SAME timer, the SAME
  * AbortController, so a live turn (PM / dev-loop Ralph, the two callers that
  * thread this signal on as `externalSignal`) is cancelled the identical way a
@@ -316,7 +316,7 @@ export async function raceWithWedge<T>(
 }
 
 /**
- * The shipped `ProjectGate`: the real contract preflight (ADR 017). It lives
+ * The shipped `ProjectGate`: the real contract preflight (SPEC §6). It lives
  * here, beside the real phase implementations, because `flow-runner.ts` may
  * hold only the port (SPEC.md §6 Project).
  */

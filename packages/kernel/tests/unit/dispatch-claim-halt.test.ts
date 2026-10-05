@@ -1,5 +1,5 @@
 /**
- * The emergency halt at the dispatch claim (ADR 011): `claimDispatchSlot`
+ * The emergency halt at the dispatch claim (D-03): `claimDispatchSlot`
  * refuses with `Halted` before writing anything, and the shared envelope maps
  * it to 409 { error: 'halted', since }.
  */

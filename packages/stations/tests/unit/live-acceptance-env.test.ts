@@ -1,5 +1,5 @@
 /**
- * The dev-loop's live-acceptance env guard (bead forge-mfv5.3.5, ADR 051
+ * The dev-loop's live-acceptance env guard (bead forge-mfv5.3.5, D-34
  * decision 2 as amended). `liveAcceptanceEnvFor`
  * (`phases/live-acceptance-env.ts`) is the one decision the per-WI gate wiring
  * in `developer-loop.ts` makes about `requiresEnv`: a WI gate that targets the

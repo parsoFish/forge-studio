@@ -69,7 +69,7 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
       const target = resolve(dir, link);
       // A managed project's own repo is a GROUND CLONE under `projects/<name>/`
       // — gitignored, cloned on demand, absent in CI and in a fresh worktree.
-      // ADR 035 keeps the brain forge-owned while the project stays a separate
+      // SPEC §4 keeps the brain forge-owned while the project stays a separate
       // repo, so forge cannot assert anything about that tree's contents: a
       // theme citing its project's source would flag or clear depending only on
       // whether the clone happened to be checked out, which is a gate that
@@ -172,7 +172,7 @@ export const STALENESS_PREFIXES: readonly string[] = FORGE_INTERNAL_PREFIXES;
  * For each theme citing a path in `## Sources` (or anywhere in the body):
  * - For FORGE themes: resolve relative to `<forgeRoot>/`. Flag missing files
  *   that look like source paths.
- * - For a theme in any OTHER brain — a project brain (ADR 035) or an
+ * - For a theme in any OTHER brain — a project brain (SPEC §4) or an
  *   operator-created KB — a bare `docs/…` citation names THAT project's docs,
  *   which live in its ground clone under `projects/<name>/`: gitignored,
  *   absent in CI, another repository's tree. Forge cannot resolve it, so it is
@@ -259,7 +259,7 @@ function collectIndexLinkTargets(brainRoot: string): Set<string> {
   if (existsSync(topIndex)) indexFiles.push(topIndex);
 
   // A KB's index pages sit beside its `themes/` dir — for the forge sub-wikis
-  // and, since ADR 035, for every project brain at `brain/projects/<name>/`
+  // and, since SPEC §4, for every project brain at `brain/projects/<name>/`
   // too. Derived from `themeDirs` so a KB whose themes are LINTED can never be
   // a KB whose indexes are unread: that mismatch is what made every Brain 3
   // theme look like an orphan.
