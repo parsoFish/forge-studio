@@ -100,7 +100,7 @@ const DECLARATION_FILE_RE = /\.d\.(ts|mts|cts)$/;
 /**
  * Recursively collect every scannable source file under `dir`, walking with
  * Node's built-in recursive `readdirSync` (Node >=20.1; this repo's
- * `engines.node` floor is >=20).
+ * `engines.node` floor is >=22.12).
  */
 function collectSourceFiles(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true, recursive: true });
