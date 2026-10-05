@@ -689,15 +689,15 @@ while IFS= read -r cmd; do
   # on the log and A's wrapper stamped seven seconds later. A lane came within
   # one message of reporting a sibling's failures as its own, and PR bodies
   # across the milestone had quoted counts from this path as evidence.
-  # The wrapper's own PASS/FAIL line was always per-lane and always correct;
-  # it is the STEP log that lied, which is the harder kind to notice.
+  # The wrapper's PASS/FAIL line was always per-lane; the STEP log lied.
   log="$LOGS/gate-$(basename "$R")-$name.log"
   t0=$(now_ticks)
   # Written to a temp file and renamed: `rename(2)` is atomic within a
   # filesystem, so a reader either sees the previous complete log or this one,
   # never a half-written file — and a gate already executing this script keeps
   # its own inode rather than following a path that changed underneath it.
-  if ( unset $GATE_CONTROL_VARS; eval "$cmd" ) > "$log.part" 2>&1; then
+  step="$cmd"; [ "$cmd" = "npm test" ] && step="\"\$HERE/gate-step-timeout.sh\" \"\${GATE_NPM_TEST_TIMEOUT_SECS:-1200}\" -- npm test" # gate-step-timeout.sh: hung step held a gate 64 min
+  if ( unset $GATE_CONTROL_VARS; eval "$step" ) > "$log.part" 2>&1; then
     mv -f "$log.part" "$log"
     echo "PASS  $cmd  ($(secs "$t0"))"
   else
@@ -732,7 +732,7 @@ while IFS= read -r cmd; do
       echo "REFUSED  $cmd  ($(secs "$t0")) — $(grep -m1 -E '^\[[a-z][a-z-]*-guard\]' "$log" 2>/dev/null | sed 's/^\[[^]]*\] *//')"
       refused=1
     else
-      echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
+      echo "FAIL  $cmd  ($(secs "$t0"))$([ "$rc" -eq 124 ] && echo ' TIMEOUT')  → $log"
       fail=1
       FAIL_COUNT=$((FAIL_COUNT + 1))
       FAIL_CMD="$cmd"; FAIL_LOG="$log"

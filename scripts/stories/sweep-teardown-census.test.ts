@@ -6,7 +6,8 @@
  * the reap, a sibling outside the run's dispatch tree, a TERM-respecting
  * child, and a census that refuses the sweep.
  */
-import { test } from 'node:test';
+import { test as nodeTest, after } from 'node:test';
+import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,8 +17,49 @@ import { reapCensusAndSweep } from './sweep-teardown.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
 import {
   killIfAlive, plantReapedRootWithGrandchild, plantInitManifest, fastQuiesce, waitForFileToExist,
-  waitForProcVisible,
+  waitForProcVisible, waitForRalphPid,
 } from './sweep-teardown-plant.mjs';
+
+/**
+ * A HANG IS A NAMED FAILURE, AND TEARDOWN FORCE-KILLS (T3, tooling/gate-step-timeout).
+ * These doors plant SIGTERM-ignoring writers; when SIGTERM did not stop one the
+ * file hung ~60 min (the live child keeps node's event loop up) instead of
+ * failing. Two bounds, both by RECORDED pid, never by name:
+ *  - every test runs under `HANG_BOUND_MS`; losing the race fails THAT test with
+ *    a message naming it (its plants' own `t.after` then SIGKILL their pids);
+ *  - every fixture pid a test records is force-killed by the file-level
+ *    `after()` after a bounded wait if still alive, and the final test asserts
+ *    none survived (a failing describe/file `after()` exits 0 in node 22, so the
+ *    assertion lives in a test, the kill in `after()`).
+ * What the doors assert about `reapCensusAndSweep` is unchanged.
+ */
+const HANG_BOUND_MS = 60_000;
+const TEARDOWN_WAIT_MS = 2_000;
+const recordedPids = new Set<number>();
+const record = (pid: number | undefined) => { if (pid) recordedPids.add(pid); };
+const isAlive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const recordRalph = async (file: string) => record((await waitForRalphPid(file, { timeoutMs: 1000 })) ?? undefined);
+
+function test(name: string, fn: (t: TestContext) => Promise<void>) {
+  nodeTest(name, async (t) => {
+    let timer: NodeJS.Timeout | undefined;
+    const hang = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(
+        `HANG: "${name}" did not finish within ${HANG_BOUND_MS} ms — a SIGTERM-ignoring fixture writer was not stopped; its pid is force-killed by teardown`,
+      )), HANG_BOUND_MS);
+    });
+    try { await Promise.race([fn(t), hang]); } finally { clearTimeout(timer); }
+  });
+}
+
+async function forceKillSurvivors(): Promise<number[]> {
+  const deadline = Date.now() + TEARDOWN_WAIT_MS;
+  while ([...recordedPids].some(isAlive) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  const survivors = [...recordedPids].filter(isAlive);
+  for (const pid of survivors) killIfAlive(pid);
+  return survivors;
+}
+after(async () => { await forceKillSurvivors(); });
 
 /**
  * Finding row 75's SECOND half (T1 rulings 1258, 1332) — the story's own
@@ -45,6 +87,7 @@ test('finding row 75 (agent half) RED: the OLD sequence (sweepProductFixtures al
     setInterval(() => {}, 1000);
   `, ralphPidFile);
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  record(parent.pid); await recordRalph(ralphPidFile);
 
   // The OLD sequence: `quiesceWriters` only prints, and the trailing sweep
   // ran regardless of what it found. Standing in for that here with the sweep
@@ -71,6 +114,7 @@ test('finding row 75 (agent half) DOOR: reapCensusAndSweep kills the grandchild,
     setInterval(() => {}, 1000);
   `, ralphPidFile);
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  record(parent.pid); await recordRalph(ralphPidFile);
 
   const evidenceDir = join(root, 'queue-claim');
   const result = await reapCensusAndSweep({
@@ -147,6 +191,7 @@ test('finding row 75 (agent half) DOOR (second): a writer OUTSIDE this run\'s di
     setInterval(() => {}, 1000);
   `], { stdio: 'ignore' });
   t.after(() => killIfAlive(sibling.pid!));
+  record(sibling.pid);
   await waitForProcVisible(sibling.pid!); // wait on the event, not the clock (T1 1372)
 
   const evidenceDir = join(root, 'queue-claim');
@@ -208,6 +253,7 @@ test('finding row 75 (agent half) DOOR (third): a TERM-respecting grandchild exi
     setInterval(() => {}, 1000);
   `, ralphPidFile);
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  record(parent.pid); await recordRalph(ralphPidFile);
 
   const evidenceDir = join(root, 'queue-claim');
   const result = await reapCensusAndSweep({
@@ -262,4 +308,9 @@ test('finding row 75 (agent half): a non-empty census refuses the sweep entirely
     // pids as strings — the escalation must still reach it regardless.
     `the survivor must still have been escalated to SIGKILL: ${JSON.stringify(killed)}`,
   );
+});
+
+nodeTest('teardown: no recorded fixture pid survives the doors above (a survivor is force-killed AND fails here, named)', async () => {
+  const survivors = await forceKillSurvivors();
+  assert.deepEqual(survivors, [], `census fixtures still alive after the doors — SIGTERM did not stop them; force-killed pids: ${survivors.join(', ')}`);
 });
