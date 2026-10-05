@@ -4302,18 +4302,6 @@
     "count": 1
   },
   {
-    "file": "scripts/check-docs-shape.mjs",
-    "kind": "stem",
-    "cited": "check-docs-claims",
-    "count": 1
-  },
-  {
-    "file": "scripts/check-docs-shape.test.ts",
-    "kind": "stem",
-    "cited": "check-docs-claims",
-    "count": 6
-  },
-  {
     "file": "scripts/check-file-size.mjs",
     "kind": "path",
     "cited": "apps/studio/components/__ratchet_probe__.tsx",
