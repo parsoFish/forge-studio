@@ -132,6 +132,60 @@ test('demoCheckpointPreflightRefusal: `node dist/cli.js` (relative; argv[0] `nod
   }
 });
 
+// forge-8vfn.30.9 — a bare head not on PATH but declared in package.json "bin".
+function withBinWorktree(pkg: unknown, name: string, fn: (worktree: string) => void): void {
+  const worktree = tmpDir();
+  const savedPath = process.env.PATH;
+  try {
+    writeFileSync(join(worktree, 'package.json'), JSON.stringify(pkg));
+    writeWorkItem(
+      workItem({
+        work_item_id: 'WI-3',
+        acceptance_criteria: [{ given: 'g', when: `the demo capture runs \`${name} --version\``, then: 't' }],
+      }),
+      worktree,
+    );
+    process.env.PATH = join(worktree, 'no-such-dir'); // the name cannot be on PATH
+    fn(worktree);
+  } finally {
+    process.env.PATH = savedPath;
+    rmSync(worktree, { recursive: true, force: true });
+  }
+}
+
+test('demoCheckpointPreflightRefusal: a bare `gp` declared in package.json bin (target not built yet) → ok', () => {
+  withBinWorktree({ name: 'gitpulse', bin: { gp: './dist/cli.js' } }, 'gp', (worktree) => {
+    assert.equal(demoCheckpointPreflightRefusal(worktree, 'code'), null);
+  });
+});
+
+test('demoCheckpointPreflightRefusal: an undeclared bare name still refuses, naming both lookups', () => {
+  withBinWorktree({ name: 'gitpulse', bin: { gp: './dist/cli.js' } }, 'other', (worktree) => {
+    const refusal = demoCheckpointPreflightRefusal(worktree, 'code');
+    assert.notEqual(refusal, null);
+    assert.match(refusal!, /PATH/);
+    assert.match(refusal!, /package\.json "bin"/);
+  });
+});
+
+test('demoCheckpointPreflightRefusal: a declared bin that escapes the worktree refuses with the named reason', () => {
+  for (const target of ['../evil.js', '/usr/bin/evil', './a/../../evil.js']) {
+    withBinWorktree({ name: 'x', bin: { gp: target } }, 'gp', (worktree) => {
+      const refusal = demoCheckpointPreflightRefusal(worktree, 'code');
+      assert.notEqual(refusal, null, target);
+      assert.match(refusal!, /bin is refused/, target);
+    });
+  }
+});
+
+test('demoCheckpointPreflightRefusal: a malformed package.json refuses (never read as "no bin")', () => {
+  withBinWorktree({}, 'gp', (worktree) => {
+    writeFileSync(join(worktree, 'package.json'), '{not json');
+    const refusal = demoCheckpointPreflightRefusal(worktree, 'code');
+    assert.match(refusal ?? '', /unreadable or malformed/);
+  });
+});
+
 test('demoCheckpointPreflightRefusal: the SAME unproducible command under a class that does not capture checkpoints (docs) → ok', () => {
   const worktree = tmpDir();
   try {
