@@ -25,7 +25,13 @@ import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:
 import { join, resolve } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, SAFE_CAPTURE_NAME_RE } from '../demo-paths.ts';
-import { gitIdentityConfigArgs, guardedReadDir, ORCHESTRATOR_GIT_IDENTITY, resolveGuardedPath } from '@forge/kernel';
+import {
+  gitIdentityConfigArgs,
+  guardedReadDir,
+  ORCHESTRATOR_GIT_IDENTITY,
+  resolveCheckpointHead,
+  resolveGuardedPath,
+} from '@forge/kernel';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
@@ -101,7 +107,8 @@ export function preflightDemoCommands(
  *     worktree's package.json.
  *   - a path-bearing head (`./tool.sh`, `bin/x`) → must exist + be executable
  *     relative to the worktree (or absolute).
- *   - a bare binary (`node`, `go`, `echo`) → must resolve on PATH.
+ *   - a bare binary (`node`, `go`, `echo`) → must resolve on PATH, or be a
+ *     `bin` the worktree's package.json declares (contained in the worktree).
  *
  * Only argv[0] (+ the npm script name) is checked — deeper args may reference
  * build outputs the capture run produces itself. Unreadable/missing demo.json
@@ -159,23 +166,10 @@ function checkCommandProducible(command: string, worktreePath: string): string |
       return `\`${head}\` does not exist or is not executable in the worktree — the capture run would record "[command did not run]" as evidence`;
     }
   }
-  // Bare binary: must resolve on PATH.
-  return isExecutableOnPath(head)
-    ? null
-    : `\`${head}\` not found on PATH — the capture run would record "[command did not run]" as evidence`;
-}
-
-function isExecutableOnPath(bin: string): boolean {
-  for (const dir of (process.env.PATH ?? '').split(':')) {
-    if (!dir) continue;
-    try {
-      accessSync(join(dir, bin), constants.X_OK);
-      return true;
-    } catch {
-      /* try the next PATH entry */
-    }
-  }
-  return false;
+  // Bare binary: PATH, then a contained package.json `bin` (forge-8vfn.30.9) —
+  // the SAME resolver the capture spawn uses.
+  const resolved = resolveCheckpointHead(argv, worktreePath);
+  return resolved.ok ? null : resolved.reason;
 }
 
 /**

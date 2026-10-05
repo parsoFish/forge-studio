@@ -21,7 +21,7 @@ be reachable from here or it cannot reach the browser at all.
 | community registry vocabulary | `COMMUNITY_REGISTRY_KINDS` |
 | demo & release-process vocabulary | `DEMO_STEP_KINDS` · `RELEASE_STEP_KINDS` · `RELEASE_STEP_PHASES` |
 | the runnable-source rule — whether enqueueFlowRun may claim a manifest | `DEVELOP_FLOW_ID` · `isRunnableSource` |
-| the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
+| the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `resolveDeclaredBin` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
 | pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |
 | work-item id patterns (`WI-`/`UWI-`, the split-suffix rule) + numeric stem | `WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `DEV_WORK_ITEM_ID_PATTERN` · `devWorkItemIdStem` |
@@ -35,7 +35,7 @@ be reachable from here or it cannot reach the browser at all.
 | upload-materials vocabulary | `MATERIAL_KINDS` |
 | failure-signature prefixes failure-classifier.ts scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |
 
-### Types (79)
+### Types (80)
 
 `AgentBudgets` · `AgentComposition` · `AgentDefinition` · `AgentFanout` ·
 `AgentRuntime` · `ArtifactKind` · `ArtifactTemplate` · `ArtifactTemplateSchema` ·
@@ -46,7 +46,7 @@ be reachable from here or it cannot reach the browser at all.
 `CommunityRegistryItem` · `CommunityRegistryKind` · `CommunityRegistrySignals` ·
 `CommunityRegistrySource` · `CommunitySkill` · `ContractStage` ·
 `ContractStageRow` · `ContractStageStatus` · `CycleOutcome` ·
-`DeclarationDriveResult` · `DemoElementDefinition` · `DemoStep` ·
+`DeclarationDriveResult` · `DeclaredBinResult` · `DemoElementDefinition` · `DemoStep` ·
 `DemoStepKind` · `DrivableCommandResult` · `FlowDefinition` · `FlowEdge` ·
 `FlowKickoff` · `FlowKickoffKind` · `FlowNode` · `FlowReview` · `FlowTrigger` ·
 `InitiativeManifest` · `InitiativeOrigin` · `InstructionSeed` ·
@@ -79,6 +79,6 @@ finds nothing. The only cross-file import anywhere in the package is a
 type-only one (`studio-types.ts` imports the `ManifestClass` type from
 `manifest-types.ts`). Every export is a plain type, a frozen array/const, or a
 pure function over its arguments (`isRunnableSource`, `inlineCodeSpan`,
-`extractDrivableCommand`, `declarationDrivesCheckpoint`, `isSafeDemoRoute`,
+`extractDrivableCommand`, `declarationDrivesCheckpoint`, `resolveDeclaredBin`, `isSafeDemoRoute`,
 `extractDemoRoute`) — none of them touch a filesystem, a socket, or a child
 process, so there is nothing here that writes state and nothing to recover.
