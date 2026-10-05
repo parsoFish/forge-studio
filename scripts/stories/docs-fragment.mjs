@@ -12,6 +12,9 @@
  * `data-*` state stays in the story: it is the test's contract, not the
  * reader's.
  *
+ * A story whose full page exceeds the how-to word ceiling renders the condensed
+ * page instead (`renderCondensed`): the acts as headings, one line per beat.
+ *
  * A RED beat is marked red, and a story with any red beat says so at the top.
  * A story that failed must never emit a confident how-to telling an operator
  * to do something that does not work.
@@ -19,6 +22,7 @@
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { assertSafeStoryId } from './sweep.mjs';
+import { CEILINGS, countWords } from '../check-docs-budget.mjs';
 
 /** The site directory every generated how-to lands in. */
 export const HOWTO_DIR = 'apps/docs/src/content/docs/guides/how-to';
@@ -66,6 +70,48 @@ function renderBeat(storyId, beat, index) {
   return lines.join('\n');
 }
 
+const ACT_PREFIX = /^ACT (\d+) — /;
+const CONDENSED_INTRO = "Each step is one recorded action; open a step's picture to see the screen.";
+
+/** The act text without its `ACT n — ` prefix, first letter capitalised. */
+function condensedAct(act) {
+  const text = String(act).replace(ACT_PREFIX, '');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Split beats into acts by the `ACT n — ` prefix; beats before the first marker are act 1. */
+function groupByAct(beats) {
+  const groups = [];
+  let current = null;
+  beats.forEach((beat, index) => {
+    const m = ACT_PREFIX.exec(String(beat.act));
+    if (current === null || (m && Number(m[1]) !== current.n)) {
+      current = { n: m ? Number(m[1]) : 1, items: [] };
+      groups.push(current);
+    }
+    current.items.push({ beat, index });
+  });
+  return groups;
+}
+
+function condensedItem(storyId, beat, index) {
+  const text = condensedAct(beat.act);
+  const mark = beat.status === 'red' ? ' — **RED, not verified.**' : '';
+  const lines = [`${index + 1}. ${text}${mark}`];
+  if (beat.frame) lines.push(`   ![${text}](${frameUrl(storyId, beat.frame)})`);
+  return lines.join('\n');
+}
+
+function renderCondensed(head, storyId, beats) {
+  const groups = groupByAct(beats);
+  const out = [head, CONDENSED_INTRO, ''];
+  for (const g of groups) {
+    out.push(groups.length >= 2 ? `## Act ${g.n}` : '## Steps', '');
+    out.push(g.items.map(({ beat, index }) => condensedItem(storyId, beat, index)).join('\n'), '');
+  }
+  return out.join('\n');
+}
+
 /**
  * Render the whole page. Pure — the caller writes it and copies the frames.
  * `verifiedOn` (YYYY-MM-DD) is the run's date: the page was checked against
@@ -98,7 +144,10 @@ export function renderDocFragment(result, { verifiedOn } = {}) {
       '',
     );
   }
-  return `${head.join('\n')}\n${beats.map((b, i) => renderBeat(story.id, b, i)).join('\n')}`;
+  const headText = head.join('\n');
+  const full = `${headText}\n${beats.map((b, i) => renderBeat(story.id, b, i)).join('\n')}`;
+  // The ceiling and the count are check-docs-budget's: one source. Over it, the page condenses.
+  return countWords(full) > CEILINGS['how-to'] ? renderCondensed(headText, story.id, beats) : full;
 }
 
 /**
