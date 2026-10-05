@@ -208,7 +208,7 @@ jobs:
   # an artifact only; publishing is the operator's hosting gate, not CI's.
   docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
