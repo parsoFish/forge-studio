@@ -50,7 +50,6 @@ not how to get there or why.
 
 | Page | What it covers |
 |---|---|
-| [CLI reference](./reference/cli.md) | The `forge --help` output plus the CLI verbs beyond Studio (`serve`, `preflight`, `brain lint`/`index`, phase entry points) — Studio is the sole operator surface; this documents the rest. |
 | [Studio DOM contract](./reference/studio-dom-contract.md) | The per-route `data-*` attribute contract every Studio page mirrors its load-bearing state into, so automation (Playwright today) drives a page by reading structured DOM state rather than scraping rendered text. |
 | [Request-path sinks](./reference/request-path-sinks.md) | The enumeration behind the path-guard ratchet: every filesystem read/write reachable from a bridge route or CLI dispatch whose path derives from request data, classified `guarded` / `unguarded` / `accidentally-safe`. |
 | [Studio copy](./reference/studio-copy.md) | The facts Studio and the scripts still take from the deleted `mockups/` tree — the named constant or behaviour, its value, and the mockup decision that justified it. |
