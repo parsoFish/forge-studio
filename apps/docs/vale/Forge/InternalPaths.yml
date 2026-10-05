@@ -2,6 +2,6 @@ extends: existence
 message: "'%s' is a source path. Guides do not name internals; link to reference instead."
 level: error
 nonword: true
-scope: raw
+scope: [text, code]
 tokens:
   - '\b(?:packages|apps)/[A-Za-z0-9_-]+'
