@@ -94,7 +94,7 @@ export type RoadmapInitiative = {
   /** plan-everything-before-kickoff: dependency-gate eligibility (meaningful while status==='pending'). */
   ready: boolean;
   blockedBy: string[];
-  /** 7.6.18 — see the `[data-blocked-clauses]` row in studio-dom-contract.md. */
+  /** 7.6.18 — see `data-blocked-clauses` in dev/studio-dom-contract.md. */
   blockedClauses?: string[];
   /** 7.6.132 — would `enqueueFlowRun` claim this for forge-develop? Derived server-side by `isRunnableSource`. */
   canStartDevelopment?: boolean;

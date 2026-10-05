@@ -400,6 +400,8 @@
   "dispatch-decision-capture.test",
   "dispatch-terminal.test",
   "distribute-flow.test",
+  "docs-fragment-placeholder-label.test",
+  "docs-fragment-sanitise.test",
   "docs-gate",
   "docs-gate.test",
   "document-title",

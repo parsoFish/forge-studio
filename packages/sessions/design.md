@@ -276,8 +276,7 @@ probe on the real tree rather than asserted:
 
 `check-raw-fs-guarded.mjs` reaches these sinks only through a module NAMED in
 its explicit list, so `kinds/demo-generate.ts` was ADDED beside its parent
-there, never swapped in — see `docs/reference/request-path-sinks.md`
-§"Relocated in M6-A row 5" for the conserved per-kind sink census.
+there, never swapped in — see `scripts/request-path-sinks.classes.json` for the per-kind sink census.
 
 ## `kinds/architect-brain-read.ts` observes `onToolUse`, never `queryFn`
 

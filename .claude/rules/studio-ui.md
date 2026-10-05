@@ -31,9 +31,9 @@ leaves it green over a dead path.
 ## Keep the stories in sync
 
 When a change adds, renames or removes a load-bearing attribute, route or
-control, update the per-route inventory in
-`docs/reference/studio-dom-contract.md` and the affected story beat in the
-same PR. Invoke the `journey-sync` skill. You may not edit a story to make it
+control, re-run `node scripts/dev-gen.mjs`
+(regenerates `dev/studio-dom-contract.md`) and update the affected story beat in
+the same PR. Invoke the `journey-sync` skill. You may not edit a story to make it
 pass. A beat you need to change is an operator-approved amendment.
 
 Run the costless stories before pushing a Studio change:
