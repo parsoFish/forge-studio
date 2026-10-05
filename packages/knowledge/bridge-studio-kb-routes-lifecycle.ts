@@ -383,8 +383,7 @@ export async function handleKbDelete(
       // sessions are only REPORTED (their kb_id names a dead KB now), never
       // swept along with the project's own state.
       const projectsRootForDelete = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      // The seeding session's cwd anchor under projects/ (an empty dot-dir) and
-      // its session dirs under the logs root (forge-8vfn.8.5.58).
+      // Seeding anchor: the empty cwd dot-dir under projects/ + its logs-root sessions.
       let removedSessionAnchor = false;
       for (const [root, segs] of [
         [projectsRootForDelete, [`${KB_SEEDING_ANCHOR_PREFIX}${id}`]],
@@ -401,12 +400,11 @@ export async function handleKbDelete(
         if (projName.startsWith('.')) continue; // dot-anchors handled above
         for (const sid of guardedReadDir(ctx.logsRoot, sessionKindSegments(projName, KB_CLEANUP_KIND_DIR)) ?? []) {
           const raw = guardedReadFile(ctx.logsRoot, [...sessionDirSegments(projName, KB_CLEANUP_KIND_DIR, sid), 'status.json']);
-          if (raw === null) continue; // unreadable session - not attributable to this KB
           try {
-            const st = JSON.parse(raw) as { kb_id?: unknown };
+            const st = JSON.parse(raw ?? '') as { kb_id?: unknown };
             if (st.kb_id === id) orphanedSessions.push(`${projName}/${KB_CLEANUP_KIND_DIR}/${sid}`);
           } catch {
-            // malformed status - not attributable to this KB
+            // unreadable/malformed session - not attributable to this KB
           }
         }
       }

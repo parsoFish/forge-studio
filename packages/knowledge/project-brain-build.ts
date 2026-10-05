@@ -132,12 +132,10 @@ export function listStagedThemes(logsRoot: string, project: string, sessionId: s
 }
 
 export function commitProjectBrain(args: {
-  /** `<forgeRoot>/_logs` — where the staged themes' session dir lives. */
-  logsRoot: string;
+  logsRoot: string; // `<forgeRoot>/_logs`: where the staged themes' session dir lives
   sessionId: string;
   forgeRoot: string;
-  /** `status.project` is the session's home segment under `<logsRoot>/_sessions`. */
-  status: ProjectBrainCommitInput;
+  status: ProjectBrainCommitInput; // `status.project` is the session's home under `<logsRoot>/_sessions`
 }): { wrote: string[]; themes: string[] } {
   const { logsRoot, sessionId, forgeRoot, status } = args;
   const staged = listStagedThemes(logsRoot, status.project, sessionId);

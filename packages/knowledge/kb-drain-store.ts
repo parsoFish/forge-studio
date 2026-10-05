@@ -406,8 +406,7 @@ export function mintKbCleanupDraftSession(
       // No/unparseable kb.yaml — the dot-anchor fallback above still works.
     }
     const logsRoot = join(forgeRoot, '_logs');
-    // The guarded write realpath-walks logsRoot itself — which may not
-    // exist yet on a fresh install (or an isolated test root).
+    // The guarded write realpath-walks logsRoot, which may not exist yet.
     mkdirSync(logsRoot, { recursive: true });
     const sessionId = newDraftSessionId();
 

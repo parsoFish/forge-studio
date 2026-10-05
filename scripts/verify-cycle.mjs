@@ -246,8 +246,6 @@ function cleanProjectRunState(project, repoPath) {
       }
     }
   }
-  // Drop stale architect sessions so the fresh interview starts clean. They
-  // live under the logs root, never in the ground (forge-8vfn.8.5.58).
   const archRoot = join(logsRoot, ...sessionKindSegments(project, ARCHITECT_KIND_DIR));
   rmSync(archRoot, { recursive: true, force: true });
   if (existsSync(join(repoPath, '.git'))) git(repoPath, ['worktree', 'prune']);

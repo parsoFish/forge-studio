@@ -89,9 +89,6 @@ import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { createLogger, bridgeCycleId, installForgeRefGuardHook, ARCHITECT_KIND_DIR } from '@forge/kernel';
-
-/** A session kind's on-disk dir under `<logsRoot>/_sessions/<project>/`: `_<kind id>` (the registry's convention). */
-const kindDirOf = (kindId: string): string => `_${kindId}`;
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
@@ -400,14 +397,14 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // file-checkpoint writes (questions, AGENTS.draft.md, status) push a re-fetch
   // signal to the UI. Mirrors `watchArchitect`.
   const watchInstructions = (): void => {
-    instructionsWatchers.push(...watchProjectSubdirs(logsRoot, kindDirOf('instructions'), () => broadcast({ type: 'instructions-list-changed' })));
+    instructionsWatchers.push(...watchProjectSubdirs(logsRoot, '_instructions', () => broadcast({ type: 'instructions-list-changed' })));
   };
 
   // Stage B — watch each project's `_demo/` dir so the runner's file-checkpoint
   // writes (status, DEMO.html generation) push a re-fetch signal to the UI.
   // Mirrors `watchInstructions`.
   const watchDemo = (): void => {
-    demoWatchers.push(...watchProjectSubdirs(logsRoot, kindDirOf('demo'), () => broadcast({ type: 'demo-list-changed' })));
+    demoWatchers.push(...watchProjectSubdirs(logsRoot, '_demo', () => broadcast({ type: 'demo-list-changed' })));
   };
 
   /** W7-C2 (A12) — the one place that knows which kinds have a `*-list-changed` WS event; a kind with none honestly no-ops. */

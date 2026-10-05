@@ -734,9 +734,7 @@ export function mintProjectBrainSeedingSession(
   if (!guardedProject.ok) {
     throw new Error(`kb create: hand-off session project "${sessionProject}" failed containment`);
   }
-  // The session dir lives under the logs root (forge-8vfn.8.5.58); the anchor
-  // dir under projects/ is only the agent's cwd, so it must exist — a dot-
-  // prefixed anchor is filtered out of project discovery, never a phantom.
+  // The session dir is under the logs root; the anchor under projects/ is only the agent's cwd.
   mkdirSync(guardedProject.realPath, { recursive: true });
   mkdirSync(logsRoot, { recursive: true });
   const written = write<ProjectBrainSeedingSessionStatus>(
