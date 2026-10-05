@@ -1570,7 +1570,7 @@ The security-relevant input is a shape this audit had not carried before: a
 **markdown link target extracted from file content an AGENT wrote during the
 turn**. It is not request text, but it is untrusted text that reaches
 `resolve()`, and a brain theme legitimately links anywhere inside the repo
-(`../../../docs/decisions/…`, `_logs/…` — `checkStaleness` exists precisely
+(`../../../docs/reference/…`, `_logs/…` — `checkStaleness` exists precisely
 because they do), so `brain/` is too narrow a containment root and `forgeRoot`
 is the right one.
 

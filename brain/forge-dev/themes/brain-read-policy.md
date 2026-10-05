@@ -61,7 +61,7 @@ rationale no longer applies. Brain 3 is *supplemental context* (project
 file layout, testing norms); the WI/manifest remains the single source
 of *intent*. Advisory, not mandatory — no runtime gate added.
 
-**Path correction (2026-07-17, R5-07-F6):** [ADR 035](../../../docs/decisions/035-forge-owned-central-artifacts.md) centralised Brain 3 into the forge repo at `brain/projects/<name>/themes/`.
+**Path correction (2026-07-17, R5-07-F6):** [SPEC §4](../../../SPEC.md) centralised Brain 3 into the forge repo at `brain/projects/<name>/themes/`.
 
 **How reads are bounded (guardrail).** Every permitted brain read must
 go through the built navigation metadata first — `INDEX.md`, the

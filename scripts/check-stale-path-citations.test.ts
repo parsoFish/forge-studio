@@ -289,7 +289,7 @@ describe('path-shaped citations in markdown prose', () => {
     }
   });
 
-  for (const excluded of ['brain/theme.md', 'docs/decisions/0001-x.md', '_1.0/plan.md']) {
+  for (const excluded of ['brain/theme.md', '_1.0/plan.md']) {
     test(`${excluded} is excluded from prose scanning`, () => {
       const { root, cleanup } = fixture({
         [excluded]: `See packages/ghost/dead-module.ts for details.\n`,

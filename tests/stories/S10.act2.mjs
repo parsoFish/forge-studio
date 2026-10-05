@@ -403,7 +403,7 @@ export const ACT_2 = [
       // clean NODE boundary — never mid-turn: ADR 028's amendment records
       // that `cycle.ts` never threads `nodeBudgets` into `runFlow` in
       // production, so the wedge-kill live-abort path is "presently dormant
-      // outside tests" (`docs/decisions/028-flow-engine.md` ~262-269).
+      // outside tests" (SPEC §2).
       // Waiting for WI-1 `complete` before pressing stop (the ORIGINAL,
       // wrong shape) means WI-2's worktree is already created and its own
       // Ralph loop is already running by the time the press lands — the next

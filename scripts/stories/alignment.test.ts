@@ -374,9 +374,9 @@ test('--intake against the real repo prints the tracked authoring targets, repor
   // not exist (PR #966 CI run 36245858629). An empty range still reads the
   // README's targets, which is what this test is for.
   const { targets } = intakeReport(REAL_ROOT, 'HEAD');
-  // Mechanism only: the six targets T1 1593 names are tracked in the README
-  // and none is cited by a real sidecar yet, so all should still show up.
+  // Mechanism only: the README's brain-theme targets (T1 1593) are tracked
+  // and no real sidecar cites them yet, so both should still show up.
   const allPaths = targets.flatMap((t) => t.paths);
-  assert.ok(allPaths.includes('docs/decisions/033-studio-first-flow-ux.md'));
-  assert.ok(allPaths.includes('docs/decisions/029-runtime-adapters.md'));
+  assert.ok(allPaths.includes('brain/forge-dev/themes/class-blind-gates.md'));
+  assert.ok(allPaths.includes('brain/forge-dev/themes/agent-authored-gates-are-self-grading.md'));
 });

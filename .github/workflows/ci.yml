@@ -76,12 +76,6 @@ jobs:
       - name: Markdown lint
         run: npm run lint
 
-      - name: ADR index check
-        run: node scripts/check-adr-index.mjs
-
-      - name: ADR two-way supersedes/amends links
-        run: node scripts/check-adr-links.mjs
-
       - name: Decisions ledger (every DECISIONS.md row names an enforcement that exists)
         run: node scripts/check-decisions.mjs
 

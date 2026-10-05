@@ -19,7 +19,7 @@
  * the time the press landed — the operator stop is honoured only before a
  * WI's worktree is created or at a node boundary (`developer-loop.ts:1152`,
  * `flow-runner.ts:461-464`; no wedge budget is threaded in production,
- * `docs/decisions/028-flow-engine.md` ~262-269), so WI-2 ran to completion
+ * SPEC §2), so WI-2 ran to completion
  * regardless and "WI-2 resumes" passed vacuously. The fix waits for `active`
  * and asserts an explicit `pending` for the NEXT work item right after the
  * halt, before any resume. (2) `pickDefaultRun` ranks ACT 1's own `complete`

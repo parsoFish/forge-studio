@@ -45,7 +45,6 @@ const CHANGELOG_NEXT = /^## \[/;
 
 /** `path` ending `/**` excludes the subtree; otherwise an exact file. */
 export const EXCLUDED = [
-  { path: 'docs/decisions/**', owner: 'W1 (this lane)', reason: 'the records themselves — retired in the same lane' },
   { path: 'tests/stories/**', owner: 'W3 (stories workstream)', reason: 'until W3 (stories workstream) — temporary; W3 widens this scope' },
   { path: 'scripts/stories/**', owner: 'W3 (stories workstream)', reason: 'until W3 (stories workstream) — story harness, edited only by W3/W6 (DOCS-COMMON §3); temporary' },
   { path: 'demos/**', owner: 'W3 (stories workstream)', reason: 'until W3 (stories workstream) — temporary; W3 widens this scope' },
@@ -55,6 +54,8 @@ export const EXCLUDED = [
   { path: 'brain/packs/**', owner: 'W8 (Brain-1 workstream)', reason: 'Brain-1 packs' },
   { path: 'packages/kernel/tests/test-fixtures/spawn-capture/pm.json', owner: 'W8 (Brain-1 workstream)', reason: 'captures the Brain-1 index text verbatim; clears when W8 moves Brain 1 out' },
   { path: 'packages/kernel/tests/test-fixtures/spawn-capture/reflector.json', owner: 'W8 (Brain-1 workstream)', reason: 'captures the Brain-1 index text verbatim; clears when W8 moves Brain 1 out' },
+  { path: 'scripts/hooks/guard-paths.mjs', owner: 'W1', reason: 'the hook that blocks recreating the retired records names their path by necessity' },
+  { path: 'scripts/guard-paths.test.ts', owner: 'W1', reason: 'tests that hook against the retired path by necessity' },
   { path: 'scripts/check-adr-citations.mjs', owner: 'W1', reason: 'this check cites the pattern by necessity' },
   { path: 'scripts/check-adr-citations.test.ts', owner: 'W1', reason: 'this check cites the pattern by necessity' },
   { path: BASELINE_REL, owner: 'W1', reason: 'this check\'s own data' },

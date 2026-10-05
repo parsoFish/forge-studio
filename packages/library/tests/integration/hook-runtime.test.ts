@@ -4,8 +4,7 @@
  * `Cannot find module './hook-runtime.ts'` on import. Do not stub the module
  * into existence; red is the deliverable of this round.
  *
- * Contract this file pins (docs/roadmaps/archive/R3-library-componentry.md
- * §R3-03-F3):
+ * Contract this file pins (R3-03-F3):
  *
  *   Each hook's permission manifest {env, read, network} is DENY-BY-DEFAULT.
  *   At execution, the harness invokes the hook with a STRIPPED environment

@@ -137,14 +137,10 @@ test('an ordinary word merely CONTAINING a token is still not a hit', () => {
 test('record-type files are excluded — but a NEW roadmap doc is still policed', () => {
   withFixture(
     {
-      'docs/decisions/024-x.md': 'the unifier\n',
       'docs/superpowers/specs/blueprint.md': 'the ideas machine\n',
       'docs/roadmaps/1.0.md': 'the unifier is retired\n',
-      'docs/roadmaps/archive/R4-ootb-suite.md': 'the unifier\n',
-      'docs/roadmaps/archive/README.md': 'the unifier\n',
-      // M6 archived R1-R8: the RECORD is docs/roadmaps/archive/README.md, and
-      // docs/roadmaps/README.md is now a current-state index. Both are asserted,
-      // so the exclusion cannot silently widen back over the live index.
+      // docs/roadmaps/README.md is a current-state index: asserted, so the
+      // exclusion cannot silently widen back over the live index.
       'docs/roadmaps/README.md': 'the unifier\n',
       'docs/roadmaps/2.0.md': 'the unifier\n',
     },
@@ -157,11 +153,8 @@ test('record-type files are excluded — but a NEW roadmap doc is still policed'
         `the live roadmap index is current-state prose and must be policed:\n${r.out}`,
       );
       for (const excluded of [
-        'docs/decisions/024-x.md',
         'docs/superpowers/specs/blueprint.md',
         'docs/roadmaps/1.0.md',
-        'docs/roadmaps/archive/R4-ootb-suite.md',
-        'docs/roadmaps/archive/README.md',
       ]) {
         assert.doesNotMatch(
           r.out,
@@ -191,24 +184,24 @@ test('an ignored TREE is not scanned — git ignore rules, not a hand-kept skip 
   );
 });
 
-test('a markdown link TARGET into an excluded tree is not a hit — ADR filenames are history', () => {
-  // Two real ADRs carry a retired token in their filename (019-cycle-resume-from-unifier.md,
-  // 026-review-unifier-wi-list.md). ADR filenames are append-only history. A lint that fires on
+test('a markdown link TARGET into an excluded tree is not a hit — record filenames are history', () => {
+  // A design record may carry a retired token in its filename
+  // (superpowers/specs/review-unifier-wi-list.md). Record filenames are append-only history. A lint that fires on
   // the LINK PATH pushes authors to de-link the citation to stay green — the guard degrading the
   // docs it exists to protect. Prose on the same line is still a hit.
   withFixture(
     {
       'docs/known-gaps.md':
-        'See [ADR 026](./decisions/026-review-unifier-wi-list.md) and [ADR 019](../docs/decisions/019-cycle-resume-from-unifier.md).\n',
+        'See [the review design](./superpowers/specs/review-unifier-wi-list.md) and [the resume design](../docs/superpowers/specs/cycle-resume-from-unifier.md).\n',
     },
     (r) => {
-      assert.equal(r.code, 0, `an ADR link target must not be a hit:\n${r.out}`);
+      assert.equal(r.code, 0, `a record link target must not be a hit:\n${r.out}`);
     },
   );
   withFixture(
-    { 'docs/known-gaps.md': 'The unifier ran here — see [ADR 026](./decisions/026-review-unifier-wi-list.md).\n' },
+    { 'docs/known-gaps.md': 'The unifier ran here — see [the review design](./superpowers/specs/review-unifier-wi-list.md).\n' },
     (r) => {
-      assert.equal(r.code, 1, `prose beside an ADR link must still be a hit:\n${r.out}`);
+      assert.equal(r.code, 1, `prose beside a record link must still be a hit:\n${r.out}`);
       assert.match(r.out, /1 hit\(s\)/, r.out);
     },
   );

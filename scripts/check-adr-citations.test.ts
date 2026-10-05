@@ -49,7 +49,6 @@ test('pattern is case-sensitive and word-bounded', () => {
 
 test('excluded paths are ignored; live brain themes are not', () => {
   const d = repo({
-    'docs/decisions/001-a.md': 'ADR 001',
     'tests/stories/a.md': 'ADR 001',
     'demos/x.md': 'ADR 001',
     'brain/forge-dev/t.md': 'ADR 001',
@@ -170,6 +169,6 @@ test('usage error exits 2; --list-exclusions prints paths', () => {
   assert.equal(run(d, '--bogus').code, 2);
   const r = run(d, '--list-exclusions');
   assert.equal(r.code, 0);
-  assert.match(r.out, /docs\/decisions\//);
+  assert.match(r.out, /tests\/stories\//);
   cleanup(d);
 });

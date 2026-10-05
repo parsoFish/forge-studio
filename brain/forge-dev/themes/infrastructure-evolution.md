@@ -49,7 +49,7 @@ fallbacks, no "for backwards compatibility" paths.
 ## Sources
 
 - [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — "What forge is *not*" section.
-- [`docs/decisions/011-unattended-scheduler.md`](../../../docs/decisions/011-unattended-scheduler.md) — explicit non-rebuild list.
+- [`DECISIONS.md` D-04](../../../DECISIONS.md) — explicit non-rebuild list.
 
 ## See also
 

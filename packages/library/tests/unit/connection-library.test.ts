@@ -7,7 +7,7 @@
  * of this round.
  *
  * Contract this file pins (`_wave5/specs/R3-04.md` D1/D2/D5/D8/D12-D16,
- * Appendix A; `docs/roadmaps/archive/R3-library-componentry.md` §R3-04-F1/F4).
+ * Appendix A; R3-04-F1/F4).
  *
  * ROUND 3 SCHEMA CHANGE (D13-D16, source-verified against upstreams — see
  * the spec's Appendix A): `install:` is a THREE-method union

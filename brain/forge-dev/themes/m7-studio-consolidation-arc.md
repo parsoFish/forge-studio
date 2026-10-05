@@ -26,7 +26,7 @@ related_themes:
 # M7 — finishing the strangler
 
 M0–M6 ([`forge-studio-build-arc`](./forge-studio-build-arc.md)) landed the new Studio
-surfaces *alongside* the ones they replaced. M7 ([ADR-031](../../../docs/decisions/031-studio-consolidation.md))
+surfaces *alongside* the ones they replaced. M7 ([D-12](../../../DECISIONS.md))
 ripped out the legacy and productionised the launch: deleted the pre-Studio
 `/dashboard` + its ~2.6k-LOC cluster, folded `/review`+`/reflect` into `/artifact`,
 rebuilt the architect interview+PLAN gate natively in Studio (retiring

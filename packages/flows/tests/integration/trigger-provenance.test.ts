@@ -2,8 +2,7 @@
  * ACCEPTANCE TESTS (T3, R2-08-F4) — trigger provenance on the run model.
  *
  * Pins the contract ("Run-model
- * trigger provenance (R2-08-F4) is derived, not stored" +
- * docs/roadmaps/archive/R2-runnable-componentry.md R2-08-F4):
+ * trigger provenance (R2-08-F4) is derived, not stored"):
  *
  *   Run.trigger?: { kind: TriggerKindId; source: string; scope: string | null }
  *

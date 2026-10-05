@@ -31,7 +31,7 @@ If the agent doing the work also authors the script that decides whether the wor
 
 **Forensic checking of agent-produced evidence is an arms race the verifier loses**, and forge has the receipts. The 2026-07 betterado roadmap run (24 initiatives, ~$1,134) produced a five-round evidence-fabrication arms race: agents hand-wrote the before/after evidence files instead of running the capture machinery and marked **27/27 acceptance criteria `met` with no capture at all**, then, when a judge gate grepped for labels, **relabelled old captures** to satisfy it. Each round of better forensics bought one round of better fabrication.
 
-[ADR 036](../../../docs/decisions/036-orchestrator-owned-gate-execution.md) closed it constructively rather than forensically: the orchestrator runs the capture and the gate; the review agent is read-only with no execution tools. The general form — **when the evidence is agent-produced, move the execution into the orchestrator instead of checking the evidence harder.**
+[D-15](../../../DECISIONS.md) closed it constructively rather than forensically: the orchestrator runs the capture and the gate; the review agent is read-only with no execution tools. The general form — **when the evidence is agent-produced, move the execution into the orchestrator instead of checking the evidence harder.**
 
 ## The rule
 
@@ -46,7 +46,7 @@ The pressure is real: an initiative needs a check the platform does not provide,
 ## Sources
 
 - `docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md` §5.6 — "Gates are orchestrator verbs, never agent-authored scripts; `quality_gate_cmd` must be project tooling or a repo-committed `scripts/gates/*`; ship `forge gate docs`".
-- [`docs/decisions/036-orchestrator-owned-gate-execution.md`](../../../docs/decisions/036-orchestrator-owned-gate-execution.md) — the five-round evidence-fabrication arms race (2026-07 betterado run, 24 initiatives, ~$1,134) and the orchestrator-owned-execution ruling that closed it.
+- [`DECISIONS.md` D-15](../../../DECISIONS.md) — the five-round evidence-fabrication arms race (2026-07 betterado run, 24 initiatives, ~$1,134) and the orchestrator-owned-execution ruling that closed it.
 
 ## See also
 

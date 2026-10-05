@@ -4,8 +4,7 @@
  * `Cannot find module './hook-scan.ts'` on import. Do not stub the module
  * into existence; red is the deliverable of this round.
  *
- * Contract this file pins (docs/roadmaps/archive/R3-library-componentry.md
- * §R3-03-F2, D4 in the T3 task brief):
+ * Contract this file pins (R3-03-F2, D4 in the T3 task brief):
  *
  *   Every hook entering the library passes a STATIC security scan before it
  *   is runnable, across four categories: network egress (curl/wget/fetch/nc/
