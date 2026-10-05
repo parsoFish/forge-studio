@@ -1,65 +1,37 @@
 #!/usr/bin/env node
 /**
- * check-docs-shape.mjs — the Diátaxis shape + hand-written budget guard for docs/.
+ * check-docs-shape.mjs — two rules about generated and internal pages.
  *
- * Spec §4 "Docs" and §7 clause 4: `docs/` is four Diátaxis quadrants plus
- * planning directories, and 1.0 caps the HAND-WRITTEN pages at 25.
- * Ruling 392 fixes what "hand-written" means, and this script is where that
- * definition lives — a rule moved out of prose, not a new bar.
+ *   A. Every page under apps/docs/src/content/docs/guides/how-to/ carries
+ *      `generated_from: tests/stories/<id>.story.mjs` naming a story that
+ *      exists — a how-to is generated from a story, never hand-written. A
+ *      docs/ page carrying `generated_from:` is a write to the retired emit
+ *      target and fails.
+ *   B. No internal ledger on the published site: a page anywhere under
+ *      apps/docs/src/content/docs/ sharing a basename with a `dev/*.md`
+ *      file fails, as does a site page whose `generated_from:` points into
+ *      dev/ or at a checker script. A missing dev/ means nothing to check.
  *
- * "prove-or-warn" style: plain node, no deps,
- * fail = non-zero exit + one actionable line per violation.
- *
- * Rules:
- *   1. every docs/**\/*.md lives in one of the four quadrants
- *      (tutorials|how-to|reference|explanation) or the three planning
- *      directories (roadmaps|superpowers) or product/ — the one
- *      exception is docs/README.md, the index itself;
- *   2. HAND-WRITTEN = every docs/**\/*.md minus roadmaps/,
- *      superpowers/ and product/, minus every file carrying `generated_from:`
- *      frontmatter (the story runner's output). That count is <= 25;
- *   3. generated pages live on the docs site only. Every page under
- *      apps/docs/src/content/docs/guides/how-to/ MUST carry `generated_from:
- *      tests/stories/<id>.story.mjs` naming a story that exists — a how-to
- *      is generated from a story, never hand-written, and stripping the
- *      header is how a hand edit would hide. A docs/ page carrying
- *      `generated_from:` is a write to the retired emit target and FAILS;
- *   4. the index reaches everything, in two tiers:
- *      (a) every HAND-WRITTEN page is linked from docs/README.md DIRECTLY —
- *          with ~17 pages there is no excuse for a directory fallback;
- *      (b) every OTHER tracked file under docs/ (`git ls-files docs/`, which
- *          includes non-markdown: schemas and other non-markdown) is
- *          covered directly OR by a directory-level mention.
- *      (b) is check-docs-claims.mjs's own rule, preserved verbatim in effect,
- *      because this check REPLACES that guard. Retiring it on (a) alone would
- *      have silently un-enforced four files — proved by deleting the index's
- *      schemas entry and watching this check stay green while the retired one
- *      went red. A fold is a fold only when the survivor fails on everything
- *      the retired guard failed on.
+ * The page-count cap is replaced by check-docs-budget's word ceilings and its
+ * 20-guide cap (D-37).
  *
  * Usage: node scripts/check-docs-shape.mjs [root]   (root defaults to the repo)
+ * Fail = non-zero exit + one actionable line per violation.
  */
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(process.argv[2] ?? FORGE_ROOT);
 const DOCS_DIR = join(root, 'docs');
-const README_PATH = join(DOCS_DIR, 'README.md');
+const DEV_DIR = join(root, 'dev');
 const STORIES_DIR = join(root, 'tests/stories');
-const SITE_HOWTO_REL = 'apps/docs/src/content/docs/guides/how-to';
+const SITE_REL = 'apps/docs/src/content/docs';
+const SITE_DIR = join(root, SITE_REL);
+const SITE_HOWTO_REL = `${SITE_REL}/guides/how-to`;
 const SITE_HOWTO_DIR = join(root, SITE_HOWTO_REL);
-
-/** The four Diátaxis quadrants — the shape the tree is FOR. */
-const QUADRANTS = ['tutorials', 'how-to', 'reference', 'explanation'];
-/** Planning + catalogue directories: outside the four AND outside the count (392). */
-const UNCOUNTED = ['roadmaps', 'superpowers', 'product'];
-/** The index is the one page allowed to sit at the top of docs/. */
-const TOP_LEVEL_ALLOWED = 'README.md';
-const HANDWRITTEN_CAP = 25;
 
 function markdownFilesUnder(dir) {
   if (!existsSync(dir)) return [];
@@ -72,187 +44,67 @@ function markdownFilesUnder(dir) {
   return out;
 }
 
-/** The frontmatter block's raw text, or '' when the file has none. */
-function frontmatter(abs) {
+const rel = (abs) => relative(root, abs).split('\\').join('/');
+
+/** The `generated_from:` value of a page's frontmatter, or null. */
+function generatedFrom(abs) {
   const text = readFileSync(abs, 'utf8');
-  if (!text.startsWith('---\n')) return '';
+  if (!text.startsWith('---\n')) return null;
   const end = text.indexOf('\n---', 4);
-  return end === -1 ? '' : text.slice(4, end);
-}
-
-function frontmatterField(fm, name) {
-  const m = fm.match(new RegExp(`^${name}:\\s*(.+)$`, 'm'));
+  if (end === -1) return null;
+  const m = text.slice(4, end).match(/^generated_from:\s*(.+)$/m);
   return m ? m[1].trim() : null;
-}
-
-/** Story ids the runner generates docs for, from the story files themselves. */
-function storyIds() {
-  if (!existsSync(STORIES_DIR)) return [];
-  return readdirSync(STORIES_DIR)
-    .filter((f) => f.endsWith('.story.mjs'))
-    .map((f) => f.replace(/\.story\.mjs$/, ''));
-}
-
-/** Every markdown-link target in the index, './' stripped and '#anchor' dropped. */
-function indexLinkTargets() {
-  if (!existsSync(README_PATH)) return null;
-  const text = readFileSync(README_PATH, 'utf8');
-  const targets = new Set();
-  const re = /\]\(([^)]+)\)/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const t = m[1].trim().split('#')[0].replace(/^\.\//, '').replace(/^docs\//, '');
-    if (t) targets.add(t);
-  }
-  return targets;
-}
-
-/** Every tracked file under docs/, as the retired guard enumerated them. */
-function trackedDocsFiles(root_) {
-  try {
-    return execFileSync('git', ['ls-files', 'docs/'], { cwd: root_, encoding: 'utf8' })
-      .split('\n')
-      .filter(Boolean);
-  } catch {
-    return null; // not a git tree — rule 4b cannot run; reported by the caller
-  }
-}
-
-/**
- * Directory-level cover, narrower than "the substring D/ appears somewhere":
- * a link to D/README.md, to the bare D/, or D/ as free-standing text. A link
- * to ONE file inside D must NOT be read as covering D — otherwise the second
- * file added there is silently unreachable, which is exactly the trap the
- * retired guard's own header documented.
- */
-function directoriesMentioned(text) {
-  const dirs = new Set();
-  for (const m of text.matchAll(/\]\(([^)]+)\)/g)) {
-    const t = m[1].trim().split('#')[0].replace(/^\.\//, '').replace(/^docs\//, '');
-    if (t.endsWith('/')) dirs.add(t.slice(0, -1));
-    else if (t.endsWith('/README.md')) dirs.add(t.slice(0, -'/README.md'.length));
-  }
-  for (const m of text.matchAll(/(?:^|[\s`(])([A-Za-z0-9._-]+)\/(?=[\s`),.]|$)/gm)) dirs.add(m[1]);
-  return dirs;
 }
 
 function main() {
   const violations = [];
+  let howtos = 0;
 
-  if (!existsSync(DOCS_DIR)) {
-    console.error('check-docs-shape: FAIL — no docs/ directory');
-    process.exitCode = 1;
-    return;
-  }
-
-  const files = markdownFilesUnder(DOCS_DIR)
-    .map((abs) => ({ abs, rel: relative(root, abs).split('\\').join('/') }))
-    .sort((a, b) => a.rel.localeCompare(b.rel));
-
-  const ids = new Set(storyIds());
-  const handwritten = [];
-  const generatedRels = [];
-
-  for (const file of files) {
-    const parts = file.rel.split('/'); // docs/<a>/<b>...
-    const top = parts.length === 2 ? null : parts[1];
-
-    // Rule 1 — location.
-    if (top === null) {
-      if (parts[1] !== TOP_LEVEL_ALLOWED) {
-        violations.push(
-          `${file.rel} lives outside the Diátaxis tree — the only page allowed at the top of docs/ is docs/${TOP_LEVEL_ALLOWED}; move it into one of ${QUADRANTS.join('|')} (or ${UNCOUNTED.join('|')})`,
-        );
-      }
-    } else if (!QUADRANTS.includes(top) && !UNCOUNTED.includes(top)) {
+  // Rule A — a docs/ page must not carry generated_from.
+  for (const abs of markdownFilesUnder(DOCS_DIR)) {
+    if (generatedFrom(abs)) {
       violations.push(
-        `${file.rel} lives outside the Diátaxis tree — docs/${top}/ is not one of ${QUADRANTS.join('|')} (or ${UNCOUNTED.join('|')})`,
+        `${rel(abs)} carries \`generated_from:\` — generated pages live in ${SITE_HOWTO_REL}/, never under docs/; delete it and re-run the story`,
       );
     }
-
-    const fm = frontmatter(file.abs);
-    const generatedFrom = frontmatterField(fm, 'generated_from');
-
-    // Rule 3 (retired target) — the story runner writes to the site only.
-    if (generatedFrom) {
-      violations.push(
-        `${file.rel} carries \`generated_from:\` — generated pages live in ${SITE_HOWTO_REL}/, never under docs/; delete it and re-run the story`,
-      );
-    }
-
-    // Rule 2 — the hand-written set.
-    if (top !== null && UNCOUNTED.includes(top)) continue;
-    if (generatedFrom) { generatedRels.push(file.rel); continue; }
-    handwritten.push(file.rel);
   }
 
-  // Rule 3 (site) — every how-to on the site is a story's generated page.
+  // Rule A — every site how-to is a story's generated page.
   for (const abs of markdownFilesUnder(SITE_HOWTO_DIR)) {
-    const rel = relative(root, abs).split('\\').join('/');
-    const from = frontmatterField(frontmatter(abs), 'generated_from');
+    howtos++;
+    const from = generatedFrom(abs);
     if (!from) {
-      violations.push(`${rel} carries no \`generated_from:\` header — a how-to is generated from a story under tests/stories/, never hand-written; re-run the story that writes it`);
+      violations.push(`${rel(abs)} carries no \`generated_from:\` header — a how-to is generated from a story under tests/stories/, never hand-written; re-run the story that writes it`);
     } else if (!/^tests\/stories\/[A-Za-z0-9._-]+\.story\.mjs$/.test(from) || !existsSync(join(root, from))) {
-      violations.push(`${rel} says \`generated_from: ${from}\` but no such story exists — re-run the story that writes this page, or delete the page`);
+      violations.push(`${rel(abs)} says \`generated_from: ${from}\` but no such story exists — re-run the story that writes this page, or delete the page`);
     }
   }
 
-  // Rule 4 — the index links every hand-written page.
-  const targets = indexLinkTargets();
-  if (targets === null) {
-    violations.push('docs/README.md is missing — it is the index every hand-written page is reached from');
-  } else {
-    for (const rel of handwritten) {
-      const fromDocs = rel.replace(/^docs\//, '');
-      if (fromDocs === TOP_LEVEL_ALLOWED) continue; // the index need not link itself
-      if (!targets.has(fromDocs)) {
-        violations.push(`${rel} is not linked from docs/README.md — every hand-written page is reachable from the index`);
-      }
+  // Rule B — no internal ledger on the published site.
+  const ledgers = existsSync(DEV_DIR)
+    ? readdirSync(DEV_DIR).filter((f) => f.endsWith('.md') && statSync(join(DEV_DIR, f)).isFile())
+    : [];
+  const ledgerNames = new Set(ledgers);
+  for (const abs of markdownFilesUnder(SITE_DIR)) {
+    if (ledgerNames.has(basename(abs))) {
+      violations.push(`${rel(abs)}: internal ledger ${basename(abs)} belongs in dev/, never on the published site`);
     }
-  }
-
-  // Rule 4b — everything else tracked under docs/, directly or by its directory.
-  let coveredCount = 0;
-  const tracked = trackedDocsFiles(root);
-  if (tracked === null) {
-    violations.push('cannot enumerate tracked docs files (`git ls-files docs/` failed) — rule 4 cannot be proven');
-  } else if (targets !== null) {
-    const handwrittenSet = new Set(handwritten);
-    const dirs = directoriesMentioned(readFileSync(README_PATH, 'utf8'));
-    const generatedSet = new Set(generatedRels);
-    for (const rel of tracked) {
-      if (handwrittenSet.has(rel)) continue;            // 4a already required a direct link
-      if (generatedSet.has(rel)) continue;              // the story runner's, listed by its quadrant README
-      if (rel === 'docs/README.md') continue;
-      coveredCount++;
-      const fromDocs = rel.replace(/^docs\//, '');
-      if (targets.has(fromDocs)) continue;
-      const top = fromDocs.includes('/') ? fromDocs.split('/')[0] : null;
-      if (top && dirs.has(top)) continue;
-      violations.push(`${rel} is not covered by docs/README.md — link it, or mention its directory`);
+    const from = generatedFrom(abs);
+    if (from && (/^(\.\/)?dev\//.test(from) || /^scripts\/check-[^/]*$/.test(from))) {
+      violations.push(`${rel(abs)} says \`generated_from: ${from}\` — a ledger from dev/ or a checker never publishes to the site`);
     }
-  }
-
-  // Rule 2's verdict, last so the count is the line a reader ends on.
-  const summary = `hand-written ${handwritten.length} (cap ${HANDWRITTEN_CAP})`;
-  if (handwritten.length > HANDWRITTEN_CAP) {
-    violations.push(
-      `${summary} — the 1.0 budget (spec §7 clause 4) is ${HANDWRITTEN_CAP} hand-written pages; cut or merge ${handwritten.length - HANDWRITTEN_CAP} more`,
-    );
   }
 
   if (violations.length) {
-    console.error(`check-docs-shape: FAIL (${violations.length} violation${violations.length === 1 ? '' : 's'}) — ${summary}`);
+    console.error(`check-docs-shape: FAIL (${violations.length} violation${violations.length === 1 ? '' : 's'})`);
     for (const v of violations) console.error(`  ✗ ${v}`);
-    // `process.exitCode` + `return`, never `process.exit()`: the violation list
-    // is unbounded and `process.exit()` tears the process down before a piped
-    // stdout has drained (see check-raw-fs-guarded.mjs).
+    // exitCode + return, never process.exit(): a piped stdout must drain.
     process.exitCode = 1;
     return;
   }
 
   console.log(
-    `check-docs-shape: PASS — ${files.length} docs pages, ${summary}, ${ids.size} story ids generated, index links every hand-written page, ${coveredCount} tracked docs files covered`,
+    `check-docs-shape: PASS — ${howtos} generated how-tos name their story, ${ledgers.length} dev/ ledgers absent from the site`,
   );
 }
 
