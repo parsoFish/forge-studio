@@ -13,14 +13,15 @@ You extend forge by adding data (agents, flows, hooks, catalog entries) or by im
 
 | Seam | You add | Where | Checked by |
 |---|---|---|---|
-| Agent | A `SKILL.md` | `skills/<slug>/SKILL.md` | `forge studio lint` |
+| Agent | A `SKILL.md` with agent frontmatter | `skills/<slug>/SKILL.md` | `forge studio lint` |
+| Skill | A `SKILL.md` of instructions | `.forge/skills/<id>/SKILL.md` in a project, or `skills/<id>/SKILL.md` for every project | `forge preflight` |
 | Flow | A `flow.yaml` | `studio/flows/<id>/flow.yaml` | `forge studio lint` |
 | Hook | A `hook.yaml` and script | `studio/hooks/<id>/` | `forge studio lint`, operator approval |
 | Catalog entry | A line in a list | `studio/catalog.yaml` | `forge studio lint` |
 | Runtime adapter | TypeScript implementing `RuntimeAdapter` | `packages/agents/_adapters/<sdk>/index.ts` | The adapter conformance test |
 | Knowledge backend | TypeScript implementing `KbBackend` | `packages/knowledge/kb-backend.ts` | The Knowledge contract tests |
 
-Adding an agent slug to a flow's `nodes` is the only registration an agent needs.
+Adding an agent slug to a flow's `nodes` is the only registration an agent needs. A skill needs no registration: a project lists its id in `skills` in `.forge/project.json`, or an agent lists it in `composition.skills`, and forge looks for it in the project's `.forge/skills/` first, then in forge's `skills/`.
 
 ## Fields
 
@@ -143,6 +144,6 @@ forge studio lint
 
 - A runtime adapter other than `claude` registers but is not selectable until you provide its dependency and credentials. Gemini and Aider ship registered and unavailable.
 - Only the `claude` adapter cancels an in-flight iteration when a node's wedge timer fires.
-- The only Knowledge backend is the filesystem one. `getKbBackend` always returns it.
+- The only Knowledge backend is the filesystem one, and there is no registration point for another: `getKbBackend` always returns the filesystem backend. A new backend is a code change to `packages/knowledge/kb-backend.ts`.
 - A flow whose `fanOut` names an agent without a `fanout` block fails lint.
 - Flow ids must be unique across `studio/flows/` and every package's `flows/` directory.
