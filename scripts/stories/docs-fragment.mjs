@@ -18,6 +18,7 @@
  */
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { assertSafeStoryId } from './sweep.mjs';
 
 /** The site directory every generated how-to lands in. */
 export const HOWTO_DIR = 'apps/docs/src/content/docs/guides/how-to';
@@ -40,6 +41,7 @@ export function docPathFor(story, root) {
 
 /** Where this story's frames are copied for the site. */
 export function mediaDirFor(story, root) {
+  assertSafeStoryId(story.id); // the directory is removed whole by writeHowTo
   return join(root, MEDIA_DIR, story.id);
 }
 

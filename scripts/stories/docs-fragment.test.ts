@@ -161,3 +161,11 @@ test('verifiedOn is required and must be a YYYY-MM-DD date', () => {
   assert.throws(() => renderDocFragment(result, {} as never), /verifiedOn/);
   assert.throws(() => renderDocFragment(result, { verifiedOn: '5 Oct' }), /verifiedOn/);
 });
+
+test('the media directory refuses a story id that is not one safe path segment', () => {
+  // writeHowTo removes this directory whole before publishing frames into it.
+  for (const id of ['..', '../x', 'a/b', '', '.hidden/..']) {
+    assert.throws(() => mediaDirFor({ id, docs: { title: 't' } }, '/r'), /unsafe story id/, id);
+  }
+  assert.equal(mediaDirFor({ id: 'S10', docs: { title: 't' } }, '/r'), '/r/apps/docs/public/media/stories/S10');
+});
