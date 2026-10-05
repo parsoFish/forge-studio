@@ -144,6 +144,7 @@ secrets.env
 .claude/*
 !.claude/commands/
 !.claude/settings.json
+!.claude/rules/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/journey-sync/
