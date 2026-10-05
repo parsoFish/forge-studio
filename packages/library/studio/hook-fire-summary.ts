@@ -39,7 +39,7 @@ export function deriveHookFireSummary(events: readonly EventLogEntry[], hookId: 
 }
 
 // Bounded scan (T2 review of 95cb287f). Mechanics: @forge/kernel/guarded-
-// scan.ts; rationale: request-path-sinks.md's "M7-C U2" section.
+// scan.ts; bounded so a huge fire log cannot stall a route.
 
 /** Page size — never open more cycle dirs than this per request. */
 export const HOOK_FIRE_SCAN_MAX_CYCLES = 50;

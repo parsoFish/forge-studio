@@ -107,7 +107,7 @@ export function changedMarkdownFiles(worktreePath: string): readonly string[] {
     // every segment its own element, and a path that will not resolve inside it
     // is dropped rather than read. `docs-gate.ts`'s own `existsSync`/
     // `readFileSync` are therefore only ever handed an already-contained
-    // absolute path (docs/reference/request-path-sinks.md classifies them).
+    // absolute path (scripts/request-path-sinks.classes.json classifies them).
     const abs = guardedFile(worktreePath, rel.split('/'), 'read');
     if (abs !== null) paths.push(abs);
   }

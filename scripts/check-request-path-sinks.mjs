@@ -2,7 +2,7 @@
 /**
  * check-request-path-sinks.mjs — no-new-unguarded-sinks RATCHET.
  *
- * Why this exists: docs/reference/request-path-sinks.md enumerates every
+ * Why this exists: dev/request-path-sinks.md (generated from scripts/request-path-sinks.classes.json) enumerates every
  * request-derived filesystem path in the repo as of one point in time. The
  * same defect shape (a request-derived path reaching an fs/git call with no
  * real containment) was found TWELVE times across seven initiatives despite
@@ -143,7 +143,7 @@ export { DESIGNATED_UNGUARDED_FUNCTIONS, countDesignatedCallers };
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_BASELINE_PATH = join(FORGE_ROOT, 'scripts/request-path-sinks.baseline.txt');
-export const DEFAULT_DOC_PATH = join(FORGE_ROOT, 'docs/reference/request-path-sinks.md');
+export const DEFAULT_CLASSES_PATH = join(FORGE_ROOT, 'scripts/request-path-sinks.classes.json');
 
 /**
  * The trees this walk may enter. `packages/` and `apps/` are the production
@@ -494,7 +494,7 @@ function printFailureGuidance(failures) {
     console.error('  1. Route the path through a guard:');
     console.error("       - resolveGuardedPath(root, segments) from cli/studio-path-guard.ts — FIXED root, every untrusted id its own segments[] element (never folded into root).");
     console.error('       - or isContainedProjectRepoPath / isContainedWorktreePath / isSafeCycleId from cli/manifest-path-guard.ts.');
-    console.error('  2. Add a row to docs/reference/request-path-sinks.md classifying the new site guarded / unguarded / accidentally-safe, per that doc\'s own rules.');
+    console.error('  2. Add an entry for the file to scripts/request-path-sinks.classes.json (class, guard, verified, note); dev/request-path-sinks.md is generated from it.');
     console.error('  3. Re-run with --write to accept the new baseline:');
     console.error('       node scripts/check-request-path-sinks.mjs --write');
     console.error('');
@@ -506,7 +506,7 @@ function printFailureGuidance(failures) {
     console.error('  1. Route the request-derived project + sessionId through the guard, do NOT bare-join them:');
     console.error('       - resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId) from cli/bridge-studio-sessions.ts (delegates to resolveGuardedPath — per-segment identity + charset + symlink containment; returns null on ANY escape).');
     console.error('       - Hand the GUARDED dir to readSessionStatus / writeSessionStatus; never a raw join(root, project, sessionId).');
-    console.error('  2. Add a row to docs/reference/request-path-sinks.md classifying the new caller guarded / unguarded / accidentally-safe.');
+    console.error('  2. Add an entry for the calling file to scripts/request-path-sinks.classes.json.');
     console.error('  3. Re-run with --write to accept the new baseline:');
     console.error('       node scripts/check-request-path-sinks.mjs --write');
     console.error('');
@@ -514,79 +514,43 @@ function printFailureGuidance(failures) {
 }
 
 /**
- * Whether `relFile` has ANY classification text in the audit doc — a coarse,
- * FILE-level check, not a per-sink one (M7 findings row 25's "unless the doc
- * classification exists" clause). The doc's rows are freeform narrative
- * prose keyed to file paths (see docs/reference/request-path-sinks.md), not
- * a machine-parseable (file, sink) index, so per-sink matching would be
- * exactly the kind of audit that overstates its own rigour the header warns
- * against. Coarse is a deliberate, stated trade: false-negative-safe (a file
- * the doc has never mentioned always refuses) at the cost of not catching a
- * SECOND, undocumented sink kind added to an ALREADY-documented file — the
- * same "prove-or-warn" model the rest of this ratchet uses.
+ * The checker-owned classification data: `{ "<file>": { class, guard, verified,
+ * note } }`, one entry per file, rendered into dev/request-path-sinks.md by
+ * `node scripts/dev-gen.mjs`. A missing file reads as empty (so the very first
+ * `--write` and fixtures work); malformed JSON throws — never silently empty.
  */
-export function docClassifiesFile(docText, relFile) {
-  return docText.includes(relFile);
-}
-
-/**
- * Doc-derived classification census — replaces
- * docs/reference/request-path-sinks.md's hand-maintained "## Summary" table,
- * which was the single highest-conflict edit across M7-C (measured: 6
- * collisions in one day, because every PR touched both a table row there AND
- * appended its own new section at the end). Rather than a hand-typed number
- * that can silently drift from the rows actually written below it, this
- * scans the doc's OWN classification-table rows (`file:line | op | field |
- * class | evidence`) and buckets each by its own `class` cell, plus tallies
- * the `[exec]`/`[read]`/`[unver]` verification markers wherever they occur.
- *
- * INFORMATIONAL ONLY, never a gate — printed every run, never compared
- * against a stored figure. The doc's rows are freeform narrative prose (see
- * its own structure: 70+ ad hoc section headings, arbitrarily long evidence
- * cells), not a machine-parseable (file, sink) index, so treating a count
- * derived from it as pass/fail-worthy would be exactly the kind of audit
- * that overstates its own rigour — this file's own header already names
- * that failure mode. A live, always-current print removes the churn (there
- * is no longer a stale number IN the doc to disagree with reality) without
- * pretending to verify prose it cannot reliably parse.
- */
-const DOC_TABLE_ROW_RE = /^\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|(.*)\|\s*$/;
-
-export function countDocClassifications(docText) {
-  const byClass = { guarded: 0, unguarded: 0, accidentallySafe: 0, notRequestDerived: 0, other: 0 };
-  const byMarker = { exec: 0, read: 0, unver: 0 };
-  let totalRows = 0;
-  for (const line of docText.split('\n')) {
-    if (/^\|\s*-{2,}/.test(line)) continue; // markdown table separator row
-    const m = DOC_TABLE_ROW_RE.exec(line);
-    if (!m) continue;
-    const classCell = m[4].trim();
-    if (!classCell || classCell.toLowerCase() === 'class') continue; // empty cell or the header row itself
-    totalRows += 1;
-    const lc = classCell.toLowerCase();
-    if (lc.includes('not request-derived')) byClass.notRequestDerived += 1;
-    else if (lc.includes('accidentally-safe')) byClass.accidentallySafe += 1;
-    else if (/\bunguarded\b/.test(lc)) byClass.unguarded += 1;
-    else if (/\bguarded\b/.test(lc)) byClass.guarded += 1;
-    else byClass.other += 1;
-    if (line.includes('[exec]')) byMarker.exec += 1;
-    if (line.includes('[read]')) byMarker.read += 1;
-    if (line.includes('[unver]')) byMarker.unver += 1;
+export function loadClasses(classesPath) {
+  if (!existsSync(classesPath)) return {};
+  const parsed = JSON.parse(readFileSync(classesPath, 'utf8'));
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${classesPath}: expected a JSON object keyed by file`);
   }
-  return { totalRows, byClass, byMarker };
+  return parsed;
 }
 
-/** Prints the doc census line every runCheck call (check or --write). A
- *  missing doc reads as zero rows rather than throwing — this is
- *  informational, never a gate, so an absent doc must never take the whole
- *  check down. */
-function printDocCensus(docPath) {
-  const docText = existsSync(docPath) ? readFileSync(docPath, 'utf8') : '';
-  const { totalRows, byClass, byMarker } = countDocClassifications(docText);
+/** Exact lookup: has `relFile` an entry in the classification data? */
+export function isClassified(classes, relFile) {
+  return Object.hasOwn(classes, relFile);
+}
+
+/** Census over the classification data (informational, never a gate). */
+export function countClassifications(classes) {
+  const byClass = { guarded: 0, unguarded: 0, 'accidentally-safe': 0, 'not-request-derived': 0, other: 0 };
+  const byVerified = { exec: 0, read: 0, unver: 0 };
+  const entries = Object.values(classes);
+  for (const e of entries) {
+    byClass[e.class in byClass ? e.class : 'other'] += 1;
+    if (e.verified in byVerified) byVerified[e.verified] += 1;
+  }
+  return { total: entries.length, byClass, byVerified };
+}
+
+function printCensus(classesPath) {
+  const { total, byClass, byVerified } = countClassifications(loadClasses(classesPath));
   console.log(
-    `check-request-path-sinks: doc census (${docPath}) — ${totalRows} classified row${totalRows === 1 ? '' : 's'} ` +
-      `(guarded ${byClass.guarded}, unguarded ${byClass.unguarded}, accidentally-safe ${byClass.accidentallySafe}, not-request-derived ${byClass.notRequestDerived}, other ${byClass.other}); ` +
-      `markers: [exec] ${byMarker.exec}, [read] ${byMarker.read}, [unver] ${byMarker.unver}`
+    `check-request-path-sinks: classification census (${classesPath}) — ${total} classified file${total === 1 ? '' : 's'} ` +
+      `(guarded ${byClass.guarded}, unguarded ${byClass.unguarded}, accidentally-safe ${byClass['accidentally-safe']}, not-request-derived ${byClass['not-request-derived']}, other ${byClass.other}); ` +
+      `verified: exec ${byVerified.exec}, read ${byVerified.read}, unver ${byVerified.unver}`
   );
 }
 
@@ -596,25 +560,25 @@ function printDocCensus(docPath) {
  *  reused rather than re-derived.
  *
  *  M7 findings row 25's other half: --write must never RAISE a row (a grown
- *  or brand-new pair) unless the audit doc already classifies that file —
+ *  or brand-new pair) unless classes.json already classifies that file —
  *  otherwise --write is exactly the tool that lets an undocumented growth
- *  sail into the baseline unread. Tightening (dropping) never needs doc
+ *  sail into the baseline unread. Tightening (dropping) never needs a classes.json
  *  backing, per this ratchet's own existing rule that a lower count is never
  *  a regression, so only `grown` is gated. Refuses (no write) and returns 1
- *  if any grown row's file lacks doc coverage — EXCEPT when no baseline
+ *  if any grown row's file has no classes.json entry — EXCEPT when no baseline
  *  existed yet (`hadPriorBaseline` false): the very first --write is
  *  establishing ground truth wholesale, not raising anything incrementally,
  *  so every row in it reads as "new" against an empty prior baseline and the
  *  gate would otherwise block the initial capture entirely. */
-function writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableCount, totalCalls, hadPriorBaseline }) {
-  const docText = existsSync(docPath) ? readFileSync(docPath, 'utf8') : '';
-  const undocumented = hadPriorBaseline ? grown.filter((g) => !docClassifiesFile(docText, g.file)) : [];
+function writeBaseline({ baselinePath, classesPath, rows, grown, dropped, reachableCount, totalCalls, hadPriorBaseline }) {
+  const classes = loadClasses(classesPath);
+  const undocumented = hadPriorBaseline ? grown.filter((g) => !isClassified(classes, g.file)) : [];
   if (undocumented.length) {
     console.error(
-      `check-request-path-sinks: --write REFUSED — ${undocumented.length} row(s) would RAISE the baseline with no classification in ${docPath}:`
+      `check-request-path-sinks: --write REFUSED — ${undocumented.length} row(s) would RAISE the baseline with no entry in ${classesPath}:`
     );
     for (const u of undocumented) console.error(`  ✗ ${u.file} ${u.sink}: ${u.baselineCount} -> ${u.count}`);
-    console.error('  Add a row to docs/reference/request-path-sinks.md classifying the new/grown site first (M7 findings row 25 — --write never raises an undocumented row).');
+    console.error('  Add an entry for the file to scripts/request-path-sinks.classes.json first — --write never raises an unclassified row.');
     return 1;
   }
 
@@ -637,7 +601,7 @@ function writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableC
  * injectable so tests can point this at a temp fixture tree instead of the
  * real repo. Returns a process exit code; never calls process.exit itself.
  */
-export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, docPath = DEFAULT_DOC_PATH, write = false } = {}) {
+export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, classesPath = DEFAULT_CLASSES_PATH, write = false } = {}) {
   const { reachable, rows: sinkRows } = analyze(root);
   // Combine the raw-sink rows with the caller-count dimension into ONE row
   // stream. Both key on (file, sink, count) and flow through compareBaseline /
@@ -647,7 +611,7 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
     a.file === b.file ? a.sink.localeCompare(b.sink) : a.file.localeCompare(b.file)
   );
   const totalCalls = rows.reduce((sum, r) => sum + r.count, 0);
-  printDocCensus(docPath);
+  printCensus(classesPath);
 
   if (write) {
     // bead forge-8vfn.5.19, problem 2: --write is not a re-key — it
@@ -660,7 +624,7 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
     const hadPriorBaseline = existsSync(baselinePath);
     const priorRows = hadPriorBaseline ? parseBaseline(readFileSync(baselinePath, 'utf8')) : [];
     const { failures: grown, tighten: dropped } = compareBaseline(rows, priorRows);
-    return writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableCount: reachable.length, totalCalls, hadPriorBaseline });
+    return writeBaseline({ baselinePath, classesPath, rows, grown, dropped, reachableCount: reachable.length, totalCalls, hadPriorBaseline });
   }
 
   if (!existsSync(baselinePath)) {

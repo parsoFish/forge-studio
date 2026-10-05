@@ -9,7 +9,7 @@
  * (in-flight → ready → after-prerequisites → unplanned) under NO invented
  * dates. Pan/zoom is a hand-rolled CSS transform (translate+scale) — see the
  * "why not reactflow" note below. The retired roadmap-uplift/b-prime mockup
- * (docs/reference/studio-copy.md) is the operator-locked visual/semantic
+ * is the operator-locked visual/semantic
  * reference this ports; layout math lives in
  * `apps/studio/lib/roadmap-time-layout.ts` as pure, unit-tested functions —
  * this component only turns that layout into DOM.

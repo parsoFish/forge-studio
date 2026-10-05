@@ -99,8 +99,8 @@ title>.md`, so the name moves when the title does.
 
 1. `npm run stories -- --list` — find the affected story/beats without booting.
 2. Update the beat's drive/checks for the new surface (`data-*` first — see
-   `docs/reference/studio-dom-contract.md`; add/update attributes with the UI
-   change itself).
+   `dev/studio-dom-contract.md`; add/update attributes with the UI
+   change itself, then re-run `node scripts/dev-gen.mjs`).
 3. Update the narration + captions so the text still describes what's shown;
    re-record the clip if the visible arc changed (entry → progression → payoff).
 4. Mark 1-2 `key: true` frames per beat for the gallery.
