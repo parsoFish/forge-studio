@@ -22,12 +22,12 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "R-05: Act3 (beats 10-11, S1.act3.mjs): interview -> draft -> critique -> plan-gate -> approve loop, session-checkpointed"
     },
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "D-07: Beat8: demo-builder session (briefing->generating->awaiting-review->locking->locked), verdict-approve finalising a locked demo"
     },
     {

@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { countWords, CEILINGS } from '../check-docs-budget.mjs';
 import { renderDocFragment, docPathFor, mediaDirFor, slugFor, firstSentence, frameUrl } from './docs-fragment.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -168,4 +169,59 @@ test('the media directory refuses a story id that is not one safe path segment',
     assert.throws(() => mediaDirFor({ id, docs: { title: 't' } }, '/r'), /unsafe story id/, id);
   }
   assert.equal(mediaDirFor({ id: 'S10', docs: { title: 't' } }, '/r'), '/r/apps/docs/public/media/stories/S10');
+});
+
+// --- Condensed page: a story whose full render exceeds the how-to ceiling ---
+
+const FIXTURES = join(ROOT, 'scripts/stories/fixtures');
+const loadFixture = (name: string) => JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
+
+test('a story whose full render fits the ceiling renders exactly as before (S7, 26 beats)', () => {
+  const s7 = loadFixture('S7-beats.json');
+  const md = renderDocFragment(s7, { verifiedOn: ON });
+  assert.ok(countWords(md) <= CEILINGS['how-to'], 'the S7 full render fits');
+  assert.equal(md, readFileSync(join(FIXTURES, 'S7-howto.golden.md'), 'utf8'));
+  assert.match(md, /^## 1\. /m);
+});
+
+test('a story over the ceiling renders the condensed page: acts, one item per beat, no say text', () => {
+  const s10 = loadFixture('S10-beats.json');
+  assert.equal(s10.beats.length, 61);
+  const md = renderDocFragment(s10, { verifiedOn: ON });
+  assert.ok(countWords(md) <= CEILINGS['how-to'], `condensed S10 is ${countWords(md)} words`);
+  assert.match(md, /^## Act 1$/m);
+  assert.match(md, /^## Act 2$/m);
+  assert.match(md, /Each step is one recorded action; open a step's picture to see the screen\./);
+  assert.equal((md.match(/^\d+\. /gm) ?? []).length, 61);
+  assert.match(md, /^61\. /m); // numbering continues across acts
+  assert.doesNotMatch(md, /ACT 2 —/);
+  assert.doesNotMatch(md, /^## \d+\./m);
+  assert.equal((md.match(/!\[/g) ?? []).length, 61);
+  assert.ok(md.includes('/media/stories/S10/'), 'frames are present');
+  assert.doesNotMatch(md, new RegExp(s10.beats[0].say.slice(0, 30)), 'the say sentence is omitted');
+  assert.equal(frontmatter(md).type, 'how-to');
+});
+
+test('a red beat is marked on its item in the condensed page, and the red banner stays', () => {
+  const s10 = loadFixture('S10-beats.json');
+  const beats = s10.beats.map((b: { status: string }, i: number) => (i === 4 ? { ...b, status: 'red' } : b));
+  const md = renderDocFragment({ ...s10, beats }, { verifiedOn: ON });
+  assert.match(md, /^5\. .* — \*\*RED, not verified\.\*\*$/m);
+  assert.equal((md.match(/RED, not verified\./g) ?? []).length, 1);
+  assert.match(md, /This story did not pass/);
+});
+
+test('a long single-act story condenses under one Steps heading', () => {
+  const beats = Array.from({ length: 70 }, (_, i) => ({
+    act: `do the thing number ${i + 1} with some more words in it`,
+    say: `Sentence one for step ${i + 1} that is long enough to matter here. Second sentence.`,
+    status: 'green',
+    failures: [],
+    frame: `frames/${String(i + 1).padStart(2, '0')}-x.png`,
+  }));
+  const md = renderDocFragment({ story: result.story, beats }, { verifiedOn: ON });
+  assert.match(md, /^## Steps$/m);
+  assert.doesNotMatch(md, /^## Act /m);
+  assert.match(md, /^1\. Do the thing number 1 /m); // first letter capitalised
+  assert.equal((md.match(/^\d+\. /gm) ?? []).length, 70);
 });
