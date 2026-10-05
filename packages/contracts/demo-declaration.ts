@@ -138,3 +138,57 @@ export function extractDemoRoute(text: string): RouteExtraction {
  */
 export const PRESENTATION_ONLY_SKILL_IDS = ['demo-design'] as const;
 export type PresentationOnlySkillId = (typeof PRESENTATION_ONLY_SKILL_IDS)[number];
+
+/** What a worktree's package.json `bin` says about a bare checkpoint command. */
+export type DeclaredBinResult =
+  | { kind: 'undeclared' }
+  | { kind: 'contained'; target: string }
+  | { kind: 'rejected'; target: string; reason: string };
+
+/**
+ * A bare checkpoint command whose head is not on PATH may still be a binary
+ * the ground declares (`"bin": {"gitpulse": "./dist/cli.js"}`) — bead
+ * forge-8vfn.30.9. This is the pure half of that lookup: given the parsed
+ * package.json and the head, says whether the head is declared and whether
+ * its target stays INSIDE the worktree (lexically; `@forge/kernel`'s
+ * `resolveCheckpointHead` re-checks symlinks against the real tree). A string
+ * `bin` counts under the package's `name` (scope stripped, as npm links it);
+ * an object `bin` by own key. An absolute target, one that climbs out of the
+ * worktree, or a malformed one is `rejected` with a reason — never skipped,
+ * never followed.
+ */
+export function resolveDeclaredBin(pkg: unknown, name: string): DeclaredBinResult {
+  if (typeof pkg !== 'object' || pkg === null) return { kind: 'undeclared' };
+  const { bin, name: pkgName } = pkg as { bin?: unknown; name?: unknown };
+  let target: unknown;
+  if (typeof bin === 'string') {
+    if (typeof pkgName !== 'string' || pkgName.replace(/^@[^/]+\//, '') !== name) return { kind: 'undeclared' };
+    target = bin;
+  } else if (typeof bin === 'object' && bin !== null && Object.hasOwn(bin, name)) {
+    target = (bin as Record<string, unknown>)[name];
+  } else {
+    return { kind: 'undeclared' };
+  }
+  const shown = typeof target === 'string' ? target : String(target);
+  if (typeof target !== 'string' || target.trim() === '') {
+    return { kind: 'rejected', target: shown, reason: `bin "${name}" declares a non-string or empty target` };
+  }
+  if (/^([/\\]|[A-Za-z]:)/.test(target)) {
+    return { kind: 'rejected', target, reason: `bin "${name}" target \`${target}\` is absolute — a declared bin must stay inside the worktree` };
+  }
+  const kept: string[] = [];
+  for (const seg of target.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      if (kept.pop() === undefined) {
+        return { kind: 'rejected', target, reason: `bin "${name}" target \`${target}\` resolves outside the worktree` };
+      }
+      continue;
+    }
+    kept.push(seg);
+  }
+  if (kept.length === 0) {
+    return { kind: 'rejected', target, reason: `bin "${name}" target \`${target}\` names the worktree root, not a file` };
+  }
+  return { kind: 'contained', target: kept.join('/') };
+}

@@ -1,7 +1,7 @@
 # Architecture
 
 > This document is the **narrative / intended** architecture. The
-> **canonical current architecture** is captured in [`docs/explanation/architecture.md`](./docs/explanation/architecture.md),
+> **canonical current architecture** is captured in each package's `README.md`,
 > [`DECISIONS.md`](./DECISIONS.md), and [`docs/reference/project-contract.md`](./docs/reference/project-contract.md).
 > The 2026-05-17 as-built snapshot and the pre-simplification refocus-architecture design docs
 > were archived prior art (removed 2026-06-07 — see git history). [`DECISIONS.md`](./DECISIONS.md) records load-bearing decisions.
@@ -49,7 +49,7 @@ work items.
 
 > **High-level view (refreshed 2026-06-14 — M7/M8).** The diagram below reflects
 > the as-built Studio-as-one-product and three-seam architecture. The structural
-> reference is [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) and [`DECISIONS.md`](./DECISIONS.md).
+> reference is each package's `README.md` and [`DECISIONS.md`](./DECISIONS.md).
 
 ```mermaid
 flowchart TB
@@ -341,3 +341,16 @@ Cycle helpers extracted to `packages/flows/cycle-helpers.ts` to break the `flow-
 - It is not a per-project agent personality. (Skills are shared; per-project taste lives in `brain/projects/<name>/profile.md` in the forge repo (SPEC §4).)
 - It does not retry failed initiatives automatically. (Failure → human triage.)
 - It does not host its own model runtime, vector DB, or agent harness. (Claude Agent SDK does that.)
+
+## Package allow-graph
+
+A package imports only a strictly lower rank: `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← stations ← factory ← apps/{forge, studio}`. Same-rank siblings never import each other; `apps/studio` imports `@forge/contracts` only and reaches everything else over HTTP.
+`scripts/check-boundaries.mjs` enforces it against a baseline of `<rule>|<from>|<to>` triples, not a count; a baseline change is a reviewed diff.
+
+## Community registry
+
+`studio/community/registry.yaml` is the repo-tracked list of community items. Studio and `forge community refresh` write the file; the operator commits it. Repo facts (stars, update times) live once per source under `sources:`; an item carrying one is a load error.
+
+## Licence
+
+forge is AGPL-3.0-or-later. Running a modified copy for your own projects creates no obligation; letting other users interact with a modified copy over a network obliges you to offer them its source.

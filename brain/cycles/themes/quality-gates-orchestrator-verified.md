@@ -38,7 +38,7 @@ Trade-off: makes acceptance-criteria authoring discipline more important — vag
 
 ## Sources
 
-- [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) — "hallucinated test passes" failure mode.
+- [`apps/docs/src/content/docs/how-forge-works.md`](../../../apps/docs/src/content/docs/how-forge-works.md) — "hallucinated test passes" failure mode.
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — trusting-agent-output cross-system data + review-fix-loop concrete numbers.
 
 ## See also
