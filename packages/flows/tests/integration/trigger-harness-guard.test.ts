@@ -1,5 +1,5 @@
 /**
- * R2-04-F3 (ADR-041) — guard coverage for externally-originated triggers.
+ * R2-04-F3 (D-23) — guard coverage for externally-originated triggers.
  *
  * Two pins:
  *  1. Harness mode: a staged cron/webhook request drained through the REAL

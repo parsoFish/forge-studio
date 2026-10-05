@@ -82,7 +82,7 @@ test('validateCompiledWorkItemSet: verification_artifact present, no creates →
   assert.deepEqual(validateCompiledWorkItemSet(items), []);
 });
 
-test('validateCompiledWorkItemSet: neither creates nor verification_artifact → error citing ADR 037', () => {
+test('validateCompiledWorkItemSet: neither creates nor verification_artifact → error citing D-18', () => {
   const items = [fixture({ work_item_id: 'WI-9', creates: undefined, verification_artifact: undefined })];
   const errors = validateCompiledWorkItemSet(items);
   assert.equal(errors.length, 1);
@@ -641,7 +641,7 @@ test('compileWorkItemSpecs: WRITE FAILURE folds into compileErrors, emits an err
   }
 });
 
-// ---------- compileWorkItemSpecs: ralph-spec-lint integration (ADR 037 / REFINEMENT-PLAN §7) ----------
+// ---------- compileWorkItemSpecs: ralph-spec-lint integration (D-17 / REFINEMENT-PLAN §7) ----------
 
 test('compileWorkItemSpecs: vacuous gate (named test that neither exists nor is created) folds into compileErrors and emits pm.spec-lint', () => {
   const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');

@@ -1,12 +1,12 @@
 /**
- * wi-spec-compiler — deterministic core (ADR 037 decision items 1+2).
+ * wi-spec-compiler — deterministic core (D-17 decision items 1+2).
  *
  * Sequenced in `runOnePmPass` (project-manager.ts) right after
  * `appendStandingAcs` and before `validateWorkItemSet` — the same seam
  * `appendStandingAcs` already occupies, extended: parse constraint sources →
  * inject matching clauses verbatim → compile resolvable hidden-coupling
  * edges → enforce the `creates:` mandatory-with-escape + sizing invariants.
- * The LLM assist pass (ADR 037 decision item 3, `skills/wi-spec-compiler/`)
+ * The LLM assist pass (D-17 decision item 3, `skills/wi-spec-compiler/`)
  * is explicitly out of scope here — this module is pure code, no SDK.
  *
  * Failure semantics (no silent paths):
@@ -43,8 +43,8 @@ import {
 import { isIgnoredPathFor } from './gitignored-creates.ts';
 import { ralphSpecLintWorkItems } from './ralph-spec-lint.ts';
 
-/** ADR 037: sizing bound on a WI's `creates:` list — the evidence base is the
- * migration-checklist cycles' oversized WIs (docs/decisions/037-compiled-wi-contracts.md). */
+/** D-18: sizing bound on a WI's `creates:` list — the evidence base is the
+ * migration-checklist cycles' oversized WIs. */
 export const MAX_WI_CREATE_PATHS = 5;
 
 // ---------- 1. constraint injection ----------
@@ -198,13 +198,13 @@ export function injectConstraintClauses(
 // ---------- 2. creates: mandatory-with-escape + sizing bound ----------
 
 /**
- * ADR 037: `creates:` is mandatory on every WI UNLESS it declares
+ * D-18: `creates:` is mandatory on every WI UNLESS it declares
  * `verification_artifact` (the escape for pure-modification WIs with no new
  * files). Reported set-errors-style (mirrors `validateWorkItemSet`'s
  * `setErrors` message shape) so the PM pipeline can fold these straight into
  * its existing failure path/telemetry without a new outcome shape.
  *
- * ADR 051 decision 5 adds the third `creates:` rule to this same place: a path
+ * D-34 adds the third `creates:` rule to this same place: a path
  * git will never see. `isIgnoredPath` is injected so the rule stays testable
  * without a repository, and is omitted by callers that have none — a validator
  * that cannot see the repository must not accuse a work item of hiding from it.
@@ -226,7 +226,7 @@ export function validateCompiledWorkItemSet(
     }
     for (const path of hasCreates && isIgnoredPath ? item.creates! : []) {
       if (isIgnoredPath?.(path) !== true) continue;
-      // ADR 051 decision 5. The required-paths check reads the DIFF for these
+      // D-34. The required-paths check reads the DIFF for these
       // paths, so one git never sees cannot appear there and the check passes
       // on its ABSENCE — the work is graded done because the evidence it looks
       // for is invisible. The most expensive form of declared-data-fails-open.
@@ -237,7 +237,7 @@ export function validateCompiledWorkItemSet(
     }
     if (hasCreates && item.creates!.length > MAX_WI_CREATE_PATHS) {
       errors.push(
-        `${item.work_item_id}: creates lists ${item.creates!.length} path(s), exceeding the ADR 037 ` +
+        `${item.work_item_id}: creates lists ${item.creates!.length} path(s), exceeding the D-18 ` +
           `sizing bound of ${MAX_WI_CREATE_PATHS} — split into smaller work items`,
       );
     }
@@ -257,7 +257,7 @@ export type CouplingCompileResult = {
   items: WorkItem[];
   /** Edges successfully derived AND persisted to the spec files. */
   compiledEdges: CompiledCouplingEdge[];
-  /** Pairs the compiler could not resolve — the PM pass hard-rejects on these, unchanged from pre-ADR-037. */
+  /** Pairs the compiler could not resolve — the PM pass hard-rejects on these, unchanged from pre-D-17. */
   unresolved: CouplingPair[];
   /** Spec-file writes that failed — folded into the PM pass's setErrors (loud, never swallowed). */
   writeErrors: string[];
@@ -267,12 +267,12 @@ export type CouplingCompileResult = {
 
 /**
  * `detectHiddenCoupling` upgraded from reject-only to compile-when-derivable
- * (ADR 037). A shared-file overlap with no `depends_on` edge is resolved by
+ * (D-17). A shared-file overlap with no `depends_on` edge is resolved by
  * WI-id numeric order — the higher-numbered WI gets `depends_on` the lower
  * ("WI-2 gets depends_on WI-1"); on a numeric TIE the order falls back to
  * deterministic LEXICOGRAPHIC id comparison, the greater id becoming the
  * dependent. The tie arm carries two cases: zero-padding (`WI-05` vs `WI-5`,
- * both stem 5) and — since ADR 037's 2026-08-23 amendment — a SPLIT PAIR
+ * both stem 5) and — since D-17's 2026-08-23 amendment — a SPLIT PAIR
  * (`WI-4a` vs `WI-4b`, both stem 4), which is why `WI-4b depends_on WI-4a`
  * and a split CHAINS instead of fanning out. Chaining is the point: two halves
  * of one unit of work share the file they were split out of, and serialising
@@ -303,7 +303,7 @@ export function compileHiddenCoupling(
     const numA = devWorkItemIdStem(pair.a);
     const numB = devWorkItemIdStem(pair.b);
     if (numA === null || numB === null) {
-      unresolved.push(pair); // non-derivable id shape → reject (pre-ADR-037 behavior)
+      unresolved.push(pair); // non-derivable id shape → reject (pre-D-17 behavior)
       continue;
     }
     let dependent: string;
@@ -337,7 +337,7 @@ export function compileHiddenCoupling(
     return { ...item, depends_on: merged };
   });
 
-  // Revalidate the DAG after adding edges (ADR 037): compiled edges must not
+  // Revalidate the DAG after adding edges (D-17): compiled edges must not
   // introduce a cycle. All-or-nothing — if the batch closes a loop, discard
   // every derived edge and report all detected pairs unresolved.
   const { setErrors } = validateWorkItemSet(candidateItems);
@@ -392,7 +392,7 @@ export type WiSpecCompileOptions = {
   manifest: InitiativeManifest;
   workItemsDir: string;
   /**
-   * The PROJECT's worktree root (NOT forgeRoot) — ralph-spec-lint (ADR 037 /
+   * The PROJECT's worktree root (NOT forgeRoot) — ralph-spec-lint (D-17 /
    * REFINEMENT-PLAN §7) searches it for existing test files. Defaults to two
    * levels up from `workItemsDir` (`<worktree>/.forge/work-items` →
    * `<worktree>`), the nesting `work-item.ts`'s `writeWorkItem` uses; pass
@@ -413,7 +413,7 @@ export type WiSpecCompileOptions = {
  * outcome), inject matching clauses (emitting `pm.constraint-injected` per
  * successfully-persisted clause), compile derivable hidden-coupling edges
  * (emitting `pm.coupling-edge-compiled` per persisted edge), then run the
- * ADR 037 `creates:` invariants. Write failures emit
+ * D-18 `creates:` invariants. Write failures emit
  * `pm.compile-write-failed` (error-level) and land in `compileErrors`.
  */
 export function compileWorkItemSpecs(opts: WiSpecCompileOptions): WiSpecCompileResult {
@@ -442,7 +442,7 @@ export function compileWorkItemSpecs(opts: WiSpecCompileOptions): WiSpecCompileR
     });
   }
 
-  // ralph-spec-lint (ADR 037 / REFINEMENT-PLAN §7): after injection, before
+  // ralph-spec-lint (D-17 / REFINEMENT-PLAN §7): after injection, before
   // hidden-coupling compile — neither of those steps touches `quality_gate_cmd`
   // / `creates` / `files_in_scope`, so running the lint here vs. after coupling
   // is equivalent; "after injection" is the sequencing the check was designed

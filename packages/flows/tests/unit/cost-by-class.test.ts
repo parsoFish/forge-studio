@@ -96,7 +96,7 @@ test('costByClass: sums per-class totals from the authoritative cost rule, means
   }
 });
 
-test('costByClass: a manifest with no "class" frontmatter counts under "unclassified", never dropped — the real-world shape of every pre-ADR-051 manifest', () => {
+test('costByClass: a manifest with no "class" frontmatter counts under "unclassified", never dropped — the real-world shape of every pre-D-34 manifest', () => {
   const forgeRoot = setup();
   try {
     writeManifest(forgeRoot, 'INIT-legacy', null, 'cyc-legacy');

@@ -38,7 +38,7 @@ export async function runFinalizeSweep(wiring: PhaseWiring): Promise<void> {
 }
 
 /**
- * ADR 040 fix-loop drain sweep: re-enter any ready-for-review cycle that has
+ * D-20 fix-loop drain sweep: re-enter any ready-for-review cycle that has
  * pending fix work-items (a review send-back compiled them onto the
  * initiative's own queue) in the SAME cycle — reusing the persisted cycle_id,
  * the worktree, and the open PR; the develop agent is the single fix executor.
@@ -47,7 +47,7 @@ export async function runFinalizeSweep(wiring: PhaseWiring): Promise<void> {
  * out of the timer.
  */
 export async function runDrainSweep(wiring: PhaseWiring, queueRoot: string): Promise<void> {
-  if (readHalt(queueRoot) !== null) return; // the emergency halt (ADR 011): re-entry is a claim
+  if (readHalt(queueRoot) !== null) return; // the emergency halt (D-03): re-entry is a claim
   try {
     for (const r of await drainPendingFixWorkItems({ queueRoot, notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
       if (r.status === 'drained') {
@@ -83,7 +83,7 @@ export function runFlowTriggerSweep(): void {
 }
 
 /**
- * R2-04 (ADR-041): sync the scheduler's armed cron triggers against every
+ * R2-04 (D-23): sync the scheduler's armed cron triggers against every
  * flow's declared `on: cron` set (stop what's no longer declared, arm what's
  * newly declared). Best-effort, mirroring the other sweeps — a broken flow or
  * an invalid schedule is reported inside `syncCronTriggers` via `notify` and

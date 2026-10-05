@@ -1,5 +1,5 @@
 /**
- * Forge Studio — Run Aggregator (M1-1, ADR-027/028)
+ * Forge Studio — Run Aggregator (M1-1, D-09 / SPEC §2)
  *
  * Pure aggregation: queue state + manifest + _logs/<cycleId>/events.jsonl
  * + artifacts dir → a structured Run object for the Studio UI.
@@ -12,7 +12,7 @@
  * frontmatter `phase` field. Each flow node with an `agent` field maps:
  * SKILL.md[phase] → node.id.
  *
- * Canonicalization layer (hardcoded — ADR-028 engine will own the full table in M3):
+ * Canonicalization layer (hardcoded — SPEC §2 engine will own the full table in M3):
  *   reflection  → reflect node (frontmatter says 'reflector', events say 'reflection')
  *   review-loop → review node (gate-only; no agent in flow.yaml)
  *   closure     → review node (closure folds into the review node)
@@ -112,14 +112,14 @@ export function aggregateRun(args: {
   manifestPath: string;
   nowMs: number;
   /**
-   * ADR-044 P1 (`packages/flows/run-list-cache.ts`) additive-optional escape hatch: a
+   * D-27 P1 (`packages/flows/run-list-cache.ts`) additive-optional escape hatch: a
    * caller deriving MANY runs in one pass (the mtime-keyed cached list
    * builder) can build buildNodeMapping/buildFlowNodeSets/
    * buildAgentSlugToNodeId ONCE for the whole pass instead of once per
    * manifest — mirroring how listRuns() below already does for its own
    * loop. Omitted (the default) → unchanged behavior: every existing call
    * site, including listRuns itself, builds its own and is untouched.
-   * ADR-042 disclosure: additive-optional fields on an already-exported
+   * D-31 disclosure: additive-optional fields on an already-exported
    * function signature, not a new orchestrator export.
    */
   nodeMapping?: Map<string, string | null>;
@@ -204,7 +204,7 @@ function aggregateRunWithMapping(args: {
 
   // A `pending`-queue manifest is a blank, never-run initiative when NO
   // cycle has actually STARTED for it yet — which is not the same test as
-  // "does it carry a `cycle_id`". ADR 026 anchors a TRIGGERED initiative's
+  // "does it carry a `cycle_id`". D-20 anchors a TRIGGERED initiative's
   // `cycle_id` at mint time (`mint-triggered-initiative.ts`'s
   // `mintAndPersistManifestCycleId`), before the scheduler ever claims it —
   // that manifest sits in `pending/` with a real `cycle_id` and zero event
@@ -365,7 +365,7 @@ function buildRun(args: {
 
   return {
     id: cycleId,
-    // ADR-028 / J5: associate the run with the flow its manifest names, so a
+    // SPEC §2 / J5: associate the run with the flow its manifest names, so a
     // flow's run surfaces under /flows/<flow_id>. Pre-S8 manifests carry no
     // flow_id → 'unknown' (the forge-cycle default was retired; S8/DEC-3).
     flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
@@ -472,7 +472,7 @@ function findTriggerFiringEvent(events: readonly EventLogEntry[]): { on: string;
 }
 
 /**
- * R2-08-F4 (ADR-027 amendment): derive `Run.trigger`. Two independent
+ * R2-08-F4 (D-10 amendment): derive `Run.trigger`. Two independent
  * sources, because the shipped kinds differ in whether a run is minted at
  * all (see the module-level `Run.trigger` doc):
  *
@@ -607,7 +607,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
  * below calls this in its per-file catch so one bad manifest degrades
  * instead of crashing the whole list.
  *
- * ADR-042 disclosure: exported per the ratified boundary "a pure function
+ * D-31 disclosure: exported per the ratified boundary "a pure function
  * with an explicit error contract may be exported for direct tests" — its
  * second caller is `packages/flows/run-list-cache.ts`'s `deriveFresh` fail path, which
  * needs the IDENTICAL degraded shape `listRuns` produces rather than a

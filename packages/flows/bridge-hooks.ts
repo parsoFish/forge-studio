@@ -1,5 +1,5 @@
 /**
- * bridge-hooks — R2-04 (ADR-041) external webhook receipts.
+ * bridge-hooks — R2-04 (D-22) external webhook receipts.
  *
  * `POST /api/hooks/:hookId` is the ONE ingress for github/gitea/gitlab
  * webhook deliveries. It is deliberately thin: verify the signature over the
@@ -13,7 +13,7 @@
  * Trust model: the bridge binds 0.0.0.0, so this route is LAN/internet
  * reachable the moment an operator exposes it — signature verification
  * (`packages/flows/webhook-verify.ts`) is the ONLY trust boundary; there is no
- * source-IP allowlist (documented as defense-in-depth-only in ADR-041). A
+ * source-IP allowlist (documented as defense-in-depth-only in D-22). A
  * missing/empty secret env value fails closed (503) rather than accepting an
  * unverified payload.
  *
@@ -352,7 +352,7 @@ async function processHookReceipt(
   }
 
   // 8. Stage only — no dispatch, no spawn (see the dry-bridge classification).
-  // R2-08-F1 (ADR-027 amendment): carry the trigger's own `projects:`
+  // R2-08-F1 (D-10 amendment): carry the trigger's own `projects:`
   // declaration. R2-08-F3 closes the gap the ORIGINAL comment here flagged:
   // `resolveProjectIdForRepo` is the real repo→forge-project-id mapping (an
   // IDENTITY match against each project's declared `.forge/project.json`
@@ -360,7 +360,7 @@ async function processHookReceipt(
   // webhook-family payload (push/release/pr-merged/issue-raised all carry
   // `payload.repo`), not just the two new kinds. An unresolved/ambiguous repo
   // still fails closed exactly as before (declared scope + unresolved project
-  // ⇒ typed skip at the drain, ADR-027 R2-08 amendment rule 3/4).
+  // ⇒ typed skip at the drain, D-10 R2-08 amendment rule 3/4).
   const eventProject = resolveProjectIdForRepo(ctx.forgeRoot, payload.repo);
   stageFlowRunRequest(
     {
@@ -380,7 +380,7 @@ async function processHookReceipt(
       triggerKind: trigger.on,
       payload,
       ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
-      // Seam F6 half 1 (ADR 051 decision 4): the trigger's own `class:`
+      // Seam F6 half 1 (D-34): the trigger's own `class:`
       // declaration, read straight off the resolved trigger config — needed
       // by mint-triggered-initiative.ts when the target flow accepts more
       // than one manifest class.

@@ -1,5 +1,5 @@
 /**
- * File-based initiative queue (per ADR 011).
+ * File-based initiative queue (per D-04).
  *
  * State machine via directory rename:
  *   _queue/pending → in-flight → ready-for-review → merged → done
@@ -133,7 +133,7 @@ function clearOperatorStopFlag(filename: string, paths: QueuePaths): void {
  * even if the rename itself then fails.
  */
 export function claim(filename: string, paths = getPaths()): string | null {
-  if (readHalt(paths.root) !== null) return null; // the emergency halt (ADR 011): nothing new starts
+  if (readHalt(paths.root) !== null) return null; // the emergency halt (D-03): nothing new starts
   const from = join(paths.pending, filename);
   const to = join(paths.inFlight, filename);
   clearOperatorStopFlag(filename, paths);

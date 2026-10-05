@@ -219,7 +219,7 @@ export function hasErrorBetween(events: readonly EventLogEntry[], afterIdx: numb
  * (RunStatus 'gated') after its last node parked awaiting an operator verdict
  * — for the seed forge-develop flow that is always the `review` node
  * (review-loop + closure both fold into it, per CANONICAL_PHASE_OVERRIDES),
- * but a user-authored flow (ADR-028) can name its gate node anything, and a
+ * but a user-authored flow (SPEC §2) can name its gate node anything, and a
  * flow with no review node at all (e.g. an architect hand-off parking in the
  * same queue state) has no review gate to report. Trusting the last event
  * whose phase resolves to a real node — the same array-order trust
@@ -260,7 +260,7 @@ export function findFailure(
       // Find the node of the last error event before this classifier
       const failedNode = findLastErrorNode(events, i, nodeMapping, agentSlugToNodeId);
       // W8-A2 (ON-7): NO `?? 'unifier'` fallback. The unifier node was retired
-      // from the live flow by R4-01-F4 (ADR-039/040) — `forge-develop/flow.yaml`
+      // from the live flow by R4-01-F4 (SPEC §1 / D-20) — `forge-develop/flow.yaml`
       // mentions it only in a comment saying it is gone — so defaulting here
       // pointed the operator at a node that exists in no flow. The monitor
       // silently drew no outline (no hex carries that id) and the field

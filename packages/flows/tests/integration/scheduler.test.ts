@@ -548,7 +548,7 @@ test('classifyCycleFailure: empty events → terminal (unrecognised)', async () 
 // validation error is deterministic: the same decomposition re-runs the same
 // errors, so `transient` bought INIT-2026-08-14-betterado-gap-registry the full
 // MAX_AUTO_RETRIES and three byte-identical ~$2.40 runs. The contract is now
-// terminal / zero retries (ADR 015 + ADR 037 2026-08-23 amendments).
+// terminal / zero retries (SPEC §3 / D-17 2026-08-23 amendments).
 test('classifyCycleFailure: pm per_item_error_count > 0 → terminal (deterministic, no auto-retry)', async () => {
   const { classifyCycleFailure } = await import('@forge/agents');
   const events = [

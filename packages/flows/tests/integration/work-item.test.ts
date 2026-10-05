@@ -392,7 +392,7 @@ test('creates: entry not in files_in_scope is rejected', () => {
   assert.ok(errors.some((e) => e.includes('creates')), `got ${JSON.stringify(errors)}`);
 });
 
-test('origin (ADR 040): review-fix | demo-fix | gate-fix round-trips; absent stays omitted', () => {
+test('origin (D-20): review-fix | demo-fix | gate-fix round-trips; absent stays omitted', () => {
   // Absent → not serialised (PM-authored WIs stay byte-identical).
   const plain = serializeWorkItem(fixture());
   assert.doesNotMatch(plain, /^origin:/m);
@@ -407,7 +407,7 @@ test('origin (ADR 040): review-fix | demo-fix | gate-fix round-trips; absent sta
   }
 });
 
-test('origin (ADR 040): an unknown origin is rejected by validateWorkItem', () => {
+test('origin (D-20): an unknown origin is rejected by validateWorkItem', () => {
   const errors = validateWorkItem(fixture({ origin: 'bogus' as unknown as 'review-fix' }));
   assert.ok(errors.some((e) => e.includes('origin')), `got ${JSON.stringify(errors)}`);
 });

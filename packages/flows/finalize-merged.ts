@@ -68,11 +68,11 @@ export type FinalizeDeps = {
   runClosure?: (input: CycleInput, logger: EventLogger, reviewerOutcome: ReviewerOutcome) => Promise<ClosureResult>;
   /** Reflector action an `on: merged` agent-target dispatches to. Injectable. */
   /**
-   * The factory's reflection turn (ADR 048). REQUIRED and injected: this package
+   * The factory's reflection turn (D-32). REQUIRED and injected: this package
    * declares the port and never imports `@forge/factory`, so that deleting the
    * example package leaves the platform running. Tests inject their own.
    *
-   * `def` (seam F4, operator item 81/ADR-039 generalisation): the resolved
+   * `def` (seam F4, operator item 81/SPEC §1 generalisation): the resolved
    * `on: merged` target's own agent def (`resolveMergeAgentHandler` below
    * already loads it to read its band guard) — threaded through so the
    * reflection-close band's system prompt/spawn options read THIS def, never
@@ -105,7 +105,7 @@ export type FinalizeDeps = {
 
 /** The timestamped log-dir cycle id for an initiative (most-recent), so the
  *  reflector writes `user-questions.json` where the UI's /api/reflect reads it.
- *  Exported so the ADR 026 drain shares the same `_logs`-dir resolution. */
+ *  Exported so the D-20 drain shares the same `_logs`-dir resolution. */
 export function latestCycleId(logsRoot: string, initiativeId: string): string | null {
   if (!existsSync(logsRoot)) return null;
   let best: { id: string; mtime: number } | null = null;
@@ -458,7 +458,7 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps): Promise<
         out.push({ initiativeId, status: 'still-open' });
         continue;
       }
-      // ADR 040 merge-vs-loop: a merged PR is terminal — finalize WINS over the
+      // D-20 merge-vs-loop: a merged PR is terminal — finalize WINS over the
       // fix-loop drain (running fix WIs against a merged branch is pointless).
       // But if the operator merged with fix work-items still pending, surface it
       // so the drop is never SILENT (the merge overrides the unrun concerns).
@@ -475,7 +475,7 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps): Promise<
       const inFlightPath = join(paths.inFlight, file);
       renameSync(manifestPath, inFlightPath);
 
-      // ADR 026: prefer the cycle_id persisted on the manifest (the authoritative
+      // D-20: prefer the cycle_id persisted on the manifest (the authoritative
       // anchor written at first claim) so finalize appends to the SAME `_logs`
       // dir the cycle used; fall back to the latest matching dir for legacy
       // manifests that never persisted one.
@@ -494,7 +494,7 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps): Promise<
         project: m.project ?? null,
       };
 
-      // ADR-027: a confirmed GitHub merge is an implicit approve — persist the
+      // D-09: a confirmed GitHub merge is an implicit approve — persist the
       // verdict artifact (the operator merged silently, no UI verdict) so the
       // reflector that runs inside finalizeOne has a durable record. overwrite:
       // false keeps an explicit UI approve/send-back, if one was already written.

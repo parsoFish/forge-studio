@@ -10,14 +10,14 @@
  * knew the magic flag or forge threw the work away.
  *
  * This module makes the requeue infer the resume position, mirroring the
- * ADR-019 resume machinery (no new runtime mechanism):
+ * D-06 resume machinery (no new runtime mechanism):
  *
  *   - prior failure classified `environment: true` (G3/N9 classifier)
  *     AND the preserved worktree still exists
  *     AND the initiative branch carries commits beyond main
  *     AND the preserved `.forge/work-items/` specs are readable
  *       → RESUME:
- *           · every WI `complete`  → `resume_from: integrate` (ADR 019 — the
+ *           · every WI `complete`  → `resume_from: integrate` (D-06 — the
  *             post-develop band re-runs at the `integrate` node against the
  *             preserved branch; no WI is rebuilt)
  *           · some WIs incomplete  → NO marker; the worktree + branch are
@@ -47,7 +47,7 @@ export type RequeueResumeDecision =
   | {
       resume: true;
       /**
-       * `'integrate'` → stamp `resume_from: integrate` (ADR 019). `'plan'` →
+       * `'integrate'` → stamp `resume_from: integrate` (D-06). `'plan'` →
        * stamp `resume_from: plan` (row 157, ruling 1873) — the PM node
        * RE-RUNS (it is the phase that failed), unlike the other two markers.
        * `'pr-open'` → stamp `resume_from: pr-open` (row 122) — narrower than
@@ -271,7 +271,7 @@ export function decideRequeueResume(args: {
   if (args.workItems.complete === args.workItems.total) {
     const allCompleteReason =
       `${triggerLabel} with all ${args.workItems.total} WIs complete on the preserved branch — ` +
-      'resume from the integrate node (ADR 019)';
+      'resume from the integrate node (D-06)';
     return { resume: true, resume_from: 'integrate', reason: allCompleteReason };
   }
   const partialReason =

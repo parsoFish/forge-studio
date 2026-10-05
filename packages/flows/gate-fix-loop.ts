@@ -1,5 +1,5 @@
 /**
- * Gate-fix loop compiler (R4-10-F2, ADR-036 amendment / ADR-040) — the
+ * Gate-fix loop compiler (R4-10-F2, D-15 amendment / D-20) — the
  * merge-boundary full-suite gate's unattended remediation.
  *
  * When `runMergeBoundaryGate` (cycle-helpers.ts) finds a red full-suite baseline
@@ -16,7 +16,7 @@
  * loudly (marker + notify), identical to the other two fix origins.
  *
  * The failure detail flows to the fix agent through `.forge/last-gate-failure.md`
- * (the ADR-036 §2 results-flow seam, written by the gate itself) — this module
+ * (the D-15 results-flow seam, written by the gate itself) — this module
  * embeds it verbatim into the WI rationale so the agent sees exactly what failed.
  */
 

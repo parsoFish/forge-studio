@@ -18,10 +18,10 @@
  * `mergePullRequest` IS now called by the approve path (superseding G9):
  *   - `POST /api/verdict` 'approve' in `apps/forge/ui-bridge.ts` — the UI approve
  *     merges the remote PR immediately and fires `finalizeMergedReadyForReview`.
- *     M7-5 (ADR-031) removed the old `forge review --approve` CLI merge; the
+ *     M7-5 (D-12) removed the old `forge review --approve` CLI merge; the
  *     bridge verdict route is the sole approve surface (its merge is a strict
  *     superset of the deleted CLI path).
- * The operator's approve IS the merge gate (ADR-023 + ADR-021 supersede G9).
+ * The operator's approve IS the merge gate (D-12 / D-07 supersede G9).
  * It remains unreachable from `runReviewer` / `runCycle` / the scheduler.
  *
  * Production assumes a real GitHub remote. Projects without a GitHub
@@ -190,7 +190,7 @@ export function embedDemoInPr(
  * classified `dev-loop-unifier-demo-failed` event.
  *
  * Returns the tracked-demo directory path on success (so callers don't
- * recompute it). ADR 021: the structured `demo.json` is the contract the
+ * recompute it). D-07: the structured `demo.json` is the contract the
  * unifier must author (DEMO.md is derived from it via `forge demo render`);
  * this asserts the structured source exists.
  */

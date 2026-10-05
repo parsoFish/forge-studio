@@ -134,7 +134,7 @@ test('runRequeue --resume-from=integrate: stamps resume_from AND preserves the w
 
     const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromIntegrate: true });
 
-    // ADR 019: worktree is the salvaged work — it must NOT be removed.
+    // D-06: worktree is the salvaged work — it must NOT be removed.
     assert.equal(r.worktreeRemoved, false);
     assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-integrate');
     // resume_from stamped into the moved manifest.
@@ -145,7 +145,7 @@ test('runRequeue --resume-from=integrate: stamps resume_from AND preserves the w
   }
 });
 
-test('runRequeue --resume-from=integrate: preserves worktree + branch, stamps resume_from: integrate, clears legacy pr-feedback (ADR 026)', () => {
+test('runRequeue --resume-from=integrate: preserves worktree + branch, stamps resume_from: integrate, clears legacy pr-feedback (D-20)', () => {
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
@@ -153,7 +153,7 @@ test('runRequeue --resume-from=integrate: preserves worktree + branch, stamps re
     writeFileSync(join(root, '_queue', 'failed', file), MANIFEST(root, { worktreePath: wt }));
     mkdirSync(wt, { recursive: true });
     writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
-    // A legacy pr-feedback.md (ADR 026 retired the thread) must now be cleared.
+    // A legacy pr-feedback.md (D-20 retired the thread) must now be cleared.
     const feedback = join(root, '_queue', 'failed', 'INIT-2026-05-24-rq-test.pr-feedback.md');
     writeFileSync(feedback, '# Send-back feedback\n\nlegacy file\n');
 
@@ -199,10 +199,10 @@ test('runRequeue: throws when initiative ID does not resolve', () => {
   }
 });
 
-// ADR 026 retired the `<id>.pr-feedback.md` send-back thread (review feedback is
+// D-20 retired the `<id>.pr-feedback.md` send-back thread (review feedback is
 // now appended UWIs in the worktree). Any requeue — resume or not — clears a
 // legacy feedback file, since nothing reads it anymore.
-test('runRequeue: a full (non-resume) requeue CLEARS a stamped resume_from (ADR 026)', () => {
+test('runRequeue: a full (non-resume) requeue CLEARS a stamped resume_from (D-20)', () => {
   const root = setupForgeRoot();
   try {
     const id = 'INIT-2026-05-24-rq-test';

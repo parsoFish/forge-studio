@@ -1,5 +1,5 @@
 /**
- * ADR 051 decision 5 — the third `creates:` rule, in its own file.
+ * D-34 — the third `creates:` rule, in its own file.
  *
  * These belong beside `validateCompiledWorkItemSet`'s other creates tests in
  * `wi-spec-compile.test.ts`, and they are here instead because that file is
@@ -32,7 +32,7 @@ function fixture(overrides: Partial<WorkItem> = {}): WorkItem {
 }
 
 // ---------------------------------------------------------------------------
-// ADR 051 decision 5 — the third `creates:` rule: a path git will never see
+// D-34 — the third `creates:` rule: a path git will never see
 //
 // The defect it closes: the required-paths check reads the DIFF for a WI's
 // `creates:` paths, so one under a gitignored directory can never appear there
@@ -42,7 +42,7 @@ function fixture(overrides: Partial<WorkItem> = {}): WorkItem {
 // the truth is proven in `packages/flows/phases/gitignored-creates.test.ts`.
 // ---------------------------------------------------------------------------
 
-test('ADR 051: a gitignored creates entry is a compile error naming the path AND the consequence', () => {
+test('D-34: a gitignored creates entry is a compile error naming the path AND the consequence', () => {
   const errors = validateCompiledWorkItemSet(
     [fixture({ files_in_scope: ['_scratch/notes.md'], creates: ['_scratch/notes.md'] })],
     (p) => p === '_scratch/notes.md',
@@ -52,7 +52,7 @@ test('ADR 051: a gitignored creates entry is a compile error naming the path AND
   assert.match(hit, /required-paths check/, 'a rule that only says it fired teaches nothing — the message names what breaks');
 });
 
-test('ADR 051: the SAME set is clean when the predicate says not ignored — kills "flag every creates entry"', () => {
+test('D-34: the SAME set is clean when the predicate says not ignored — kills "flag every creates entry"', () => {
   const errors = validateCompiledWorkItemSet(
     [fixture({ files_in_scope: ['_scratch/notes.md'], creates: ['_scratch/notes.md'] })],
     () => false,
@@ -60,14 +60,14 @@ test('ADR 051: the SAME set is clean when the predicate says not ignored — kil
   assert.deepEqual(errors.filter((e) => e.includes('gitignored')), []);
 });
 
-test('ADR 051: with NO predicate the rule does not run — a caller with no repository must not accuse', () => {
+test('D-34: with NO predicate the rule does not run — a caller with no repository must not accuse', () => {
   const errors = validateCompiledWorkItemSet([
     fixture({ files_in_scope: ['_scratch/notes.md'], creates: ['_scratch/notes.md'] }),
   ]);
   assert.deepEqual(errors.filter((e) => e.includes('gitignored')), []);
 });
 
-test('ADR 051: every entry is checked, not just the first — kills "test creates[0]"', () => {
+test('D-34: every entry is checked, not just the first — kills "test creates[0]"', () => {
   const errors = validateCompiledWorkItemSet(
     [fixture({
       files_in_scope: ['src/a.ts', 'build/b.js', 'build/c.js'],
@@ -78,7 +78,7 @@ test('ADR 051: every entry is checked, not just the first — kills "test create
   assert.equal(errors.filter((e) => e.includes('gitignored')).length, 2);
 });
 
-test('ADR 051: the new rule does not displace the two ADR 037 creates rules it sits beside', () => {
+test('D-34: the new rule does not displace the two D-18 creates rules it sits beside', () => {
   const noCreates = validateCompiledWorkItemSet(
     [fixture({ creates: undefined, verification_artifact: undefined })],
     () => true,

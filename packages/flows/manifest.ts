@@ -5,7 +5,7 @@
  * Manifests live as markdown files with YAML frontmatter under
  * `_queue/{pending,in-flight,...}/<initiative-id>.md`.
  *
- * Per ADR 007 (markdown artifacts) and ADR 011 (file-based queue).
+ * Per SPEC §3 (markdown artifacts) and D-04 (file-based queue).
  */
 
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
@@ -35,7 +35,7 @@ import type { InitiativeOrigin, InitiativeManifest, ManifestPhase } from '@forge
 
 const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed', 'triggered'];
 /**
- * ADR 051's four change classes as a runtime list — the same relationship
+ * D-34's four change classes as a runtime list — the same relationship
  * `INITIATIVE_ORIGINS` above has to `InitiativeOrigin`: the TYPE is the SSOT in
  * `@forge/contracts`, this is the value a validator can iterate. Exported
  * because `@forge/factory`'s class -> gate-profile table is keyed by it and a
@@ -110,7 +110,7 @@ export function parseManifest(content: string): InitiativeManifest {
   // the boundary rather than silently coercing).
   const rawOrigin = stringField(data, 'origin', false);
   const origin = (rawOrigin ? rawOrigin : DEFAULT_ORIGIN) as InitiativeOrigin;
-  // ADR 051. `class` follows `origin`'s convention exactly: preserved verbatim
+  // D-34. `class` follows `origin`'s convention exactly: preserved verbatim
   // here and rejected by validateManifest, so the boundary fails fast on a
   // typo rather than coercing it. There is no default — a manifest that omits
   // it is missing a required field, not an implicit `code` initiative.
@@ -211,7 +211,7 @@ export function serializeManifest(m: InitiativeManifest): string {
     // legacy manifest gains the explicit tag — the cohort split must be
     // unambiguous on disk, not inferred at read time forever.
     origin: m.origin ?? DEFAULT_ORIGIN,
-    // ADR 051: both round-trip unconditionally. A field the writer drops is a
+    // D-34: both round-trip unconditionally. A field the writer drops is a
     // field the next reader cannot enforce, and every write path spreads the
     // parsed manifest back through here.
     class: m.class,
@@ -289,7 +289,7 @@ export function validateManifest(m: InitiativeManifest): string[] {
   if (!INITIATIVE_ORIGINS.includes(m.origin)) {
     errors.push(`origin must be one of ${INITIATIVE_ORIGINS.join(' | ')}: got ${String(m.origin)}`);
   }
-  // ADR 051: the class selects the gate profile the work is judged by, so an
+  // D-34: the class selects the gate profile the work is judged by, so an
   // unknown one is an error at the boundary, never a fall-through to `code`.
   if (!CHANGE_CLASSES.includes(m.class)) {
     errors.push(`class must be one of ${CHANGE_CLASSES.join(' | ')}: got ${String(m.class)}`);
@@ -385,7 +385,7 @@ export function readManifestOrigin(manifestPath: string): InitiativeOrigin {
 }
 
 /**
- * ADR 026: best-effort read of the manifest's persisted `cycle_id`. Returns
+ * D-20: best-effort read of the manifest's persisted `cycle_id`. Returns
  * `null` when the file is missing/unparseable (dry-runs, fixtures) or no id has
  * been persisted yet (legacy manifest). Never throws — lineage threading must
  * not break a cycle.
@@ -400,7 +400,7 @@ export function readManifestCycleId(manifestPath: string): string | null {
 }
 
 /**
- * ADR 028 / J5: best-effort read of the manifest's `flow_id` — the Studio flow
+ * SPEC §2 / J5: best-effort read of the manifest's `flow_id` — the Studio flow
  * the cycle should run. Returns `null` when absent/unparseable. Never throws
  * (the parse must not crash the caller) — but post-S8/DEC-3 a `null` flow_id is a
  * terminal error in runCycle (the forge-cycle default was retired; there is no
@@ -480,7 +480,7 @@ export function mintAndPersistManifestCycleId(manifestPath: string, initiativeId
 }
 
 /**
- * ADR 026: persist `cycle_id` onto the manifest's frontmatter the first time an
+ * D-20: persist `cycle_id` onto the manifest's frontmatter the first time an
  * initiative is claimed, so every later re-entry reuses the same `_logs` dir.
  * Idempotent + best-effort: if the manifest already carries a `cycle_id` (or is
  * missing/unparseable) this is a no-op and never throws. Round-trips through
@@ -546,7 +546,7 @@ export function persistManifestSpecs(manifestPath: string, specs: string[]): voi
 }
 
 /**
- * ADR 019 (successor develop flow, R4-10-F6): stamp `resume_from: integrate` on the
+ * D-06 (successor develop flow, R4-10-F6): stamp `resume_from: integrate` on the
  * manifest when a cycle has every WI `complete` but the post-develop band has not
  * yet finished, so that if the daemon CRASHES the recovery sweep can move the
  * manifest to pending and the scheduler resumes it correctly (reuse the worktree,
@@ -582,7 +582,7 @@ export function persistManifestResumeFromIntegrate(manifestPath: string): void {
  * those bands already wrote to the preserved worktree, never re-derive them.
  * Narrower than `persistManifestResumeFromIntegrate` above, which re-enters
  * the whole post-develop band (integrate → adversarial-review → review) — the
- * ADR 019 amendment this function implements exists precisely because that is
+ * D-06 amendment this function implements exists precisely because that is
  * wasted, already-done work when the failure is known to be AT PR-open.
  * Idempotent + best-effort, same contract as its sibling above.
  */
@@ -598,7 +598,7 @@ export function persistManifestResumeFromPrOpen(manifestPath: string): void {
 }
 
 /**
- * ADR 040: stamp `resume_from: 'develop'` and increment `review_rounds`
+ * D-20: stamp `resume_from: 'develop'` and increment `review_rounds`
  * (absent ⇒ 1) in a single read-modify-write, invoked by the review verdict
  * handler each time review feedback compiles into fix work-items and the
  * cycle re-dispatches the develop agent. The CALLER holds the manifest's
@@ -625,7 +625,7 @@ export function persistManifestSendBack(manifestPath: string): { round: number }
 // ---------- helpers ----------
 
 /**
- * ADR 051 — the typed `acceptance_criteria` reader. A malformed entry is an
+ * SPEC §3 — the typed `acceptance_criteria` reader. A malformed entry is an
  * ERROR NAMING ITS INDEX, never a silent absence: the shape this replaces
  * (prose recovered by regex) dropped whatever it failed to match, and a
  * criterion nobody parsed is a criterion the review agent cannot return a

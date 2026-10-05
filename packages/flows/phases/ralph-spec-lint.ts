@@ -307,7 +307,7 @@ export type RalphSpecLintResult = {
  *   diff-touch backstop enforces delivery)
  * - the corpus search was truncated, or the corpus carries dynamically-named
  *   tests (`.each`) → WARNING (the lint cannot prove vacuousness)
- * - otherwise → hard failure (vacuous-pass risk, ADR 037)
+ * - otherwise → hard failure (vacuous-pass risk, D-17)
  * Empty/whitespace gates and syntactically invalid selector regexes are hard
  * failures regardless (provable without any search). Unrecognised runners
  * pass through silently.
@@ -364,7 +364,7 @@ export function ralphSpecLintWorkItems(
       flagged++;
       errors.push(
         `${item.work_item_id}: quality_gate_cmd is empty/whitespace — the gate must be a real runnable ` +
-          `command whose exit code is the verdict (ADR 037)`,
+          `command whose exit code is the verdict (D-17)`,
       );
       continue;
     }
@@ -453,7 +453,7 @@ export function ralphSpecLintWorkItems(
     errors.push(
       `${item.work_item_id}: quality_gate_cmd [${cmdText}] names test '${selector}' that neither exists nor is ` +
         `created by this WI — vacuous pass risk (a non-matching ${extractor.name} selector exits 0 with no tests ` +
-        `run), ADR 037. Fix: add the test's file to creates: (write-first protocol), or point the gate at an ` +
+        `run), D-17. Fix: add the test's file to creates: (write-first protocol), or point the gate at an ` +
         `existing test.`,
     );
   }

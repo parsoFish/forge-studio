@@ -1,7 +1,7 @@
 /**
  * Row 167 (bead forge-8vfn.8.1.61, T1 ruling 1916) — a resume that RE-ENTERS
- * the develop flow (`resumeFrom: 'integrate'` ADR 019, `'pr-open'` row 122,
- * `'develop'` ADR 040 fix loop) must rebase the preserved worktree onto
+ * the develop flow (`resumeFrom: 'integrate'` D-06, `'pr-open'` row 122,
+ * `'develop'` D-20 fix loop) must rebase the preserved worktree onto
  * current main ONCE, at re-entry, before the first node runs.
  *
  * Before this row's fix the rebase lived inside `execPm`

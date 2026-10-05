@@ -1,5 +1,5 @@
 /**
- * Tests for claim-time validation (ADR-028 §8, M3-6).
+ * Tests for claim-time validation (SPEC §2, M3-6).
  *
  * Covers:
  *   A. validateClaimable — contract-ready + valid flow → ok
@@ -124,7 +124,7 @@ function setupContractReadyProject(dir: string): void {
   // The preflight C2 check runs git commands; if not a repo, it does text-scan.
   writeFileSync(join(dir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
   // C4: roadmap.md stays in the project repo; Brain 3 is forge-owned + CENTRAL
-  // (ADR 035) at <forgeRoot>/brain/projects/<name>/. The project dir is
+  // (SPEC §4) at <forgeRoot>/brain/projects/<name>/. The project dir is
   // <forgeRoot>/projects/<name>, so the central brain is two levels up.
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   const name = dir.split('/').pop()!;
@@ -659,7 +659,7 @@ test('FORGE_SKIP_CONTRACT_CHECK unset: contract refusal fires as before', () => 
 });
 
 // ---------------------------------------------------------------------------
-// K. Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead
+// K. Seam F6 half 1 (D-34, spec §5 item 8, bead
 //    forge-8vfn.6.10.15): the SAME `flowAcceptsClass` predicate `enqueueFlowRun`
 //    uses, checked again at claim time — the authoritative gate every claim
 //    converges on regardless of which door (or none) queued the initiative.

@@ -13,7 +13,7 @@ import { PHASE_EXECUTOR_KINDS } from '@forge/agents';
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
-  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); ADR-039 declared dispatch: a band guard (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
+  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); SPEC §1 declared dispatch: a band guard (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
   | 'unknown';    // defensive fallback — no def, or an invalid declared executor
 
 /**
@@ -23,7 +23,7 @@ export type NodeKind =
  *
  * `contract: 'agent'` (R4-18; the OOTB onboard flow wrapper was retired in
  * W7-C1 — this stays authorable vocabulary): an onboard-shaped flow's
- * `contract-check` node carries BOTH `gate:'contract'` and `agent:'contract-check'` (ADR-039
+ * `contract-check` node carries BOTH `gate:'contract'` and `agent:'contract-check'` (SPEC §1
  * declared dispatch — no privileged executor enum). Mapping the gate id to
  * the ordinary `'agent'` kind does two things at once: it declares `contract`
  * as known gate vocabulary (so `resolveNodeKind` never falls through to

@@ -1,7 +1,7 @@
 /**
  * §7.1 release-definition gap — "every extension seam is a registry with a
  * conformance test". `TriggerKindId`'s registry is `TRIGGER_KINDS`
- * (`packages/contracts/index.ts`, ADR-041). Until this file, its only test
+ * (`packages/contracts/index.ts`, D-23). Until this file, its only test
  * was a studio UI mirror-parity test (`apps/studio/tests/contract/trigger-kind-parity.test.ts`)
  * — nothing proved the SERVER side actually wires each row to a real runtime
  * path. This file does, for EVERY row, DERIVED from the table itself (never
@@ -16,7 +16,7 @@
  *      `fireAgentCompleteTriggers` (agent-complete), `syncCronTriggers`
  *      (cron), or the real `/api/hooks/:hookId` receiver `handleHookRoutes`
  *      (webhook/pr-merged/issue-raised) — driven end to end, not mocked;
- *   3. a `reserved` kind is REJECTED by validation with the ADR-041
+ *   3. a `reserved` kind is REJECTED by validation with the D-23
  *      `trigger-kind-reserved` error code (no runtime stub);
  *   4. none of the four runtime mechanisms above dispatches a kind id that
  *      is not in the table at all (a bogus `on:` value reaches none of them).
@@ -183,7 +183,7 @@ for (const row of TRIGGER_KINDS.filter((k) => k.status === 'shipped')) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. DERIVED expectation: every `reserved` row is rejected with the ADR-041
+// 2. DERIVED expectation: every `reserved` row is rejected with the D-23
 //    error code, and ONLY that code (the id itself is a known registry
 //    member, so `trigger-kind` must NOT also fire).
 // ---------------------------------------------------------------------------

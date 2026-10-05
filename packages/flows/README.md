@@ -70,7 +70,7 @@ finding, not silently papered over here.**
 
 ## Crash and recovery
 
-State lives in `_queue/` as directories, not rows (ADR 011). `claim()` renames
+State lives in `_queue/` as directories, not rows (D-04). `claim()` renames
 a manifest `pending → in-flight` with one `renameSync` — atomic, "the entire
 claim mechanism" (`queue.ts:17-18,134-145`) — and drops a `.heartbeat`
 sidecar (`writeHeartbeat`, `queue.ts:204-207`, a plain `writeFileSync`; only
@@ -97,7 +97,7 @@ is `complete` but the post-develop band hasn't finished, it stamps
 `resume_from: integrate` on the manifest *before* a crash can happen, so the
 recovery sweep's rename-to-`pending` plus that pre-set marker resumes at
 `integrate` rather than re-running PM + the whole dev-loop. `resume_from`
-(ADR 019, `manifest.ts:161-167`) also takes `plan | develop | pr-open`;
+(D-06, `manifest.ts:161-167`) also takes `plan | develop | pr-open`;
 `inferRequeueResume` (`requeue-resume.ts`) derives it from the prior
 `failure_classification` event when a WI died mid-cycle instead, and
 `rebaseForResume` (`cycle-helpers.ts:80-103`) rebases the preserved branch

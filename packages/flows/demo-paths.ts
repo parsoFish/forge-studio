@@ -27,7 +27,7 @@ import { join, resolve } from 'node:path';
 
 import { readArtifactRoot } from '@forge/knowledge';
 
-/** Canonical basename of the structured demo the unifier authors (ADR 021). */
+/** Canonical basename of the structured demo the unifier authors (D-07). */
 export const DEMO_JSON_BASENAME = 'demo.json';
 
 /** Canonical basename of the derived PR-facing markdown (F4: the single demo output). */

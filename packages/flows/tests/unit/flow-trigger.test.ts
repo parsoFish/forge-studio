@@ -77,7 +77,7 @@ test('onFire observability hook runs before each dispatch', async () => {
   assert.deepEqual(seen, ['fire:retro-flow', 'dispatch:retro-flow']);
 });
 
-test('ADR-041 registry: nine kinds, reserved rows have no runtime, merged is an OOTB row', () => {
+test('D-23 registry: nine kinds, reserved rows have no runtime, merged is an OOTB row', () => {
   // T1 ruling (R2-08-F2 pin review, reapplied for R2-08-F3): this exact-array
   // assertion pins the CURRENT full kind enumeration. T1 explicitly ruled that
   // the T3 test-writer amends this ONE pre-existing test itself (the
@@ -113,7 +113,7 @@ test('(RED) [F3 #1] pr-merged and issue-raised TRIGGER_KINDS rows are shipped, o
     assert.equal(
       row!.status,
       'shipped',
-      `expected "${id}"'s status to be "shipped" (ADR-027's R2-08-F3: project-event kinds over the existing webhook receiver) — got "${row!.status}"`,
+      `expected "${id}"'s status to be "shipped" (D-10's R2-08-F3: project-event kinds over the existing webhook receiver) — got "${row!.status}"`,
     );
     assert.equal(
       row!.origin,
@@ -136,7 +136,7 @@ test('(RED) [F2 #10] agent-complete TRIGGER_KINDS row is shipped, not reserved',
   assert.equal(
     row!.status,
     'shipped',
-    `expected agent-complete's status to be "shipped" (ADR-027's R2-08 amendment: "agent-complete (R2-08-F2) likewise flips status: reserved → shipped") — got "${row!.status}"`,
+    `expected agent-complete's status to be "shipped" (D-10's R2-08 amendment: "agent-complete (R2-08-F2) likewise flips status: reserved → shipped") — got "${row!.status}"`,
   );
 });
 

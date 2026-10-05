@@ -41,7 +41,7 @@ The same rule produced the injection in `apps/forge/routes.ts`:
 contributes route factories (`handleHookRoutes`, `handleRecoveryRoutes`,
 `handleStudioPostRoutes`) rather than a router it owns.
 
-## ADR 028 — the flow IS the ordered path of stations
+## The flow IS the ordered path of stations
 
 A flow is data: nodes, edges, kickoff, triggers. `packages/flows/studio/flow-registry.ts`
 loads and serializes it, `packages/flows/studio/validate-triggers.ts` checks its trigger

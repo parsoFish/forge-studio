@@ -2,7 +2,7 @@
  * flow-fanout.ts — the fan-out predicate, shared by the authoring lint and the
  * flow engine's runtime enforcement.
  *
- * ADR 028 §1: a `fanOut` node resolves its multiplicity at runtime from a named
+ * SPEC §2: a `fanOut` node resolves its multiplicity at runtime from a named
  * upstream artifact, so a node declaring `fanOut` must have at least one
  * inbound edge whose `artifact` matches the declaration. A node with zero
  * inbound edges (a flow's entry node) can never satisfy that, so `fanOut` on an

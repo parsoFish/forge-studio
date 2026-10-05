@@ -632,7 +632,7 @@ test('P4: runCycle emits architect end event without cost/duration for legacy ma
   }
 });
 
-// ADR 021: snapshotCycleArtefacts mirrors the tracked demo bundle + the
+// D-07: snapshotCycleArtefacts mirrors the tracked demo bundle + the
 // architect PLAN.html into _logs/<cycleId>/artifacts/ so the bridge can serve
 // them to the in-UI review screen.
 test('snapshotCycleArtefacts: mirrors demo.json + DEMO.html + PLAN.html into _logs/<cycleId>/artifacts', async () => {

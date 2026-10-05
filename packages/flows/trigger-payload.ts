@@ -1,5 +1,5 @@
 /**
- * R2-04-F3 (ADR-041) — typed trigger payloads: external content as DATA, never
+ * R2-04-F3 (D-23) — typed trigger payloads: external content as DATA, never
  * prompt text.
  *
  * External payloads (webhook bodies; later, feed items) enter forge as this
@@ -49,7 +49,7 @@ export type WebhookReleasePayload = {
 };
 
 /**
- * R2-08-F3 (ADR-027 amendment) — a GitHub pull request was merged. GitHub
+ * R2-08-F3 (D-10 amendment) — a GitHub pull request was merged. GitHub
  * only (`provider` is a literal, not the three-provider union the other
  * webhook payloads share) — gitlab/gitea stay schema-reserved with zero
  * stubs; there is no grounded payload shape for them yet.
@@ -72,7 +72,7 @@ export type WebhookPullRequestPayload = {
 };
 
 /**
- * R2-08-F3 (ADR-027 amendment) — a GitHub issue was opened. GitHub only, same
+ * R2-08-F3 (D-10 amendment) — a GitHub issue was opened. GitHub only, same
  * rationale as {@link WebhookPullRequestPayload}.
  */
 export type WebhookIssuePayload = {

@@ -1,5 +1,5 @@
 /**
- * flow-budgets.ts — Runner-level budget enforcement (ADR-028 decision 4, M3-3).
+ * flow-budgets.ts — Runner-level budget enforcement (SPEC §2, M3-3).
  *
  * Three classes, each a single concern:
  *   CostTracker    — accumulates cost_usd from events; warns at 70%, stops at 100%

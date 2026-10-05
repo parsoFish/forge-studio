@@ -5,7 +5,7 @@
  * `data-demo-region` sections and persists them as a JSON sidecar; the verdict
  * (approve / send-back) is DERIVED over those comments — any blocking, unresolved
  * comment ⇒ send-back, mapping each concern to a GIVEN/WHEN/THEN acceptance
- * criterion the existing /api/verdict drain consumes (ADR-026). No DB.
+ * criterion the existing /api/verdict drain consumes (D-20). No DB.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

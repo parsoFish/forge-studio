@@ -215,7 +215,7 @@ export type PruneStaleWiWorktreesResult = {
  *
  * A mid-fan-out crash (or an operator `forge requeue`) can leave per-WI
  * worktrees/branches behind for an initiative: the cycle-level preserve
- * logic (`scheduler.ts`, ADR-019) protects only the CYCLE worktree.
+ * logic (`scheduler.ts`, D-06) protects only the CYCLE worktree.
  * Per-WI worktrees are pure scratch — merged WI work already lives on the
  * cycle branch after merge-back, and any UNMERGED work from a crashed
  * attempt is simply re-run by the next attempt's own dev-loop dispatch —

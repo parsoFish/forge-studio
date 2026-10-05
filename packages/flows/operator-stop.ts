@@ -1,16 +1,16 @@
 /**
  * operator-stop.ts — the non-destructive `stop-run` signal (bead
- * forge-8vfn.8.1.39, rulings 1771 + 1774; ADR 028 amendment "operator stop is
+ * forge-8vfn.8.1.39, rulings 1771 + 1774; D-11 amendment "operator stop is
  * a second trigger on the clean-boundary halt").
  *
  * WHY A FILE, NOT A LIVE HANDLE. The bridge and the daemon (`forge serve`)
- * are separate OS processes (ADR 011) and there is no cycle registry the
+ * are separate OS processes (D-04) and there is no cycle registry the
  * bridge can reach into — ruling 1774 rejected building one (that is the
- * process-isolator ADRs 011-013 forbid). The cost ceiling already halts a
+ * process isolator R-03 rules out). The cost ceiling already halts a
  * running cycle at a clean boundary via a value the runner polls
  * (`CostTracker`, flow-budgets.ts); an operator stop reuses exactly that
  * shape as a SECOND trigger on the same halt, via a flag FILE instead of an
- * in-memory counter — consistent with ADR 011's "the filesystem is the
+ * in-memory counter — consistent with D-04's "the filesystem is the
  * protocol": presence, not contents, is the signal, same as every other
  * flag file in this package.
  *

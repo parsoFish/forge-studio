@@ -105,7 +105,7 @@ export function enqueuePlanRun(
     return { status: 'already-running', initiativeId, detail: 'a cycle is already in-flight' };
   }
   // A develop cycle parked in ready-for-review is awaiting the review gate (or
-  // the ADR-026 drain owns it) — don't plan over it. A NON-develop manifest in
+  // the D-20 drain owns it) — don't plan over it. A NON-develop manifest in
   // ready-for-review is the forge-architect hand-off state: that's still
   // plannable (falls through), matching enqueueDevelopRun's inverse check.
   const reviewParkedPath = join(paths.readyForReview, file);

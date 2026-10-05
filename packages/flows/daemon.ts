@@ -3,7 +3,7 @@
  * spawns one detached (apps/forge/serve-supervisor.ts), so the operator's
  * shell can come and go without stranding an in-flight initiative.
  *
- * State lives on disk (consistent with the file-based queue, ADR 011):
+ * State lives on disk (consistent with the file-based queue, D-04):
  *   _logs/daemon/forge.pid   — pid of the detached `forge serve`
  *   _logs/daemon/serve.log   — its stdout/stderr
  *   _logs/daemon/stopping    — the pid a stop was SIGNALLED to (W7-FIX-A3):

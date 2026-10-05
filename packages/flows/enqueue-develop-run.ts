@@ -3,7 +3,7 @@
  *
  * The architect flow (forge-architect) decomposes an initiative into work items;
  * the operator then presses "start development" on the roadmap. Since R2-04-F1
- * (ADR-041) this module is a thin delegate over the generic per-flow claimable
+ * (D-23) this module is a thin delegate over the generic per-flow claimable
  * enqueue (`enqueue-flow-run.ts`) with the target pinned to `forge-develop` —
  * it keeps its own result vocabulary (`already-developing`) for its existing
  * callers (`POST /api/develop/start`, the trigger drain, tests).
@@ -27,7 +27,7 @@ export type EnqueueDevelopStatus =
    *  shipped initiative is never re-run from an operator action. */
   | 'already-done'
   | 'not-planned'
-  /** Seam F6 half 1 (ADR 051 decision 4): forge-develop does not declare
+  /** Seam F6 half 1 (D-34): forge-develop does not declare
    *  the manifest's `class` in its `accepts` list. */
   | 'class-mismatch'
   | 'error';

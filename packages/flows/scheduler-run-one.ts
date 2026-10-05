@@ -254,7 +254,7 @@ export async function runOne(
     // already preserved here (S9/DEC-3 hand-off) — forge-8vfn.8.5.18.
     const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
 
-    // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
+    // SPEC §2 (M3-6): claim-time validation — refuse before worktree/cycle.
     // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
     // a manifest with no flow_id is refused by validateClaimable.
     const claimCheck = validateClaimable(
@@ -299,17 +299,17 @@ export async function runOne(
       }
     }
 
-    // Record the flow version at claim time (edit-lock seam, ADR-028 §6/M3-6).
+    // Record the flow version at claim time (edit-lock seam, SPEC §2).
     // If the on-disk flow version changes mid-run the runner warns (M4 will enforce).
     annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion), claim_blocked_clauses: '' });
 
     const branch = `forge/${manifest.initiativeId}`;
-    // ADR 019 + S9: reuse a PRESERVED worktree rather than `worktree.add`, which
+    // D-06 + S9: reuse a PRESERVED worktree rather than `worktree.add`, which
     // self-heals by rm-rf'ing the path — wiping the gitignored `.forge/work-items/`
     // + `.forge/unifier-items/` + per-WI commits that live untracked there. Two
     // cases need the preserved tree:
-    //   - a resume marker: 'integrate' crash recovery (ADR-019) or 'develop'
-    //     fix-loop re-entry (ADR-040) — both run against the per-WI commits.
+    //   - a resume marker: 'integrate' crash recovery (D-06) or 'develop'
+    //     fix-loop re-entry (D-20) — both run against the per-WI commits.
     //   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle parked
     //     at ready-for-review with pm's `.forge/work-items/`; the develop run's
     //     dev node consumes them. `resume_from` is cleared on the hand-off, so this
@@ -412,7 +412,7 @@ export async function runOne(
     // the SAME initiative — a mid-fan-out crash, or an operator `forge
     // requeue` (which only ever preserves/wipes the CYCLE worktree; it has
     // no notion of per-WI scratch). Per-WI worktrees are pure scratch
-    // (ADR-019 preserves only the cycle worktree), so it is always safe to
+    // (D-06 preserves only the cycle worktree), so it is always safe to
     // sweep them here, before any WI has been dispatched for this fresh
     // attempt — regardless of whether `strategy` above was 'reuse' or
     // 'add'. `createWiWorktree`'s own per-call self-heal (wi-worktree.ts)
@@ -435,12 +435,12 @@ export async function runOne(
       projectRepoPath: manifest.projectRepoPath,
       worktreePath: wtHandle.path,
       logsRoot,
-      // ADR 019: thread the resume marker into the cycle so it skips PM +
+      // D-06: thread the resume marker into the cycle so it skips PM +
       // per-WI dev-loop and runs only the unifier + downstream phases.
       resumeFrom: manifest.resumeFrom,
       eventTee: tee,
       // No verdict provider is threaded in: the review verdict arrives
-      // out-of-band as a UI action. ADR 026: a send-back appends UWIs the drain
+      // out-of-band as a UI action. D-20: a send-back appends UWIs the drain
       // runs in place; the cycle never blocks waiting on an operator. The
       // review phase opens the PR and stops at ready-for-review.
     }, wiring);
@@ -589,16 +589,16 @@ type ParsedManifest = {
   initiativeId: string;
   project: string;
   projectRepoPath: string;
-  /** ADR 051's manifest `class` — checked against the resolved flow's
+  /** D-34's manifest `class` — checked against the resolved flow's
    *  `accepts` list at claim time (seam F6 half 1, spec §5 item 8). */
   changeClass: InitiativeManifest['class'];
   /** The Studio flow this manifest runs under (S8/DEC-3 — required; no default). */
   flowId?: string;
   /**
-   * ADR 019 (successor develop flow, R4-10-F6) / ADR 040: resume the cycle
+   * D-06 (successor develop flow, R4-10-F6) / D-20: resume the cycle
    * against the preserved worktree — 'integrate' skips PM + the per-WI dev-loop and
    * re-enters at the post-develop `integrate` node (WI commits already present);
-   * 'develop' (ADR 040 send-back re-entry) rebase-skips PM and RUNS the dev loop.
+   * 'develop' (D-20 send-back re-entry) rebase-skips PM and RUNS the dev loop.
    * 'plan' (row 157) rebases and STILL RUNS PM — it is the phase that failed.
    * 'pr-open' (row 122) skips PM, the dev-loop AND the whole post-develop band
    * (integrate, adversarial-review) — only the review node re-runs.
@@ -640,7 +640,7 @@ export function annotateManifest(path: string, fields: Record<string, string>): 
 }
 
 /**
- * ADR-028 §8 (M3-6) + bead forge-8vfn.8.1.8: append an event to the
+ * SPEC §2 (M3-6) + bead forge-8vfn.8.1.8: append an event to the
  * initiative's JSONL log. Best-effort — the cycle logger isn't open yet at
  * either call site. Missing dir is created on the fly. `logsRoot` (forge-8vfn.8.1.10) is ALREADY the `_logs` root.
  */

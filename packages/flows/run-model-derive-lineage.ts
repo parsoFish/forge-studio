@@ -52,7 +52,7 @@ export function deriveArtifacts(
   }
 
   // verdict: the cycle's own artifacts/verdict.json — the durable artifact
-  // `writeVerdictJson` writes on every operator approve/send-back (ADR-027)
+  // `writeVerdictJson` writes on every operator approve/send-back (D-09)
   // and the file the /artifact viewer itself renders. W7-B7 (artifact-plan-11):
   // this used to be detected ONLY via `<initiativeId>.verdict-response.md` in
   // a queue dir — a file nothing writes any more — so the verdict trail chip
@@ -61,7 +61,7 @@ export function deriveArtifacts(
     artifacts['verdict'] = 'view';
   } else {
     // Legacy fallback: <initiativeId>.verdict-response.md in any queue dir
-    // (walk up) so frozen pre-ADR-027 logs still resolve.
+    // (walk up) so frozen pre-D-09 logs still resolve.
     // R4-11-F1: `merged` included — a confirmed-merge manifest sits there
     // briefly between closure's two terminal moves (→merged, then merged→done
     // in the same sweep), and the verdict response written at approval time

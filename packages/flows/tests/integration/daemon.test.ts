@@ -98,7 +98,7 @@ test('reapStalePidFile keeps a pid file whose process is alive', () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-// ---------- spawnServeDetached (M7-5 / ADR-031) ----------
+// ---------- spawnServeDetached (M7-5 / D-12) ----------
 
 test('spawnServeDetached: returns null when a live daemon is already running', () => {
   const root = tmpForge();

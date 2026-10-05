@@ -1,5 +1,5 @@
 /**
- * R2-04 (ADR-041) — mint a fresh initiative for a cron/webhook-originated
+ * R2-04 (D-23) — mint a fresh initiative for a cron/webhook-originated
  * flow-run request (no source initiative to repoint).
  *
  * The target flow's `project` binding supplies the project; lint requires it
@@ -53,7 +53,7 @@ function idToken(s: string): string {
 }
 
 /**
- * R2-08-F4 (ADR-027 amendment; round-2 correction): derive the
+ * R2-08-F4 (D-10 amendment; round-2 correction): derive the
  * trigger-provenance fields to persist on the minted manifest, from the
  * staged request alone — never from `req.payload` (free-text/external data;
  * the attacker-payload acceptance test pins that `trigger` never carries
@@ -88,7 +88,7 @@ function idToken(s: string): string {
  * kinds (`webhook`, `pr-merged`, `issue-raised` all share the
  * signature-verified `/api/hooks/:hookId` receiver — R2-08-F3). Reading
  * `req.origin` directly here would collapse all three onto the single
- * reported value `'webhook'`, contradicting ADR-027's "kind: the registry
+ * reported value `'webhook'`, contradicting D-09's "kind: the registry
  * id, the declaration that fired" contract. `cron`/`agent-complete` origins
  * stay unambiguously 1:1 with their registry kind (there is no `on: cron`
  * sub-vocabulary), so their real callers never need to set `triggerKind` —
@@ -141,7 +141,7 @@ export function mintTriggeredInitiative(
       return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook/trigger-agent-complete)` };
     }
 
-    // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): a triggered
+    // Seam F6 half 1 (D-34, spec §5 item 8): a triggered
     // initiative has no architect turn to set its class, so it is DERIVED
     // from the target flow's own declaration — the flow knows what kind of
     // work it runs, this call site does not guess. Exactly one accepted
@@ -228,7 +228,7 @@ export function mintTriggeredInitiative(
       created_at: now.toISOString(),
       iteration_budget: budgets.defaultIterationBudget,
       cost_budget_usd: budgets.defaultCostBudgetUsd,
-      // ADR 051 / seam F6 half 1 (spec §5 item 8): the target flow's declared
+      // D-34 / seam F6 half 1 (spec §5 item 8): the target flow's declared
       // class (or its firing trigger's, when the flow accepts more than
       // one) — resolved above, never a hardcoded guess.
       class: mintedClass,
@@ -252,7 +252,7 @@ export function mintTriggeredInitiative(
         '',
         `Originated by an external trigger (${req.origin}: ${req.triggeredBy}) targeting flow \`${flowId}\`.`,
         'The typed trigger payload is persisted as the `trigger-payload` artifact in the cycle log',
-        '(data, never prompt text — ADR-041).',
+        '(data, never prompt text — D-23).',
       ].join('\n'),
     };
     // SEC-03 (Defect 3): route through the single write choke point

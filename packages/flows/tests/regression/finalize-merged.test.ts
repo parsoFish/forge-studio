@@ -264,7 +264,7 @@ test('finalize: [forge-f9g] an out-of-scope on:merged trigger does NOT fire refl
   }
 });
 
-test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 026 lineage)', async () => {
+test('finalize: threads the manifest-persisted cycle_id into finalizeOne (D-20 lineage)', async () => {
   const { root, queueRoot } = setup();
   try {
     const wt = join(root, 'projects', 'demo', 'wt');
@@ -328,7 +328,7 @@ test('finalize: merged with pending fix work-items still finalizes, but surfaces
     const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-merged-pending';
-    // A post-send-back worktree (ADR 040): a review-fix work item compiled by
+    // A post-send-back worktree (D-20): a review-fix work item compiled by
     // the send-back loop onto the initiative's own `.forge/work-items/`
     // queue, still `pending` when the operator merged anyway.
     const fixWi: WorkItem = {

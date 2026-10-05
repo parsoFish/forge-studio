@@ -582,7 +582,7 @@ test('deriveStopOnBudget: negative control — an ordinary terminal PM hidden-co
 // W8-A2 (ON-7) — a terminal state must not name a phase that no longer exists.
 //
 // `findFailure` defaulted an unattributable failure to `failedAt: 'unifier'`.
-// The unifier node was RETIRED from the live flow by R4-01-F4 (ADR-039/040);
+// The unifier node was RETIRED from the live flow by R4-01-F4 (SPEC §1 / D-20);
 // `studio/flows/forge-develop/flow.yaml` mentions it only in a comment
 // explaining that it is gone. So an unattributable failure pointed the
 // operator at a node that exists in no flow — the monitor silently draws no

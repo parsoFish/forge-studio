@@ -128,7 +128,7 @@ test('empty queue → drain returns []', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ADR-041 §2 concurrency: origination requests are skipped when a prior
+// D-23 concurrency: origination requests are skipped when a prior
 // `origin: 'triggered'` run of the SAME target flow is still active.
 // ---------------------------------------------------------------------------
 

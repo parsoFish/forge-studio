@@ -108,7 +108,7 @@ export async function openPrInline(
     // dev-loop + integrate + adversarial-review bands already succeeded, and
     // the failure is `openPullRequest` itself (push / gh), not a missing
     // artefact. When the cause matches the environment/DNS/transient-network
-    // signatures PR #946 taught the classifier, stamp the dedicated ADR-019
+    // signatures PR #946 taught the classifier, stamp the dedicated D-06
     // `pr-open` resume marker BEFORE throwing: a resume must reuse the
     // preserved worktree and re-enter at THIS node only — skipping PM, the
     // per-WI dev-loop AND the whole post-develop band (integrate,

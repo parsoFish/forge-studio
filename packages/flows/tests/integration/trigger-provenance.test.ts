@@ -1,7 +1,7 @@
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F4) — trigger provenance on the run model.
  *
- * Pins the contract (docs/decisions/027-studio-object-model.md "Run-model
+ * Pins the contract ("Run-model
  * trigger provenance (R2-08-F4) is derived, not stored" +
  * docs/roadmaps/archive/R2-runnable-componentry.md R2-08-F4):
  *
@@ -680,7 +680,7 @@ test('a manifest with origin: "triggered" is reported as origin "triggered", not
 // ---------------------------------------------------------------------------
 // Mirrors packages/flows/tests/integration/trigger-harness-guard.test.ts's "COMPLETE effect set"
 // pattern. Kills any implementation that persists a NEW cached/materialized
-// trigger record to disk (violating "no new stored run object" — ADR-027).
+// trigger record to disk (violating "no new stored run object" — D-09).
 
 test('reading a triggered run\'s trigger provenance (aggregateRun + listRuns) writes NO new file anywhere under root', () => {
   const root = makeTmp();

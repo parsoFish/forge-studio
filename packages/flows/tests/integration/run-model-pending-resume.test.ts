@@ -117,7 +117,7 @@ test('aggregateRun: triggered pending manifest (mint-time cycle_id, no log) is s
   try {
     const initId = 'INIT-2026-01-01-triggered-not-yet-claimed';
     const cycleId = '2026-01-01T00-00-00_INIT-2026-01-01-triggered-not-yet-claimed';
-    // ADR 026 (`mint-triggered-initiative.ts`'s `mintAndPersistManifestCycleId`)
+    // D-20 (`mint-triggered-initiative.ts`'s `mintAndPersistManifestCycleId`)
     // anchors a triggered initiative's cycle_id at MINT time, before the
     // scheduler ever claims it — no `_logs/<cycleId>/` exists yet. This must
     // stay indistinguishable, at the wire, from any other never-run planned

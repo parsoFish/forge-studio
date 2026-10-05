@@ -32,7 +32,7 @@ import { skillRoots } from '@forge/kernel';
 export const FALLBACK_FLOW_ID = 'unknown';
 /**
  * Canonicalization overrides applied on top of the derived mapping.
- * ADR-028 engine will own this table in M3.
+ * SPEC §2 engine will own this table in M3.
  *
  * - reflection → reflect (frontmatter phase is 'reflector', events emit 'reflection')
  * - review-loop/closure → review (gate-only node; no agent in flow.yaml)

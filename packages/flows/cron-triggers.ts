@@ -1,5 +1,5 @@
 /**
- * R2-04 (ADR-041) — cron triggers: the scheduler's temporal arm.
+ * R2-04 (D-23) — cron triggers: the scheduler's temporal arm.
  *
  * A flow declares `on: cron` triggers (`schedule` + `target`) in its
  * `flow.yaml`. This module is armed exclusively by the SCHEDULER — never the
@@ -82,7 +82,7 @@ type DeclaredCronTrigger = {
   concurrency: 'allow' | 'forbid' | 'replace';
   /** R2-08-F1: the trigger's own `projects:` declaration. Absent ⇒ unscoped. */
   projects?: string[];
-  /** Seam F6 half 1 (ADR 051 decision 4): the trigger's own `class:`
+  /** Seam F6 half 1 (D-34): the trigger's own `class:`
    *  declaration — threaded onto the staged request so a mint against a
    *  multi-class target flow can resolve its manifest class. */
   class?: string;

@@ -1,5 +1,5 @@
 /**
- * Unit tests for the orchestrator-owned capture primitives (ADR 036 / N1):
+ * Unit tests for the orchestrator-owned capture primitives (D-15 / N1):
  * child-process semantics against fake scripts (pass / fail / timeout /
  * output capture), the demo.json capture-trigger predicate, and the
  * commit-what-forge-produced step. Integration with the composed unifier gate

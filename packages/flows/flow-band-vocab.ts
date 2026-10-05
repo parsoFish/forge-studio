@@ -1,7 +1,7 @@
 /**
  * Real flow band vocabulary (R1-06 WI-1, T1 ruling Q8).
  *
- * Placed in `cli/` rather than `orchestrator/` — ADR-042 caps the surface
+ * Placed in `cli/` rather than `orchestrator/` — D-31 caps the surface
  * area of `orchestrator/`, and `cli/` routes are not capped; this is a small,
  * pure helper consumed by the KB-create bridge route and by `forge studio
  * lint`, neither of which is orchestrator hot-path code.
@@ -34,7 +34,7 @@ import { skillPath } from '@forge/agents';
  * `listFlowIds`/`studio-lint` register a flow by DIRECTORY NAME only, so a
  * not-yet-authored/corrupt `flow.yaml` still passes the ref-existence check —
  * yet widening the band vocab to everything let an operator attach
- * `review-band` (→ a reviewer brain-read grant, ADR-010) to a flow that has
+ * `review-band` (→ a reviewer brain-read grant, SPEC §4) to a flow that has
  * no review band at all. `studio-lint` shares this helper, so a fail-open
  * fallback was not independently backstopped anywhere.
  *

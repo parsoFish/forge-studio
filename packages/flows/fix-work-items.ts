@@ -1,5 +1,5 @@
 /**
- * Fix work-items — the send-back loop's compiler + queue predicates (ADR 040).
+ * Fix work-items — the send-back loop's compiler + queue predicates (D-20).
  *
  * A review send-back (and, later, R4-10's demo-miss / merge-gate loops) compiles
  * operator feedback into ORDINARY work items on the initiative's own
@@ -78,7 +78,7 @@ export function writeReviewCapExhaustedMarker(worktreePath: string, detail: stri
     worktreePath,
     ['.forge', REVIEW_CAP_EXHAUSTED_FILENAME],
     [
-      '# Review fix-loop cap exhausted (ADR 040)',
+      '# Review fix-loop cap exhausted (D-20)',
       '',
       detail.trim(),
       '',
@@ -183,7 +183,7 @@ export type CompileFixWorkItemsInput = {
   projectGateCmd: string[];
   /** Iteration budget stamped onto the compiled WI. */
   estimatedIterations: number;
-  /** Config-resolved caps (ADR 040 — `resolveReviewLoopCaps`). */
+  /** Config-resolved caps (D-20 — `resolveReviewLoopCaps`). */
   caps: FixLoopCaps;
   /** The round this compile belongs to (the verdict handler's `review_rounds + 1`). */
   currentRound: number;
@@ -223,7 +223,7 @@ export function fixWorkItems(worktreePath: string): WorkItem[] {
  * (not yet built) and `in-progress` (a crashed run mid-build — the re-entered
  * dev-loop re-runs it). `complete` are done; `failed` fix WIs are operator
  * territory (see {@link hasFailedFixWorkItem}) — never auto-retried.
- * The finalize/drain sweeps arbitrate on this predicate (ADR 040 mutex).
+ * The finalize/drain sweeps arbitrate on this predicate (D-20 mutex).
  */
 export function pendingFixWorkItems(worktreePath: string): WorkItem[] {
   const open = fixWorkItems(worktreePath).filter(
@@ -243,7 +243,7 @@ export function fixWorkItemCount(worktreePath: string): number {
 }
 
 /**
- * ADR 040 — compile one fix concern into a work item on the initiative's own
+ * D-20 — compile one fix concern into a work item on the initiative's own
  * queue. Validates everything BEFORE writing (a malformed payload throws and
  * never corrupts the queue), enforces both caps, appends `WI-<max+1>` with
  * `origin` set and `depends_on: []` (prior WIs are complete — satisfied roots).
@@ -358,7 +358,7 @@ function fixConcernBody(
   return [
     `# ${id} — ${origin} concern (${concernKind})`,
     '',
-    '> Compiled from a post-develop fix loop (ADR 040). Address it on the EXISTING',
+    '> Compiled from a post-develop fix loop (D-20). Address it on the EXISTING',
     '> branch — this is the SAME cycle, not a fresh one. Prior work items are',
     '> already complete; do NOT re-implement them.',
     '',

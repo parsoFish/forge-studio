@@ -2,7 +2,7 @@
  * A `PhaseWiring` for tests that never reach a phase.
  *
  * `runCycle` and `drainPendingFixWorkItems` require the installed factory's
- * wiring (ADR 048) — flows declares the ports and imports no factory. Most tests
+ * wiring (D-32) — flows declares the ports and imports no factory. Most tests
  * here inject `runDrainCycle` or stop before the flow walk, so the wiring is
  * present only to satisfy the contract.
  *

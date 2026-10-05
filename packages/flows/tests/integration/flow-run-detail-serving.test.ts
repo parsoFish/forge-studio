@@ -4,7 +4,7 @@
  *
  * F4's whole premise is that "every flow run — live AND completed/archived —
  * gets a detail surface", and that everything on it is DERIVED from the
- * event log with nothing new stored (ADR-008 posture). Two facts have to
+ * event log with nothing new stored (SPEC §3 posture). Two facts have to
  * hold for that to be true, and neither was pinned before this file:
  *
  *   (c) An ARCHIVED run — a manifest that has already been moved to
@@ -264,7 +264,7 @@ test('an EMPTY forge root yields zero runs rather than a placeholder run', () =>
 });
 
 // ---------------------------------------------------------------------------
-// ADR-008 posture — reading a run writes nothing
+// SPEC §3 posture — reading a run writes nothing
 // ---------------------------------------------------------------------------
 
 test('deriving an archived run writes NO new file — nothing is stored for the detail page', () => {

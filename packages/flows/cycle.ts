@@ -50,7 +50,7 @@ import type {
 } from './cycle-context.ts';
 import { resolveQualityGateCmd } from './cycle-context.ts';
 
-// Phase runners are now invoked via flow-runner.ts (ADR-028 M3-2).
+// Phase runners are now invoked via flow-runner.ts (SPEC §2 M3-2).
 // The six helper functions (openPrInline, commitDevLoopBoundary,
 // enforceDevLoopCloseInvariant, enforceFinalCiGate, preservingForgeScratch,
 // assertNonEmptyDelivery) live in ./cycle-helpers.ts to break the inside-out
@@ -69,7 +69,7 @@ export {
 // below, at its own re-entry-rebase seam — no default, no fallback (CLAUDE.md).
 import { rebaseForResume } from './cycle-helpers.ts';
 
-// Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
+// Flow-runner: the phase-sequencing DAG executor (SPEC §2, M3-2).
 import { runFlow, flowPathForId } from './flow-runner.ts';
 import type { PhaseWiring } from './phase-wiring.ts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
@@ -77,7 +77,7 @@ import { loadFlowDefinition } from './studio/flow-registry.ts';
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener inlined here (REV-6). The operator's verdict
 // arrives out-of-band as a UI action: APPROVE is a no-op ack (they merge in
-// GitHub; closure confirms); ADD-WORK-ITEMS (ADR 026) appends typed UWIs to the
+// GitHub; closure confirms); ADD-WORK-ITEMS (D-20) appends typed UWIs to the
 // unifier queue in the live worktree and the drain re-runs them in the SAME
 // cycle (one cycleId) — no requeue, no send-back to a dev phase.
 
@@ -215,7 +215,7 @@ export function emitSyntheticArchitectEvents(
 
 export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<CycleResult> {
   const started = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
-  // ADR 026: keep one initiative on ONE cycleId for its whole life. Prefer an
+  // D-20: keep one initiative on ONE cycleId for its whole life. Prefer an
   // explicitly threaded id (the review→unifier drain + the merge finalizer pass
   // it), then a previously-persisted id (a crash-recovery resume reuses the
   // original cycle's `_logs` dir instead of minting a sibling — the root fix for
@@ -285,7 +285,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
   let lintStatus: LintStatus = 'skipped';
   try {
     if (!input.dryRun) {
-      // ADR-028 M3-2: delegate the phase sequence to flow-runner.
+      // SPEC §2 M3-2: delegate the phase sequence to flow-runner.
       // Route to the flow the initiative manifest names (`flow_id`). S8/DEC-3
       // retired the forge-cycle monolith — there is NO default flow and NO
       // fallback (forge principles forbid coexistence/fallbacks). Every manifest
@@ -401,7 +401,7 @@ export async function snapshotCycleArtefacts(
     cpSync(wiSrc, wiDst, { recursive: true, force: true });
   }
 
-  // Demo bundle (ADR 021): the unifier writes the TRACKED demo at the project's
+  // Demo bundle (D-07): the unifier writes the TRACKED demo at the project's
   // artifactRoot-resolved demo dir (legacy `demo/<initiativeId>/`, or
   // `<artifactRoot>/history/<initiativeId>/demo` when the project gathers its
   // committed artifacts under a sub-root — e.g. betterado's `forge/`). It holds

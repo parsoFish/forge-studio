@@ -1,5 +1,5 @@
 /**
- * Orchestrator-owned demo capture (ADR 036 / refinement N1).
+ * Orchestrator-owned demo capture (D-15 / refinement N1).
  *
  * The 2026-07 betterado run escalated through five rounds of live-evidence
  * fabrication (hand-written beforeOutput/afterOutput, relabeled captures,
