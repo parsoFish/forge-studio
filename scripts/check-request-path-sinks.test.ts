@@ -28,7 +28,8 @@ import {
   formatBaseline,
   parseBaseline,
   compareBaseline,
-  countDocClassifications,
+  countClassifications,
+  isClassified,
   runCheck,
 } from './check-request-path-sinks.mjs';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -307,14 +308,14 @@ test('M7 row 25: --write is the one-command fix for a stale-HIGH row', () => {
   }
 });
 
-test('M7 row 25: --write REFUSES to raise an undocumented row — never-raise-without-doc-backing', () => {
+test('M7 row 25: --write REFUSES to raise an unclassified row — never-raise-without-a-classes.json-entry', () => {
   const root = makeFixture();
   const baselinePath = baselinePathFor(root);
-  const docPath = join(root, 'docs/reference/request-path-sinks.md');
+  const classesPath = join(root, 'scripts/request-path-sinks.classes.json');
   try {
-    mkdirSync(dirname(docPath), { recursive: true });
-    writeFileSync(docPath, '# empty doc — nothing classified yet\n');
-    runCheck({ root, baselinePath, docPath, write: true });
+    mkdirSync(dirname(classesPath), { recursive: true });
+    writeFileSync(classesPath, '{}\n');
+    runCheck({ root, baselinePath, classesPath, write: true });
 
     // Grow a row without ever touching the doc.
     writeFileSync(
@@ -331,7 +332,7 @@ test('M7 row 25: --write REFUSES to raise an undocumented row — never-raise-wi
     );
 
     const before = readFileSync(baselinePath, 'utf8');
-    const code = runCheck({ root, baselinePath, docPath, write: true });
+    const code = runCheck({ root, baselinePath, classesPath, write: true });
     assert.equal(code, 1, '--write must refuse an undocumented grown row rather than silently raising the baseline');
     assert.equal(readFileSync(baselinePath, 'utf8'), before, 'the baseline file must be untouched on refusal');
   } finally {
@@ -339,14 +340,14 @@ test('M7 row 25: --write REFUSES to raise an undocumented row — never-raise-wi
   }
 });
 
-test('M7 row 25: --write ACCEPTS a grown row once the doc classifies the file', () => {
+test('M7 row 25: --write ACCEPTS a grown row once classes.json classifies the file', () => {
   const root = makeFixture();
   const baselinePath = baselinePathFor(root);
-  const docPath = join(root, 'docs/reference/request-path-sinks.md');
+  const classesPath = join(root, 'scripts/request-path-sinks.classes.json');
   try {
-    mkdirSync(dirname(docPath), { recursive: true });
-    writeFileSync(docPath, '# empty doc\n');
-    runCheck({ root, baselinePath, docPath, write: true });
+    mkdirSync(dirname(classesPath), { recursive: true });
+    writeFileSync(classesPath, '{}\n');
+    runCheck({ root, baselinePath, classesPath, write: true });
 
     writeFileSync(
       join(root, 'orchestrator/reached.ts'),
@@ -361,10 +362,10 @@ test('M7 row 25: --write ACCEPTS a grown row once the doc classifies the file', 
       ].join('\n')
     );
     // Now classify it.
-    writeFileSync(docPath, '| orchestrator/reached.ts | writeFileSync 1 -> 2 | classified | guarded [read] |\n');
+    writeFileSync(classesPath, JSON.stringify({ 'orchestrator/reached.ts': { class: 'guarded', guard: 'g', verified: 'read', note: 'n' } }));
 
-    assert.equal(runCheck({ root, baselinePath, docPath, write: true }), 0);
-    assert.equal(runCheck({ root, baselinePath, docPath }), 0);
+    assert.equal(runCheck({ root, baselinePath, classesPath, write: true }), 0);
+    assert.equal(runCheck({ root, baselinePath, classesPath }), 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -553,45 +554,43 @@ test('8vfn.5.19: --write PRINTS every row it changes (the "silent absorption" de
 // that can drift from what is actually written there.
 // =============================================================================
 
-test('countDocClassifications: buckets rows by their own class cell, ignores the header', () => {
-  const md = [
-    '| file:line | op | field | class | evidence |',
-    '|---|---|---|---|---|',
-    '| a.ts:1 | x | y | guarded `[exec]` | z |',
-    '| b.ts:1 | x | y | unguarded | z |',
-    "| c.ts:1 | x | y | accidentally-safe `[read]` | z |",
-    "| d.ts:1 | x | y | `accidentally-safe` -> **not request-derived** `[read]` | z |",
-    '| e.ts:1 | x | y | not request-derived `[read]` | z |',
-  ].join('\n');
-  const counts = countDocClassifications(md);
-  assert.equal(counts.totalRows, 5, 'the header/separator rows must not be counted as classified rows');
-  assert.equal(counts.byClass.guarded, 1);
-  assert.equal(counts.byClass.unguarded, 1);
-  assert.equal(counts.byClass.accidentallySafe, 1);
-  assert.equal(counts.byClass.notRequestDerived, 2);
-  assert.equal(counts.byMarker.exec, 1);
-  assert.equal(counts.byMarker.read, 3);
+test('countClassifications: buckets entries by class and verified marker', () => {
+  const counts = countClassifications({
+    'a.ts': { class: 'guarded', guard: 'g', verified: 'exec', note: 'n' },
+    'b.ts': { class: 'unguarded', guard: null, verified: 'read', note: 'n' },
+    'c.ts': { class: 'accidentally-safe', guard: null, verified: 'read', note: 'n' },
+    'd.ts': { class: 'not-request-derived', guard: null, verified: null, note: 'n' },
+    'e.ts': { class: 'other', guard: null, verified: 'unver', note: 'n' },
+  });
+  assert.equal(counts.total, 5);
+  assert.deepEqual(counts.byClass, { guarded: 1, unguarded: 1, 'accidentally-safe': 1, 'not-request-derived': 1, other: 1 });
+  assert.deepEqual(counts.byVerified, { exec: 1, read: 2, unver: 1 });
 });
 
-test('doc census: runCheck prints a doc-derived classification count, never a hand-typed one', () => {
+test('isClassified is an exact lookup, not a substring test', () => {
+  const classes = { 'apps/forge/a.ts': { class: 'guarded', guard: null, verified: null, note: 'n' } };
+  assert.equal(isClassified(classes, 'apps/forge/a.ts'), true);
+  assert.equal(isClassified(classes, 'apps/forge/a.ts.bak'), false);
+  assert.equal(isClassified(classes, 'forge/a.ts'), false);
+  assert.equal(isClassified(classes, 'constructor'), false);
+});
+
+test('census: runCheck prints a classes.json-derived count', () => {
   const root = makeFixture();
   const baselinePath = baselinePathFor(root);
-  const docPath = join(root, 'docs/reference/request-path-sinks.md');
+  const classesPath = join(root, 'scripts/request-path-sinks.classes.json');
   try {
-    mkdirSync(dirname(docPath), { recursive: true });
-    writeFileSync(
-      docPath,
-      ['| file:line | op | field | class | evidence |', '|---|---|---|---|---|', '| a.ts:1 | x | y | guarded `[exec]` | z |'].join('\n')
-    );
+    mkdirSync(dirname(classesPath), { recursive: true });
+    writeFileSync(classesPath, JSON.stringify({ 'a.ts': { class: 'guarded', guard: null, verified: 'exec', note: 'n' } }));
     let out = '';
     const origLog = console.log;
     console.log = (...args: unknown[]) => { out += args.join(' ') + '\n'; };
     try {
-      runCheck({ root, baselinePath, docPath, write: true });
+      runCheck({ root, baselinePath, classesPath, write: true });
     } finally {
       console.log = origLog;
     }
-    assert.match(out, /doc census.*1 classified row/i, 'runCheck must print a doc-derived count, computed live from docPath');
+    assert.match(out, /classification census.*1 classified file/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

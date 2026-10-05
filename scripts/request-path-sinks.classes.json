@@ -1,0 +1,998 @@
+{
+ "apps/forge/agent-dispatch-cmd.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "apps/forge/agent-run.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "apps/forge/brain-fix-turn.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "apps/forge/bridge-agent-dispatch.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "apps/forge/bridge-cycle-scan.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "apps/forge/bridge-halt.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "read",
+  "note": "`GET /api/health`, `POST /api/halt` (the drain counts)"
+ },
+ "apps/forge/bridge-studio-writes.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`PUT /api/studio/flows/:id` body `triggers[].target.ref`"
+ },
+ "apps/forge/bridge-studio.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`GET /api/studio/flows/:id`"
+ },
+ "apps/forge/forge-watch.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "apps/forge/ui-bridge.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "read",
+  "note": "body `project`, `sessionId`"
+ },
+ "packages/agents/agent-dispatch.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/agents-md-compose.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/band-agent-run.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/bridge-agents-history-rows.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "`_logs/` entry NAMES read by `readdirSync` (never a route's own `slug`, per D5)"
+ },
+ "packages/agents/bridge-agents-run-state.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/bridge-agents-studio.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "URL param `slug`, gated by `SLUG_RE` + `isReservedId` before any path is built"
+ },
+ "packages/agents/materials-staging.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`POST /api/agents/:slug/run` body `materials[].filename`"
+ },
+ "packages/agents/phases/agent-scope-guard.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/ralph/claude-agent.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/ralph/stop-conditions.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "no request field"
+ },
+ "packages/agents/run-agent.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/skill-path.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/agents/spawn-marker.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/factory/class-profiles.ts": {
+  "class": "not-request-derived",
+  "guard": "isContainedProjectRepoPath",
+  "verified": "exec",
+  "note": "Not a route: the phase executor's dependency wiring (`packages/stations/phases/executor-deps.ts`) and the dev-loop…"
+ },
+ "packages/flows/bridge-recovery.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`initiativeId` (route param, `INIT_ID_RE`-gated)"
+ },
+ "packages/flows/bridge-studio-runs.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`POST /api/plan-verdict` body `project`, `sessionId`"
+ },
+ "packages/flows/cost-by-class.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": null,
+  "note": "`forgeRoot`"
+ },
+ "packages/flows/cycle-helpers.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/cycle-pr-open.ts": {
+  "class": "not-request-derived",
+  "guard": "isContainedWorktreePath",
+  "verified": "read",
+  "note": "Not a route: the develop flow's PR-open step"
+ },
+ "packages/flows/daemon.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/drain-fix-loop.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/enqueue-flow-run.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "body `initiativeId` / `initiativeIds[]`"
+ },
+ "packages/flows/enqueue-plan-run.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "body `initiativeId` / `initiativeIds[]`"
+ },
+ "packages/flows/finalize-merged.ts": {
+  "class": "guarded",
+  "guard": "isContainedWorktreePath",
+  "verified": "exec",
+  "note": "`POST /api/verdict` approve → `finalizeAfterMerge` → `pruneMergedWorktrees`: manifest `worktree_path` + `initiative_id`"
+ },
+ "packages/flows/flow-artifacts.ts": {
+  "class": "other",
+  "guard": "isSafeCycleId",
+  "verified": "exec",
+  "note": "`manifest.cycle_id`"
+ },
+ "packages/flows/flow-run-requests.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/flow-runner.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/forge-metrics.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/forge-requeue.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "exec",
+  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`"
+ },
+ "packages/flows/gate-fix-loop.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/gh-pinned.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": null,
+  "note": "the PR lifecycle"
+ },
+ "packages/flows/manifest.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": null,
+  "note": "`manifestPath`"
+ },
+ "packages/flows/mint-triggered-initiative.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "exec",
+  "note": "`PUT /api/studio/flows/:id` body `project` → background flow-trigger sweep → minted manifest's `project` / `project_repo_path`"
+ },
+ "packages/flows/operator-stop.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/flows/phases/gitignored-creates.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/phases/orchestrated-capture.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "a filename under `.capture/<side>/` (command-checkpoint-influenced)"
+ },
+ "packages/flows/pr-branch-sync.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": null,
+  "note": "the dev-loop close, reached from the cycle"
+ },
+ "packages/flows/pr-media.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "`ref` (this same file's own `git rev-parse` result, see row above), `relDir` (`worktreeDemoRelDir`)"
+ },
+ "packages/flows/pr.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "no request field"
+ },
+ "packages/flows/promote-manifests.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/queue.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "`GET /api/runs/planned` (the forge-develop kickoff surface) via `listPlannedInitiatives`"
+ },
+ "packages/flows/requeue-resume.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "exec",
+  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`"
+ },
+ "packages/flows/review-comments.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`/api/review-comments/:cycleId`"
+ },
+ "packages/flows/run-model.ts": {
+  "class": "not-request-derived",
+  "guard": "isSafeCycleId",
+  "verified": "read",
+  "note": "`GET /api/runs` and `GET /api/runs/<id>` through `cachedListRuns`, plus the daemon's own run listing"
+ },
+ "packages/flows/scheduler-dispatch.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/scheduler-run-one.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "the dirname of git's own `rev-parse --git-path info/exclude` answer for a forge-created worktree"
+ },
+ "packages/flows/scheduler.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/flows/stale-remote-branch-guard.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/kernel/case-folding-probe.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: reached from `POST /api/agents/:slug/run` via `packages/agents/materials-staging.ts` and from `POST…"
+ },
+ "packages/kernel/checkpoint-command.ts": {
+  "class": "not-request-derived",
+  "guard": "resolveDeclaredBin containment + realpath re-check",
+  "verified": "exec",
+  "note": "checkpoint command head and the claim's worktree; reads the worktree package.json, never a request field"
+ },
+ "packages/kernel/claude-cli-path.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: the SDK spawn path, read once per `query()`"
+ },
+ "packages/kernel/config.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "`GET /api/studio/projects/starters` via `packages/projects/project-roster.ts`'s `handleProjectsStarters`"
+ },
+ "packages/kernel/contained-read.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/kernel/discovery-roots.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/kernel/dispatch-claim.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`root`/`segments`, passed by the caller (same as the two rows above)"
+ },
+ "packages/kernel/forge-ref-guard-hook.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "exec",
+  "note": "`forgeRoot`"
+ },
+ "packages/kernel/gh-identity.ts": {
+  "class": "not-request-derived",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "Not a route: reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s creation path, and from `forge…"
+ },
+ "packages/kernel/guarded-scan.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/kernel/halt.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "read",
+  "note": "`POST /api/halt`, `POST /api/halt/release`, `GET /api/health` (through `apps/forge/bridge-halt.ts`), plus the daemon's queue claim and…"
+ },
+ "packages/kernel/init.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/kernel/log-cycles.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/kernel/logging.ts": {
+  "class": "other",
+  "guard": "isSafeCycleId",
+  "verified": "exec",
+  "note": "`manifest.cycle_id`"
+ },
+ "packages/kernel/path-guard.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "any caller with a multi-segment tail"
+ },
+ "packages/kernel/process-liveness.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/kernel/project-layout.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s `mintRemote`"
+ },
+ "packages/kernel/studio-object.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/knowledge/brain-fix-auto.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/knowledge/brain-lint.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/knowledge/brain-paths.ts": {
+  "class": "unguarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`:id` on every `/api/studio/kbs/*` route"
+ },
+ "packages/knowledge/brain-write-lease.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: the brain-write lease every brain writer (reflector, KB drain/consolidate/brain-fix) takes"
+ },
+ "packages/knowledge/bridge-studio-kbs.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`POST /api/studio/kbs/:id/guidance`"
+ },
+ "packages/knowledge/kb-backend.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/knowledge/kb-drain-edit-soundness.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/knowledge/kb-graph.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`GET /api/studio/kbs/:id`, `/nodes/:nodeId`"
+ },
+ "packages/knowledge/kb-health.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/knowledge/kb-job-state.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": "exec",
+  "note": "no request field"
+ },
+ "packages/knowledge/kb-lint-summary.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/knowledge/kb-sites.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/knowledge/project-brain-seed.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`projectId`/`dirName`"
+ },
+ "packages/knowledge/theme-frontmatter.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": null,
+  "note": "no request field"
+ },
+ "packages/library/bridge-studio-authoring.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/library/bridge-studio-catalog.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/library/bridge-studio-community.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`GET /api/studio/community/:kind/:id`"
+ },
+ "packages/library/bridge-studio-hooks-detail.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "URL `:id`, body `scriptBody`"
+ },
+ "packages/library/bridge-studio-hooks.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`POST /api/studio/hooks`, `/:id/approve`, `/:id/override`, `GET /:id`"
+ },
+ "packages/library/bridge-studio-skills.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`GET /api/studio/skills/:id`, `POST /:id/approve`"
+ },
+ "packages/library/bridge-studio-templates.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "body/URL `id` as the staging LEAF (`${id}.md`)"
+ },
+ "packages/library/community-refresh-run.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": null,
+  "note": "no request field"
+ },
+ "packages/library/skill-path.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/library/skill-staging.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/library/studio-lint-library-passes.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/library/studio-lint-tool-fence.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/library/studio/community-fetch-package.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`POST /api/studio/community/skill/:id/install`, for a row whose package is not yet on disk"
+ },
+ "packages/library/studio/community-index.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`GET /api/studio/community/:kind/:id`"
+ },
+ "packages/library/studio/community-install.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`POST /api/studio/skills/install` body `packageDir`; community install"
+ },
+ "packages/library/studio/hook-library.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`hook.yaml`'s own `script:` field"
+ },
+ "packages/library/studio/hook-package.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "URL `:id` (hook slug), reached from `GET/POST /api/studio/hooks*` via `hookRunState`/`scanHookPackage`, and from `GET…"
+ },
+ "packages/library/studio/hook-runtime.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "any route that spawns an agent, via `packages/agents/studio/hook-dispatch.ts`"
+ },
+ "packages/library/studio/skill-install-ledger.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/library/studio/skill-install.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`id`"
+ },
+ "packages/library/studio/skill-package.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`GET /api/studio/skills/:id` (via `bridge-studio-skills.ts`), and the trust/repin hash reads"
+ },
+ "packages/library/studio/template-library.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`GET` scaffold `:id`"
+ },
+ "packages/projects/bridge-studio-project-onboard.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/projects/constraint-author.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/projects/contract-stages.ts": {
+  "class": "guarded",
+  "guard": "resolveSafeSessionDir",
+  "verified": "read",
+  "note": "`GET /api/studio/sessions/onboarding/:sessionId?project=`, `GET /api/studio/projects/:id/contract-stages`, and"
+ },
+ "packages/projects/preflight-repo.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/projects/preflight.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "bridge preflight routes (via the validated project dir)"
+ },
+ "packages/projects/project-config-write.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": null,
+  "note": "`projectRoot` (the PUT route's discovered project dir; the demo lock's `status.project_repo_path`, validated at `/start` by…"
+ },
+ "packages/projects/project-create.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`POST` body `name`, `appType`"
+ },
+ "packages/projects/project-migrate.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/projects/project-repo-tx.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/projects/reset.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/bash-fence.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "the resolved candidate of a `Bash` tool call's OWN command text"
+ },
+ "packages/sessions/bridge-studio-architect.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`project` / `sessionId` / the trailing file NAME, each its own `segments[]` element under the fixed `projectsRoot`"
+ },
+ "packages/sessions/bridge-studio-demo.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`project` / `sessionId` / `element` / generation number and filename"
+ },
+ "packages/sessions/bridge-studio-instructions.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`project` / `sessionId` / the trailing file NAME, each its own `segments[]` element under the fixed `projectsRoot`"
+ },
+ "packages/sessions/bridge-studio-kickoff.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`project` / `sessionId` / `kbId`, each its own `segments[]` element under the fixed `projectsRoot` or `logsRoot`"
+ },
+ "packages/sessions/bridge-studio-lifecycle.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`GET /api/studio/sessions` rows + `GET /api/studio/sessions/:kind/:sessionId` (`project`/`kind`/`sessionId`)"
+ },
+ "packages/sessions/bridge-studio-session-index.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`project` and `sessionId` as directory ENTRY NAMES read by `readdirSync`, never a route parameter"
+ },
+ "packages/sessions/heartbeat.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/interactive-finalizers.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "no request field"
+ },
+ "packages/sessions/interactive-session.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`dirname(candidatePath)`, where `candidatePath` is the GATED tool's own input (`file_path`/`notebook_path`/`path`)"
+ },
+ "packages/sessions/kinds/architect-critic.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/kinds/architect-plan.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/kinds/architect-session.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/kinds/architect-steps.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "no request field"
+ },
+ "packages/sessions/kinds/architect.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/kinds/demo-builder.ts": {
+  "class": "accidentally-safe",
+  "guard": null,
+  "verified": "read",
+  "note": "`status.project_repo_path` joined with the fixed literal `.forge/demo` dropped the two composer literals,…"
+ },
+ "packages/sessions/kinds/demo-generate.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": null,
+  "note": "`status.project_repo_path`"
+ },
+ "packages/sessions/kinds/demo-session-store.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/kinds/fix-turn.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/kinds/kind-turn.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": null,
+  "note": "no request field"
+ },
+ "packages/sessions/kinds/project-brain.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/session-readability.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "exec",
+  "note": "`GET /api/studio/sessions/:kind/:sessionId` (the LEGACY arm), and the four pre-existing `apps/forge/ui-bridge.ts` call sites that now…"
+ },
+ "packages/sessions/session-write-fence.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/studio/session-artifact-derivers.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/studio/session-kinds-validate.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/studio/session-kinds.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/sessions/turn-budget.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": "read",
+  "note": "`logsRoot`"
+ },
+ "packages/sessions/turn-cost-rows.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: the session/story spend emitters' FAILURE path"
+ },
+ "packages/stations/demo-delta.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`bundleDir` (`before`/`after` `.out` or `.filmstrip.png`)"
+ },
+ "packages/stations/demo-model.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/gates/docs-gate.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "the markdown paths in the branch diff"
+ },
+ "packages/stations/phases/adversarial-review.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/agent-skill-text.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/developer-loop.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/executor-deps.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/integrate.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`demoJsonAbs`"
+ },
+ "packages/stations/phases/merge-boundary.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "exec",
+  "note": "`input.worktreePath` as `cwd`"
+ },
+ "packages/stations/phases/pm-acceptance-gate.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/pm-decomposition-doc.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/pm-prompt-context.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/pm-rejected-set.ts": {
+  "class": "not-request-derived",
+  "guard": "isContainedWorktreePath",
+  "verified": "exec",
+  "note": "Not a route: the project-manager PHASE's failure path (`packages/stations/phases/project-manager.ts`)"
+ },
+ "packages/stations/phases/project-manager.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/reflector.ts": {
+  "class": "guarded",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "the reflector rerun fired by `POST /api/reflect/<id>/answer` (`apps/forge/bridge-reflect.ts`), and the post-merge reflector"
+ },
+ "packages/stations/phases/review-refusal.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: the adversarial-review phase's findings harvest"
+ }
+}

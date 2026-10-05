@@ -54,7 +54,7 @@
  *     Nothing true to say -> `null`, never filler.
  *   D4 — `status` renders the REAL `RunStatus` — `'planned'|'active'|
  *     'gated'|'complete'|'failed'` (studio-client.ts:26). The mockup's
- *     `'attention'` status (recorded in docs/reference/studio-copy.md) has
+ *     `'attention'` status has
  *     NO producer anywhere in this repo and must never appear.
  *   D7 — `when` is deterministic/locale-independent: `formatWhen` takes an
  *     explicit `nowMs`, never reads `Date.now()` or `toLocaleString()`
@@ -264,8 +264,7 @@ test("R6-06 D6/D7: renderSegment renders the EIGHTH segment kind, {kind:'standal
 //   - `in-flow` — every flow-node row's own `run.flowId`, always present
 //     (`Run.flowId: string`, non-optional — `studio-client.ts:55`) — the
 //     mockup's own opening beat for an agent-history row was literally "in
-//     forge-develop · …" (recorded in docs/reference/studio-copy.md as
-//     `AGENT_HISTORY.developer`). Lowercase 'in', matching this file's own
+//     forge-develop · …" (`AGENT_HISTORY.developer`). Lowercase 'in', matching this file's own
 //     established lowercase-no-punctuation style for positive-arc kinds
 //     ('merged', 'standalone') rather than the mockup's literal "STANDALONE"
 //     caps (already deliberately not carried over for 'standalone' either).

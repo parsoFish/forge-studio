@@ -42,7 +42,7 @@
  * Every other line is a byte-for-byte move: same body, same guard order, same
  * comments. The two-phase check-then-write ordering in the onboard handler
  * (SEC-03 round 4) and every path guard in it are load-bearing —
- * `docs/reference/request-path-sinks.md` records five separate incidents in
+ * five separate containment incidents were fixed in
  * this exact code.
  *
  * `readJson(req)` → `ctx.readBody()`: the ORIGINAL handlers called

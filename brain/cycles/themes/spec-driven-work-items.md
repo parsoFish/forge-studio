@@ -53,7 +53,7 @@ A `_graph.md` (mermaid) sibling shows the dependency graph for human review.
 
 ## Sources
 
-- [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) — primary source.
+- [`apps/docs/src/content/docs/how-forge-works.md`](../../../apps/docs/src/content/docs/how-forge-works.md) — primary source.
 
 ## See also
 

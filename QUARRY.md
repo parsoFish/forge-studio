@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 122 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 123 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -54,21 +54,21 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
-| `kernel` | 36 | 6,530 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `contracts` | 7 | 1,627 | **1,627** | ratified 1,627 (+54, forge-8vfn.30.9, ruling 666): `resolveDeclaredBin`, the pure declared-bin containment rule shared by flows and factory. |
+| `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 48 | 11,220 | **9,423** | ratified 9,423 — row 206 (forge-8vfn.8.5.56): collision-free preflight-fix run ids, a crashed fix reads failed; +11, lane-ratified (≤100, ruling 666). |
+| `projects` | 48 | 11,219 | **9,423** | ratified 9,423 — row 206 (forge-8vfn.8.5.56): collision-free preflight-fix run ids, a crashed fix reads failed; +11, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,460 | **12,884** | ratified 12,884 — row 206 (forge-8vfn.8.5.56): brain-fix claims the run id through the dispatch seam, fix-agent checks the active-job derivation, a crashed fix reads failed; +52, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,909 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 89 | 25,147 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
-| `factory` | 15 | 2,906 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `flows` | 89 | 25,141 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
+| `factory` | 15 | 2,909 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,301 | **12,301** | ratified 12,301 — row 212 follow-up 3 (forge-8vfn.8.5.48), lane-ratified under ruling 666 (measured ceiling); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 35 | 8,543 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **493** | **132,547** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **494** | **132,689** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -128,7 +128,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
 | packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 305 |
 | packages/knowledge/brain-lint-checks-graph.ts | knowledge | verbatim | 247 |
-| packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 501 |
+| packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 502 |
 | packages/knowledge/brain-lint-checks-truth.ts | knowledge | verbatim | 219 |
 | packages/knowledge/brain-lint-theme-paths.ts | knowledge | verbatim | 145 |
 | packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
@@ -211,7 +211,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-job-state.ts | knowledge | verbatim | 224 |
 | packages/knowledge/kb-drain-routes.ts | knowledge | verbatim | 409 |
 | packages/knowledge/kb-drain-model.ts | knowledge | verbatim | 553 |
-| packages/knowledge/kb-drain-store.ts | knowledge | verbatim | 484 |
+| packages/knowledge/kb-drain-store.ts | knowledge | verbatim | 483 |
 | packages/knowledge/routes.ts | knowledge | verbatim | 337 |
 | packages/library/routes.ts | library | verbatim | 495 |
 | packages/knowledge/kb-lint-summary.ts | knowledge | verbatim | 548 |
@@ -560,20 +560,21 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/run-view-types.ts | contracts | rewritten | 97 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
-| packages/contracts/demo-declaration.ts | contracts | rewritten | 140 |
+| packages/contracts/demo-declaration.ts | contracts | rewritten | 194 |
 | packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/factory/demo.ts | factory | verbatim | 420 |
+| packages/factory/demo.ts | factory | verbatim | 423 |
 | packages/flows/index.ts | flows | verbatim | 132 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
-| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 446 |
+| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 440 |
 | packages/flows/pr.ts | flows | verbatim | 420 |
 | packages/flows/pr-media.ts | flows | rewritten | 157 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
 | packages/kernel/gh-identity.ts | kernel | verbatim | 111 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 143 |
-| packages/kernel/index.ts | kernel | verbatim | 105 |
+| packages/kernel/index.ts | kernel | verbatim | 109 |
+| packages/kernel/checkpoint-command.ts | kernel | rewritten | 88 **New file, forge-8vfn.30.9: the one checkpoint-command head resolver (PATH, then a contained package.json bin) shared by the pre-claim check and the capture spawn.** |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 336 |
 | packages/kernel/tool-fence.ts | kernel | rewritten | 94 **Written for bead `forge-a9o9` (T1 rulings 670/691) — deny-by-default tool access, with no enumeration anywhere. Here rather than beside `makeToolEventSink` in `agents` because the spawn paths that need it span `sessions`, `agents` and `factory`, and the kernel is the only layer all three already stand on; `spawn-env.ts` next door settled the same class for env vars.** |
@@ -603,7 +604,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |
 | packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 682 |
 | packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 299 |
-| packages/projects/project-contract-scaffold.ts | projects | verbatim | 557 |
+| packages/projects/project-contract-scaffold.ts | projects | verbatim | 556 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 229 |
 | packages/projects/routes.ts | projects | verbatim | 389 |
 | apps/forge/cli-gate.ts | apps/forge | rewritten | 70 |
