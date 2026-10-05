@@ -79,7 +79,7 @@ jobs:
       - name: Decisions ledger (every DECISIONS.md row names an enforcement that exists)
         run: node scripts/check-decisions.mjs
 
-      - name: Docs shape check (Diataxis tree + the hand-written budget)
+      - name: Docs shape check (generated how-tos name their story; no dev/ ledger on the site)
         run: node scripts/check-docs-shape.mjs
 
       - name: Identity check (retired vocabulary)
