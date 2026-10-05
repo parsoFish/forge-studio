@@ -49,7 +49,7 @@ const FIXTURE = {
 const cliSource = (word: string) =>
   `console.log(process.argv.slice(2).join(' ') === '--help' ? 'top ${word}' : 'studio ${word}');\n`;
 
-function root(): string {
+function makeFixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'docs-gen-'));
   mkdirSync(join(dir, 'docs/schemas'), { recursive: true });
   mkdirSync(join(dir, 'apps/docs/src/content/docs/reference'), { recursive: true });
@@ -111,7 +111,7 @@ test('rendering is deterministic', () => {
 });
 
 test('generate maps output path to content without writing', () => {
-  const dir = root();
+  const dir = makeFixture();
   try {
     const out = generate(dir) as Map<string, string>;
     assert.ok(out.get(PAGE)?.includes('title:'));
@@ -119,7 +119,7 @@ test('generate maps output path to content without writing', () => {
 });
 
 test('write then --check passes; edits and missing pages fail naming the file', () => {
-  const dir = root();
+  const dir = makeFixture();
   try {
     assert.equal(run(['--root', dir, '--check']).status, 1, 'missing page is stale');
     assert.equal(run(['--root', dir]).status, 0);
@@ -156,7 +156,7 @@ test('limits state the refused key and the blocked env names', () => {
 const CLI_PAGE = 'apps/docs/src/content/docs/reference/cli.md';
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const cliRoot = (_word: string) => root();
+const cliRoot = (_word: string) => makeFixture();
 
 test('the CLI page is a source entry that names cli.ts', () => {
   const s = SOURCES.find((x: { out: string }) => x.out === CLI_PAGE);
@@ -172,8 +172,8 @@ test('the CLI page holds each help block verbatim under its command heading', ()
 });
 
 test('the committed CLI page matches the current help output', () => {
-  const page = readFileSync(join(REPO_ROOT, CLI_PAGE), 'utf8');
-  assert.equal(page, renderCli((args: string[]) => runCli(REPO_ROOT, args)));
+  const committed = readFileSync(join(REPO_ROOT, CLI_PAGE), 'utf8');
+  assert.equal(committed, renderCli((args: string[]) => runCli(REPO_ROOT, args)));
 });
 
 test('the help text carries no retired narration', () => {
