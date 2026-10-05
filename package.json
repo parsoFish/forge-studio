@@ -9,7 +9,7 @@
     "forge": "./bin/forge.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "workspaces": [
     "packages/*",
