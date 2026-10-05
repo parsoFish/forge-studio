@@ -81,3 +81,5 @@ commit `cf8950bbe3d7a81b6e1759e3ebe4e07c28b1e567` — the same project this seed
 copies it to `brain/projects/<project>/` and `teardownFixtureGround` removes it (the capability the
 `go-provider-old-contract` ground introduced). `scripts/stories/fixture-ground-brain.test.ts` provisions THIS
 fixture into a scratch root and asserts every HARD preflight clause passes (forge-1rk5.3).
+
+- **Deviation (docs refactor W3):** de-referenced decision-record citations: the old citation → `(D-07)` in the 15 `seed/forge/history/*/demo/DEMO.md` headers. Method-C digest of `seed/` is now **`24aaa8843b6709cb`** (100 files; was `b8bcac348a5aba3a`). The brain profile fixture likewise: decision-record citation → `(SPEC §4)`, blob `6baa8f419f25d295c3f536dd3499e18b1de7f5de` (was `df6ab676d3c98b2e2a90ab2cdc401a02678abaa8`); nothing pins the blob.

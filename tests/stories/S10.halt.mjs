@@ -1,5 +1,5 @@
 /**
- * S10's emergency-halt beats (ADR 011's one halt, row 207) — kept beside the
+ * S10's emergency-halt beats (D-03, one halt, row 207) — kept beside the
  * story, not inside it: `S10.story.mjs` and `S10.act2.mjs` sit at the 800-line
  * cap (T1 ruling 492: SPLIT, NEVER BASELINE), and these beats are one concern.
  *

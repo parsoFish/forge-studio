@@ -1,6 +1,6 @@
 # Add --json flag to gitpulse CLI for machine-readable analytics output
 
-> _Derived from `demo.json` (ADR 021). Essence:_ The gitpulse CLI gains a --json flag that serialises the already-computed Summary struct to stdout as stable, two-space-indented JSON, enabling downstream tools (scripts, CI dashboards) to consume analytics programmatically without recomputation. Error behaviour (exit codes 1 and 2) is unchanged; --top cap applies to all arrays in JSON output exactly as for table output.
+> _Derived from `demo.json` (D-07). Essence:_ The gitpulse CLI gains a --json flag that serialises the already-computed Summary struct to stdout as stable, two-space-indented JSON, enabling downstream tools (scripts, CI dashboards) to consume analytics programmatically without recomputation. Error behaviour (exit codes 1 and 2) is unchanged; --top cap applies to all arrays in JSON output exactly as for table output.
 
 ## Intent & Outcome
 

@@ -1,6 +1,6 @@
 # Add --sort <column>[:asc|:desc] flag to gitpulse CLI
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Every analytics command (churn, ownership, hotspots, authors, compare, tags) can now re-order its output by any of its output columns via --sort. Omitting the flag preserves the previous default ordering byte-for-byte.
+> _Derived from `demo.json` (D-07). Essence:_ Every analytics command (churn, ownership, hotspots, authors, compare, tags) can now re-order its output by any of its output columns via --sort. Omitting the flag preserves the previous default ordering byte-for-byte.
 
 ## Intent & Outcome
 

@@ -400,7 +400,7 @@ export const ACT_2 = [
       // TWO checkpoints — `CycleInput.shouldStopBeforeWorkItem`, consulted
       // BEFORE a WI's worktree is created (`developer-loop.ts:1152`,
       // wired to the flag file at `flow-runner.ts:461-464`), and the next
-      // clean NODE boundary — never mid-turn: ADR 028's amendment records
+      // clean NODE boundary — never mid-turn: SPEC §2's amendment records
       // that `cycle.ts` never threads `nodeBudgets` into `runFlow` in
       // production, so the wedge-kill live-abort path is "presently dormant
       // outside tests" (SPEC §2).
@@ -495,7 +495,7 @@ export const ACT_2 = [
       // header). `terminal: 'failed'` is `_queue/failed/`, the SAME state
       // every other terminal but `ready-for-review` reads by mtime
       // (`beats-queue-terminal.mjs`'s own header). UNMEASURED bound: the
-      // stop lands at the next clean node/work-item boundary (ADR 028's
+      // stop lands at the next clean node/work-item boundary (SPEC §2's
       // amendment), which for this idea is at most one more work item's
       // build — `CYCLE_BOUND` is generous headroom over that.
       act: 'ACT 2 — stop the second run mid-flight',

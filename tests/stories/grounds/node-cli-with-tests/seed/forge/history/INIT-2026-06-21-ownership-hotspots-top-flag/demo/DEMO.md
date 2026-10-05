@@ -1,6 +1,6 @@
 # File ownership, hotspot detection, and --top <n> flag for gitpulse
 
-> _Derived from `demo.json` (ADR 021). Essence:_ gitpulse now identifies file owners (author with most surviving blame lines), ranks files by churn × recency hotspot score, and bounds every ranked table with --top <n>. Three pure modules (ownership.ts, hotspot.ts, stats.ts extensions) + CLI flag wiring + format rendering land in one cohesive PR.
+> _Derived from `demo.json` (D-07). Essence:_ gitpulse now identifies file owners (author with most surviving blame lines), ranks files by churn × recency hotspot score, and bounds every ranked table with --top <n>. Three pure modules (ownership.ts, hotspot.ts, stats.ts extensions) + CLI flag wiring + format rendering land in one cohesive PR.
 
 ## Intent & Outcome
 

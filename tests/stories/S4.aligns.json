@@ -13,7 +13,7 @@
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §3: Beat4: \"an edge has always had to say which artifact crosses it\" — the edge/artifact contract this ADR defines, held via ArtifactPicker"
+      "why": "SPEC §3: Beat4: \"an edge has always had to say which artifact crosses it\" — the edge/artifact contract this decision defines, held via ArtifactPicker"
     },
     {
       "path": "DECISIONS.md",

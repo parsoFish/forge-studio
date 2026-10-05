@@ -1,6 +1,6 @@
 # Add --author filter flag (glob, repeatable, OR'd) to gitpulse CLI
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Prior to this initiative, gitpulse had no way to narrow analytics output to a specific author — every command reported the full commit population. This initiative adds `--author <pattern>` (repeatable, OR-semantics, case-insensitive `*`-wildcard, applies to both name and email) across all subcommands and output formats, with honest exclusion accounting: text reports annotate `(N commits excluded by author filter)`; JSON output gains a top-level `authorsFiltered` field; CSV output prepends a `# authorsFiltered: N` comment line.
+> _Derived from `demo.json` (D-07). Essence:_ Prior to this initiative, gitpulse had no way to narrow analytics output to a specific author — every command reported the full commit population. This initiative adds `--author <pattern>` (repeatable, OR-semantics, case-insensitive `*`-wildcard, applies to both name and email) across all subcommands and output formats, with honest exclusion accounting: text reports annotate `(N commits excluded by author filter)`; JSON output gains a top-level `authorsFiltered` field; CSV output prepends a `# authorsFiltered: N` comment line.
 
 ## Summary
 

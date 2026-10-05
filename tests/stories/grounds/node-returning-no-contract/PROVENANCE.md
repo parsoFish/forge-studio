@@ -109,3 +109,5 @@ pattern `packages/knowledge/tests/unit/project-brain-seed.test.ts` and
 `apps/forge/tests/regression/onboard-returning-project-preserves-brain-and-history.test.ts` (bead
 `forge-mfv5.2.6`). Registered in `scripts/stories/fixture-ground-digests.test.ts`'s `PINNED` table
 so this ground cannot drift unpinned, same as every other fixture on disk.
+
+- **Deviation (docs refactor W3):** de-referenced decision-record citations: the old citation → `(D-07)` in `seed/forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md`. Method-C digest of `seed/` is now **`22ccb2f298e13344`** (6 files; was `836208005cd5ee08`).

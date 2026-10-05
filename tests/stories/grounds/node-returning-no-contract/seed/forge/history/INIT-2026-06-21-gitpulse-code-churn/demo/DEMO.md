@@ -1,6 +1,6 @@
 # Milestone 1 — Code churn: per-file churn, per-author churn, and date-window scoping
 
-> _Derived from `demo.json` (ADR 021). Essence:_ The gitpulse CLI now surfaces how much each file and each author changes, not just commit counts. Three new behaviours ship together: (1) per-file churn sorted by total lines changed; (2) per-author insertions and deletions in the report; (3) --since/--until flags that scope all analytics to a date window. This closes Milestone 1 from the project roadmap.
+> _Derived from `demo.json` (D-07). Essence:_ The gitpulse CLI now surfaces how much each file and each author changes, not just commit counts. Three new behaviours ship together: (1) per-file churn sorted by total lines changed; (2) per-author insertions and deletions in the report; (3) --since/--until flags that scope all analytics to a date window. This closes Milestone 1 from the project roadmap.
 
 ## Intent & Outcome
 

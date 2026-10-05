@@ -1,6 +1,6 @@
 # Add --compare <ref> flag: signed delta analytics between two git refs
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Engineers reviewing a release can now run `gitpulse <repo> --compare <ref>` to see signed delta tables showing how commit activity, churn, and per-author contributions changed since a base ref — instead of a single snapshot. This closes Milestone 4b.
+> _Derived from `demo.json` (D-07). Essence:_ Engineers reviewing a release can now run `gitpulse <repo> --compare <ref>` to see signed delta tables showing how commit activity, churn, and per-author contributions changed since a base ref — instead of a single snapshot. This closes Milestone 4b.
 
 ## Intent & Outcome
 

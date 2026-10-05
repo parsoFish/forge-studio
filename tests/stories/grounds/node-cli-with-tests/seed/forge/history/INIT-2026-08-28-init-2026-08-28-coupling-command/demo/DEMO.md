@@ -1,6 +1,6 @@
 # Add `gitpulse coupling` subcommand — file co-change analytics
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Prior to this initiative, gitpulse only reported per-author commit and churn statistics; there was no way to see which files are habitually changed together. This initiative adds a `coupling` subcommand backed by a new pure analytics module (`src/coupling.ts`) and three output renderers (plain-text table, JSON, CSV) wired through the existing CLI dispatch layer. Operators can now run `gitpulse coupling <repo>` to instantly surface the strongest file-pairing signals in any git repository.
+> _Derived from `demo.json` (D-07). Essence:_ Prior to this initiative, gitpulse only reported per-author commit and churn statistics; there was no way to see which files are habitually changed together. This initiative adds a `coupling` subcommand backed by a new pure analytics module (`src/coupling.ts`) and three output renderers (plain-text table, JSON, CSV) wired through the existing CLI dispatch layer. Operators can now run `gitpulse coupling <repo>` to instantly surface the strongest file-pairing signals in any git repository.
 
 ## Summary
 

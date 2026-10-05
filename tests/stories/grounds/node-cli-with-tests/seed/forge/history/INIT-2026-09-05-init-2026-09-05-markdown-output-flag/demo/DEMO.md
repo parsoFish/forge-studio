@@ -1,6 +1,6 @@
 # Add --markdown flag: GFM table output for all gitpulse commands
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Prior to this change, gitpulse only emitted plain-text tables and had no machine-readable GFM format. This initiative adds `--markdown` to every table-producing command (single-snapshot, `--compare`, `tags`, `coupling`), emitting valid GitHub-Flavoured Markdown tables whose first output line is always the header row (first char `|`) and second line is always the delimiter row. Pipe characters in cell values are escaped as `\|` rather than RFC-4180 double-quote wrapped, keeping GFM column counts consistent across all data rows.
+> _Derived from `demo.json` (D-07). Essence:_ Prior to this change, gitpulse only emitted plain-text tables and had no machine-readable GFM format. This initiative adds `--markdown` to every table-producing command (single-snapshot, `--compare`, `tags`, `coupling`), emitting valid GitHub-Flavoured Markdown tables whose first output line is always the header row (first char `|`) and second line is always the delimiter row. Pipe characters in cell values are escaped as `\|` rather than RFC-4180 double-quote wrapped, keeping GFM column counts consistent across all data rows.
 
 ## Summary
 
