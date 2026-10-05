@@ -341,14 +341,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "seedSessionId": "2026-10-04T08-05-39-20a01e49",
+        "seedSessionId": "2026-10-05T14-42-38-b2efca47",
         "seedSessionPhase": "briefing",
         "seedSessionRunning": "false"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
-        "seed-session-id": "2026-10-04T08-05-39-20a01e49",
+        "seed-session-id": "2026-10-05T14-42-38-b2efca47",
         "fetch-status": "ok",
         "kb-id": "story-s6",
         "node-count": "1",
@@ -428,13 +428,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "seedTheme": "evidence-freshness-not-label-match"
+        "seedTheme": "review-evidence-must-be-id-bound"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
         "fetch-status": "ok",
-        "theme-node": "evidence-freshness-not-label-match",
+        "theme-node": "review-evidence-must-be-id-bound",
         "theme-active": "false",
         "kb-id": "story-s6"
       },
@@ -508,10 +508,10 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-04T08-06-45-1b718482"
+        "architectSessionId": "2026-10-05T14-44-04-fe1ae51d"
       },
       "data": {
-        "architect-session-id": "2026-10-04T08-06-45-1b718482"
+        "architect-session-id": "2026-10-05T14-44-04-fe1ae51d"
       },
       "expect": {
         "architect-session-id": "<architectSessionId>"
@@ -563,14 +563,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "drainRunId": "story-s6-drain-mutjewhl"
+        "drainRunId": "story-s6-drain-muvd1pjw"
       },
       "data": {
         "page": "knowledge",
         "page-ready": "true",
         "fetch-status": "ok",
         "drain-state": "green",
-        "drain-run-id": "story-s6-drain-mutjewhl"
+        "drain-run-id": "story-s6-drain-muvd1pjw"
       },
       "expect": {
         "page": "knowledge",
@@ -607,32 +607,14 @@
   "reap": {
     "reaped": [
       {
-        "pid": 3681464,
-        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
+        "pid": 422825,
+        "dir": "_logs/_architect-2026-10-05T14-44-04-fe1ae51d",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 3681463,
-        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 3681340,
-        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 3681306,
-        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 3681272,
-        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
+        "pid": 422818,
+        "dir": "_logs/_architect-2026-10-05T14-44-04-fe1ae51d",
         "signal": "SIGTERM",
         "via": "cwd",
         "terminatedBeforeFirstPricedEvent": 30000
@@ -640,16 +622,16 @@
     ],
     "skipped": [
       {
-        "pid": 3680891,
-        "dir": "_logs/_project-brain-2026-10-04T08-05-39-20a01e49",
-        "reason": "pid 3680891: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 422405,
+        "dir": "_logs/_project-brain-2026-10-05T14-42-38-b2efca47",
+        "reason": "pid 422405: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_architect-2026-10-04T08-06-45-1b718482",
+        "dir": "_logs/_architect-2026-10-05T14-44-04-fe1ae51d",
         "kind": "architect",
-        "sessionId": "2026-10-04T08-06-45-1b718482",
+        "sessionId": "2026-10-05T14-44-04-fe1ae51d",
         "project": "story-s6",
         "cancelledFrom": "interviewing",
         "written": true,
@@ -660,7 +642,7 @@
   "sweep": {
     "removed": [
       "projects/.kb-story-s6",
-      "_logs/_kb-drain-story-s6-drain-mutjewhl"
+      "_logs/_kb-drain-story-s6-drain-muvd1pjw"
     ],
     "failed": [],
     "claim": {
@@ -687,7 +669,7 @@
     },
     "lines": [
       "[stories] trailing sweep removed projects/.kb-story-s6",
-      "[stories] trailing sweep removed _logs/_kb-drain-story-s6-drain-mutjewhl",
+      "[stories] trailing sweep removed _logs/_kb-drain-story-s6-drain-muvd1pjw",
       "[stories] trailing sweep KEPT projects/story-s6 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
@@ -708,35 +690,31 @@
         "entries": [
           {
             "path": "antipatterns.md",
-            "bytes": 630
+            "bytes": 802
           },
           {
             "path": "kb.yaml",
             "bytes": 268
           },
           {
-            "path": "patterns.md",
-            "bytes": 383
-          },
-          {
             "path": "profile.md",
-            "bytes": 1367
+            "bytes": 1736
           },
           {
-            "path": "themes/evidence-freshness-not-label-match.md",
-            "bytes": 1126
+            "path": "themes/review-evidence-must-be-id-bound.md",
+            "bytes": 1522
           },
           {
-            "path": "themes/review-gate-vacuous-pass.md",
-            "bytes": 1464
+            "path": "themes/vacuous-gate-pass.md",
+            "bytes": 1383
           },
           {
-            "path": "themes/verifier-repro-is-the-gate.md",
-            "bytes": 1187
+            "path": "themes/verifier-without-repro-agrees.md",
+            "bytes": 1318
           }
         ],
         "truncated": false,
-        "total": 7
+        "total": 6
       }
     ],
     "failed": [],
@@ -752,7 +730,7 @@
     "moved": []
   },
   "git": {
-    "sha": "918a631068a580453e0945501c221af0716a7b03",
+    "sha": "4a717a1774d9a3cb74929103781895472f143ee0",
     "dirty": false
   },
   "storyDigest": "ac3225f6f16e3c19"
