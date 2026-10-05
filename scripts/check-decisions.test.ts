@@ -17,7 +17,7 @@ const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'check-decisions.mj
 const REAL = new Set(['apps/forge/cli.ts', 'packages/x/a.test.ts', 'scripts/check-foo.mjs']);
 const exists = (p: string) => REAL.has(p);
 
-function ledger(decisionRows: string[], rejectedRows: string[] = ['| R-1 | Job queue | ADR 011 |'], extra = ''): string {
+function ledger(decisionRows: string[], rejectedRows: string[] = ['| R-1 | Job queue | Battle-tested tools exist |'], extra = ''): string {
   return [
     '# Decisions', '',
     '## Decisions', '',
