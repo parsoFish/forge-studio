@@ -14,7 +14,8 @@ demo and the usage doc at once.* Eight milestones (M0–M7) driven as parallel
 lanes, PRs #228 onward, each milestone closed by a real merge on a real
 ground or recorded NOT MET. The version stays 0.x until the tag is cut after
 the capstones; the plan and its exit tables are in
-[`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md).
+[`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md). The work below ships on main
+as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
 
 ### Added
 
@@ -52,6 +53,23 @@ the capstones; the plan and its exit tables are in
   session panel with a finalizer; the second verdict-write path is gone.
 - **Demo evidence** (M7): story-derived demos, in-clip cinematography, media
   in the PR, and a no-delta control run.
+- **Studio supervises `forge serve`** (M7, [ADR 011](docs/decisions/011-unattended-scheduler.md),
+  [ADR 031](docs/decisions/031-studio-consolidation.md)): `forge studio` starts
+  one serve per forge root, restarts it with backoff, stops it once on exit and
+  reports its state on `GET /api/health`; claimable work runs at once, with no
+  scheduler lifecycle control anywhere.
+- **The one emergency halt** (M7, [ADR 011](docs/decisions/011-unattended-scheduler.md)):
+  one Studio control, shown on every page while on, stops every new claim —
+  queue claims, fix-loop re-entry and agent dispatches — while every active
+  run finishes; the record survives restarts, and releasing it starts the
+  queued work in order.
+- **One start, one end** (M7): a run id has at most one live agent turn,
+  refused in code with a 409; every agent, node and cycle start writes exactly
+  one end on every exit, an operator stop ending `stopped`; the story harness
+  checks this pairing at the end of every run.
+- **The forge repo's refs are guarded** (M7): a `reference-transaction` hook
+  refuses any agent commit to, or ref move in, the forge repo; a session turn's
+  budget is the lesser of what the session declared and what the bridge funded.
 
 ### Changed
 
