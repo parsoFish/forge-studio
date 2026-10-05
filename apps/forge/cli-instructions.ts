@@ -64,7 +64,7 @@ export function cmdConstraints(rest: string[], resolveProjectDir: ResolveProject
     console.log(
       out.authored.length > 0
         ? `constraints author: wrote ${out.authored.length} block(s) [${out.authored.join(', ')}] from ${out.source} → ${out.profilePath}`
-        : `constraints author: no constraints source (CONSTRAINTS.md / Locked-core section) — profile left untagged (compiles under the ADR-037 default)`,
+        : `constraints author: no constraints source (CONSTRAINTS.md / Locked-core section) — profile left untagged`,
     );
   } catch (err) {
     console.error(`forge constraints author: ${err instanceof Error ? err.message : String(err)}`);

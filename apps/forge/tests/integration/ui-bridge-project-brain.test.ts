@@ -147,7 +147,7 @@ test('start without project → 400', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — projectBrainAgentSpec
+// SPEC §5 amendment (wave-6 kickoff model-tier seam) — projectBrainAgentSpec
 // is strategy:fixed (sonnet), so the only legal modelTier is "sonnet".
 // ---------------------------------------------------------------------------
 

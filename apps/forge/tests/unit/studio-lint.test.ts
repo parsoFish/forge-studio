@@ -265,7 +265,7 @@ triggers: []
   cleanup(root);
 });
 
-// Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+// Seam F6 half 1 (D-34, spec §5 item 8, bead forge-8vfn.6.10.15):
 // "a flow registers its accepted classes" — a flow.yaml missing the field
 // entirely fails to LOAD (loadFlowDefinition throws), and studio-lint must
 // surface that as a `flow:<id>` `check: 'load'` error naming both the flow
@@ -392,7 +392,7 @@ desc: Has an invalid id.
 // W7-FIX-A4 (W7A4-04): a kb.yaml whose `id` is not its directory name is
 // silently dropped by the roster (`loadKbDescriptors`) AND loses its derived
 // project↔KB binding (`projectKbBindings`) — `forge studio lint` must say so,
-// mirroring the flow `dir-name` check, for BOTH kb.yaml roots (ADR 035).
+// mirroring the flow `dir-name` check, for BOTH kb.yaml roots (SPEC §4).
 // ---------------------------------------------------------------------------
 
 test('W7A4-04 (RED on main): brain/<dir>/kb.yaml whose id ≠ <dir> → error finding check=dir-name naming both', () => {
@@ -410,7 +410,7 @@ test('W7A4-04 (RED on main): brain/<dir>/kb.yaml whose id ≠ <dir> → error fi
   cleanup(root);
 });
 
-test('W7A4-04 (RED on main): brain/projects/<dir>/kb.yaml (the ADR-035 root) whose id ≠ <dir> → the SAME dir-name error', () => {
+test('W7A4-04 (RED on main): brain/projects/<dir>/kb.yaml (the SPEC §4 root) whose id ≠ <dir> → the SAME dir-name error', () => {
   const root = buildValidRoot({ includeKb: false });
   const kbDir = join(root, 'brain', 'projects', 'my-project');
   mkdirSync(kbDir, { recursive: true });
@@ -1042,7 +1042,7 @@ test('AT-40: runStudioLint(process.cwd()) surfaces the 4 real unverifiable-endpo
 });
 
 // ---------------------------------------------------------------------------
-// F1 (decorative-guard): the ADR-010 read-policy guard must be WIRED into the
+// F1 (decorative-guard): the SPEC §4 read-policy guard must be WIRED into the
 // production `forge studio lint` KB section over REAL kb.yaml content — not
 // only exercised over tmpdir fixtures inside a test. A hand-authored, bandless
 // flow-bound kb.yaml that grants the reviewer reader role must surface as a
@@ -1091,7 +1091,7 @@ processes:
   );
   assert.ok(
     readPolicyFinding !== undefined,
-    `Expected a read-policy error for kb:rogue-reviewer-kb — the ADR-010 guard must be wired into the ` +
+    `Expected a read-policy error for kb:rogue-reviewer-kb — the SPEC §4 guard must be wired into the ` +
       `production KB section. Got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
   );
 

@@ -18,7 +18,7 @@ const GROUPS: Group[] = [
   { key: 'mcps',   kind: 'mcp',   label: 'MCP Servers' },
   { key: 'guards', kind: 'guard', label: 'Guards' },
   // Real library hooks (studio/hooks/<id>/) — a DISTINCT vocabulary from
-  // guards (composition.hooks vs composition.guards, ADR-027 R3-03
+  // guards (composition.hooks vs composition.guards, SPEC §1 R3-03
   // amendment); the two must never merge in this palette either.
   { key: 'hooks',  kind: 'hook',  label: 'Hooks' },
 ];

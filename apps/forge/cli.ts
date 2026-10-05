@@ -12,7 +12,7 @@
  *   forge serve [--once]                    the scheduler daemon (spawned by the bridge + harnesses)
  *   forge architect run <sid>               advance one architect turn (spawned by the bridge per operator action)
  *   forge brain index|lint                  brain-integrity gate (mirrors studio lint)
- *   forge gate docs <path...>               the docs class's merge-boundary gate (ADR 036: a verb, not a script)
+ *   forge gate docs <path...>               the docs class's merge-boundary gate (D-15: a verb, not a script)
  *   forge community refresh [--dry-run]     deterministic community-registry refresh (needs GH_TOKEN)
  */
 
@@ -177,7 +177,7 @@ recovery (cycle / enqueue / metrics / review / report / log / requeue) now live 
 UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
 Run \`forge studio\` and drive everything from the browser.
 
-For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see docs/decisions/.`,
+For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see DECISIONS.md.`,
   );
 }
 
@@ -234,7 +234,7 @@ async function cmdServe(rest: string[]): Promise<void> {
   }
 }
 
-// ADR 011/031: `forge studio` supervises `forge serve`
+// D-12: `forge studio` supervises `forge serve`
 // (apps/forge/serve-supervisor.ts, built on `spawnServeDetached` in
 // packages/flows/daemon.ts) — it adopts a live serve or spawns one and keeps
 // it alive while Studio owns the port; the Studio UI bridge is the operator
@@ -346,7 +346,7 @@ function cmdBrainIndex(rest: string[]): void {
 // exit 1 on errors, exit 2 on usage error.
 // ---------------------------------------------------------------------------
 
-// `forge studio` is a dual-mode dispatcher (M7-6, ADR-031):
+// `forge studio` is a dual-mode dispatcher (M7-6, D-12):
 //   - `forge studio lint`           → validate studio definitions (preserved)
 //   - `forge studio [launcher flags]` → launch the operator UI (NEW canonical)
 // The bare form (no subcommand) and any leading `--flag` mean "launch"; only
@@ -450,7 +450,7 @@ function cmdStudioLint(): void {
 // ---------------------------------------------------------------------------
 // forge architect run <session-id>
 //
-// ADR 020/023: the architect runs in the forge UI. The bridge spawns
+// The architect runs in the forge UI. The bridge spawns
 // `forge architect run` per operator turn (interview → draft → finalize);
 // the runner's finalize promotes manifests to the queue. The legacy
 // out-of-cycle `forge architect commit` CLI + `/forge-architect` slash were
@@ -462,14 +462,14 @@ async function cmdArchitect(rest: string[]): Promise<void> {
   if (sub === 'run') return await cmdArchitectRun(rest.slice(1));
   console.error('forge architect: subcommands: run <session-id>');
   console.error('  forge architect run <session-id> [--project <name>]');
-  console.error('  (the architect runs in the forge UI — see ADR 020/023; the bridge spawns this per turn)');
+  console.error('  (the architect runs in the forge UI — the bridge spawns this per turn)');
   process.exit(2);
 }
 
-// ADR 020: the architect runs in the forge UI as an operator-driven,
+// The architect runs in the forge UI as an operator-driven,
 // file-checkpointed runner. `forge architect run <sid>` advances ONE turn — it's
 // what the UI bridge spawns on each operator action (start / answer / verdict).
-// M7-5 (ADR-031): INTERNAL command — hidden from `forge --help`, never invoked
+// M7-5 (D-12): INTERNAL command — hidden from `forge --help`, never invoked
 // by hand, but kept dispatchable for the bridge's spawnArchitectTurn. Do NOT
 // delete the function or its dispatch case.
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
@@ -557,7 +557,7 @@ function demoFlagValue(rest: string[], flag: string): string | undefined {
 }
 
 async function cmdDemo(rest: string[]): Promise<void> {
-  // ADR 021 / F4: `forge demo render <init>` derives the single DEMO.md from the
+  // D-07 / F4: `forge demo render <init>` derives the single DEMO.md from the
   // unifier-authored `demo/<init>/demo.json`. Run from the worktree root (or
   // pass --dir). The unifier authors demo.json once and runs this to emit the
   // committed derived artifacts.
@@ -586,7 +586,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     return;
   }
 
-  // ADR 021: `forge demo capture <init>` is the media-capture skill's engine —
+  // D-07: `forge demo capture <init>` is the media-capture skill's engine —
   // it runs the two-worktree + Playwright before/after capture and back-fills
   // the captured images into the unifier's demo.json, then re-renders the
   // bundle. Best-effort: any failure leaves demo.json notes-only and exits 0
@@ -662,7 +662,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
 }
 
 /**
- * US-4.1 / ADR-017: check the C1–C6 forge↔project contract. The argument
+ * US-4.1 / SPEC §6: check the C1–C6 forge↔project contract. The argument
  * is a project name (resolved under `projects/<name>/`) or an explicit
  * path. Prints a per-clause PASS/FAIL/WARN report and exits non-zero iff a
  * HARD clause (C1/C2/C4) fails — so an unattended caller can gate on it.

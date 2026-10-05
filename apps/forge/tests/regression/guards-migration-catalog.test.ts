@@ -1,6 +1,6 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — B1-B3 of the
- * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename,
+ * SPEC §1 `composition.hooks` → `composition.guards` rename,
  * targeting `studio/catalog.yaml` + `orchestrator/studio/registry.ts`'s
  * `loadCatalog` + `@forge/library`'s `validateCatalog`.
  *

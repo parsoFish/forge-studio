@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * EmergencyHalt — the ONE global brake (ADR 011): a nav control plus a
+ * EmergencyHalt — the ONE global brake (D-03): a nav control plus a
  * full-width alert banner, both driven by the same `serve.halt` read.
  *
  *   [data-component="emergency-halt"][data-halt-state="off|on"]

@@ -13,8 +13,7 @@ import type { GenerationSelection } from '@/lib/session-artifact-view';
 import { type AuthoringPackageKind, isAuthoringPackageKind } from '@/lib/authoring-package-shape';
 
 // ---------------------------------------------------------------------------
-// SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
-// docs/decisions/043-generic-interactive-surface.md 2026-08-15 amendment §1).
+// SessionInteractivePanel — the GENERIC interaction panel (W6-B6, SPEC §5).
 //
 // Renders EXCLUSIVELY from the GET session-shell route's own `affordances[]`
 // (`packages/sessions/studio/session-kinds.ts`'s `deriveSessionAffordances`,
@@ -30,7 +29,7 @@ import { type AuthoringPackageKind, isAuthoringPackageKind } from '@/lib/authori
 // and `authoring` (deleting their bespoke `SessionCleanupPanel`/
 // `SessionAuthoringPanel`); W6-B9 adds `instructions` (deleting its bespoke
 // `SessionInstructionsPanel`) — architect is now the ONLY kind that keeps its
-// own panel, permanently (ADR-043 amendment §4 — its branching
+// own panel, permanently (SPEC §5 — its branching
 // council/interview control flow has no linear phase-table seam).
 //
 // **File-size split (bead forge-8vfn.8.3.4).** This file used to render
@@ -116,7 +115,7 @@ export function SessionInteractivePanel({
   affordances: SessionAffordance[];
   artifact?: SessionArtifactPayload | null;
   /** Read-only — the session's kickoff-selected tier, or `null` when none
-   *  was recorded. Never editable from this panel (ADR-043 §3: the tier is
+   *  was recorded. Never editable from this panel (SPEC §5: the tier is
    *  chosen once, at kickoff). */
   modelTier?: string | null;
   /** This session's live event stream, handed straight to the shared

@@ -72,7 +72,7 @@ const RUN_RAIL_HEIGHT = 420;
 export default function MonitorPage() {
   const { agents, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
-  // M7-E row 205 (ADR 011/031): the read-only serve status.
+  // M7-E row 205 (D-12): the read-only serve status.
   const { status: serveStatus } = useServeStatus();
   const ledger = useEverythingLedger({ agents, runs, sessions, ready });
 

@@ -1,6 +1,6 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — sweep
- * completeness for the ADR-027-amendment-#2 `composition.hooks` →
+ * completeness for the SPEC §1 `composition.hooks` →
  * `composition.guards` rename (at that migration's landing the 9 ids were
  * unchanged: the 5 toggles
  * `event-log`/`cost-guard`/`stall-watchdog`/`merge-gate`/`scratch-strip` and

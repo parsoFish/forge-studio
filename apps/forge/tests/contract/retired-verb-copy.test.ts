@@ -1,7 +1,7 @@
 /**
  * No operator-facing string names a retired CLI verb (forge-8vfn.8.5.11).
  *
- * M7-5 / S9 (ADR 031) retired `forge review`, `forge requeue` and
+ * M7-5 / S9 (D-12) retired `forge review`, `forge requeue` and
  * `forge enqueue`; recovery and review live in Studio. The M7-E stranger
  * (attempt 1, Q15) read `serve.log` telling it to "resolve via 'forge review
  * <id>'" — a verb the getting-started page says no longer exists. Comments

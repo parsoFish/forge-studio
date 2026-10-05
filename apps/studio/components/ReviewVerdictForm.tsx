@@ -6,12 +6,12 @@ import { submitVerdict, type AcceptanceCriterion } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
- * The review human moment (ADR 020) — approve or add work items to a cycle's PR
+ * The review human moment — approve or add work items to a cycle's PR
  * after review. Lives on its own screen (`/review/[cycleId]`), mirroring the
  * architect plan screen; the inline dashboard box was retired. Approve =
  * rationale only; "add work items" = rationale + 1+ `GIVEN/WHEN/THEN` acceptance
  * criteria. POSTs the kept `/api/verdict` bridge route (wire kind stays
- * `send-back` for back-compat). ADR 026: the work items are appended to the
+ * `send-back` for back-compat). D-20: the work items are appended to the
  * unifier's queue and run in the SAME cycle — no send-back to a dev phase, no
  * new cycle.
  */

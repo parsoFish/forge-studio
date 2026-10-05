@@ -639,7 +639,7 @@ export function FlowHeader({
           {/* webhook family (webhook / pr-merged / issue-raised) — receive/
               trust config; the endpoint is derived read-only display, not
               editable. zyc review finding 1: pr-merged/issue-raised reuse
-              this SAME block (own `on:` value, ADR-027's amendment) — before
+              this SAME block (own `on:` value, D-09's amendment) — before
               this fix only `on: webhook` rendered it, so a pr-merged/
               issue-raised trigger had NO way to declare the webhook.id
               packages/flows/bridge-hooks.ts's findWebhookTrigger needs to route a

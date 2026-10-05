@@ -319,7 +319,7 @@ export async function probeBridgeHealth(): Promise<{ ok: true } | { ok: false; e
 }
 
 /**
- * M7-E row 205 (ADR 011/031) — `forge studio` supervises `forge serve`
+ * M7-E row 205 (D-12) — `forge studio` supervises `forge serve`
  * directly; there is no operator start/pause/resume/stop surface, only this
  * READ-ONLY status, folded into the same `GET /api/health` response the
  * bridge identity rides. `unsupervised` means the bridge itself has no

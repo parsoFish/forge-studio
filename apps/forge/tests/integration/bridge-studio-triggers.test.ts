@@ -3,7 +3,7 @@
  * at the REAL bridge routes (not by calling handler functions directly).
  *
  * Pins two surfaces (docs/roadmaps/archive/R2-runnable-componentry.md R2-08-F4 +
- * docs/decisions/027-studio-object-model.md "Run-model trigger provenance"):
+ * D-10 run-model trigger provenance):
  *
  *  1. The EXISTING `GET /api/runs` / `GET /api/runs/<id>` routes
  *     (apps/forge/bridge-studio.ts:9-12) must surface `run.trigger` for a
@@ -261,7 +261,7 @@ test('GET /api/triggers lists every declared trigger with sourceFlowId, distingu
   const rowB = body.triggers.find((t) => t.sourceFlowId === 'flow-b');
   assert.ok(rowB, `expected a row with sourceFlowId 'flow-b' — got ${JSON.stringify(body.triggers)}`);
   assert.deepEqual(rowB!.projects, [], `flow-b declares 'projects: []' (scoped to nothing) — must NOT collapse to null/unscoped, got ${JSON.stringify(rowB!.projects)}`);
-  assert.notEqual(rowB!.projects, null, 'projects: [] must never read back as null — the two states are never collapsed (ADR-027 amendment)');
+  assert.notEqual(rowB!.projects, null, 'projects: [] must never read back as null — the two states are never collapsed (D-10)');
 });
 
 // ---------------------------------------------------------------------------
@@ -273,7 +273,7 @@ test('GET /api/triggers lists every declared trigger with sourceFlowId, distingu
 // kept as a forward-looking regression pin: once F4 adds the route, this
 // kills an implementation that caches/materializes the triggers listing (or
 // any derived index) to disk on a GET, rather than deriving it purely from
-// studio/flows/*/flow.yaml on every read (ADR-027's "no new stored object").
+// studio/flows/*/flow.yaml on every read (D-09's "no new stored object").
 test('GET /api/triggers performs no write anywhere under forgeRoot', async () => {
   const before_ = listAllFilesRec(forgeRoot);
   const res = await fetch(`${bridgeUrl}/api/triggers`);

@@ -37,7 +37,7 @@ test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the ful
   assert.deepEqual(artifact.rows, [], 'the fixture\'s manifests/ dir is empty — the artifact must be an honest empty roadmap, not a fabricated row');
 
   // W6-B3 — architect carries NEITHER turnSpec NOR panel (permanently
-  // bespoke, ADR-043 2026-08-15 amendment §4) — deriveSessionAffordances must
+  // bespoke, SPEC §5) — deriveSessionAffordances must
   // yield the honest empty answer, not a fabricated guess.
   assert.deepEqual(body.affordances, [], 'architect has no turnSpec/panel — affordances must be [], never fabricated');
   // W8-B3 AMENDMENT (sessions-kinds-R06/31) — this asserted `null`, which was

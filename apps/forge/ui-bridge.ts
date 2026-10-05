@@ -110,7 +110,7 @@ type WsOutbound =
   | { type: 'snapshot'; cycles: { live: Cycle[]; recent: Cycle[] } }
   | { type: 'event'; cycleId: string; event: EventLogEntry }
   | { type: 'cycle-list-changed' }
-  // ADR 020 — an architect session changed (started, new questions, plan ready,
+  // An architect session changed (started, new questions, plan ready,
   // committed). The UI re-fetches `/api/architect/sessions`.
   | { type: 'architect-list-changed' }
   // Stage A — an instructions-creator session changed (started, new questions,
@@ -173,7 +173,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // named outcomes, not exceptions.
   const bridgeLog = createLogger(bridgeCycleId(), join(forgeRoot, '_logs'));
   installForgeRefGuardHook(forgeRoot, bridgeLog);
-  // ADR 048 clause 2, FIRST: every factory-backed default below reads this, and
+  // D-32, FIRST: every factory-backed default below reads this, and
   // the bridge must come up whether or not an example package is installed.
   await resolveInstalledFactory();
   // F1: a stable identity for this bridge process, captured once at startup
@@ -216,14 +216,14 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // supervisor exists (after this bridge is already listening).
   const getServeStatus = opts.getServeStatus ?? (() => UNSUPERVISED_SERVE_STATUS);
   const mergePrFn = opts.mergePr ?? mergePullRequest;
-  // ADR 048: flows declares the reflector port; the assembly binds it, here and in `factory-wiring.ts`.
+  // D-32: flows declares the reflector port; the assembly binds it, here and in `factory-wiring.ts`.
   const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? ((deps: { queueRoot: string; logsRoot: string }) =>
     finalizeMergedReadyForReview({ ...deps, runReflector: example().phaseWiring.runReflector }));
   // WS-A (release): the default release-finalize hook constructs a per-cycle
   // logger and delegates to the real phase. Opt-in + log-and-continue live
   // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
   // Bound only when an example is installed — `example-hooks.ts` owns that
-  // decision and its header carries the reasoning (ADR 048, rulings 485/488).
+  // decision and its header carries the reasoning (D-32, rulings 485/488).
   const runReleaseFinalizeFn = bindReleaseFinalize(opts.runReleaseFinalize, logsRoot);
   // D — auto-rerun the reflector on operator feedback. Default delegates to the
   // real helper; the POST handler + startup reconcile both call this.
@@ -241,7 +241,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   if (isDryBridge()) {
     emitDryBridgeRefusal({ route: 'startup:reflect-reconcile', method: 'BOOT', action: 'spawn-agent', logsRoot });
   } else if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1' && peekInstalledFactory() !== null) {
-    // ADR 048: reconciling feedback is the EXAMPLE's work; with none installed
+    // D-33: reconciling feedback is the EXAMPLE's work; with none installed
     // there is no reflector to re-run, so it is skipped, not swallowed.
     void example().reconcileReflectFeedback({
       logsRoot,
@@ -386,7 +386,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     ));
   };
 
-  // ADR 020 — watch each project's architect session dir (recursively where the
+  // Watch each project's architect session dir (recursively where the
   // platform supports it) so the runner's file-checkpoint writes (questions,
   // PLAN, status) push a re-fetch signal to the UI. Mirrors `watchQueue`.
   const watchArchitect = (): void => {
@@ -548,7 +548,7 @@ type HttpContext = {
   logsRoot: string;
   forgeRoot: string;
   queueRoot: string;
-  /** ADR 020 — `<forgeRoot>/projects`, the root the architect routes walk. */
+  /** `<forgeRoot>/projects`, the root the architect routes walk. */
   projectsRoot: string;
   /** Broadcast an `architect-list-changed` WS message (fsWatch may miss
    *  same-tick writes; the routes call this after they mutate session state). */
@@ -588,7 +588,7 @@ type HttpContext = {
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /**
    * WS-A — finalise the release on the PR branch before merge (opt-in;
-   * log-and-continue). OPTIONAL, and the `?` is the ADR 048 statement (ruling
+   * log-and-continue). OPTIONAL, and the `?` is the D-32 statement (ruling
    * 485): a required field could only be satisfied by a function that throws
    * when the example is absent, and that throw was being swallowed.
    */
@@ -632,7 +632,7 @@ async function handleHttp(
     return;
   }
 
-  // ---- Webhook receipts (R2-04, ADR-041) ---------------------------------
+  // ---- Webhook receipts (R2-04, D-22) ---------------------------------
   // POST /api/hooks/:hookId is called by EXTERNAL services (github/gitea/
   // gitlab), never by the Studio browser client — a webhook delivery cannot
   // carry the x-forge-csrf header (that header exists to defeat CROSS-ORIGIN
@@ -681,7 +681,7 @@ async function handleHttp(
   // `./bridge-cycle-data.ts` (feature move, no behaviour change).
   if (await handleCycleDataRoutes(req, res, { logsRoot: ctx.logsRoot, forgeRoot: ctx.forgeRoot }, url, method)) return;
 
-  // ---- Architect (ADR 020) ----------------------------------------------
+  // ---- Architect ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------

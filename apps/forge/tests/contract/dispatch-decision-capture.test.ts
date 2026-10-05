@@ -58,7 +58,7 @@
  * reported rather than silently omitted or worked around with an export or
  * text-scrape: `BAND_GUARD_IDS` + `BAND_CANONICAL_SLUG` (the DECLARED-DATA
  * side of band dispatch — the KEY) are pinned below; the internal
- * guard→executor wiring (the platform-code side, ADR-039's "the platform
+ * guard→executor wiring (the platform-code side, SPEC §1's "the platform
  * bakes only execution machinery") is not.
  *
  * `allDefinitions` is a SECOND, wider table over a DIFFERENT, narrower ROOT

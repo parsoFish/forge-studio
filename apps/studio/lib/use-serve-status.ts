@@ -2,7 +2,7 @@
 
 /**
  * useServeStatus — the live, READ-ONLY `forge serve` supervisor status
- * (M7-E row 205, ADR 011/031). `forge studio` supervises serve directly
+ * (M7-E row 205, D-12). `forge studio` supervises serve directly
  * and the operator has no lifecycle control over it, so this hook only
  * reads: every consumer shares the ONE tab-wide poll in
  * `lib/serve-status-store.ts` (row 207), and renders the single shared

@@ -1,7 +1,7 @@
 /**
  * apps/studio/lib/debounce.ts — leading+trailing debounce.
  *
- * ADR-044 (`docs/decisions/044-read-path-memoization.md`) P1 consequence: the
+ * D-27 (P1) consequence: the
  * `/api/runs` cache still costs one full pass per uncached call, so a client
  * that fires a `fetchRuns()` HTTP round-trip for every `cycle-list-changed`
  * WS message in a burst (home page + library page, both subscribed to the

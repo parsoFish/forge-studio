@@ -1,5 +1,5 @@
 /**
- * The one emergency halt (ADR 011) at the bridge: `POST /api/halt`,
+ * The one emergency halt (D-03) at the bridge: `POST /api/halt`,
  * `POST /api/halt/release`, the `serve.halt` health field, and the 409
  * `{ error: 'halted' }` refusal on every dispatch caller family. The record is
  * `<forgeRoot>/_queue/halt.json`, the same file `forge serve` reads.

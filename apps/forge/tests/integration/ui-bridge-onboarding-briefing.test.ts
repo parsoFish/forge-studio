@@ -5,7 +5,7 @@
  * WHAT WAS TRUE BEFORE. `POST /api/studio/onboarding/start` did four things in
  * one press: minted the session dir, wrote `status.json` at `running`, emitted
  * the shared `agent-run.dispatched` marker, and spawned the agent. So onboarding
- * had no interview on the generic spine at all — ADR 043 §Consequences even
+ * had no interview on the generic spine at all — SPEC §5 even
  * records it as "explicitly out of scope… a fire-and-forget dispatch".
  *
  * WHY THE OBVIOUS FIX WAS PARKED. Simply putting a checkpoint before the

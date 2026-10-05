@@ -1,5 +1,5 @@
 /**
- * Seed-data integration tests (ADR 027, M0 Task 4).
+ * Seed-data integration tests (D-09, M0 Task 4).
  *
  * Resolves paths from the repo root (process.cwd()), same precedent as
  * derive.test.ts.  These tests do I/O against the real repo files — kept
@@ -261,7 +261,7 @@ test('forge-develop declares the merged→reflect-agent trigger (single source f
   const flow = loadFlowDefinition(join(ROOT, 'studio/flows/forge-develop/flow.yaml'));
   // R4-09-F1 standalone-reflect cutover: the shipped merge dispatch targets the
   // reflect AGENT (resolved via its reflection-close band hook), not the
-  // single-node reflect flow wrapper (retired in W7-C1). ADR-041 target shape, no schema
+  // single-node reflect flow wrapper (retired in W7-C1). D-23 target shape, no schema
   // change (was {on, flow} pre-R2-04; kind:flow→kind:agent at R4-09-F1).
   assert.deepEqual(flow.triggers, [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }]);
 });

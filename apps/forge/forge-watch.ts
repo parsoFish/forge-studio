@@ -1,6 +1,6 @@
 /**
  * `forge studio` (canonical) / `forge watch` (deprecated alias) — the
- * foreground launcher that brings up the operator UI (ADR-031, M7-6).
+ * foreground launcher that brings up the operator UI (D-12, M7-6).
  *
  * Spawns two children:
  *   1. The forge-ui bridge (apps/forge/ui-bridge.ts) — WebSocket + HTTP API.
@@ -517,7 +517,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   //     have it auto-reconnect via the bridge-client backoff.
   takeoverPort(bridgePort, 'bridge', label);
   // M7-E row 205: the bridge's own GET /api/health reports serve's live
-  // status (ADR 011/031) via a GETTER, not a snapshot — the supervisor is
+  // status (D-12) via a GETTER, not a snapshot — the supervisor is
   // created a few lines below, AFTER the bridge is already listening, so the
   // indirection lets the health route always read whatever the supervisor's
   // current status is, including before it exists (unsupervised).

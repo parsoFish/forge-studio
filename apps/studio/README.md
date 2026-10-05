@@ -1,7 +1,7 @@
 # `forge-ui/` — Forge Studio, the operator UI (Scope 1: framework)
 
 > **Scope 1 — the hot path.** The Next.js operator UI launched by `forge studio` — the
-> **sole operator surface** ([ADR 031](../docs/decisions/031-studio-consolidation.md)).
+> **sole operator surface** (`DECISIONS.md` D-12).
 > Every load-bearing state is mirrored to `data-*` attributes (DOM-as-metrics) so
 > automation can drive the page by reading structured state. It talks to the
 > orchestrator **only** through the bridge (`apps/forge/bridge-studio.ts`) — it never imports

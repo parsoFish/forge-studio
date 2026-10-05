@@ -252,7 +252,7 @@ export function writeSessionKindsYaml(root: string): void {
           ],
         },
       },
-      // R4-19-F2: the new "kb-cleanup" session kind — the ADR-043-shaped
+      // R4-19-F2: the new "kb-cleanup" session kind — the SPEC §5-shaped
       // turnSpec table verbatim (see packages/sessions/studio/session-kinds.test.ts's
       // own R4-19-F2 block for the pin against the REAL, checked-in yaml;
       // this file's fixture yaml is this file's OWN pre-existing convention

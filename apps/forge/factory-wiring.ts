@@ -1,6 +1,6 @@
 /**
  * factory-wiring.ts — the ONE place the assembly names the installed example
- * factory (ADR 048, clause 2's seam), and the only module in the repository
+ * factory (D-32, clause 2's seam), and the only module in the repository
  * that may import `@forge/factory` at all.
  *
  * `packages/flows` declares the ports and imports no factory, so something has
@@ -10,7 +10,7 @@
  * `resolveInstalledFactory()` answers `null` when `@forge/factory` does not
  * resolve; every caller degrades rather than throwing, which is what makes
  * `packages/factory` removable with `forge studio` still booting (exit row 5,
- * proven by the `factory-deletable` CI job, ADR 048 clause 3).
+ * proven by the `factory-deletable` CI job, D-32).
  *
  * WHAT IS NOT SWALLOWED. Only a module-not-found naming `@forge/factory` counts
  * as "no example installed". A factory that IS installed and throws while
@@ -46,10 +46,10 @@ import {
  * answer would let half a factory look installed.
  */
 export type InstalledFactory = {
-  /** The shipped example factory's phase wiring (ADR 028's runner ports). */
+  /** The shipped example factory's phase wiring (SPEC §2's runner ports). */
   readonly phaseWiring: PhaseWiring;
   /**
-   * The class → gate-profile answer for the plan gate (ADR 051, ruling 229
+   * The class → gate-profile answer for the plan gate (D-34, ruling 229
    * half B). `null` for a class the installed table does not know, so an
    * unknown class is neither permissive nor forbidden — the plan gate simply
    * has no opinion, the honest answer when the table cannot speak to it.
@@ -139,7 +139,7 @@ export async function resolveInstalledFactory(): Promise<InstalledFactory | null
 
 /** The message every surface prints when a factory verb is asked for and none is installed. */
 export const NO_EXAMPLE_INSTALLED =
-  'no example factory is installed (`packages/factory` does not resolve) — this surface is the example\'s, not the platform\'s (ADR 048)';
+  'no example factory is installed (`packages/factory` does not resolve) — this surface is the example\'s, not the platform\'s (D-33)';
 
 /** Test seam ONLY: forget the memoized answer so a test can resolve again. */
 export function resetInstalledFactoryForTests(): void {

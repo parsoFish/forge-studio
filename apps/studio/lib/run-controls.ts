@@ -49,7 +49,7 @@ const RUNNING_CONTROLS: RunControl[] = [
     label: 'Stop',
     // `POST /api/recovery/:id/stop`. Active: writes a stop flag the runner
     // consults at its next clean node/work-item boundary (the SAME boundary
-    // the cost ceiling already halts at — ADR 028 amendment). Gated: no live
+    // the cost ceiling already halts at — SPEC §2). Gated: no live
     // agent to signal, so this moves the manifest to failed/ directly.
     detail:
       'Stops at the next clean boundary (or immediately if gated). The worktree and ' +
@@ -114,7 +114,7 @@ export type QueuedServeTone = 'halted' | 'running' | 'not-running' | 'unknown';
  * promise a pickup (`queued-awaits-serve`) — `unknown` (the read failed, or
  * this bridge has no supervisor at all: the dry bridge, or a second studio
  * attached read-only) must say it could not confirm rather than render the
- * SAME pickup promise `running` does (ADR 031: Studio never claims a run is
+ * SAME pickup promise `running` does (D-12: Studio never claims a run is
  * in progress unless a daemon is alive and claiming it). `not-running` (a
  * CONFIRMED draining/restarting/down) keeps the shared `<ServeStatusNotice>`.
  * Mirrors `describePostCommit`'s own `unknown = serve === null ||

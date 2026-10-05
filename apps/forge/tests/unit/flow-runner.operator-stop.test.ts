@@ -1,5 +1,5 @@
 /**
- * M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — ADR 028's
+ * M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — SPEC §2's
  * amendment: the operator-stop flag file is a SECOND trigger on the SAME
  * clean-boundary halt the cost ceiling already uses. Mirrors this file's
  * sibling `flow-runner.test.ts`'s own cost-ceiling / wedge-kill test style
@@ -93,7 +93,7 @@ const NOOP_CLOSE_DEPS: TestDepsPartial = {
   rebaseForResume: () => { /* no-op */ },
 };
 
-describe('flow-runner operator-stop — node boundary (ADR 028 amendment)', () => {
+describe('flow-runner operator-stop — node boundary (D-11)', () => {
   it(
     'a stop flag present when the pm node finishes throws OperatorStopError and logs ' +
       'flow.operator-stop',

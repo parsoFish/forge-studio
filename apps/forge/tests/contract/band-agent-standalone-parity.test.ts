@@ -3,7 +3,7 @@
  *
  * `packages/agents/band-agent-run.ts` runs the band-guard node agent through its
  * FLOW pipeline rather than the bare `runAgent` spawn — that parity IS the
- * module's reason to exist (R4-10-F3, ADR-039). Proving it needs
+ * module's reason to exist (R4-10-F3, SPEC §1). Proving it needs
  * `runAdversarialReview` itself, which is `@forge/factory` (rank 7) and may
  * never be imported from `packages/agents` (rank 3). This is the layer that
  * legally holds both sides, so the parity case lives here — carried over

@@ -1,6 +1,6 @@
 /**
  * `forge gate docs` — the docs class's merge-boundary gate as an ORCHESTRATOR
- * VERB (spec §5 item 6, ADR 036).
+ * VERB (spec §5 item 6, D-15).
  *
  * The rules live in `@forge/stations/gates/docs-gate.ts`; this file is the shell
  * that turns argv into a spec and findings into an exit code. The split is the
@@ -52,7 +52,7 @@ export async function cmdGate(rest: string[]): Promise<void> {
     return;
   }
 
-  // ADR 048: this verb is the EXAMPLE's, and its absence is a usage error
+  // D-33: this verb is the EXAMPLE's, and its absence is a usage error
   // (exit 2), never a pass — a gate that greens because its rules could not be
   // found is the failure this file's own header is about.
   const findings = (await requireDocsGate('forge gate docs'))(paths, spec);

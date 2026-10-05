@@ -81,7 +81,7 @@ export function refreshesRoadmap(msg: BridgeMessage): boolean {
  * `isNew` is the `/projects/new` guard W7-A4 established: that route is the
  * onboarding form, not a project, and no per-project read may fire for it.
  *
- * The debounce is ADR-044 P1's (leading+trailing 500 ms). `event` arrives per
+ * The debounce is D-27 P1's (leading+trailing 500 ms). `event` arrives per
  * log line while the PM runs, so the roadmap would otherwise refetch per line.
  * `makeCoalescedRefresh` (`lib/coalesce-refresh.ts`) is the neighbouring tool
  * and the wrong one here — it collapses same-tick bursts and in-flight overlap

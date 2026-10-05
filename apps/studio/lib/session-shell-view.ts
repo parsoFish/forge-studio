@@ -518,7 +518,7 @@ export function shouldPollSessionSummary(state: SessionShellViewState): boolean 
 //
 // `isPseudoProjectAnchor` and `COMMUNITY_REGISTRY_ANCHOR` (imported above as
 // `COMMUNITY_REFRESH_PROJECT_ANCHOR`) are a PURE TRANSFER to `@forge/contracts`
-// (ADR 046 boundary fix, `studio-beyond-contracts` edge 3): this file used to
+// (D-29 boundary fix, `studio-beyond-contracts` edge 3): this file used to
 // carry its own independently-declared mirror of both, held honest by a
 // parity test in this file's own .test.ts sibling. With one definition in
 // contracts, the mirror and its parity test are both gone — re-exported here

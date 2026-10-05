@@ -69,7 +69,7 @@ export type Agent = {
   mcps: string[];
   guards: string[];
   // Library hook ids this agent carries (R3-03-F4) — a DISTINCT vocabulary
-  // from `guards` (ADR-027 R3-03 amendment: composition.hooks holds library
+  // from `guards` (SPEC §1 R3-03 amendment: composition.hooks holds library
   // hook ids, composition.guards holds the fixed platform dispatch-key set).
   hooks: string[];
   /**
@@ -109,7 +109,7 @@ export type Agent = {
    *  applies. */
   declaredMaxBudgetUsd?: number;
   /**
-   * W6-B6 (ADR-043 2026-08-15 amendment §3) — server-computed FACT
+   * W6-B6 (SPEC §5) — server-computed FACT
    * (`packages/agents/studio/derive.ts`'s `agentCapabilityDescriptor().
    * allowedTiers`), read directly off the wire's `capability` object —
    * SAME "own top-level field, parsed independently of `capability`"

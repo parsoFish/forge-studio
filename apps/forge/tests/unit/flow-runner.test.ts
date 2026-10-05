@@ -1,5 +1,5 @@
 /**
- * Tests for packages/flows/flow-runner.ts (ADR-028, M3-1/2).
+ * Tests for packages/flows/flow-runner.ts (SPEC §2, M3-1/2).
  *
  * All tests use MOCK deps (spy functions) so no filesystem or SDK calls happen.
  * Test 4 loads the REAL forge-cycle.yaml via loadFlowDefinition and runs the
@@ -38,7 +38,7 @@ function makeInput(overrides: Partial<CycleInput> = {}): CycleInput {
     projectRepoPath: '/tmp/test/project',
     worktreePath: '/tmp/test/worktree',
     // These tests mock the node executors and use synthetic paths — no real artifacts land on
-    // disk, so they run as dry runs (which skips the ADR-027 inbound-artifact guard). Artifact
+    // disk, so they run as dry runs (which skips the SPEC §1 inbound-artifact guard). Artifact
     // enforcement is covered in flow-artifacts.test.ts against real on-disk layouts.
     dryRun: true,
     ...overrides,
@@ -524,7 +524,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the integrate node re-authors');
   });
 
-  it('resume_from:integrate (ADR-019 crash recovery, R4-10-F6) resumes at the integrate node', async () => {
+  it('resume_from:integrate (D-06 crash recovery, R4-10-F6) resumes at the integrate node', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
@@ -1311,7 +1311,7 @@ describe('single-node flow with a generic (non-legacy, no-executor) agent — ex
 });
 
 // ---------------------------------------------------------------------------
-// Test 8: Node-executor registry seam (ADR-028 — "new flow = no orchestrator edit")
+// Test 8: Node-executor registry seam (SPEC §2 — "new flow = no orchestrator edit")
 // ---------------------------------------------------------------------------
 
 /**
@@ -1338,7 +1338,7 @@ function makeAgentDef(overrides: Partial<AgentDefinition> = {}): AgentDefinition
   };
 }
 
-describe('flow-runner node-executor registry seam (ADR-028)', () => {
+describe('flow-runner node-executor registry seam (SPEC §2)', () => {
   it('resolveNodeKind maps gate/agent fields to kinds (gate wins over agent, declared executor drives the rest)', () => {
     // Stub roster (R2-01-F2): resolution now reads `def.executor` off the
     // agent definition rather than a hardcoded AGENT_KIND table — build a
@@ -1347,7 +1347,7 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     const agents = new Map<string, AgentDefinition>([
       ['architect', makeAgentDef({ slug: 'architect', name: 'Architect' })],
       // R4-01-F2: the PM no longer declares an executor either — its dispatch
-      // key is the wi-contract band hook (ADR-039).
+      // key is the wi-contract band hook (SPEC §1).
       [
         'project-manager',
         makeAgentDef({
@@ -1368,7 +1368,7 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
       ],
       ['developer-unifier', makeAgentDef({ slug: 'developer-unifier', name: 'Unifier', executor: 'unifier' })],
       // R4-01-F2: the reflector no longer declares an executor — its dispatch
-      // key is the reflection-close band hook (ADR-039), so it resolves to
+      // key is the reflection-close band hook (SPEC §1), so it resolves to
       // the generic 'agent' kind and execAgent routes it to the band.
       [
         'reflector',

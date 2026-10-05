@@ -7,7 +7,7 @@
  * afterwards: every "Save project" 500'd and silently discarded the edit,
  * with no in-Studio remedy (save-repo silently no-ops, preflight fix-auto
  * best-effort-swallows the same failure) — only a manual `git commit` from a
- * shell outside Studio, contradicting ADR-031.
+ * shell outside Studio, contradicting D-12.
  *
  * Chain: `scaffoldContractArtifacts` runs `git init` for the fresh dir but
  * makes no initial commit, so the repo is UNBORN (zero commits) →

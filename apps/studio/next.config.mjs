@@ -25,7 +25,7 @@ const nextConfig = {
   // shim page was deleted.
   async redirects() {
     return [
-      // Architect (M7-4 / R2-10 PR2, WI-8, ADR-031): interview + PLAN gate
+      // Architect (M7-4 / R2-10 PR2, WI-8, D-12): interview + PLAN gate
       // consolidated onto the shared session shell. `/interview` is listed
       // first so a request never chains through two redirect hops.
       {
@@ -33,8 +33,8 @@ const nextConfig = {
         destination: '/sessions/architect/:sessionId',
         permanent: true,
       },
-      // `/architect/new` is a LIVE page (the architect's own kickoff — ADR-043
-      // amendment §4: architect never migrates onto the generic surface), NOT
+      // `/architect/new` is a LIVE page (the architect's own kickoff — SPEC §5: architect never
+      // migrates onto the generic surface), NOT
       // a legacy session id. Without the negative lookahead, `new` matched
       // `:sessionId` and every "Plan with Architect" entry landed on the
       // generic /sessions/architect/new kickoff instead (wave-6 final gate,
@@ -68,13 +68,13 @@ const nextConfig = {
         destination: '/sessions/demo/:sessionId',
         permanent: true,
       },
-      // Review human moment (M7-3, ADR-031): unified artifact viewer.
+      // Review human moment (M7-3, D-12): unified artifact viewer.
       {
         source: '/review/:cycleId',
         destination: '/artifact?run=:cycleId&type=verdict&mode=gate',
         permanent: true,
       },
-      // Reflection human moment (M7-3, ADR-031): unified artifact viewer.
+      // Reflection human moment (M7-3, D-12): unified artifact viewer.
       {
         source: '/reflect/:cycleId',
         destination: '/artifact?run=:cycleId&type=reflection&mode=view',

@@ -1,5 +1,5 @@
 /**
- * Tests for the pure reflection-form helpers (M7-3, ADR-031). These gate the
+ * Tests for the pure reflection-form helpers (M7-3, D-12). These gate the
  * submit button and assemble the answer payload posted to the bridge — the
  * load-bearing logic re-homed from /reflect/[cycleId] into the unified /artifact
  * reflection gate.

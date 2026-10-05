@@ -3,7 +3,7 @@
  * session at its pre-turn phase forever".
  *
  * `cmdAgentRun` (`apps/forge/agent-run.ts`) used to await a runner's turn (either
- * the ADR-043 §3 turnSpec road's `runInteractiveTurn`, or one of the 4
+ * the SPEC §5 turnSpec road's `runInteractiveTurn`, or one of the 4
  * legacy `AGENT_RUNNERS`' own `runTurn`) with NO try/catch anywhere between
  * it and the top-level `apps/forge/cli.ts` catch-all, which only prints to
  * stderr and calls `process.exit(1)` — invisible to `apps/forge/ui-bridge.ts`'s

@@ -5,7 +5,7 @@
  * rendered on the /artifact verdict surface in BOTH gate and view mode.
  *
  * These are agent CLAIMS the operator weighs before deciding — never a gate by
- * themselves (ADR-021: approve IS the merge and stays human). An empty
+ * themselves (approve IS the merge and stays human). An empty
  * findings array is an explicit clean pass and renders as such.
  *
  * W7-B7 (artifact-plan-16): a MISSING artifact used to render nothing — the

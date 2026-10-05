@@ -1,5 +1,5 @@
 /**
- * bridge-halt.ts — the one emergency halt at the bridge (ADR 011).
+ * bridge-halt.ts — the one emergency halt at the bridge (D-03).
  *
  * `POST /api/halt` writes `<forgeRoot>/_queue/halt.json`; `POST /api/halt/release`
  * removes it. `haltStatus` is the read the health route folds into `serve.halt`.

@@ -1,5 +1,5 @@
 /**
- * Tests for the ADR-044 P1 debounce wiring in
+ * Tests for the D-27 P1 debounce wiring in
  * `use-studio-home-data.ts`'s `createDebouncedRefreshRuns` — the exact
  * function `useStudioHomeData()`'s `cycle-list-changed` handler calls,
  * extracted as a plain, effect-free unit so this claim is provable by
@@ -40,7 +40,7 @@ test('a single cycle-list-changed message refetches immediately (leading edge)',
 test('a burst of cycle-list-changed messages collapses into at most TWO refreshRuns calls', () => {
   // The exact defect a careless merge resolution would have shipped: one
   // fetchRuns() HTTP round-trip per WS message, re-amplifying the cost
-  // ADR-044's server-side memo exists to remove.
+  // D-27's server-side memo exists to remove.
   const refreshRuns = vi.fn();
   const debounced = createDebouncedRefreshRuns(refreshRuns);
 

@@ -12,7 +12,7 @@ import { bridgePost, bridgeReadOr404, bridgeReadOrThrow, resolveBridgeUrl } from
 // because a `type`-only edge never participates in module evaluation order.
 import type { SessionLifecycle } from './session-lifecycle-client.ts';
 
-// ---- Architect (ADR 020) -------------------------------------------------
+// ---- Architect -------------------------------------------------
 
 export type ArchitectPhase =
   | 'interviewing'
@@ -117,7 +117,7 @@ export async function architectFileUrl(relative: string): Promise<string> {
 export async function startArchitect(input: {
   project: string;
   idea: string;
-  /** ADR-043 §3: operator-chosen tier (validated server-side vs the architect SKILL envelope). */
+  /** SPEC §5: operator-chosen tier (validated server-side vs the architect SKILL envelope). */
   modelTier?: string;
   /** W7-B6 (projects-14): session cost ceiling (USD) — enforced by the runner at every turn start. */
   costCeilingUsd?: number;
@@ -215,7 +215,7 @@ export async function listInstructionsSessions(): Promise<InstructionsSessionSum
 export async function startInstructions(input: {
   project: string;
   mode: 'init' | 'edit';
-  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — an operator-chosen kickoff
+  /** W6-B6 (SPEC §5) — an operator-chosen kickoff
    *  model tier, validated server-side against instructions-creator's own
    *  SKILL.md-declared envelope (`resolveKickoffModelTier`). Omit for the
    *  spec's spawn-default tier. */
@@ -325,7 +325,7 @@ export async function startDemoBuilder(input: {
   mode: 'create' | 'update';
   /** Iterate ONE demo-element kind (per-element iteration); omit to compose the full demo. */
   targetElement?: string;
-  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+  /** W6-B6 (SPEC §5) — see {@link startInstructions}'s
    *  own doc; validated against demo-builder's own SKILL.md envelope. */
   modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; mode?: 'create' | 'update'; error?: string }> {
@@ -359,7 +359,7 @@ export type ProjectBrainSession = {
 /** Start a project-brain builder session (phase=briefing). */
 export async function startProjectBrain(input: {
   project: string;
-  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+  /** W6-B6 (SPEC §5) — see {@link startInstructions}'s
    *  own doc; validated against project-brain-builder's own SKILL.md envelope. */
   modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
@@ -415,7 +415,7 @@ export async function fetchStagedThemes(project: string, sessionId: string): Pro
 export async function startAuthoring(input: {
   project: string;
   prompt: string;
-  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+  /** W6-B6 (SPEC §5) — see {@link startInstructions}'s
    *  own doc; validated against creation-agent's own SKILL.md envelope. */
   modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {

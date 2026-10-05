@@ -633,7 +633,7 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
 
 // ---------------------------------------------------------------------------
 // SessionAffordancePayload — mirrors packages/sessions/studio/session-kinds.ts's
-// `SessionAffordance` (W6-B6, ADR-043 2026-08-15 amendment §1 "affordances
+// `SessionAffordance` (W6-B6, SPEC §5 "affordances
 // are derived, not authored"). Re-declared client-side per this file's own
 // convention (header) — never imported from the orchestrator.
 // ---------------------------------------------------------------------------
@@ -794,7 +794,7 @@ export type SessionShellPayload = {
   turns: SessionTurn[];
   artifact: SessionArtifactPayload;
   /**
-   * W6-B6 (ADR-043 2026-08-15 amendment §1) — the derived, phase-scoped
+   * W6-B6 (SPEC §5) — the derived, phase-scoped
    * operator affordances (`packages/sessions/studio/session-kinds.ts`'s
    * `deriveSessionAffordances`, server-computed). REQUIRED and hard-parsed
    * like every sibling field — a kind with no derivable affordances
@@ -804,7 +804,7 @@ export type SessionShellPayload = {
    */
   affordances: SessionAffordance[];
   /**
-   * W6-B6 (ADR-043 2026-08-15 amendment §3) — the session's own
+   * W6-B6 (SPEC §5) — the session's own
    * kickoff-selected model tier, read live off `status.json.modelTier`.
    * `null` for a session with no recorded tier (predates the seam, or a
    * `strategy:fixed` skill's kickoff never writes one). REQUIRED (the key

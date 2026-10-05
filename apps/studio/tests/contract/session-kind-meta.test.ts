@@ -132,7 +132,7 @@ test('W7-C1 (sessions-kinds-01/crosscut-14): onboarding IS a generic kickoff kin
 
 // ---- KICKOFF_SPECS (the kickoff page's per-kind form spec) ----------------
 
-test('KICKOFF_SPECS covers exactly the six generic kickoff kinds (architect keeps its bespoke native entry, ADR-043 §4)', () => {
+test('KICKOFF_SPECS covers exactly the six generic kickoff kinds (architect keeps its bespoke native entry, SPEC §5)', () => {
   const specKinds = Object.keys(KICKOFF_SPECS).sort();
   const genericKinds = KICKOFF_ENTRIES.filter((e) => e.kind !== 'architect').map((e) => e.kind).sort();
   expect(specKinds).toEqual(genericKinds);

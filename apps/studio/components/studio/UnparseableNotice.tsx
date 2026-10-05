@@ -6,7 +6,7 @@ import type * as React from 'react';
  * `forge-8vfn.7.6.23` — the manifests a project's queue holds that the PARSER
  * REFUSED, named with the parser's own message.
  *
- * `parseManifest` is deliberately fail-fast (`class` is required — ADR-051,
+ * `parseManifest` is deliberately fail-fast (`class` is required — D-34,
  * `packages/flows/manifest.ts:117`, "There is no default"), and
  * `scanProjectManifests` used to discard that verdict with a bare `continue`.
  * The roadmap then reported *"No initiatives found for this project"* — a

@@ -1,5 +1,5 @@
 /**
- * Tests for the in-UI architect runner (ADR 020).
+ * Tests for the in-UI architect runner.
  *
  * The runner is a bounded, file-checkpointed turn driven by an injectable
  * `queryFn` seam (the `runCouncil` pattern) — so the full state machine is
@@ -1132,10 +1132,10 @@ test('P4: readArchitectSessionStats handles events without cost_usd gracefully (
 });
 
 // ---------------------------------------------------------------------------
-// ADR-024 / M2-4: architectAgentSpec derives correctly from SKILL.md
+// SPEC §1 / M2-4: architectAgentSpec derives correctly from SKILL.md
 // ---------------------------------------------------------------------------
 
-test('ADR-024: architectAgentSpec derives phase, tier, and tool lists from SKILL.md', () => {
+test('SPEC §1: architectAgentSpec derives phase, tier, and tool lists from SKILL.md', () => {
   assert.equal(architectAgentSpec.phase, 'architect');
   assert.equal(architectAgentSpec.tier, 'sonnet');
   assert.deepEqual([...architectAgentSpec.allowedTools], ['Read', 'Grep', 'Glob', 'Bash']);
@@ -1143,11 +1143,11 @@ test('ADR-024: architectAgentSpec derives phase, tier, and tool lists from SKILL
   assert.equal(architectAgentSpec.skill, 'skills/architect/SKILL.md');
 });
 
-test('ADR-024: ARCHITECT_MODEL resolves to the concrete sonnet model id', () => {
+test('SPEC §1: ARCHITECT_MODEL resolves to the concrete sonnet model id', () => {
   assert.equal(ARCHITECT_MODEL, 'claude-sonnet-4-6');
 });
 
-test('ADR-024: runStructured passes model + derived allowedTools to the queryFn options', async () => {
+test('SPEC §1: runStructured passes model + derived allowedTools to the queryFn options', async () => {
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
   writeFileSync(
     join(sessionDir, 'answers.json'),
@@ -1193,7 +1193,7 @@ test('ADR-024: runStructured passes model + derived allowedTools to the queryFn 
   assert.equal(result.phase, 'awaiting-verdict');
   // Every structured call must carry ITS OWN agent's model + tool lists. Since
   // ruling 380 the drafting turn ends with the completeness critic, which is a
-  // DIFFERENT ADR-024 agent (its own SKILL.md, sonnet, tool-free) — so the
+  // DIFFERENT SPEC §1 agent (its own SKILL.md, sonnet, tool-free) — so the
   // calls are partitioned by which agent issued them and each half is asserted
   // against its own spec. Lumping them together would have made this test pass
   // only while the architect happened to be the only agent on the path.
@@ -1228,11 +1228,11 @@ test('ADR-024: runStructured passes model + derived allowedTools to the queryFn 
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — architectAgentSpec
+// SPEC §5 amendment (wave-6 kickoff model-tier seam) — architectAgentSpec
 // stays strategy:fixed, so the only legal requested tier is the fixed one.
 // ---------------------------------------------------------------------------
 
-/** Mirrors the ADR-024 test's queryFn shape above (line ~1110): interview
+/** Mirrors the SPEC §1 test's queryFn shape above (line ~1110): interview
  *  done:true so the SAME call drives interview → explore → draft in one turn;
  *  captures the model handed on the FIRST call. */
 function makeCapturingQueryFn(onFirstModel: (model: string | undefined) => void): QueryFn {

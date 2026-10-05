@@ -1,5 +1,5 @@
 /**
- * The one resolution seam (ADR 048 clause 2). What these pin is not that the
+ * The one resolution seam (D-32). What these pin is not that the
  * factory resolves — every other suite proves that by using it — but the two
  * things a seam gets WRONG: swallowing a real breakage as "not installed", and
  * asking the question twice and getting two answers.
@@ -7,7 +7,7 @@
  * The deletability claim itself is NOT tested here. It is proven by execution
  * in `scripts/factory-deletable.mjs`, which removes the package and boots the
  * bridge; a test that merely READ the imports would be the "claimed, not
- * proven" shape ADR 048 clause 3 exists to forbid.
+ * proven" shape D-32 exists to forbid.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,5 +41,5 @@ test('a factory that IS installed and fails to load is NOT reported as "no examp
 
 test('the absence message names the package and the reason, so an operator is not left guessing (kills: a bare "not found")', () => {
   assert.match(NO_EXAMPLE_INSTALLED, /packages\/factory/);
-  assert.match(NO_EXAMPLE_INSTALLED, /ADR 048/);
+  assert.match(NO_EXAMPLE_INSTALLED, /D-33/);
 });

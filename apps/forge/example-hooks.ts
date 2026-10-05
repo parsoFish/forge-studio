@@ -2,7 +2,7 @@
  * `example-hooks.ts` — what the bridge binds when the example factory IS
  * installed, and what it does instead when it is NOT.
  *
- * ADR 048 says the platform must boot and serve with `packages/factory`
+ * D-32 says the platform must boot and serve with `packages/factory`
  * deleted, and T1 ruling 488 states the clause the proof now asserts: *"With no
  * example installed, example-owned hooks are not bound; the bridge survives any
  * request that would have used one and `/api/health` still answers."* This

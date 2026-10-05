@@ -4,7 +4,7 @@
  * `data-*` hooks so a journey can assert KB health WITHOUT scraping
  * rendered prose, and its "Suggested action" copy stops naming manual
  * ingest (operator decision 3, R1-06-F3 — ingest stays reflection-only;
- * see docs/decisions/010-brain-first.md + R1-contract-componentry.md
+ * see SPEC §4 + R1-contract-componentry.md
  * lines ~213-227). Today KbHealth.tsx:130 reads "Queue a manual ingest
  * pass or leave a guidance note." and the component's outer `<div>`
  * (line 40) carries ZERO `data-*` attributes.

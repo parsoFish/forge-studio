@@ -1,6 +1,6 @@
 /**
  * serve-supervisor — `forge studio` supervises `forge serve` the same way it
- * already supervises the bridge and the UI (ADR 011/031 as merged in #1089):
+ * already supervises the bridge and the UI (D-12 as merged in #1089):
  * whenever serve is live it claims every eligible pending manifest, and there
  * is no operator lifecycle control over it — no start/pause/resume/stop
  * surface. The one emergency halt is a different seam (row 207) and does not

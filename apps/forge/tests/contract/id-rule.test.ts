@@ -73,7 +73,7 @@ before(async () => {
     'id: gitpulse-brain\nname: gitpulse (project)\nbinding:\n  kind: project\n  ref: gitpulse\ndesc: Mismatched id.\nbackend: filesystem\n',
   );
 
-  // The matching central per-project KB (ADR 035): brain/projects/trafficGame/kb.yaml
+  // The matching central per-project KB (SPEC §4): brain/projects/trafficGame/kb.yaml
   mkdirSync(join(forgeRoot, 'brain', 'projects', 'trafficGame', 'themes'), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'brain', 'projects', 'trafficGame', 'kb.yaml'),

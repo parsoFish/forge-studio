@@ -105,7 +105,7 @@ test('AT-6: unknown project -> 404, no _authoring dir created', async () => {
 
 // UPDATED (R4-21 phase 2, WI-1, D3 — _wave5/unit-specs/R4-21-phase2.md):
 // `writeAuthoringSession` used to seed `phase:'running'`, a token that is
-// not a row in the authoring turnSpec's phase table (ADR-043 §1: analyzing ->
+// not a row in the authoring turnSpec's phase table (SPEC §5: analyzing ->
 // awaiting-review -> committing -> committed) — `runInteractiveTurn` fails
 // loud on an unrecognised phase BY DESIGN (the declared-data-fails-open
 // antipattern this campaign guards against), so a session seeded at
@@ -127,7 +127,7 @@ test('AT-7: a valid start writes a real session dir (status.json + prompt.md) un
 
   const sessionDir = join(authoringKindDir(), body.sessionId);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string; project: string };
-  assert.equal(status.phase, 'analyzing', 'D3: the seeded phase must be "analyzing" (the authoring turnSpec\'s first row) — "running" is not a row in ADR-043 §1\'s phase table and would brick the first real turn');
+  assert.equal(status.phase, 'analyzing', 'D3: the seeded phase must be "analyzing" (the authoring turnSpec\'s first row) — "running" is not a row in SPEC §5\'s phase table and would brick the first real turn');
   assert.equal(status.project, 'demoproj');
   assert.ok(!existsSync(groundAuthoringDir()), 'no session dir may be written into the managed project\'s checkout');
 
@@ -172,7 +172,7 @@ test('AT-11 (P4): a valid start seeds status.json with the operator\'s prompt ve
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — creation-agent is
+// SPEC §5 amendment (wave-6 kickoff model-tier seam) — creation-agent is
 // now strategy:range [sonnet, opus].
 // ---------------------------------------------------------------------------
 

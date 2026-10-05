@@ -1,11 +1,11 @@
 /**
- * R4-19-F2 — THE CONSTRAINT TEST (AGENT_RUNNERS half). ADR-043's entire reason
+ * R4-19-F2 — THE CONSTRAINT TEST (AGENT_RUNNERS half). SPEC §5's entire reason
  * for existing: a new interactive session kind is authored as turnSpec DATA
  * riding the EXISTING generic `runInteractiveTurn` spine — NEVER a new
  * orchestrator runner, NEVER a new `AGENT_RUNNERS` entry. Asserted against
  * the REAL source file, not a fixture or a hand-built registry snapshot —
  * this is the test that kills a "just add a fifth runner" implementation,
- * the exact per-kind re-invention ADR-043 dissolves.
+ * the exact per-kind re-invention SPEC §5.
  *
  * Split out of `packages/sessions/tests/contract/session-kinds-panel.test.ts`
  * (M7-E boundary fix): `AGENT_RUNNERS` moved (now at `apps/forge/agent-run.ts`)
@@ -32,7 +32,7 @@ describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup
   it('AGENT_RUNNERS (apps/forge/agent-run.ts) gains NO "kb-cleanup" key — the session rides the existing turnSpec dispatch fork in cmdAgentRun, not a new bespoke runner', () => {
     assert.ok(
       !Object.prototype.hasOwnProperty.call(AGENT_RUNNERS, 'kb-cleanup'),
-      `AGENT_RUNNERS must not gain a "kb-cleanup" entry — got keys: ${Object.keys(AGENT_RUNNERS).join(', ')}. A turnSpec-bearing descriptor is dispatched by cmdAgentRun's ADR-043 §3 fork BEFORE AGENT_RUNNERS is ever consulted (apps/forge/agent-run.ts); adding a key here re-opens the exact per-runner cap park ADR-043 dissolved.`,
+      `AGENT_RUNNERS must not gain a "kb-cleanup" entry — got keys: ${Object.keys(AGENT_RUNNERS).join(', ')}. A turnSpec-bearing descriptor is dispatched by cmdAgentRun's SPEC §5 fork BEFORE AGENT_RUNNERS is ever consulted (apps/forge/agent-run.ts); adding a key here re-opens the exact per-runner cap park SPEC §5.`,
     );
     // Belt-and-suspenders grep on the real source TEXT (not just the
     // imported object's own keys) — catches a "kb-cleanup" entry added under

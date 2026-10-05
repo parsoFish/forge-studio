@@ -202,7 +202,7 @@ export async function startFlowRun(
   }
 }
 
-// ---- Structured demo (ADR 021) ------------------------------------------
+// ---- Structured demo (D-07) ------------------------------------------
 
 export type DemoHarnessMetricRow = {
   label: string;

@@ -2,7 +2,7 @@
  * bridge-agent-dispatch — the detached-runner spawn machinery (architect /
  * instructions / demo-builder / project-brain / authoring / kb-cleanup turns,
  * plus the generic `forge agent dispatch` spawn) and the one architect route
- * that stayed host-side (ADR 020).
+ * that stayed host-side.
  *
  * forge-4zk: carved out of `apps/forge/ui-bridge.ts` (feature move, no
  * behaviour change).
@@ -86,7 +86,7 @@ export { newRunStamp };
  *  R4-21 phase 2, WI-2 (D5's sibling concern): `authoring` is the first row
  *  that does NOT go through a bespoke `<verb> run <sid> --project <p>` CLI
  *  command — it rides the GENERIC `forge agent run <agent-id> <sid> --project
- *  <p>` dispatch fork (ADR-043 §3, `apps/forge/agent-run.ts`'s `cmdAgentRun`), so its
+ *  <p>` dispatch fork (SPEC §5, `apps/forge/agent-run.ts`'s `cmdAgentRun`), so its
  *  argvPrefix is `['agent', 'run', 'authoring']` rather than `['<verb>',
  *  'run']`. The 4 legacy rows carry an EXPLICIT argv prefix instead of the
  *  former `{verb}` + implicit `'run'` shape specifically so this one row can
@@ -114,7 +114,7 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
   'project-brain': { argvPrefix: ['project-brain', 'run'], logPrefix: 'project-brain' },
   authoring: { argvPrefix: ['agent', 'run', 'authoring'], logPrefix: 'authoring' },
   // R4-19-F2 — the kb-cleanup session, riding the SAME generic
-  // runInteractiveTurn spine as authoring (ADR-043 §3): `forge agent run
+  // runInteractiveTurn spine as authoring (SPEC §5): `forge agent run
   // kb-cleanup <sid> --project <p>`.
   'kb-cleanup': { argvPrefix: ['agent', 'run', 'kb-cleanup'], logPrefix: 'kb-cleanup' },
 };

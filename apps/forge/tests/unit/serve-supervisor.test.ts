@@ -1,6 +1,6 @@
 /**
  * serve-supervisor — `forge studio` supervises `forge serve` exactly the way
- * it supervises the bridge and the UI (ADR 011/031 as merged in #1089): there
+ * it supervises the bridge and the UI (D-12 as merged in #1089): there
  * is no operator start/pause/resume/stop surface, only a supervisor that
  * adopts a live process or spawns one, and respawns it (with crash-loop
  * backoff) for as long as Studio owns the port.

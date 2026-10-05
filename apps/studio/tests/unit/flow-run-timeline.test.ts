@@ -12,7 +12,7 @@
  * `./flow-run-detail-render.test.ts`); ALL the judgement lives here, where
  * it can be tested.
  *
- * ADR-008 posture: nothing new is stored. Every row is derived from the flow
+ * SPEC §3 posture: nothing new is stored. Every row is derived from the flow
  * definition (`Flow.nodes`) plus the already-derived run model
  * (`Run.phases` / `Run.phaseMeta`), both of which the bridge already serves.
  *
@@ -315,8 +315,7 @@ test('note segments compose deterministically from the node\'s own fields, in a 
   // UNREACHABLE, not merely omitted. `buildNodeMeta` populates `gateChecks`
   // only when `nodeId === 'unifier'` (run-model-derive.ts:181), but no seed
   // flow declares a `unifier` node — `studio/flows/forge-develop/flow.yaml`'s
-  // own header records the monolithic unifier node's retirement (R4-10-F1,
-  // ADR-039/040): the live flow is `dev → integrate → adversarial-review →
+  // own header records the monolithic unifier node's retirement (R4-10-F1): the live flow is `dev → integrate → adversarial-review →
   // review`. Since `deriveFlowRunTimeline` sources its rows from
   // `flow.nodes`, no row with `nodeId === 'unifier'` can ever exist, for any
   // run including archived ones — so a gate-checks segment could never be

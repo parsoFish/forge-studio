@@ -319,7 +319,7 @@ test('sessionEntryHrefForAgent derives /sessions/<kind>/new from the ONE kickoff
   expect(sessionEntryHrefForAgent('instructions-creator')).toBe('/sessions/instructions/new');
   expect(sessionEntryHrefForAgent('demo-builder')).toBe('/sessions/demo/new');
   expect(sessionEntryHrefForAgent('project-brain-builder')).toBe('/sessions/project-brain/new');
-  // architect keeps its bespoke entry (ADR-043 §4).
+  // architect keeps its bespoke entry (SPEC §5).
   expect(sessionEntryHrefForAgent('architect')).toBe('/architect/new');
   // an agent with no session kind has NO fabricated href — including the
   // retired community-refresh agent (W8-B5b WI-3), same as any other

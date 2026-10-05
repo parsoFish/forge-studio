@@ -1,5 +1,5 @@
 /**
- * Forge Studio bridge routes (M1-2, ADR-027/028).
+ * Forge Studio bridge routes (M1-2, D-09, SPEC §2).
  *
  * Boolean-returning route module plugged into handleHttp after handleReflect.
  * All routes are read-only GET endpoints; write routes land in M2.
@@ -116,7 +116,7 @@ export type StudioRunsContext = StudioContext & { sessionIsReadable: SessionRead
 export { SAFE_ID_RE };
 
 /** The session phase vocabulary of the four kinds whose runners predate the
- *  ADR-043 phase table now LIVES with the sessions seam
+ *  SPEC §5 phase table now LIVES with the sessions seam
  *  (`packages/sessions/session-phases.ts`) — it is session vocabulary, and the
  *  import cycle that once kept it in this host module ended when the generic
  *  session route moved into that package. Re-exported here so this module's
@@ -129,7 +129,7 @@ export {
 } from '@forge/sessions';
 
 
-/** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
+/** W7-A2 (SPEC §5) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
  *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
  *  (packages/sessions/bridge-studio-session-cancel.ts) and read as terminal by
@@ -137,7 +137,7 @@ export {
  *  the per-kind tables are consulted. Deliberately NOT a per-kind
  *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
  *  is the same fact for all eight kinds, and eight copies of one fact in
- *  eight tables is exactly the drift shape ADR-043's "derived, not authored"
+ *  eight tables is exactly the drift shape SPEC §5's "derived, not authored"
  *  discipline exists to prevent. `deriveSessionAffordances` already yields
  *  `[]` for any phase a table does not name, so a cancelled session derives
  *  no affordance without any table change.
@@ -266,7 +266,7 @@ function classifyEvent(e: EventLogEntry): LogLine {
 // ---------------------------------------------------------------------------
 
 /** Find a Run by id (cycleId or initiativeId). Returns null if not found.
- *  ADR-044 P1: routes through the per-manifest memo (packages/flows/run-list-cache.ts)
+ *  D-27 P1: routes through the per-manifest memo (packages/flows/run-list-cache.ts)
  *  — same derivation, same contract as listRuns, but terminal runs skip
  *  re-parsing their events.jsonl once cached.
  *
@@ -424,7 +424,7 @@ export async function handleStudioRoutes(
     try {
       const qs = parseQuery(rawUrl);
       const flowFilter = qs.get('flow');
-      // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
+      // D-27 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
       let runs = cachedListRuns(ctx.forgeRoot, Date.now());
       if (flowFilter) {
         // Match by lineage, not just current flowId: a run whose manifest was
@@ -629,7 +629,7 @@ export async function handleStudioRoutes(
   // Pure read: scans every registered flow's OWN declarations — no write, no
   // materialized index. `projects: null` (absent on the declaration) is kept
   // distinct from `projects: []` (declared empty) all the way to the wire
-  // (ADR-027 R2-08 amendment rule 1) — never collapsed into each other.
+  // (D-10 R2-08 amendment rule 1) — never collapsed into each other.
   if (url === '/api/triggers') {
     try {
       const root = resolve(ctx.forgeRoot);
@@ -885,7 +885,7 @@ type ScannedManifestEntry = {
  */
 /** A manifest in one of this project's queue dirs that `parseManifest` refused,
  *  with the parser's OWN message. `forge-8vfn.7.6.23`: the parse is deliberately
- *  fail-fast (`class` is required — ADR-051, `manifest.ts:117`, "There is no
+ *  fail-fast (`class` is required — D-34, `manifest.ts:117`, "There is no
  *  default"), and this scan used to discard that verdict with a bare `continue`.
  *  The operator then read "No initiatives found for this project" when the truth
  *  was "three of this project's manifests failed to parse" — different problems,

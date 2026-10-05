@@ -8,7 +8,7 @@
  * session at `briefing`. The brief travels through the SAME generic
  * question-form affordance a spine-started session shows on its own page, and
  * THAT dispatches. So this form is a client of the generic surface rather than
- * a second way to start an onboarding agent — ADR 043's direction — while the
+ * a second way to start an onboarding agent — SPEC §5's direction — while the
  * operator still presses once.
  *
  * S1 beat 4 asserts `onboard-run-status: 'running'` immediately after this
