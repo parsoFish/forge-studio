@@ -782,8 +782,7 @@ test('WI2-5-containment: traversal-shaped sessionId is refused — nothing is wr
 
   // Variant 1: sessionId "../evil-sibling" — a naive join(authoringRoot,
   // '../evil-sibling', 'status.json') cancels the _authoring segment and
-  // lands at <logsRoot>/_sessions/<project>/evil-sibling/status.json. Plant a
-  // REAL, valid, awaiting-review session there.
+  // lands at <logsRoot>/_sessions/<project>/evil-sibling/status.json. Plant a REAL session there.
   const projectRoot = join(forgeRoot, '_logs', '_sessions', PROJECT);
   const evilSiblingDir = join(projectRoot, 'evil-sibling');
   writeSeededSession(evilSiblingDir, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });

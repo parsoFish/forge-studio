@@ -370,13 +370,8 @@ test('R4-17 AT-8 (BLOCKER, ACCEPT / false-rejection control — mirrors cli/cont
     const text = await res.text();
     assert.equal(res.status, 200, `a symlink resolving back inside projectsRoot must be ACCEPTED, got ${res.status}: ${text}`);
     const body = JSON.parse(text) as { sessionId: string };
-    // The session dir lives under the logs root keyed by the project NAME; the
-    // ground (the symlink's real target) stays clean.
     const sessionDir = join(forgeRoot, '_logs', '_sessions', 'alias-back-inside', '_onboarding', body.sessionId);
-    assert.ok(
-      existsSync(join(sessionDir, 'status.json')),
-      `expected the session to land at ${sessionDir} (project reached via the accepted symlink), proving the guard resolves+re-checks containment rather than rejecting every symlink`,
-    );
+    assert.ok(existsSync(join(sessionDir, 'status.json')), `expected the session at ${sessionDir} (logs-root dir keyed by project NAME; project reached via the accepted symlink), proving the guard resolves+re-checks containment rather than rejecting every symlink`);
     assert.ok(!existsSync(join(projectsRoot, realTargetName, '_onboarding')), 'the ground (the symlink real target) must hold no session dir');
   } finally {
     rmSync(aliasLink, { force: true });
@@ -537,8 +532,7 @@ test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, no
   const project = 'symlinkonboardproj';
   const projectDir = join(forgeRoot, 'projects', project);
   mkdirSync(projectDir, { recursive: true });
-  const sessionHome = join(forgeRoot, '_logs', '_sessions', project);
-  mkdirSync(sessionHome, { recursive: true });
+  const sessionHome = join(forgeRoot, '_logs', '_sessions', project); mkdirSync(sessionHome, { recursive: true });
   const outsideDir = mkdtempSync(join(tmpdir(), 'onboarding-start-onboarding-escape-target-'));
   const onboardingLink = join(sessionHome, '_onboarding');
   try {
@@ -560,7 +554,6 @@ test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, no
     rmSync(onboardingLink, { force: true });
     rmSync(outsideDir, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
-    rmSync(sessionHome, { recursive: true, force: true });
   }
 });
 
@@ -568,8 +561,7 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
   const project = 'realonboardingdirproj';
   const projectDir = join(forgeRoot, 'projects', project);
   mkdirSync(projectDir, { recursive: true });
-  const sessionHome = join(forgeRoot, '_logs', '_sessions', project);
-  mkdirSync(join(sessionHome, '_onboarding'), { recursive: true });
+  const sessionHome = join(forgeRoot, '_logs', '_sessions', project); mkdirSync(join(sessionHome, '_onboarding'), { recursive: true });
   try {
     const res = await fetch(`${url}/api/studio/onboarding/start`, {
       method: 'POST', headers: CSRF, body: JSON.stringify({ project }),
@@ -586,7 +578,6 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
     );
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
-    rmSync(sessionHome, { recursive: true, force: true });
   }
 });
 
@@ -672,8 +663,7 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
 test('R4-17 AT-16 (pin 5 item 1, ACCEPT control): a project with a REAL EARLIER onboarding session already inside "_onboarding" (the shape every SECOND run has) — a fresh start must still succeed, land in its OWN distinct session dir, and leave the earlier session completely untouched', async () => {
   const project = 'secondrunwithearliersession';
   const projectDir = join(forgeRoot, 'projects', project);
-  mkdirSync(projectDir, { recursive: true });
-  const sessionHome = join(forgeRoot, '_logs', '_sessions', project);
+  mkdirSync(projectDir, { recursive: true }); const sessionHome = join(forgeRoot, '_logs', '_sessions', project);
   const earlierSessionId = '2020-01-01T00-00-00'; // deliberately historical — never collides with "now"
   const earlierDir = join(sessionHome, '_onboarding', earlierSessionId);
   mkdirSync(earlierDir, { recursive: true });
@@ -699,7 +689,6 @@ test('R4-17 AT-16 (pin 5 item 1, ACCEPT control): a project with a REAL EARLIER 
     );
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
-    rmSync(sessionHome, { recursive: true, force: true });
   }
 });
 

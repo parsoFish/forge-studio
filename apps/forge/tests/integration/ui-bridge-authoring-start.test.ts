@@ -215,16 +215,13 @@ test('AT-8: two starts against the same project mint two distinct session dirs',
 
 test('AT-9 (containment): a logs-side symlinked "_authoring" kind dir pointing outside the logs root is refused — nothing is written through it', async () => {
   const outsideDir = mkdtempSync(join(tmpdir(), 'authoring-start-outside-'));
-  const linkPath = authoringKindDir();
+  // A fresh project: the symlink must be creatable (an earlier test made a REAL demoproj/_authoring, which would turn this test into a silent no-op).
+  mkdirSync(join(forgeRoot, 'projects', 'escapeproj'), { recursive: true });
+  const linkPath = authoringKindDir('escapeproj');
   mkdirSync(join(linkPath, '..'), { recursive: true });
+  symlinkSync(outsideDir, linkPath, 'dir');
   try {
-    symlinkSync(outsideDir, linkPath, 'dir');
-  } catch {
-    rmSync(outsideDir, { recursive: true, force: true });
-    return; // symlinks unsupported on this filesystem/platform — skip
-  }
-  try {
-    const res = await start({ project: 'demoproj', prompt: 'escape attempt' });
+    const res = await start({ project: 'escapeproj', prompt: 'escape attempt' });
     assert.equal(res.status, 400, 'a symlinked _authoring parent escaping the logs root must be refused');
     const outsideEntries = existsSync(outsideDir) ? readdirSync(outsideDir) : [];
     assert.deepEqual(outsideEntries, [], 'nothing may be written into the out-of-tree directory the symlink points at');

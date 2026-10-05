@@ -251,21 +251,21 @@ test('SEC-04: a traversal-shaped sessionId is refused before any write; the outs
   // Precondition, asserted before reading any verdict.
   assert.equal(beforeCanary, 'SECRET-CANARY-MUST-NOT-CHANGE', 'arrange: canary seeded');
 
+  // Plant a VALID session at exactly where the traversal lands (<root>/victim, five
+  // levels up from <logsRoot>/_sessions/proj/<kindDir>/): a runner that joins the
+  // segments raw would find it, run its turn and fail on queryFn — not refuse.
+  const victimDir = join(root, 'victim');
+  mkdirSync(victimDir, { recursive: true });
+  writeFileSync(join(victimDir, 'status.json'), JSON.stringify({ session_id: 'victim', phase: 'analyzing' }));
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
-  let thrown: Error | undefined;
-  try {
-    await runInteractiveTurn(descriptor, {
-      sessionId: '../../../etc/passwd',
-      project: 'proj',
-      forgeRoot,
-      logsRoot,
-      queryFn: neverCalledQueryFn(),
-      logger: logger(logsRoot, 'sec04-sid'),
-    });
-    assert.fail('expected runInteractiveTurn to reject a traversal-shaped sessionId');
-  } catch (err) {
-    thrown = err as Error;
-  }
+  const thrown = await runInteractiveTurn(descriptor, {
+    sessionId: '../../../../victim',
+    project: 'proj',
+    forgeRoot,
+    logsRoot,
+    queryFn: neverCalledQueryFn(),
+    logger: logger(logsRoot, 'sec04-sid'),
+  }).then(() => undefined, (err: unknown) => err as Error);
 
   assert.ok(thrown, 'must throw');
   assert.doesNotMatch(
@@ -296,27 +296,25 @@ test('SEC-04: a traversal-shaped kindDir is refused before any write; the outsid
   const beforeCanary = readFileSync(canaryPath, 'utf8');
   const beforeProjectEntries = existsSync(projectRoot) ? readdirSync(projectRoot) : [];
   const sessionsRoot = join(logsRoot, '_sessions');
-  const beforeSessionEntries = existsSync(sessionsRoot) ? readdirSync(sessionsRoot) : [];
   // Precondition, asserted before reading any verdict.
   assert.equal(beforeCanary, 'SECRET-CANARY-MUST-NOT-CHANGE-2', 'arrange: canary seeded');
 
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-bad-kinddir');
   assert.equal(descriptor.turnSpec?.kindDir, '../evil-escape', 'arrange: fixture kindDir is traversal-shaped');
 
-  let thrown: Error | undefined;
-  try {
-    await runInteractiveTurn(descriptor, {
-      sessionId: 'sess-001',
-      project: 'proj',
-      forgeRoot,
-      logsRoot,
-      queryFn: neverCalledQueryFn(),
-      logger: logger(logsRoot, 'sec04-kinddir'),
-    });
-    assert.fail('expected runInteractiveTurn to reject a traversal-shaped kindDir');
-  } catch (err) {
-    thrown = err as Error;
-  }
+  // Plant a VALID session where `../evil-escape` lands (<logsRoot>/_sessions/evil-escape/sess-001).
+  const victimDir = join(logsRoot, '_sessions', 'evil-escape', 'sess-001');
+  mkdirSync(victimDir, { recursive: true });
+  writeFileSync(join(victimDir, 'status.json'), JSON.stringify({ session_id: 'sess-001', phase: 'analyzing' }));
+  const beforeSessionEntriesPlanted = readdirSync(sessionsRoot);
+  const thrown = await runInteractiveTurn(descriptor, {
+    sessionId: 'sess-001',
+    project: 'proj',
+    forgeRoot,
+    logsRoot,
+    queryFn: neverCalledQueryFn(),
+    logger: logger(logsRoot, 'sec04-kinddir'),
+  }).then(() => undefined, (err: unknown) => err as Error);
 
   assert.ok(thrown, 'must throw');
   assert.doesNotMatch(
@@ -332,7 +330,7 @@ test('SEC-04: a traversal-shaped kindDir is refused before any write; the outsid
   );
   assert.deepEqual(
     existsSync(sessionsRoot) ? readdirSync(sessionsRoot) : [],
-    beforeSessionEntries,
+    beforeSessionEntriesPlanted,
     'no new entry may appear under <logsRoot>/_sessions — the rejection happens before any filesystem write',
   );
 });

@@ -40,14 +40,8 @@ function repoDir(): string {
   return join(forgeRoot, 'projects', 'demo');
 }
 
-/** Session dirs live under the logs root, never in the ground (repoDir()). */
-function demoKindDir(): string {
-  return join(forgeRoot, '_logs', '_sessions', 'demo', '_demo');
-}
-
-function demoSessionDirFor(sid: string): string {
-  return join(demoKindDir(), sid);
-}
+const demoKindDir = (): string => join(forgeRoot, '_logs', '_sessions', 'demo', '_demo'); // under the logs root, never the ground
+const demoSessionDirFor = (sid: string): string => join(demoKindDir(), sid);
 
 async function post(path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
   const res = await fetch(`${url}${path}`, {
@@ -502,7 +496,6 @@ for (const { path, extraBody } of DEMO_MUTATING_ROUTES) {
 // <realSessionId>) === join(forgeRoot, '_demo', <realSessionId>)` — still
 // entirely outside `projectsRoot`.
 test('R4-16 AT-44 (Finding A, /start): POST /start with project=".." is rejected — 400, and no <logsRoot>/_demo/ directory is ever created', async () => {
-  // project='..' would put the kind dir at <logsRoot>/_sessions/../_demo === <logsRoot>/_demo.
   const outsideParent = join(forgeRoot, '_logs', '_demo');
   rmSync(outsideParent, { recursive: true, force: true });
   const { status, json } = await post('/api/demo-builder/start', { project: '..' });

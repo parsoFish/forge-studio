@@ -47,7 +47,6 @@ import matter from 'gray-matter';
 // `packages/sessions/tests/contract/affordance-no-raw-fs.test.ts` — it reads
 // package SOURCE, so it belongs beside the source, and it now covers all six
 // modules the carve spread that code across rather than the one file it used to.
-import { sessionDirSegments } from '@forge/kernel';
 import { startBridge } from '../../ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 
@@ -104,15 +103,9 @@ function freshSessionId(): string {
   return `2026-08-15T00-00-${String(sessionCounter).padStart(3, '0')}-fx`;
 }
 
-/** Session dirs live under the logs root, never in the managed project's checkout. */
-function sessionDirOf(project: string, kindDir: string, sessionId: string): string {
-  return join(forgeRoot, '_logs', ...sessionDirSegments(project, kindDir, sessionId));
-}
-
+const sessionDirOf = (project: string, kindDir: string, sessionId: string): string => { mkdirSync(join(forgeRoot, 'projects', project), { recursive: true }); return join(forgeRoot, '_logs', '_sessions', project, kindDir, sessionId); }; // logs root, never the ground
 function seedSession(project: string, kindDir: string, sessionId: string, status: Record<string, unknown>): string {
-  const dir = sessionDirOf(project, kindDir, sessionId);
-  mkdirSync(join(forgeRoot, 'projects', project), { recursive: true });
-  mkdirSync(dir, { recursive: true });
+  const dir = sessionDirOf(project, kindDir, sessionId); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
   return dir;
 }
@@ -201,7 +194,6 @@ test('SEC-3: an absolute-path-shaped sessionId ("/etc/passwd", percent-encoded) 
 
 test('SEC-4: a well-formed but non-existent sessionId under a REAL project -> 404 {error:"session not found"}', async () => {
   const project = 'secproj4';
-  mkdirSync(join(forgeRoot, 'projects', project), { recursive: true });
   mkdirSync(dirname(sessionDirOf(project, '_instructions', 'x')), { recursive: true });
   const res = await postJson(affordanceUrl('instructions', 'no-such-session-2026', 'anything'), { project, verdict: 'approve' });
   const body = (await res.json()) as { error: string };

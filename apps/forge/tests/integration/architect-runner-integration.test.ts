@@ -122,8 +122,7 @@ function setupSession(overrides?: Partial<ArchitectStatus>): {
   const logsRoot = join(root, '_logs');
   const queueRoot = join(root, '_queue');
   const sessionId = '2026-05-29T10-00-00';
-  // Session dirs live under the logs root, never in the project checkout (the ground).
-  const sessionDir = join(logsRoot, '_sessions', 'project', '_architect', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'project', '_architect', sessionId); // logs root, never the ground
   mkdirSync(sessionDir, { recursive: true });
   // The checkout itself still exists (manifest containment realpaths project_repo_path).
   mkdirSync(projectRoot, { recursive: true });

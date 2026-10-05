@@ -530,8 +530,8 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
         },
       });
     }
-    // Bead forge-c6h — thread the bridge's own snapshot projects root
-    // through as --projects-root so a dispatch carrying a --session-dir
+    // Bead forge-c6h — thread the bridge's own logs root
+    // through as --logs-root so a dispatch carrying a --session-dir
     // (none on this generic route today — sessionDir is `undefined` here;
     // the flag is inert without it) never has to re-derive it downstream.
     deps.spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd, ctx.logsRoot);
