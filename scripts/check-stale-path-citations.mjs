@@ -634,6 +634,20 @@ function readRetiredStemCandidates(path) {
   return new Set(parsed);
 }
 
+/**
+ * CLAUDE.md is loaded into every session, so its length is paid on every
+ * turn (docs refactor W1). The cap is checked here, beside "every path it
+ * cites exists". Lines are newline-terminated lines. A root with no CLAUDE.md
+ * (a test fixture) has nothing to cap; the real tree's own test asserts the
+ * file exists and fits.
+ */
+export const CLAUDE_MD_LINE_CAP = 150;
+export function claudeMdLines(root) {
+  const p = join(root, 'CLAUDE.md');
+  if (!existsSync(p)) return null;
+  return readFileSync(p, 'utf8').split('\n').length - 1;
+}
+
 function main(argv) {
   const json = argv.includes('--json');
   const write = argv.includes('--write');
@@ -705,13 +719,16 @@ function main(argv) {
 
   if (json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 
-  const failed = result.introduced.length + result.stale.length;
+  const claudeLines = claudeMdLines(root);
+  const overCap = claudeLines !== null && claudeLines > CLAUDE_MD_LINE_CAP;
+  const failed = result.introduced.length + result.stale.length + (overCap ? 1 : 0);
   if (failed === 0) {
     if (!json) {
       process.stdout.write(
         `check-stale-path-citations: PASS — ${result.totalFindings} citation(s) across ${result.totalKeys} key(s) baselined ` +
         `(${result.scannedCode} code files, ${result.scannedProse} prose files, ` +
-        `${result.retiredStems} curated retired stem(s))\n`,
+        `${result.retiredStems} curated retired stem(s))` +
+        (claudeLines === null ? '' : `; CLAUDE.md ${claudeLines}/${CLAUDE_MD_LINE_CAP} lines`) + '\n',
       );
     }
     return 0;
@@ -732,6 +749,11 @@ function main(argv) {
     for (const s of result.stale) {
       process.stdout.write(
         `  stale baseline entry: ${s.file} ${s.kind} "${s.cited}" — audited ${s.budget}, now ${s.current}; run --write to tighten the ratchet.\n`,
+      );
+    }
+    if (overCap) {
+      process.stdout.write(
+        `  CLAUDE.md: OVER CAP — ${claudeLines} lines (cap ${CLAUDE_MD_LINE_CAP}); move area detail to .claude/rules/ or delete lines that fail the rule of inclusion\n`,
       );
     }
     process.stdout.write(`check-stale-path-citations: FAIL — ${failed} violation(s) (forge-8vfn.13)\n`);

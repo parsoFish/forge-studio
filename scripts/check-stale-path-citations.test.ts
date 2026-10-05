@@ -737,3 +737,36 @@ test('row 214: the files whose comments named retired modules stay clean under t
   const hits = json.introduced.filter((f) => pinned.has(f.file));
   assert.deepEqual(hits, [], `retired-module citations reappeared: ${JSON.stringify(hits)}`);
 });
+
+// ── CLAUDE.md line cap (docs refactor W1) ──────────────────────────────
+// CLAUDE.md is loaded into every session, so its size is a cost on every
+// turn. The cap is checked here, beside "every path it cites exists".
+
+test('CLAUDE.md cap: 151 lines FAILS, naming the file, the count and the cap', () => {
+  // kills: a cap that is never enforced (an over-long CLAUDE.md passing)
+  const fx = fixture({ 'CLAUDE.md': 'x\n'.repeat(151) });
+  try {
+    const baseline = join(fx.root, 'baseline.json');
+    writeFileSync(baseline, '[]\n');
+    const { code, out } = run(fx.root, baseline);
+    assert.equal(code, 1);
+    assert.match(out, /CLAUDE\.md: OVER CAP — 151 lines \(cap 150\)/);
+  } finally { fx.cleanup(); }
+});
+
+test('CLAUDE.md cap: exactly 150 lines passes (the cap is inclusive)', () => {
+  // kills: an off-by-one that fails a file sitting exactly at the cap
+  const fx = fixture({ 'CLAUDE.md': 'x\n'.repeat(150) });
+  try {
+    const baseline = join(fx.root, 'baseline.json');
+    writeFileSync(baseline, '[]\n');
+    const { code, out } = run(fx.root, baseline);
+    assert.equal(code, 0, out);
+    assert.match(out, /CLAUDE\.md 150\/150 lines/);
+  } finally { fx.cleanup(); }
+});
+
+test('CLAUDE.md cap: the real CLAUDE.md is within the cap', () => {
+  const lines = readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8').split('\n').length - 1;
+  assert.ok(lines <= 150, `CLAUDE.md has ${lines} lines (cap 150)`);
+});
