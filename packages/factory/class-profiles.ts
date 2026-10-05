@@ -1,7 +1,7 @@
 /**
  * The change class and its gate profile — ONE data table, no logic.
  *
- * ADR 051: `class` is a typed, required manifest field; the architect sets it,
+ * D-34: `class` is a typed, required manifest field; the architect sets it,
  * the plan gate confirms it, and every work item inherits it. This module holds
  * the operator-authored table that maps a class to the gates its work is judged
  * by (roadmap §5 H7). The values are the operator's; the columns are fixed by

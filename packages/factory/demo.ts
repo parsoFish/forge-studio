@@ -13,7 +13,7 @@
  * (demo-capture.ts) additionally renders a `.webm` + `.filmstrip.png` of it;
  * the browser-checkpoint loop calls `recordBrowser` instead of a plain
  * screenshot, which produces the checkpoint's still AND its recording. Both
- * are best-effort per ADR 021 — a recording failure logs and the capture
+ * are best-effort per D-07 — a recording failure logs and the capture
  * continues, it never fails the run (the `.out`/`.png` evidence still lands).
  *
  * Testable helpers (materialiseWorktree / cleanupWorktreeAt / imageToDataUri)
@@ -298,7 +298,7 @@ export async function captureCheckpoints(
         const out = tokeniseWorktreePath(captureCommandOutput(wt.path, command), wt.path);
         writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
-        // Best-effort per ADR 021 — a recording failure never fails the
+        // Best-effort per D-07 — a recording failure never fails the
         // capture (the `.out` evidence above already landed regardless).
         try {
           await recordTerminal({

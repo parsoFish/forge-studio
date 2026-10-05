@@ -91,12 +91,12 @@ function readComposition(value: unknown): { skills: string[]; tools: string[]; m
 
 // ---------------------------------------------------------------------------
 // Prose fragments — each one states an honest fact about the input, never a
-// guess. The brainAccess fragments deliberately encode ADR-010's policy
+// guess. The brainAccess fragments deliberately encode the SPEC §4 brain-read policy
 // wording so a reader of the draft (or the composed system prompt) learns the
 // ACTUAL rule, not a vague "may or may not read the brain".
 // ---------------------------------------------------------------------------
 
-/** The only three real ADR-010 brain policies — anything else has no
+/** The only three real SPEC §4 brain policies — anything else has no
  *  justified policy to state (2026-08-05 adversarial-review round 2, finding
  *  D/10). */
 const VALID_BRAIN_ACCESS = new Set(['none', 'mandatory', 'advisory']);
@@ -104,11 +104,11 @@ const VALID_BRAIN_ACCESS = new Set(['none', 'mandatory', 'advisory']);
 function describeBrainAccess(brainAccess: string): string {
   switch (brainAccess) {
     case 'none':
-      return 'This agent does not read the forge brain (ADR-010) — the planner already encoded every relevant convention into the work items.';
+      return 'This agent does not read the forge brain (SPEC §4) — the planner already encoded every relevant convention into the work items.';
     case 'mandatory':
-      return 'This agent is brain-first (ADR-010): it queries the brain before designing, planning, or answering how forge works.';
+      return 'This agent is brain-first (SPEC §4): it queries the brain before designing, planning, or answering how forge works.';
     case 'advisory':
-      return 'This agent may consult the brain — advisory context, not mandatory (ADR-010).';
+      return 'This agent may consult the brain — advisory context, not mandatory (SPEC §4).';
     default:
       return 'Brain access not declared.';
   }
@@ -175,7 +175,7 @@ export function composeInstructionsDraft(input: Record<string, unknown>): Instru
       // `describeBrainAccess` fell through to its default "not declared"
       // prose — the draft and the derivation disagreed about the same
       // input. `present` now means "resolves to one of the three real
-      // ADR-010 policies", matching what the draft text actually states.
+      // SPEC §4 policies", matching what the draft text actually states.
       { field: 'brainAccess', present: VALID_BRAIN_ACCESS.has(brainAccessRaw) },
       { field: 'interactivity', present: interactivity.length > 0 },
     ],

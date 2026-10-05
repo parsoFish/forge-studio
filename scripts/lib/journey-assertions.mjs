@@ -17,12 +17,12 @@
  *
  * The phase-cost / hex-drawer helpers target the Studio flow monitor
  * ([data-mon-node]) — the cycle-monitor surface since /dashboard was deleted
- * (M7-1/M7-2, ADR-031).
+ * (M7-1/M7-2, D-12).
  */
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Per-phase cost is asserted on the Studio monitor hexes (M7-1/M7-2, ADR-031):
+/** Per-phase cost is asserted on the Studio monitor hexes (M7-1/M7-2, D-12):
  *  each phase HexNode carries [data-mon-node][data-phase-cost-usd]. */
 export const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd]';
 

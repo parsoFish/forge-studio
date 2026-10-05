@@ -14,7 +14,7 @@ two seams below.
 
 ## The door is `export {}`, on purpose
 
-`index.ts` re-exports nothing, and that is the design (ADR 048), not an
+`index.ts` re-exports nothing, and that is the design (D-32), not an
 unfinished job. The seams import **deep specifiers** so that resolving one agent
 does not pull the demo-capture machinery into the bridge's module graph; a
 barrel would re-couple exactly what the deep imports keep apart. **The door this
@@ -50,7 +50,7 @@ specifiers now (`@forge/stations/demo-model.ts`, `@forge/stations/gates/docs-gat
 `demo.ts` — the capture verb itself — is the one piece of the CLI seam that
 stayed the example's.
 
-**Why two seams and not one.** ADR 048 clause 2 says a fixed, enumerated set,
+**Why two seams and not one.** D-32 says a fixed, enumerated set,
 currently two, checked by name. Folding the CLI's verbs into the bridge seam was
 measured and rejected: it put **17 new (file, sink) pairs reachable from a bridge
 route** for surfaces no bridge route calls. One file would have meant widening a
@@ -60,7 +60,7 @@ security ratchet to make a count look tidier.
 
 Bead `forge-8vfn.5.31` narrowed `exports` from a `"./*"` wildcard — which
 legalised every file in the package, not just the two the seams actually
-reach for — to exactly `"./class-profiles.ts"` and `"./demo.ts"`. ADR 048's
+reach for — to exactly `"./class-profiles.ts"` and `"./demo.ts"`. D-32's
 barrel prohibition governs `index.ts`, not the exports map — an explicit
 per-file allowlist is the same discipline this README's table already keeps,
 just enforced by Node's module resolution instead of only by

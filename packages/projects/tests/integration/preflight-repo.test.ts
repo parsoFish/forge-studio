@@ -1,5 +1,5 @@
 /**
- * Tests for the forge↔project contract preflight (US-4.1 / ADR-017) — the
+ * Tests for the forge↔project contract preflight (US-4.1 / SPEC §6) — the
  * repo-hygiene clauses that need no cross-package brain-paths dependency: C2
  * (scratch hygiene, HARD, git-truth checks — a `.gitignore` text-scan alone
  * is insufficient since ignores are no-ops on already-tracked files, CON-1)
@@ -36,7 +36,7 @@ function tmp(): string {
 }
 
 /** A project dir that satisfies every clause. The project's brain is forge-owned
- *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (ADR 035). */
+ *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (SPEC §4). */
 function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void } {
   const dir = tmp();
   const forgeRoot = tmp();
@@ -52,7 +52,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\nQuality gate: `vitest run`.\n');
-  // Brain 3 (ADR 035): profile lives CENTRAL under the forge root.
+  // Brain 3 (SPEC §4): profile lives CENTRAL under the forge root.
   mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
   // DEMO: a declared demoProcess (the project half of the demo contract family).
@@ -351,7 +351,7 @@ test('C6 (ADVISORY): no GitHub remote warns but does NOT flip ok; states forge-s
     writeFileSync(join(dir, '.gitignore'), [...SCRATCH_PATHS].join('\n'));
     writeFileSync(join(dir, 'roadmap.md'), '# r\n');
     writeFileSync(join(dir, 'CLAUDE.md'), '# c\n');
-    // Brain 3 is forge-owned + central (ADR 035).
+    // Brain 3 is forge-owned + central (SPEC §4).
     mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
     writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# p\n');
     // No git repo / no remote at all.

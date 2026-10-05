@@ -565,7 +565,7 @@ function registrySource(forgeRoot: string): { exists: boolean; communitySkills: 
   return { exists, communitySkills: communitySkillsFromRegistry(forgeRoot) };
 }
 
-/** W7-B3 review F7: `kinds` (optional, additive — ADR-042 disclose-not-park)
+/** W7-B3 review F7: `kinds` (optional, additive — disclose, do not park)
  *  narrows which sections are BUILT, not merely which are returned: a caller
  *  that wants only hooks (the /hooks page's community shelf) must not pay a
  *  child-process probe per catalog connection plus the registry read to get

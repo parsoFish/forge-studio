@@ -3,5 +3,5 @@ name: mdtoc (project)
 binding:
   kind: project
   ref: mdtoc
-desc: Per-project brain for mdtoc — themes the reflector distils from each mdtoc cycle (ADR 035, central forge-owned).
+desc: Per-project brain for mdtoc — themes the reflector distils from each mdtoc cycle (SPEC §4, central forge-owned).
 backend: filesystem

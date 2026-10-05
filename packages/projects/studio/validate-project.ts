@@ -1,5 +1,5 @@
 /**
- * Project definition validation (ADR 027, §6) — the `project` half of what was
+ * Project definition validation (D-09, §6) — the `project` half of what was
  * `orchestrator/studio/validate.ts`, moved here by T1 ruling 159.
  *
  * ONE rule, over the shape a project actually arrives in:

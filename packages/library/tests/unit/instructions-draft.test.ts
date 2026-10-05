@@ -115,7 +115,7 @@ describe('composeInstructionsDraft', () => {
     assert.match(
       draft,
       /do(?:es)? not (?:read|query) the (?:forge )?brain/i,
-      'brainAccess:none must state the ADR-010 do-not-read-the-brain rule, not merely omit brain talk',
+      'brainAccess:none must state the SPEC §4 do-not-read-the-brain rule, not merely omit brain talk',
     );
   });
 
@@ -124,7 +124,7 @@ describe('composeInstructionsDraft', () => {
     assert.match(
       draft,
       /brain[- ]first|query the brain (?:first|before)/i,
-      'brainAccess:mandatory must state the ADR-010 brain-first rule, not merely omit brain talk',
+      'brainAccess:mandatory must state the SPEC §4 brain-first rule, not merely omit brain talk',
     );
   });
 
@@ -133,7 +133,7 @@ describe('composeInstructionsDraft', () => {
   // brainAccess value ('bogus-not-a-real-value', not one of
   // none|mandatory|advisory) currently makes the draft and the derivation
   // DISAGREE — the draft correctly falls through to "Brain access not
-  // declared." (there is no ADR-010 policy for an unrecognised value), but
+  // declared." (there is no SPEC §4 policy for an unrecognised value), but
   // `derivation.sources` computes `present: brainAccessRaw.length > 0`,
   // which is true for ANY non-empty string including a bogus one. A caller
   // trusting `present` to mean "the draft says something real" is lied to.
@@ -153,7 +153,7 @@ describe('composeInstructionsDraft', () => {
 
     assert.ok(
       !statesAJustifiedPolicy,
-      'the draft must never state one of the three real ADR-010 policies (none/mandatory/advisory wording) for a value that is none of the three',
+      'the draft must never state one of the three real SPEC §4 policies (none/mandatory/advisory wording) for a value that is none of the three',
     );
     assert.ok(statesNotDeclared, 'an unrecognised brainAccess value has no valid policy to state — the draft must say so explicitly');
     assert.equal(

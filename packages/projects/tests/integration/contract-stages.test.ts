@@ -696,7 +696,7 @@ describe('deriveContractStages — containment (AT-25..29)', () => {
 // AT-30..32: item 3 — the roadmap row's C4 divergence, made VISIBLE
 // (T2 ruling, binding, pin 2). `packages/projects/preflight.ts`'s checkC4 (HARD) fails
 // closed unless BOTH roadmap.md AND brain/projects/<id>/profile.md (Brain 3,
-// ADR 035, central in the forge repo) exist — but `deriveRoadmapRow` today
+// SPEC §4, central in the forge repo) exist — but `deriveRoadmapRow` today
 // only ever looks at roadmap.md, so a project can read `roadmap: present`
 // here while `forge preflight` fails it outright over the missing brain
 // profile, with nothing in this row hinting why.

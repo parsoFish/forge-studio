@@ -15,8 +15,8 @@ schema:
 # Verdict artifact contract
 
 The human review decision at the verdict gate: `kind` ∈ `approve | send-back`. On send-back it
-also carries the UWI (unifier-work-item) feedback the unifier drains in place (ADR 026, no
-discard). Today the verdict is a transient POST that drives state transitions; the ADR-027
+also carries the UWI (unifier-work-item) feedback the unifier drains in place (D-20, no
+discard). Today the verdict is a transient POST that drives state transitions; the D-09
 amendment persists it as `_logs/<cycleId>/artifacts/verdict.json` so the reflector has a durable
 record of the operator's rationale.
 

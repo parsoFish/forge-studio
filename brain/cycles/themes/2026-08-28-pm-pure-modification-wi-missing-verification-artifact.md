@@ -1,8 +1,8 @@
 ---
-title: PM emits pure-modification WI without verification_artifact, triggering ADR-037 set-error and cycle restart
+title: PM emits pure-modification WI without verification_artifact, triggering D-17 set-error and cycle restart
 description: >-
-  When a WI only modifies existing files (no new file created), ADR 037 requires
-  verification_artifact instead of creates. PM spec-lint passes but the ADR 037
+  When a WI only modifies existing files (no new file created), D-17 requires
+  verification_artifact instead of creates. PM spec-lint passes but the D-17
   set-validator fires at graph-emit time, classifying the cycle terminal/non-
   recoverable and forcing a full restart — wasting one PM run (~$0.79, ~3 min).
 category: antipattern
@@ -20,11 +20,11 @@ created_at: 2026-08-28T12:30:00.000Z
 updated_at: 2026-08-28T12:30:00.000Z
 ---
 
-# PM pure-modification WI missing `verification_artifact` → ADR-037 set-error → cycle restart
+# PM pure-modification WI missing `verification_artifact` → D-17 set-error → cycle restart
 
 ## What happened
 
-The PM decomposed the `--no-merges` initiative into 3 WIs. WI-1 and WI-2 created new test files (`creates: [test/no-merges.test.ts]`, `creates: [test/no-merges-cli.test.ts]`). WI-3 only modified existing files (`test/acceptance/run.ts`, `README.md`) and declared neither `creates` nor `verification_artifact`. `pm.spec-lint` passed (0 flagged). But the ADR 037 set-validator fired at `pm.graph-emitted` time:
+The PM decomposed the `--no-merges` initiative into 3 WIs. WI-1 and WI-2 created new test files (`creates: [test/no-merges.test.ts]`, `creates: [test/no-merges-cli.test.ts]`). WI-3 only modified existing files (`test/acceptance/run.ts`, `README.md`) and declared neither `creates` nor `verification_artifact`. `pm.spec-lint` passed (0 flagged). But the D-17 set-validator fired at `pm.graph-emitted` time:
 
 ```
 project-manager phase failed: set errors: WI-3: creates is required (ADR 037) unless
@@ -38,7 +38,7 @@ The orchestrator classified this terminal/non-recoverable, fired `failure_classi
 
 ## Why it recurs
 
-The PM must declare `verification_artifact` for any WI that modifies files without creating one. The spec-lint does not catch this (`pm.spec-lint` reported `flagged: 0`); only the post-graph ADR-037 validator does. This is a latent PM prompt gap: the set-validator fires after the PM has already finished, forcing a full restart rather than an in-place fix.
+The PM must declare `verification_artifact` for any WI that modifies files without creating one. The spec-lint does not catch this (`pm.spec-lint` reported `flagged: 0`); only the post-graph D-17 validator does. This is a latent PM prompt gap: the set-validator fires after the PM has already finished, forcing a full restart rather than an in-place fix.
 
 ## Pattern signature
 

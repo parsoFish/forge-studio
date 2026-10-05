@@ -29,7 +29,7 @@ The architect uses an LLM Council pattern — a chain of skill invocations each 
 
 The user only sees the genuine taste decisions; the mechanics are handled. Inspired by gstack's `/autoplan` chain.
 
-Implementation lives in `skills/architect-llm-council/`. Each critic is a skill invocation (per ADR 003). Pass/fail is structured — when all critics pass without escalation, the initiative is ready to queue.
+Implementation lives in `skills/architect-llm-council/`. Each critic is a skill invocation (per SPEC §1). Pass/fail is structured — when all critics pass without escalation, the initiative is ready to queue.
 
 The dependency-graph critic specifically watches for hidden dependencies that would cause parallel work-item collisions. The acceptance-criteria critic specifically watches for vagueness that would propagate downstream and break the developer loop.
 

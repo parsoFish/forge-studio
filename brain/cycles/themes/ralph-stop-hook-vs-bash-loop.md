@@ -50,7 +50,7 @@ A **Stop hook** intercepts Claude's exit attempts within a single session. The h
 | Loops | OS-level; survives Claude Code crashes | bound to one session |
 | Best for | long-running unattended (forge) | interactive `/ralph-loop` invocations |
 
-Forge v2 uses the **bash-loop pattern** (ADR 002) so iteration is auditable per-iteration and cycles can survive scheduler restarts.
+Forge v2 uses the **bash-loop pattern** (SPEC §1) so iteration is auditable per-iteration and cycles can survive scheduler restarts.
 
 ## Sources
 

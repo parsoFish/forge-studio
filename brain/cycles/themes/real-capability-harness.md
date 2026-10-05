@@ -75,7 +75,7 @@ exists so routine self-verification stays cheap and unambiguous.
 
 - *Routine:* pick one corpus initiative, reset `claude-harness` to its pre-landing SHA, re-run it, and check outcomes.
 - *Release:* run the greenfield 1→5 chain; breaks surface as golden mismatches.
-- See [ADR 022](../../../docs/decisions/022-real-capability-harness.md) for the runner contract. The standing runner evolves in `scripts/verify-cycle.mjs`.
+- See D-08 for the runner contract. The standing runner evolves in `scripts/verify-cycle.mjs`.
 
 ## See also
 

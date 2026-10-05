@@ -33,7 +33,7 @@ row, a real roster member `forge studio lint` can validate) — nothing more. It
 is the same shape [`skills/contract-check/SKILL.md`](../contract-check/SKILL.md)
 already has for the `onboard-preflight` band.
 
-The develop flow's `integrate` node carries `agent: "demo-agent"` (ADR-039 declared
+The develop flow's `integrate` node carries `agent: "demo-agent"` (SPEC §1 declared
 dispatch); at runtime `execAgent`
 ([`packages/stations/phases/executor-table.ts`](../../packages/stations/phases/executor-table.ts))
 resolves the declared `integrate-band` guard and routes the node to `execIntegrate`, which

@@ -1,6 +1,6 @@
 /**
  * forge↔project contract preflight — the "instructions" clause family
- * (US-4.1 / ADR-017). C5 (locked-core constraints declared, advisory) and C8
+ * (US-4.1 / SPEC §6). C5 (locked-core constraints declared, advisory) and C8
  * (agent-instruction file present + covers the declared gate, advisory).
  * A clause-family leaf of `preflight.ts`, whose header carries the split's
  * reasoning and the sibling map.

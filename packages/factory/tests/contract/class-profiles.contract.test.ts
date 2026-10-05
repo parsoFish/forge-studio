@@ -1,5 +1,5 @@
 /**
- * CONFORMANCE TEST for the class → gate-profile table (ADR 051 decision 2,
+ * CONFORMANCE TEST for the class → gate-profile table (D-34,
  * spec §5 item 1). It is not a behavioural test of any phase; it is the test
  * that keeps the table the ONE place a class's gates are decided.
  *
@@ -190,7 +190,7 @@ describe('class profiles — no phase re-derives what the table decides', () => 
 
 describe('class profiles — the live-acceptance tier is the class\'s, not the project\'s', () => {
   it('kills "the tier is still one project-wide flag": code/config/infra require it, docs is advisory', () => {
-    // ADR 051 decision 2, amended (bead forge-mfv5.3.5, operator ruling
+    // D-34, amended (bead forge-mfv5.3.5, operator ruling
     // 2026-09-12). A single `required` for every class is the retired
     // `testProcess.acceptance.required` boolean under a new name; the docs row
     // is the one that must differ, because a docs initiative has no live

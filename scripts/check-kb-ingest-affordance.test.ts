@@ -1,7 +1,7 @@
 /**
  * check-kb-ingest-affordance.test.ts — R1-06 WI-3 group B (3): the
  * no-ingest-affordance RATCHET (operator decision 3, 2026-08-03 —
- * docs/decisions/010-brain-first.md line 22, docs/roadmaps/
+ * SPEC §4, docs/roadmaps/
  * R1-contract-componentry.md lines ~213-227: "Explicit negative AC
  * (decision 3): no ingest affordance anywhere in creation or maintenance
  * ... grep-level assert no UI route/action triggers ingest").
@@ -330,7 +330,7 @@ test('RATCHET (green-at-birth): the real repo has no apps/studio/bridge KB inges
 // undetected. This is the specific shape the brain-maintenance agent
 // (R4-19-F2) must never carry: "the agent must NOT compose brain-ingest and
 // must have no ingest affordance of any kind" (operator decision 3 —
-// docs/decisions/010-brain-first.md line 22: "Ingest stays reflection-only").
+// SPEC §4: "Ingest stays reflection-only").
 //
 // Written FIRST, against the CURRENT (unmodified) check-kb-ingest-affordance.mjs
 // — confirmed empirically (see the two tests immediately below) that neither

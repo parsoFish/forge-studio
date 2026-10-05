@@ -160,7 +160,7 @@ export function ownSchedulerPid(root) {
  * sweep then ran and the daemon was still alive afterwards. A scheduler left
  * running is not cosmetic residue: `forge studio` ADOPTS a pid that is
  * already alive rather than spawning fresh (`apps/forge/serve-supervisor.ts`,
- * ADR 011), so the NEXT run inherits this one's queue state and env wholesale
+ * D-03), so the NEXT run inherits this one's queue state and env wholesale
  * — `scheduler-preflight.mjs`'s own refusal exists for exactly that reason,
  * on the costed side.
  *

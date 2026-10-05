@@ -112,13 +112,13 @@ test('non-vacuity: indexExportedTypeNames() finds a real, non-empty set of type-
   assert.ok(reallyExported.size > 0, 'indexExportedTypeNames() found zero type exports — the AST walk or index.ts is broken');
 });
 
-test('design.md names the ADRs that govern this package', () => {
+test('design.md names the decisions that govern this package', () => {
   // Exit row 5's own wording. Not a word count — the check is that the file
-  // cites decision records by number, so a reader arriving at the package can
+  // cites the governing decisions by id, so a reader arriving at the package can
   // reach the reasoning rather than infer it.
   const design = readFileSync(join(PKG_DIR, 'design.md'), 'utf8');
-  const adrs = [...design.matchAll(/ADR\s+(\d{3})/g)].map((m) => m[1]);
-  assert.ok(adrs.length >= 2, `design.md cites ${adrs.length} ADR(s); exit row 5 asks it to name the ones that govern the package`);
-  assert.ok(adrs.includes('024'), 'design.md must cite ADR 024 — agents compose skills, which is this package\'s own boundary');
+  const adrs = [...design.matchAll(/(D-\d{2}|SPEC §\d)/g)].map((m) => m[1]);
+  assert.ok(adrs.length >= 2, `design.md cites ${adrs.length} decision id(s); exit row 5 asks it to name the ones that govern the package`);
+  assert.ok(adrs.includes('SPEC §1'), 'design.md must cite SPEC §1 — agents compose skills, which is this package\'s own boundary');
   assert.match(design, /isolation/i, 'design.md must state spec §0\'s deferral of plugin-host process isolation');
 });

@@ -3,5 +3,5 @@ name: trafficGame (project)
 binding:
   kind: project
   ref: trafficGame
-desc: Per-project brain for trafficGame — themes the reflector distils from each cycle (ADR 035, central forge-owned).
+desc: Per-project brain for trafficGame — themes the reflector distils from each cycle (SPEC §4, central forge-owned).
 backend: filesystem

@@ -143,7 +143,7 @@ export type RequestCtx = {
  *      that leaves the allowlist and bounding the chain;
  *   3. classifies a thrown fetch into `timeout` vs `network-error`.
  *
- * EXPORTED on purpose (ADR-042's third boundary: a function with an explicit
+ * EXPORTED on purpose (a function with an explicit
  * error contract, exported so a test can drive it directly). The adapters
  * below all `encodeURIComponent`/`URLSearchParams` their inputs, so today no
  * adapter CAN reach this check with an escaping URL — which is precisely why

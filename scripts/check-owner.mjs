@@ -79,7 +79,7 @@ const NOT_PRODUCTION = /(\.test\.[cm]?[jt]sx?$)|(^|\/)test-fixtures\//;
  * (`packages/kernel/discovery-roots.ts`, operator ruling item 81) makes
  * discoverable: the operator-authored top-level root, and a package's own
  * `skills/` root — "a factory now ships as a package". Both are equally
- * production (ADR 024 — the SKILL.md IS the agent), so both must be equally
+ * production (SPEC §1 — the SKILL.md IS the agent), so both must be equally
  * visible to ownership and to the owning package's cap
  * (`check-package-caps.mjs`, which reuses `productionFiles()`).
  *
@@ -99,7 +99,7 @@ const SKILL_MD_RE = /^(?:packages\/[^/]+\/)?skills\/[^/]+\/SKILL\.md$/;
  * The production files the quarry must account for: code under the four
  * legacy trees, plus the SKILL.md agent definitions (top-level or
  * package-owned — see `SKILL_MD_RE`), which are production artifacts
- * (ADR 024 — the SKILL.md IS the agent) and move as such.
+ * (SPEC §1 — the SKILL.md IS the agent) and move as such.
  */
 export function productionFiles(root) {
   // `--others --exclude-standard` for the same reason `check-file-size.mjs`

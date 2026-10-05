@@ -94,7 +94,7 @@ _skill-staging/
 # validates them, and rm's the dir in a `finally`. Runtime, never source.
 _template-staging/
 
-# R4-21 phase 2 / ADR-043: the generic interactive-runner's finalize landing
+# R4-21 phase 2 / SPEC §5: the generic interactive-runner's finalize landing
 # root (<forgeRoot>/_interactive-library). `copyStagingToLibrary`
 # (orchestrator/interactive-finalizers.ts) lands a session's drafted package
 # here before cli/bridge-studio-authoring.ts installs it into skills/<id>/ or

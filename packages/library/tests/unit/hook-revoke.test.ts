@@ -7,7 +7,7 @@
  *   - RECORDS the revocation (an appended `revoked` entry carrying the prior
  *     approval's hashes + revokedAt) — an audit trail, never a silent erase.
  *   - Throws when there is nothing to revoke (explicit error contract —
- *     ADR-042 pure-function boundary; the bridge maps it to 409).
+ *     pure-function boundary; the bridge maps it to 409).
  *   - readHookApprovalLedger still parses a ledger carrying a `revoked` list
  *     (forward-compat of the existing reader is part of the contract).
  *

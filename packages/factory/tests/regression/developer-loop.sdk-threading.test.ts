@@ -1,7 +1,7 @@
 /**
  * commit a7b268d84 — an unavailable runtime.sdk value reached getAdapter and threw instead of falling back to claude.
  *
- * SDK-threading regression (WS-C / C1, ADR 029).
+ * SDK-threading regression (WS-C / C1, SPEC §1).
  *
  * `deriveAgentSpec` now carries the SKILL.md `runtime.sdk` through to the
  * PhaseAgentSpec, and the dev-loop resolves it through `resolveSdkId` before

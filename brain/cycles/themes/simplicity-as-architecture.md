@@ -27,12 +27,12 @@ The shape of the system is what costs to change later. Every knob, every fallbac
 
 Defended in:
 
-- **`forge.config.json` is minimal** — ~10 lines (ADR 009). Settings live in ADRs / SKILL.md / manifest frontmatter.
-- **No job queue / worker / resource controller** — `_queue/` directories + ~150-line scheduler (ADR 011).
-- **No process isolation module** — `git worktree` (ADR 006/011).
+- **`forge.config.json` is minimal** — ~10 lines. Settings live in DECISIONS.md / SKILL.md / manifest frontmatter.
+- **No job queue / worker / resource controller** — `_queue/` directories + ~150-line scheduler (R-03, D-04).
+- **No process isolation module** — `git worktree` (D-02).
 - **No retry / dedup / priority queue** — failure → human triage; pending items processed in filesystem order.
-- **No vector DB** — `brain-query` does grep-and-load; embeddings only if recall becomes a bottleneck (ADR 004).
-- **No `forge-v1`-style stage pipeline** — Ralph loop pattern collapses it (ADR 002).
+- **No vector DB** — `brain-query` does grep-and-load; embeddings only if recall becomes a bottleneck (SPEC §4).
+- **No `forge-v1`-style stage pipeline** — Ralph loop pattern collapses it (SPEC §1).
 
 Every ADR's "Alternatives considered" + non-goals section is part of this principle.
 

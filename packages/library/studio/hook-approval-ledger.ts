@@ -292,7 +292,7 @@ export function writeHookApprovalLedgerEntry(forgeRoot: string, entry: HookAppro
  * entry's pinned hashes plus a `revokedAt` stamp appended to the ledger's
  * `revoked` list. An audit trail, never a silent erase.
  *
- * Error contract (ADR-042 pure-function boundary): throws when the hook has
+ * Error contract (pure-function boundary): throws when the hook has
  * no approval on record — a revocation of nothing is a caller state error the
  * bridge maps to 409, never a silent no-op.
  */

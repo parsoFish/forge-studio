@@ -17,8 +17,7 @@
  * Enforcement is SYMMETRIC (`lintHookComposition`): a guard id under
  * `composition.hooks` is an error, and a hook id under `composition.guards`
  * is an error — a one-directional check is the half-guard this repo has
- * already been bitten by (see docs/decisions/027-studio-object-model.md's
- * "Amendment (R3-03, 2026-08-04)").
+ * already been bitten by (see D-09's R3-03 amendment, 2026-08-04).
  *
  * Every id-taking export below slug-validates before it ever touches a path —
  * see `orchestrator/skill-path.ts` (the guard lives there so it covers every
@@ -486,7 +485,7 @@ export function checkHookComposition(
         level: 'error',
         object: obj,
         check: 'hook-library/guard-in-hooks',
-        message: `Agent "${agentSlug}" composes platform guard id "${hookRef}" under composition.hooks — guard ids belong under composition.guards (ADR-027 R3-03 amendment)`,
+        message: `Agent "${agentSlug}" composes platform guard id "${hookRef}" under composition.hooks — guard ids belong under composition.guards (D-09)`,
       });
     } else if (!hookIds.has(hookRef)) {
       findings.push({
@@ -504,7 +503,7 @@ export function checkHookComposition(
         level: 'error',
         object: obj,
         check: 'hook-library/hook-in-guards',
-        message: `Agent "${agentSlug}" composes library hook id "${guardRef}" under composition.guards — library hook ids belong under composition.hooks (ADR-027 R3-03 amendment)`,
+        message: `Agent "${agentSlug}" composes library hook id "${guardRef}" under composition.guards — library hook ids belong under composition.hooks (D-09)`,
       });
     }
   }

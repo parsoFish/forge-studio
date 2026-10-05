@@ -115,7 +115,7 @@ export class MissingDeclaredSkillError extends Error {
 
 export type DeclaredSkill = { id: string; path: string; text: string };
 
-/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90) —
+/** Every skill the project declares, read for an agent's prompt (SPEC §1, item 90) —
  *  the ONE loader `runOneShotSpawn` (via `loadAndComposeProjectSkills`) and
  *  `createClaudeAgent` both call. A `PRESENTATION_ONLY_SKILL_IDS` id (e.g.
  *  `demo-design` — Studio-presentation guidance, never a cycle input; bead

@@ -37,7 +37,7 @@
  * COVERS THE SOURCE, NOT ONLY THE INSTALLED COPY (forge-6gv.18). The roster
  * sweep below (`skills/`) only ever sees an agent AFTER it has been installed
  * — a `SKILL.md` copied into `skills/<name>/` by the New-Agent picker or by
- * `forge studio create`. `studio/starters/agents/**` (Dev/Plan/Review, ADR-033)
+ * `forge studio create`. `studio/starters/agents/**` (Dev/Plan/Review)
  * is the curated template set those installs are COPIED FROM, and it sat
  * outside this scan entirely: C2a fenced all 19 roster skills but never
  * touched the three starters, so `forge studio lint` stayed green on main
@@ -131,7 +131,7 @@ export function lintSkillToolFence(forgeRoot: string): Finding[] {
 
 /**
  * `skill-tool-fence/task-agent-not-disallowed` applied to the OOTB starter
- * template tree, `studio/starters/agents/**` (ADR-033: Dev/Plan/Review). The
+ * template tree, `studio/starters/agents/**` (Dev/Plan/Review). The
  * SAME rule as `lintSkillToolFence` above, over a different root — see the
  * module header's "COVERS THE SOURCE" note for why this pass exists as a
  * separate sweep rather than folding the two directories into one walk:

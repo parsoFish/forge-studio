@@ -1,7 +1,7 @@
 /**
  * The package skeleton is real, not a directory listing.
  *
- * ADR 046 fixes nine `packages/*` plus `apps/{forge,studio}`, each declaring
+ * D-29 fixes nine `packages/*` plus `apps/{forge,studio}`, each declaring
  * `exports: {".": "./index.ts"}` and its own `test` script, each wired into the
  * root tsconfig as a project reference, under a root `workspaces` of exactly
  * `["packages/*", "apps/*"]`.
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** `1.0.md` §0 and ADR 046, in allow-graph order. */
+/** `1.0.md` §0 and D-29, in allow-graph order. */
 const PACKAGES = [
   'contracts', 'kernel', 'library', 'knowledge', 'projects',
   'agents', 'sessions', 'flows', 'stations', 'factory',
@@ -44,7 +44,7 @@ const units = [
   ...APPS.map((a) => ({ dir: `apps/${a}`, name: `@forge/app-${a}` })),
 ];
 
-test('every unit ADR 046 names exists, with an index and a manifest', () => {
+test('every unit D-29 names exists, with an index and a manifest', () => {
   const missing = units.filter((u) => !existsSync(join(ROOT, u.dir, 'package.json')));
   assert.deepEqual(missing.map((u) => u.dir), [], 'these units have no package.json');
   const noIndex = units.filter((u) => !existsSync(join(ROOT, u.dir, 'index.ts')));
@@ -61,7 +61,7 @@ test('every unit declares the ONE entry point the allow-graph is drawn against',
 });
 
 /**
- * ADR 046, amended 2026-09-25 (bead `forge-8vfn.5.31`, M7-C OD). The M3-A
+ * D-29, amended 2026-09-25 (bead `forge-8vfn.5.31`, M7-C OD). The M3-A
  * `"./*"` subpath (amended 2026-08-31) was ADDITIVE and TRANSITIONAL: it kept
  * the 756 deep-specifier imports the M3 big-bang move emitted resolving while
  * nothing had been repointed yet. That repoint is done — every external
@@ -81,7 +81,7 @@ test('every PACKAGE\'s exports is the one-door shape — no wildcard, every subp
     const keys = Object.keys(exportsMap);
     assert.ok(keys.includes('.'), `${dir}: exports must declare "."`);
     const wildcards = keys.filter((k) => k.includes('*'));
-    assert.deepEqual(wildcards, [], `${dir}: exports must not contain a wildcard key (ADR 046, amended 2026-09-25) — found ${wildcards.join(', ')}`);
+    assert.deepEqual(wildcards, [], `${dir}: exports must not contain a wildcard key (D-29, amended 2026-09-25) — found ${wildcards.join(', ')}`);
     for (const key of keys) {
       if (key === '.') continue;
       const target = exportsMap[key]!;
@@ -124,7 +124,7 @@ test('root workspaces is exactly the two globs — the transitional forge-ui ent
 });
 
 test('every unit typechecks standalone — its tsconfig extends the root and includes only its own files', () => {
-  // PARKED DECISION, 2026-08-31. ADR 046 §1 says "wired into the root tsconfig
+  // PARKED DECISION, 2026-08-31. D-29 says "wired into the root tsconfig
   // as a project reference". TypeScript refuses a reference to any project that
   // disables emit (TS6310), and spec §3 decides "no build step" — forge runs
   // TypeScript through --experimental-strip-types and the root tsconfig is
@@ -194,7 +194,7 @@ test('apps/studio is the moved forge-ui — present, a workspace, and still name
 });
 
 test('the studio app reaches the platform through contracts alone', () => {
-  // ADR 046 rule 2. Enforced for real by scripts/check-boundaries.mjs, which
+  // D-29. Enforced for real by scripts/check-boundaries.mjs, which
   // ratchets; this asserts the rule still NAMES the moved path, so the lint
   // cannot go quiet the way the containment ratchets did when the kernel moved.
   const src = readFileSync(join(ROOT, 'scripts/check-boundaries.mjs'), 'utf8');

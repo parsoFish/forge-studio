@@ -1,6 +1,6 @@
 ---
 name: project-manager
-description: forge's plan agent — decomposes the architect's finalised initiative into atomic, dependency-ordered spec-work-items (ADR-015's versioned artifact contract) for the develop agent's ralph loop to consume.
+description: forge's plan agent — decomposes the architect's finalised initiative into atomic, dependency-ordered spec-work-items (SPEC §3's versioned artifact contract) for the develop agent's ralph loop to consume.
 library: true
 phase: project-manager
 surface: unattended
@@ -26,13 +26,13 @@ budgets: {maxTurns: 70, maxBudgetUsd: 2.5, maxBudgetUsdShare: 0.2}
 
 ## Single responsibility
 
-The PM is forge's **plan agent** — the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + GWT acceptance criteria, tailored to the architect's finalised output; the plan agent decomposes those ACs **directly** into atomic outcome-sized **spec-work-items**. Each work item IS a spec — the versioned artifact contract locked in [ADR-015](../../docs/decisions/015-work-item-format.md) — authored for the develop agent's ralph loop to consume. The initiative body is the single source of intent. The plan agent owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
+The PM is forge's **plan agent** — the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + GWT acceptance criteria, tailored to the architect's finalised output; the plan agent decomposes those ACs **directly** into atomic outcome-sized **spec-work-items**. Each work item IS a spec — the versioned artifact contract locked in SPEC §3 — authored for the develop agent's ralph loop to consume. The initiative body is the single source of intent. The plan agent owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
 
-The coupling between planning and development is expressed **only** through the spec-work-item artifact itself — no ralph-loop knowledge leaks into this skill. A spec-work-item must be parseable and valid with **zero knowledge of the ralph loop**: the WI schema (ADR-015) is the whole contract.
+The coupling between planning and development is expressed **only** through the spec-work-item artifact itself — no ralph-loop knowledge leaks into this skill. A spec-work-item must be parseable and valid with **zero knowledge of the ralph loop**: the WI schema (SPEC §3) is the whole contract.
 
 Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
 
-Format and validation rules are locked in [`docs/decisions/015-work-item-format.md`](../../docs/decisions/015-work-item-format.md). The orchestrator validates every work item via [`packages/flows/work-item.ts:validateWorkItem`](../../packages/flows/work-item.ts) before dispatching — invalid work items fail the cycle.
+Format and validation rules are locked in SPEC §3. The orchestrator validates every work item via [`packages/flows/work-item.ts:validateWorkItem`](../../packages/flows/work-item.ts) before dispatching — invalid work items fail the cycle.
 
 ## Operating mode
 
@@ -86,7 +86,7 @@ Your prompt already carries the project's `package.json`/`pyproject.toml`/`Cargo
 
 ## Outputs
 
-- `<worktree>/.forge/work-items/WI-<n>[<letter>].md` — one file per work item, frontmatter + spec body. Schema locked in [ADR 015](../../docs/decisions/015-work-item-format.md) (id regex `/^WI-\d+[a-z]?$/`; the optional single lowercase letter is the **split suffix** — see "Splitting a WI" below). **Written incrementally, one file per decided WI** (see Turn economy).
+- `<worktree>/.forge/work-items/WI-<n>[<letter>].md` — one file per work item, frontmatter + spec body. Schema locked in SPEC §3 (id regex `/^WI-\d+[a-z]?$/`; the optional single lowercase letter is the **split suffix** — see "Splitting a WI" below). **Written incrementally, one file per decided WI** (see Turn economy).
 - `<worktree>/.forge/work-items/_decomposition-state.md` — the checkbox checkpoint (planned WIs, ticked as emitted). Written FIRST, updated after every WI write; the orchestrator parses it to classify how far a capped run got.
 - `<worktree>/.forge/work-items/_graph.md` — dependency graph (mermaid `graph TD`).
 
@@ -205,7 +205,7 @@ graph TD
    - **go test**: `['go', 'test', '-run', '<NewTestName>', './...']`
    - Estimates `estimated_iterations` (calibrate from `brain/cycles/themes/work-item-completion-by-domain.md`).
    - `non_goals` is **optional** — omit if undefined. `verification_artifact` and `creates` are NOT in this category: see the joint rule above — a WI must carry at least one of them.
-   - **`domain`** (R4-05-F7, optional) — SHOULD be set to a coarse subsystem/feature-area tag for this WI (e.g. `auth`, `ui`, `scheduler`) so project constraint clauses tagged `applies_to: wi.domain=<area>` (ADR 037) land only in matching WIs. Omit when a WI genuinely spans no single clear domain.
+   - **`domain`** (R4-05-F7, optional) — SHOULD be set to a coarse subsystem/feature-area tag for this WI (e.g. `auth`, `ui`, `scheduler`) so project constraint clauses tagged `applies_to: wi.domain=<area>` (D-17) land only in matching WIs. Omit when a WI genuinely spans no single clear domain.
    - **`demo_hook` is NOT a WI field** — initiative-level only.
    - **Behaviour-preserving refactors are the ONE exception to the fail-on-clean-tree rule.** A pure rename / move / reformat keeps the project's existing tests green before AND after — there is NO test that can fail-first, so a sharp fail-first gate is impossible. For such a WI, set `behavior_preserving: true` and let `quality_gate_cmd` be the existing (already-green) suite scoped to the touched package; the dev-loop disables the iter-0 hollow-gate guard for it (the branch-diff + empty-delivery backstop still guard against a no-op). Set this flag ONLY when the change genuinely preserves behaviour — if any observable behaviour changes, a fail-first gate IS possible, so use it instead. A partial rename that breaks compilation still reddens the gate, so the gate remains meaningful.
    - **A change to a live-resource's schema / config surface MUST be gated on the LIVE acceptance test, not an offline unit test.** Offline gates (and the whole CI gate, which strips the live trigger) cannot catch live-only failures — e.g. a Terraform `ConfigMode: SchemaConfigModeAttr` conversion compiles and unit-passes but makes every nested attribute *required* at `apply` time, which only the live `apply→read→destroy` test surfaces. When the project declares `testProcess.acceptance` (`.forge/project.json`), the WI that proves a resource/schema change must set `quality_gate_cmd` to the live acceptance command (e.g. `['go','test','-tags','all','-run','TestAcc<Name>','./…/acceptancetests/']`); it runs live because the serve env carries the live trigger (`TF_ACC` etc.), and `testProcess.acceptance.requiresEnv` errors fast if the env is missing rather than false-passing. Writing the acceptance test but gating the WI on an offline run is the trap — the live bug then slips to the PR unproven.

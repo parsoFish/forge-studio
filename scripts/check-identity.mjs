@@ -185,7 +185,7 @@ if (hits.length > 0) {
     '  orchestrator/phases/demo-agent.ts (demo/capture) · orchestrator/phases/adversarial-review.ts (findings/verdict)',
   );
   console.log(
-    "  · \"the develop flow's successor band\" when the passage covers both · the example develop factory · forge-studio · the KbBackend seam (ADR 018).",
+    "  · \"the develop flow's successor band\" when the passage covers both · the example develop factory · forge-studio · the KbBackend seam (SPEC §4).",
   );
   console.log(
     '  Do NOT write \"the integrate band\": spec §5 lists it as 1.0-TARGET work, so naming it in a current-state doc invents a claim.',

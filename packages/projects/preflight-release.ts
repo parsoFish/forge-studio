@@ -1,6 +1,6 @@
 /**
  * forge↔project contract preflight — C10, documentation parity & release
- * substrate (ADVISORY; opt-in), US-4.1 / ADR-017. A clause-family leaf of
+ * substrate (ADVISORY; opt-in), US-4.1 / SPEC §6. A clause-family leaf of
  * `preflight.ts`, whose header carries the split's reasoning and the
  * sibling map.
  */

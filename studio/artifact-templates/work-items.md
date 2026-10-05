@@ -19,7 +19,7 @@ schema:
 # Work-items artifact contract
 
 One `WI-<n>.md` file per atomic unit of work, plus `_graph.md` (the dependency DAG). Schema is
-locked in [ADR 015](../../docs/decisions/015-work-item-format.md) and enforced by
+locked in SPEC §3 and enforced by
 `packages/flows/work-item.ts:validateWorkItem` before dev dispatch — invalid work items fail the
 cycle. Every WI carries a discriminating `quality_gate_cmd` (no shell pipelines; must fail before
 the work exists and pass only when the ACs are met).

@@ -1,5 +1,5 @@
 /**
- * Tests for the forge↔project contract preflight (US-4.1 / ADR-017) — the
+ * Tests for the forge↔project contract preflight (US-4.1 / SPEC §6) — the
  * SKILLS clause (forge-8vfn.5.13): a declared `skills[]` id must resolve to
  * a real `SKILL.md`, project-local or forge-wide, or the clause fails HARD.
  * Mirrors the production split's preflight-skills.ts.
@@ -36,7 +36,7 @@ function tmp(): string {
 }
 
 /** A project dir that satisfies every clause. The project's brain is forge-owned
- *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (ADR 035). */
+ *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (SPEC §4). */
 function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void } {
   const dir = tmp();
   const forgeRoot = tmp();
@@ -52,7 +52,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\nQuality gate: `vitest run`.\n');
-  // Brain 3 (ADR 035): profile lives CENTRAL under the forge root.
+  // Brain 3 (SPEC §4): profile lives CENTRAL under the forge root.
   mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
   // DEMO: a declared demoProcess (the project half of the demo contract family).

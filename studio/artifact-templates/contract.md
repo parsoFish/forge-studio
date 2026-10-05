@@ -33,4 +33,4 @@ relationship, not to duplicate `runPreflight`'s own verdict.
   contract-green (`skills/onboarding-agent/SKILL.md`).
 - **Consumer:** `contract-check` — the `onboard-preflight` band's declaration
   carrier; the REAL check is orchestrator-run (`execOnboardPreflight`), not
-  agent-run (ADR-036).
+  agent-run (D-15).

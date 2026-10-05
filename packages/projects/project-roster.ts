@@ -367,7 +367,7 @@ export type StudioStartersDeps = {
 };
 
 /**
- * GET /api/studio/starters — the curated OOTB starter agents (ADR-033) the
+ * GET /api/studio/starters — the curated OOTB starter agents the
  * New-Agent picker offers. Same capability-descriptor threading as
  * `GET /api/studio/agents` (R2-02-F1, which stays in `apps/forge/bridge-studio.ts`)
  * — starters carry a real AgentDefinition the builder reads via the same

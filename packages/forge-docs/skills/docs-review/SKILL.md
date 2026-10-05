@@ -1,6 +1,6 @@
 ---
 name: docs-review
-description: "forge-docs's ONE review agent — initiative-context critique of a docs change under the single lens the flow declares (accuracy-against-source), plus a verdict on every acceptance criterion and a Why/What/How of the change. Emits a findings artifact with per-finding severity and file:line evidence pointers, weighed by the operator at the verdict gate; it judges, it never edits, it cannot run anything, and the approve/merge decision stays with the operator (ADR 021)."
+description: "forge-docs's ONE review agent — initiative-context critique of a docs change under the single lens the flow declares (accuracy-against-source), plus a verdict on every acceptance criterion and a Why/What/How of the change. Emits a findings artifact with per-finding severity and file:line evidence pointers, weighed by the operator at the verdict gate; it judges, it never edits, it cannot run anything, and the approve/merge decision stays with the operator (D-07)."
 library: true
 phase: review
 surface: unattended
@@ -43,7 +43,7 @@ these criteria before you and nothing will after you.
 
 Your findings are claims, not verdicts, weighed by the OPERATOR at the
 verdict gate. You judge; you never edit and you never gate — approve IS the
-merge and stays human (ADR-021).
+merge and stays human (D-07).
 
 ## What you receive
 

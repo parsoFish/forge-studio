@@ -289,7 +289,7 @@ export function doorWorthRunning(boundMs, ceilingMs) {
  * against a cycle that spent $3.99. The window funded a quarter less than the
  * work. The number was chosen when no S10 run had ever completed a cycle, so it
  * was derived from nothing — and it was the THIRD distinct beat-8 blocker in
- * three runs, after the ADR 037 quarantine and the unwired wait anchor.
+ * three runs, after the D-17 quarantine and the unwired wait anchor.
  *
  * WHY `makeAgentChannelDoor` BELOW CANNOT ANSWER THIS. It reads the very same
  * terminal state, and on run 17 it correctly stayed silent: it asks only after

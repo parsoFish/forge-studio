@@ -50,7 +50,7 @@
   artifact:
     kind: markdown-draft
     label: AGENTS.md draft
-  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the read-only affordance
+  # panel (W6-B3, SPEC §5 2026-08-15 amendment §2) — the read-only affordance
   # twin of instructions-runner.ts's real state machine (its own header
   # comment, orchestrator/instructions-runner.ts:17-24). instructions never
   # gains a turnSpec (2026-08-14 amendment §1 — it is never migrated onto the
@@ -150,7 +150,7 @@
   artifact:
     kind: generation-gallery
     label: Demo generations
-  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the read-only affordance
+  # panel (W6-B3, SPEC §5 2026-08-15 amendment §2) — the read-only affordance
   # twin of demo-builder-runner.ts's real state machine (its own header
   # comment, orchestrator/demo-builder-runner.ts:15-20). demo never gains a
   # turnSpec (2026-08-14 amendment §1 — it is never migrated onto the
@@ -231,9 +231,9 @@
   artifact:
     kind: contract-buildout
     label: Contract build-out
-  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the affordance twin of
+  # panel (W6-B3, SPEC §5 2026-08-15 amendment §2) — the affordance twin of
   # onboarding's real phase vocabulary. Onboarding is still not a turn-loop
-  # (ADR-043 §Consequences: it runs through `forge agent dispatch`), but since
+  # (SPEC §5: it runs through `forge agent dispatch`), but since
   # ruling 441 it is no longer fire-and-forget: it has a WRITABLE row, the
   # pre-dispatch brief, so the sentence that used to sit here — "a
   # fire-and-forget dispatch with exactly three phase values" — is no longer
@@ -271,9 +271,8 @@
 # session's accumulating draft skill/hook package (deriveFilePackage reads
 # the session dir's own staging/ subdirectory).
 #
-# turnSpec (R4-21 phase 2, WI-1, D1) is ADR-043 §1's ratified table verbatim
-# (docs/decisions/043-generic-interactive-surface.md#1-the-primitive--one-
-# additive-optional-turnspec-field) — the ADR's own worked example IS this
+# turnSpec (R4-21 phase 2, WI-1, D1) is SPEC §5's ratified table verbatim
+# — the decision record's own worked example IS this
 # descriptor. kindDir is the one SEC-04 containment segment
 # (resolveGuardedPath(projectRoot, [kindDir, sessionId])); style:agent picks
 # runAgentTurn. Four phases: analyzing (runs the agent, writes staging/,

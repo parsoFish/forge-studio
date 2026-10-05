@@ -58,7 +58,7 @@ preserved exactly at roundabout r=300 = 1.921 v/sim-s.
 
 ## Sources
 
-- [`docs/decisions/adr-collision-architecture-2026-05-22.md`](../../../../projects/trafficGame/docs/decisions/adr-collision-architecture-2026-05-22.md) — the parent ADR.
+- trafficGame's collision-architecture decision record (2026-05-22, in the trafficGame repo) — the parent decision.
 - [`docs/baselines/grading-frontier-cross-theories.md`](../../../../projects/trafficGame/docs/baselines/grading-frontier-cross-theories.md) — the 5-fix list + champion.
 - Commit `7c64b4b` "feat(traffic): elevation-aware collision avoidance + binary elevation model" on the trafficGame `main` (merged via PR #57).
 

@@ -1,6 +1,6 @@
 ---
 name: forge-onboard-project
-description: Bring any code project up to the forge↔Studio project contract so forge can develop it unattended at roadmap scale. Use before pointing forge at a new or not-yet-primed managed project. Works for any form — UI app, HTTP API, library, CLI, monorepo, infra provider — by authoring the project as a Studio object, mapping each operational contract invariant onto that project's shape, then validating (forge preflight + UI readiness) and handing off a roadmap-scale initiative. The contract spec is docs/reference/project-contract.md (ADR-034).
+description: Bring any code project up to the forge↔Studio project contract so forge can develop it unattended at roadmap scale. Use before pointing forge at a new or not-yet-primed managed project. Works for any form — UI app, HTTP API, library, CLI, monorepo, infra provider — by authoring the project as a Studio object, mapping each operational contract invariant onto that project's shape, then validating (forge preflight + UI readiness) and handing off a roadmap-scale initiative. The contract spec is docs/reference/project-contract.md (SPEC §6).
 library: true
 ---
 
@@ -9,7 +9,7 @@ library: true
 Forge develops a project as an **unattended loop** (plan → change → verify →
 package → review → merge) with no human in the inner loop. Onboarding makes the
 guarantees a human would otherwise provide **structurally true of the project**.
-Those guarantees are the contract in `docs/reference/project-contract.md` (ADR-034) —
+Those guarantees are the contract in `docs/reference/project-contract.md` (SPEC §6) —
 read it first; this skill operationalises *getting a project there*.
 
 The contract now has **two faces that must both be green**:
@@ -35,7 +35,7 @@ prove them with one read-only live call.
 ### Step 1 — Choose the committed-artifact home (`artifactRoot`)
 Decide where the project's COMMITTED forge artifacts live. `artifactRoot` now scopes
 **only** the in-repo demo + project-action skills — default, shape, path rules and
-the ADR 035 forge-owned/central split are the `artifactRoot` field's own contract
+the SPEC §4 forge-owned/central split are the `artifactRoot` field's own contract
 (`docs/schemas/project-config.schema.json`, enforced by `validateProjectConfig`).
 Runtime scratch (`_architect/`, worktree `demo/<id>/`, `.forge/` runtime dir) stays
 gitignored regardless.
@@ -85,7 +85,7 @@ gate).
 
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch (the
-exact path list — `SCRATCH_PATHS` — is `forge preflight`'s C2 check, ADR 017),
+exact path list — `SCRATCH_PATHS` — is `forge preflight`'s C2 check, SPEC §6),
 build artifacts + generated output (binaries, bundles, coverage). Never a
 blanket `.forge/` line: `.forge/project.json`, `.forge/quality_gate_cmd`, and
 `.forge/skills/` (`TRACKED_CONFIG_PATHS`) must stay trackable — C2 fails a
@@ -103,7 +103,7 @@ and reference their paths in the agent-instruction file. These are the
 
 ### Step 7 — Prime the brain & roadmap (C4)
 Author `roadmap.md` (project root); the brain profile is **forge-owned and central**
-at `brain/projects/<name>/profile.md` (+ any `themes/`) in the forge repo (ADR 035),
+at `brain/projects/<name>/profile.md` (+ any `themes/`) in the forge repo (SPEC §4),
 not authored in the project repo. **Correct stale facts** (renamed paths, dead conventions) — a
 wrong brain misleads the planner worse than an absent one. The profile is the
 queryable structure the PM/architect reads first. **Writing it is the onboarding
@@ -125,7 +125,7 @@ GitHub remote and that PRs won't need to stack.
 Every initiative leaves a browsable record: only the in-PR demo evidence lands at
 `<artifactRoot>/history/<initiative-id>/demo/` in the project repo, while the plan
 (`plan.md`) + verdict + durable history are **forge-owned** in `_logs/<cycleId>/artifacts/`
-(ADR 035). The project's `instructions` + agents write the demo into the worktree as
+(SPEC §4). The project's `instructions` + agents write the demo into the worktree as
 part of the work so it lands in the PR and is committed.
 This is a project-side convention (forge does not hard-code it) — state it in the
 instruction file and back it with a `present` `demoProcess` step.
@@ -156,9 +156,9 @@ plus a confirmation layer (create→confirm→destroy, prefixed/randomized names
 orphan sweep, creds out-of-band → env). Make the per-WI testing contract structural
 via three `.forge/project.json` fields — `testProcess.acceptance.{match,
 requiresEnv}`, `standing_work_item_acs`, `testProcess.ci.unsetEnv` — each field's
-exact contract is `docs/schemas/project-config.schema.json` (C7, ADR 017 amendment
+exact contract is `docs/schemas/project-config.schema.json` (C7, amendment
 2026-05-31). Do not write a `required` key: whether an initiative must carry a
-live-acceptance WI is its change class's `acceptance` column (ADR 051), and the
+live-acceptance WI is its change class's `acceptance` column (D-34), and the
 key is refused at load.
 Compose the project linter into the live-acc per-WI gate (its gate is the acceptance
 test, which omits lint). Enforce C9 on the live tier: resources named under the

@@ -6,7 +6,7 @@
  * carries the run's effective ceiling on the BRIDGE process `bootOwnBridge`
  * spawns (`bridge.mjs`) — the `forge studio` process whose own supervisor
  * (`apps/forge/serve-supervisor.ts`) brings `forge serve` up at boot the same
- * way it brings up the bridge and the UI (ADR 011). That supervisor's boot
+ * way it brings up the bridge and the UI. That supervisor's boot
  * step ADOPTS a live pid when `daemonPaths(forgeRoot).pidFile` already names
  * one alive per `isAlive` — supervising it, spawning nothing — and only
  * SPAWNS a fresh `forge serve` (`spawnServeDetached`, `packages/flows/

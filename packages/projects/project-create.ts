@@ -12,7 +12,7 @@
  * The templates carry the code skeleton + `.forge/project.json` (the C1 gate) +
  * AGENTS.md (C8) + a gitignore (C2/ARTIFACTS) + roadmap.md (C4 project side).
  * The only forge-owned piece not in a template is the CENTRAL Brain-3 stub
- * (ADR-035), which `seedProjectBrain` lays down — so a scaffold reaches hard-green
+ * (SPEC §4), which `seedProjectBrain` lays down — so a scaffold reaches hard-green
  * with no manual repo surgery.
  *
  * RULING 38 fix (c), M4-projects-reset: `manifest.appType` — already validated
@@ -416,7 +416,7 @@ export function scaffoldGreenfieldProject(input: {
   const projectsRoot = input.projectsRoot ?? join(input.forgeRoot, 'projects');
   const projectDir = resolve(projectsRoot, id);
   // Fixed, config-derived brain root (forgeRoot-relative, NOT projectsRoot —
-  // the central Brain-3 always lives under the forge repo, ADR 035).
+  // the central Brain-3 always lives under the forge repo, SPEC §4).
   const brainProjectsRoot = resolve(input.forgeRoot, 'brain', 'projects');
   const finalBrainDir = resolve(brainProjectsRoot, id);
 

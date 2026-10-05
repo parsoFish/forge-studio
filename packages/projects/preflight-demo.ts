@@ -1,6 +1,6 @@
 /**
  * forge↔project contract preflight — the DEMO clause family (US-4.1 /
- * ADR-017). DEMO (demoProcess declared), DEMO-SKILL (the demo declaration
+ * SPEC §6). DEMO (demoProcess declared), DEMO-SKILL (the demo declaration
  * drives at least one checkpoint, bead forge-mfv5.2.2), DEMO-ALIGN (demo
  * builds off the declared test process). All advisory. A clause-family leaf
  * of `preflight.ts`, whose header carries the split's reasoning and the

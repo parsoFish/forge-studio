@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADR 048 clause 3 — deletability is proven by EXECUTION, not claimed.
+ * D-32 — deletability is proven by EXECUTION, not claimed.
  *
  * Two halves, in order, because the second destroys the tree it runs in:
  *
@@ -102,7 +102,7 @@ for (const dir of ['apps', 'packages', 'scripts']) {
 if (offenders.length > 0) {
   fail(
     `${offenders.length} production file(s) import @forge/factory outside the ${SEAM.size} seam module(s) — ` +
-      `a package that cannot be removed is not deletable (ADR 048 clauses 1-2):\n  ${offenders.join('\n  ')}`,
+      `a package that cannot be removed is not deletable (D-32):\n  ${offenders.join('\n  ')}`,
   );
 }
 console.log(`factory-deletable: static — the ${SEAM.size} seam module(s) are the only production importers of @forge/factory.`);
@@ -220,7 +220,7 @@ if (after !== '') fail(`the proof MODIFIED the tree it was run from — that is 
 if (!existsSync(join(ROOT, 'packages', 'factory'))) fail('the proof deleted the caller\'s packages/factory');
 console.log('factory-deletable: the tree this ran from is untouched (packages/factory present, git clean).');
 
-console.log('factory-deletable: PASS — the platform boots and serves with the example package deleted (ADR 048).');
+console.log('factory-deletable: PASS — the platform boots and serves with the example package deleted (D-32).');
 
 // ---------------------------------------------------------------------------
 // 3. The SECOND factory (G3, M7-A packaged shape) is deletable by the same

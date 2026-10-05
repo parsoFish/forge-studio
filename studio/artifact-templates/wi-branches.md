@@ -17,7 +17,7 @@ commits on its own branch/worktree. The contract is that every dispatched WI pro
 delivery (`commitsAhead > 0`) and pushed its branch, so the integrate node has something to
 demonstrate. Today the delivery truth is the `dev-loop.delivered` event (git diff-stat); the
 `assertNonEmptyDelivery` check runs in the integrate node (R4-10-F1 — `execIntegrate`, formerly the
-unifier) — the `flow-runner` pre-node guard (ADR-027 amendment) moves a zero-commit dev phase
+unifier) — the `flow-runner` pre-node guard (D-09) moves a zero-commit dev phase
 to a clean boundary error.
 
 - **Producer:** developer-ralph (per-WI Ralph loop).

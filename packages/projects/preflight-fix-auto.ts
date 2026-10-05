@@ -194,7 +194,7 @@ function profileStub(projectName: string): string {
     `# ${projectName} — project profile`,
     '',
     '> Stub scaffolded by forge preflight auto-fix (Brain 3 — forge-owned central',
-    '> project brain, ADR 035). Replace with the real structure: languages, build',
+    '> project brain, SPEC §4). Replace with the real structure: languages, build',
     '> + test commands, module layout, and the conventions the dev-loop must honour.',
     '',
   ].join('\n');

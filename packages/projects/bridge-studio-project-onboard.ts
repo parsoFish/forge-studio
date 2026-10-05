@@ -128,7 +128,7 @@ export type OnboardDeps = {
  * W7-B6 (projects-28): "run demo-design" is signalled ONLY when the save
  * genuinely CHANGED demoProcess — presence-as-change tripped the banner on
  * every save because the client always sends the field. Pure decision rule,
- * exported for its direct pin (ADR-042: cli/ is not surface-capped).
+ * exported for its direct pin (cli/ is not surface-capped).
  */
 export function demoProcessChanged(incoming: unknown, stored: unknown): boolean {
   return Array.isArray(incoming) && JSON.stringify(incoming) !== JSON.stringify(stored ?? null);
@@ -536,7 +536,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // write and the paths it DID differ whenever the operator already had a
       // file. `project.json` joins them because this route wrote it too, a few
       // lines up. The brain seed is deliberately absent — those land in FORGE's
-      // own repo (ADR-035), not in the ground, and this is the ground's answer.
+      // own repo (SPEC §4), not in the ground, and this is the ground's answer.
       emitGroundFileChanges({
         forgeRoot: ctx.forgeRoot, cause: 'POST /api/studio/projects',
         projectRoot, relPaths: [...scaffoldedLocal, '.forge/project.json'],

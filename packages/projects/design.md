@@ -2,9 +2,9 @@
 
 ## Two faces, one verdict
 
-[ADR 017](../../docs/decisions/017-forge-project-contract.md) derived C1–C6 from the
+The project contract (SPEC §6) derived C1–C6 from the
 trafficGame arc: a project earns unattended development only by satisfying a
-written, checkable set of preflight clauses. [ADR 034](../../docs/decisions/034-studio-aligned-contract.md)
+written, checkable set of preflight clauses. A later revision (SPEC §6)
 found the contract living in two places that could disagree — `forge preflight`
 checking the filesystem, and Studio's `ContractReadiness` panel checking five
 object fields independently — and unified them into **one verdict, two faces**:
@@ -19,7 +19,7 @@ answer.
 Hard clauses (C1, C2, C4, C7 when acceptance testing is required) decline the run
 and name themselves; advisory clauses (C5, C6, C8–C10) warn without flipping the
 verdict, because their check is heuristic or owned by forge rather than provable
-by inspection (ADR 017). `runPreflight()` is pure — it returns a structured
+by inspection (SPEC §6). `runPreflight()` is pure — it returns a structured
 report; `formatPreflightReport`/`buildVerdictEvent` render it and the caller
 writes the event and sets the exit code, so an unattended caller can gate on it.
 `contract-compliance-loop.ts`'s `runContractComplianceLoop` is the bounded,
@@ -30,14 +30,13 @@ never an agent's self-report.
 
 ## Config lives in the project's own repo
 
-[ADR 035](../../docs/decisions/035-forge-owned-central-artifacts.md) centralised
+The central brain model (SPEC §4) centralised
 Brain 3 and development history into the forge repo, but its 2026-06-23 amendment
 reversed the equivalent move for the contract itself: *"`.forge/project.json` is
 the contract source (not a thin pointer to a central SSOT)."* `loadProjectConfig`
 therefore reads `<projectRoot>/.forge/project.json` out of the **managed
 project's own tree**, resolved through `@forge/kernel`'s `resolveProjectsDir` —
-the seam [ADR 045](../../docs/decisions/045-operator-workspace-and-promotion.md)
-designs the operator-workspace root for. This package does not implement that
+the seam that designates the operator-workspace root. This package does not implement that
 promotion path; it consumes whatever root kernel resolves, which is why a project
 onboarded under an operator workspace and one onboarded under the classic layout
 look identical to everything in this package.
@@ -47,8 +46,8 @@ look identical to everything in this package.
 SPEC.md §6: *"The gate is structural, never executed"* — `preflight.ts` asserts a
 quality-gate command exists and is plausibly fast; it never runs it. And:
 *"Flows reach the preflight through a port... a flow does not import the project
-package."* [ADR 036](../../docs/decisions/036-orchestrator-owned-gate-execution.md),
-amended 2026-08-31, records why this is an **injected dependency** rather than a
+package."* D-15
+(amended 2026-08-31) records why this is an **injected dependency** rather than a
 direct import: `packages/flows/flow-runner.ts` holds only the `ProjectGate { runPreflight }`
 port (`@forge/kernel`); `packages/stations/phases/executor-deps.ts`'s
 `createProjectGate()` is the one production wiring point that imports this
@@ -66,7 +65,7 @@ package's sixteen carved routes need `seedProjectBrain` (`@forge/knowledge`),
 `isContainedProjectRepoPath` (`@forge/flows`), `agentCapabilityDescriptor`
 (`@forge/agents`), and legacy registry/spawn helpers — every one of them a
 package `projects` (rank 2) may not import. The allow-graph
-([ADR 046](../../docs/decisions/046-package-layout-and-boundary-lint.md)) ranks
+(D-29) ranks
 `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows
 ← factory ← apps`; `knowledge` sits at the **same** rank as `projects` (siblings
 must not know about each other), and `flows`/`agents` sit strictly above. Worse,
@@ -98,7 +97,7 @@ unchanged, in `apps/forge/bridge-studio.ts`'s legacy dispatcher, and were handed
 M4-flows lane rather than carved into a package not allowed to hold them.
 
 **`preflight-fix-runner.ts`'s session half.** The interactive, agent-driven side
-of the auto-fix loop is a **sessions kind** ([ADR 043](../../docs/decisions/043-generic-interactive-surface.md))
+of the auto-fix loop is a **sessions kind** (SPEC §5)
 and lives in `packages/sessions/preflight-fix-runner.ts`, which deep-imports this
 package's `runPreflight`, `ClauseId`, `ensureStudioBranch` and
 `commitStudioChange` — a legal direction, since `sessions` (rank 4) sits above
@@ -116,7 +115,7 @@ the same rank-4-imports-rank-2 direction as the preflight-fix session half.
 ## Constraint blocks: read here, compiled elsewhere
 
 `constraint-blocks.ts` parses a project's machine-readable constraint clauses
-(`<!-- forge:constraint id: … applies_to: … -->`, [ADR 037](../../docs/decisions/037-compiled-wi-contracts.md))
+(`<!-- forge:constraint id: … applies_to: … -->`, D-17)
 and selector-matches them against a work item. `packages/flows/phases/wi-spec-compile.ts`
 (rank 5) is the one caller that compiles matched clauses into a WI body — a legal
 higher-rank import, and the reason `loadProjectConstraintBlocks` and
