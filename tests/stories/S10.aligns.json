@@ -2,17 +2,17 @@
   "aligns": [
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "D-20: The review-loop beats (S10.review.mjs): one anchored blocking comment -> fix-WI -> same-branch re-dispatch -> re-review — \"the send-back the whole story is built around\""
     },
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "D-04: Beats 7-9: _queue state machine and forge serve's always-on claim; the one emergency halt: ACT 1 pulls it mid-build and the run finishes, ACT 2 pulls it before resume and the run waits queued"
     },
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "D-06: Act2 (S10.act2.mjs): stop/resume-run (ruling 1794's inferRequeueResume path) keeps the finished work item and re-runs the unfinished one — \"the second attempt starts from what the first one…"
     },
     {
@@ -22,12 +22,12 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "D-15: The integrate station assembles evidence for review before any human or agent judges it; gates are orchestrator verbs (plan gate, review gate, merge)"
     },
     {
       "path": "DECISIONS.md",
-      "digest": "8e2dcd3527c98d97",
+      "digest": "10c21105cbc12066",
       "why": "D-17: S10.constants.mjs CYCLE_BOUND comment explicitly names \"the D-17 quarantine\" as one of beat8's three distinct blockers"
     },
     {

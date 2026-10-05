@@ -1,0 +1,167 @@
+{
+ "story": {
+  "id": "S7",
+  "docs": {
+   "kind": "how-to",
+   "title": "Create library components"
+  }
+ },
+ "beats": [
+  {
+   "act": "Open the Library",
+   "say": "The Library is the parts bin: skills, hooks, connections, templates, and what the community has published.",
+   "status": "green",
+   "frame": "frames/01-open-the-library.png"
+  },
+  {
+   "act": "Press \"+ New skill\"",
+   "say": "A skill is a reusable instruction packet — the unit an agent composes to know how to do something.",
+   "status": "green",
+   "frame": "frames/02-press-new-skill.png"
+  },
+  {
+   "act": "Describe the skill to the creation agent instead of writing the package by hand",
+   "say": "This is the fork in the road, and both branches are real: the operator can type the package into the form beside this one, or describe what they want and let the creation agent draft it.",
+   "status": "green",
+   "frame": "frames/03-describe-the-skill-to-the-creation-agent.png"
+  },
+  {
+   "act": "Open the authoring session it just started",
+   "say": "Forge mints the session and says so on the page the operator is already standing on, rather than moving them somewhere they did not ask to go.",
+   "status": "green",
+   "frame": "frames/04-open-the-authoring-session-it-just-start.png"
+  },
+  {
+   "act": "Read what it drafted, give the package its directory name, and approve it",
+   "say": "The agent drafts; the operator names and approves.",
+   "status": "green",
+   "frame": "frames/05-read-what-it-drafted-give-the-package-it.png"
+  },
+  {
+   "act": "Trust it: approve the draft in the library",
+   "say": "Two approvals, because they answer different questions.",
+   "status": "green",
+   "frame": "frames/06-trust-it-approve-the-draft-in-the-librar.png"
+  },
+  {
+   "act": "Go back to the Library",
+   "say": "The Library is where the operator returns between kinds.",
+   "status": "green",
+   "frame": "frames/07-go-back-to-the-library.png"
+  },
+  {
+   "act": "Press \"+ New hook\"",
+   "say": "A hook is the other kind of part: not instructions but a script, run on an agent’s lifecycle event.",
+   "status": "green",
+   "frame": "frames/08-press-new-hook.png"
+  },
+  {
+   "act": "Write the hook by hand: what it runs on, what it does, and what it may touch",
+   "say": "The permissions fields are the operator declaring, up front, what this script is allowed to reach.",
+   "status": "green",
+   "frame": "frames/09-write-the-hook-by-hand-what-it-runs-on-w.png"
+  },
+  {
+   "act": "Read the security scan before trusting it",
+   "say": "This is the gate that exists because a hook runs with the operator’s own credentials.",
+   "status": "green",
+   "frame": "frames/10-read-the-security-scan-before-trusting-i.png"
+  },
+  {
+   "act": "Check what is actually in the package — every file, and the fingerprint over all of them",
+   "say": "Approving bytes you were never shown is not approving.",
+   "status": "green",
+   "frame": "frames/11-check-what-is-actually-in-the-package-ev.png"
+  },
+  {
+   "act": "Approve the hook",
+   "say": "Trust and verdict are two different axes, and this is the trust one.",
+   "status": "green",
+   "frame": "frames/12-approve-the-hook.png"
+  },
+  {
+   "act": "Test-fire the approved hook, before any agent carries it",
+   "say": "Approval is a promise about bytes; a test-fire is the bytes running.",
+   "status": "green",
+   "frame": "frames/13-test-fire-the-approved-hook-before-any-a.png"
+  },
+  {
+   "act": "Go back to the Library once more",
+   "say": "Third kind, same parts bin.",
+   "status": "green",
+   "frame": "frames/14-go-back-to-the-library-once-more.png"
+  },
+  {
+   "act": "Press \"+ New template\" and write the template the hook’s output is filed into",
+   "say": "A template is one markdown definition file — the shape an artifact comes out in.",
+   "status": "green",
+   "frame": "frames/15-press-new-template-and-write-the-templat.png"
+  },
+  {
+   "act": "Back to the Library",
+   "say": "Instructions are the fourth kind of part, and their door now sits in the parts bin with the other three.",
+   "status": "green",
+   "frame": "frames/16-back-to-the-library.png"
+  },
+  {
+   "act": "Open the instructions launcher straight from the Library",
+   "say": "One click from the parts bin to the launcher.",
+   "status": "green",
+   "frame": "frames/17-open-the-instructions-launcher-straight-.png"
+  },
+  {
+   "act": "Draft the project’s own working instructions, so the parts have a house style to follow",
+   "say": "Instructions are the fourth kind of component and the only one that is about the project rather than about forge: the AGENTS.md every agent dispatched at this repo reads before it does anything.",
+   "status": "green",
+   "frame": "frames/18-draft-the-project-s-own-working-instruct.png"
+  },
+  {
+   "act": "Open the instructions session it just started",
+   "say": "Same shape as the skill: forge mints the session and says so where the operator already is, and reaching it is their own next act.",
+   "status": "green",
+   "frame": "frames/19-open-the-instructions-session-it-just-st.png"
+  },
+  {
+   "act": "Head back to the Agents pillar",
+   "say": "The parts are all made now — a skill, a hook, a template, a house style.",
+   "status": "green",
+   "frame": "frames/20-head-back-to-the-agents-pillar.png"
+  },
+  {
+   "act": "Open brain-ingest from the roster",
+   "say": "The roster is a list of workers; binding happens on one worker’s own page.",
+   "status": "green",
+   "frame": "frames/21-open-brain-ingest-from-the-roster.png"
+  },
+  {
+   "act": "Bind the hook to the agent, and save it",
+   "say": "A hook is inert until an agent carries it.",
+   "status": "green",
+   "frame": "frames/22-bind-the-hook-to-the-agent-and-save-it.png"
+  },
+  {
+   "act": "Run the agent",
+   "say": "The hook is bound, so this run is the first time anything other than the operator can set it off.",
+   "status": "green",
+   "frame": "frames/23-run-the-agent.png"
+  },
+  {
+   "act": "Wait for the run to end",
+   "say": "A session that ends is the event this hook was written for.",
+   "status": "green",
+   "frame": "frames/24-wait-for-the-run-to-end.png"
+  },
+  {
+   "act": "Back to the Library",
+   "say": "The record of what a hook did lives with the hook, not with whichever agent happened to trigger it.",
+   "status": "green",
+   "frame": "frames/25-back-to-the-library.png"
+  },
+  {
+   "act": "Open the hook, and see the session ending fire it",
+   "say": "This is where S7 ends: the hook the operator wrote, scanned, approved and bound actually ran, and its own page says when and how it ended.",
+   "status": "green",
+   "frame": "frames/26-open-the-hook-and-see-the-session-ending.png"
+  }
+ ]
+}
