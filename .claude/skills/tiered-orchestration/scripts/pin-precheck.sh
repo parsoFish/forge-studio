@@ -103,6 +103,36 @@ manifest_fp() { sha256sum "$1" "${1%.sha256}.counts" 2>/dev/null | sha256sum | c
 # PER-MANIFEST LINES ARE REQUIRED — NO AGGREGATE FALLBACK. A log that predates
 # them cannot say which manifest moved, and falling back to the aggregate would
 # silently restore the starvation this exists to end.
+# ZERO IS A NAMED STATE, STATED BY THE LOG AND CONFIRMED BY THE CAMPAIGN. The
+# campaign's manifests may be legitimately frozen and moved out, so none at all
+# is valid -- but only when `gate-pins.sh` SAID so (`PIN_MANIFEST_COUNT=`), never
+# when the per-manifest lines are merely absent (an old log) or short (a
+# truncated one). And the campaign must still agree NOW: a manifest that appeared
+# since the gate was never measured by it.
+PIN_LINES_N="$(grep -cE '^PIN_MANIFEST [^ ]+=[0-9a-f]{16}$' "$LOG")"
+LOG_COUNT="$(sed -n 's/^PIN_MANIFEST_COUNT=\([0-9]\{1,\}\)$/\1/p' "$LOG" | head -1)"
+if [ -n "$LOG_COUNT" ]; then
+  LOG_COUNT=$((10#$LOG_COUNT))
+  if [ "$PIN_LINES_N" -lt "$LOG_COUNT" ]; then
+    echo "PIN_PRECHECK_REFUSED: $LOG says PIN_MANIFEST_COUNT=$LOG_COUNT but carries only $PIN_LINES_N PIN_MANIFEST line(s) — the log is truncated, so it cannot say which manifests it measured. Re-gate."
+    exit 2
+  fi
+  if [ "$LOG_COUNT" -eq 0 ]; then
+    NOW_N=0
+    for zm in "$CAMP"/gate-manifests/*.sha256; do [ -e "$zm" ] && NOW_N=$((NOW_N + 1)); done
+    if [ "$NOW_N" -gt 0 ]; then
+      echo "PIN_PRECHECK_REFUSED: $LOG says PIN_MANIFEST_COUNT=0 but $CAMP now holds $NOW_N manifest(s) — a manifest appeared since the gate and was never measured by it. Re-gate."
+      exit 2
+    fi
+    if grep -q '^REFUSED ' "$LOG"; then
+      echo "PIN_PRECHECK_REFUSED: $LOG reports zero manifests but carries a REFUSED line — the gate itself refused, so zero is not a clean verdict."
+      exit 2
+    fi
+    echo "PIN_PRECHECK_OK: zero manifests (gate log and campaign both report 0)"
+    exit 0
+  fi
+fi
+
 if ! grep -qE '^PIN_MANIFEST [^ ]+=[0-9a-f]{16}$' "$LOG"; then
   echo "PIN_PRECHECK_REFUSED: $LOG carries no per-manifest PIN_MANIFEST lines — it predates forge-8vfn.7.6.80, so it cannot say WHICH manifest moved and this check will not fall back to the aggregate. Re-gate."
   exit 2

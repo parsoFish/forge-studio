@@ -50,6 +50,16 @@ else
   #
   # The aggregate STAYS. It is still the one-line answer, and a log carrying
   # only it must stay readable until every lane's gate emits these.
+  # THE COUNT IS ALWAYS STATED, INCLUDING ZERO. A campaign whose manifests were
+  # frozen and moved out holds none, which is a valid state; `pin-precheck`
+  # accepts it only when the log SAYS `PIN_MANIFEST_COUNT=0` -- absence of
+  # per-manifest lines is an old or truncated log, not a zero. It also bounds a
+  # truncated log: COUNT=n needs n PIN_MANIFEST lines.
+  pin_count=0
+  for pin_m in "$CAMP"/gate-manifests/*.sha256; do
+    [ -e "$pin_m" ] && pin_count=$((pin_count + 1))
+  done
+  echo "PIN_MANIFEST_COUNT=$pin_count"
   for pin_m in "$CAMP"/gate-manifests/*.sha256; do
     [ -e "$pin_m" ] || continue
     pin_name="$(basename "$pin_m" .sha256)"

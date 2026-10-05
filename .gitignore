@@ -143,6 +143,7 @@ secrets.env
 # can open. Other .claude/skills stay local.
 .claude/*
 !.claude/commands/
+!.claude/settings.json
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/journey-sync/
