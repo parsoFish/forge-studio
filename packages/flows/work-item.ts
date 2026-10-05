@@ -519,7 +519,7 @@ export function writeWorkItemStatus(specPath: string, status: WorkItemStatus): v
  *
  * Hidden coupling = merge-time conflict risk. PM's last-step self-check — see
  * the "Hidden dependencies" failure mode in the Plan section of
- * docs/explanation/example-factory.md.
+ * apps/docs/src/content/docs/how-forge-works.md.
  * Drives the `no_hidden_file_coupling` benchmark criterion.
  *
  * Reachability is checked in both directions because a `depends_on` edge
