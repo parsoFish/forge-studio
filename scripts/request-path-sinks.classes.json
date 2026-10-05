@@ -1,33 +1,33 @@
 {
  "apps/forge/agent-dispatch-cmd.ts": {
-  "class": "unguarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "apps/forge/agent-run.ts": {
-  "class": "unguarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "apps/forge/brain-fix-turn.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "apps/forge/bridge-agent-dispatch.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "apps/forge/bridge-cycle-scan.ts": {
-  "class": "not-request-derived",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "apps/forge/bridge-halt.ts": {
   "class": "other",
@@ -51,7 +51,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "apps/forge/ui-bridge.ts": {
   "class": "unguarded",
@@ -60,22 +60,22 @@
   "note": "body `project`, `sessionId`"
  },
  "packages/agents/agent-dispatch.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/agents-md-compose.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/band-agent-run.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/bridge-agents-history-rows.ts": {
   "class": "guarded",
@@ -87,7 +87,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/bridge-agents-studio.ts": {
   "class": "guarded",
@@ -105,13 +105,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/ralph/claude-agent.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/ralph/stop-conditions.ts": {
   "class": "not-request-derived",
@@ -123,19 +123,19 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/skill-path.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/agents/spawn-marker.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/factory/class-profiles.ts": {
   "class": "not-request-derived",
@@ -162,10 +162,10 @@
   "note": "`forgeRoot`"
  },
  "packages/flows/cycle-helpers.ts": {
-  "class": "accidentally-safe",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/cycle-pr-open.ts": {
   "class": "not-request-derived",
@@ -177,13 +177,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/drain-fix-loop.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/enqueue-flow-run.ts": {
   "class": "guarded",
@@ -210,22 +210,22 @@
   "note": "`manifest.cycle_id`"
  },
  "packages/flows/flow-run-requests.ts": {
-  "class": "accidentally-safe",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/flow-runner.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/forge-metrics.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/forge-requeue.ts": {
   "class": "other",
@@ -237,7 +237,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/gh-pinned.ts": {
   "class": "accidentally-safe",
@@ -264,10 +264,10 @@
   "note": "no request field"
  },
  "packages/flows/phases/gitignored-creates.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/phases/orchestrated-capture.ts": {
   "class": "guarded",
@@ -297,7 +297,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/queue.ts": {
   "class": "not-request-derived",
@@ -327,7 +327,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/scheduler-run-one.ts": {
   "class": "not-request-derived",
@@ -339,13 +339,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/flows/stale-remote-branch-guard.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/kernel/case-folding-probe.ts": {
   "class": "not-request-derived",
@@ -369,13 +369,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/kernel/discovery-roots.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/kernel/dispatch-claim.ts": {
   "class": "guarded",
@@ -396,10 +396,10 @@
   "note": "Not a route: reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s creation path, and from `forge…"
  },
  "packages/kernel/guarded-scan.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/kernel/halt.ts": {
   "class": "other",
@@ -411,13 +411,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/kernel/log-cycles.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/kernel/logging.ts": {
   "class": "other",
@@ -447,13 +447,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/knowledge/brain-fix-auto.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/knowledge/brain-lint.ts": {
   "class": "accidentally-safe",
@@ -483,7 +483,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/knowledge/kb-drain-edit-soundness.ts": {
   "class": "accidentally-safe",
@@ -501,7 +501,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/knowledge/kb-job-state.ts": {
   "class": "accidentally-safe",
@@ -513,13 +513,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/knowledge/kb-sites.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/knowledge/project-brain-seed.ts": {
   "class": "guarded",
@@ -585,19 +585,19 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/library/skill-staging.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/library/studio-lint-library-passes.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/library/studio-lint-tool-fence.ts": {
   "class": "not-request-derived",
@@ -675,7 +675,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/projects/contract-stages.ts": {
   "class": "guarded",
@@ -687,7 +687,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/projects/preflight.ts": {
   "class": "guarded",
@@ -711,19 +711,19 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/projects/project-repo-tx.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/projects/reset.ts": {
-  "class": "guarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/bash-fence.ts": {
   "class": "guarded",
@@ -771,7 +771,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/interactive-finalizers.ts": {
   "class": "guarded",
@@ -789,19 +789,19 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/kinds/architect-plan.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/kinds/architect-session.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/kinds/architect-steps.ts": {
   "class": "guarded",
@@ -813,7 +813,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/kinds/demo-builder.ts": {
   "class": "accidentally-safe",
@@ -831,13 +831,13 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/kinds/fix-turn.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/kinds/kind-turn.ts": {
   "class": "guarded",
@@ -846,10 +846,10 @@
   "note": "no request field"
  },
  "packages/sessions/kinds/project-brain.ts": {
-  "class": "unguarded",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/session-readability.ts": {
   "class": "guarded",
@@ -861,25 +861,25 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/studio/session-artifact-derivers.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/studio/session-kinds-validate.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/studio/session-kinds.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/sessions/turn-budget.ts": {
   "class": "other",
@@ -903,7 +903,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/gates/docs-gate.ts": {
   "class": "guarded",
@@ -912,28 +912,28 @@
   "note": "the markdown paths in the branch diff"
  },
  "packages/stations/phases/adversarial-review.ts": {
-  "class": "accidentally-safe",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/agent-skill-text.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/developer-loop.ts": {
-  "class": "not-request-derived",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/executor-deps.ts": {
-  "class": "not-request-derived",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/integrate.ts": {
   "class": "guarded",
@@ -951,19 +951,19 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/pm-decomposition-doc.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/pm-prompt-context.ts": {
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/pm-rejected-set.ts": {
   "class": "not-request-derived",
@@ -972,10 +972,10 @@
   "note": "Not a route: the project-manager PHASE's failure path (`packages/stations/phases/project-manager.ts`)"
  },
  "packages/stations/phases/project-manager.ts": {
-  "class": "accidentally-safe",
+  "class": "other",
   "guard": null,
   "verified": null,
-  "note": "Classified from audit narrative only; no per-file table row was recorded."
+  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
  "packages/stations/phases/reflector.ts": {
   "class": "guarded",
