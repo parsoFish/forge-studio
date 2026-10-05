@@ -3,7 +3,7 @@
  *
  * (1) IT DELETED A LEGITIMATE PRODUCT ARTIFACT — T1 ruling 308.
  * S1's onboarding really does create the ground project's Brain 3 sub-wiki
- * (`brain/projects/<ground>/`, central, SPEC §4). The fence saw a path that
+ * (`brain/projects/<ground>/`, central, ADR 035). The fence saw a path that
  * was not a run artifact and removed it:
  *
  *   fence: REMOVED brain/projects/gitweave/ — created by the run, not its

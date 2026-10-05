@@ -9,7 +9,7 @@
  * stays open for a human to judge.
  *
  * `forge studio` starts and supervises a forever-mode `forge serve`
- * (D-12): whenever serve is live it claims every eligible manifest in
+ * (ADR 011/031): whenever serve is live it claims every eligible manifest in
  * `_queue/pending/` on its own. This driver never spawns `forge serve`
  * itself and never calls `POST /api/develop/start` — `writeHandoffArtifacts`
  * writes the manifest ALREADY on `forge-develop` (`d12-demo-runs-core.mjs`'s

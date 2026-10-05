@@ -2,7 +2,7 @@
  * halt-record.mjs — a story run never starts on a halted ground and never
  * leaves a halt behind.
  *
- * The emergency halt (D-03) is one record, `_queue/halt.json`, that the
+ * The emergency halt (ADR 011) is one record, `_queue/halt.json`, that the
  * product reads on every claim: while it exists `forge serve` claims nothing
  * and every agent dispatch is refused. A run that starts on a ground carrying
  * one would see every beat that waits on a claim time out for a reason no

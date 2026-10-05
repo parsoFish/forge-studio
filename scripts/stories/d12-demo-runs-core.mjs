@@ -3,7 +3,7 @@
  * runs (bead `forge-1rk5.3`): `control` (a behaviour-preserving refactor, every
  * checkpoint must read `unchanged`) and `positive` (a real behaviour change,
  * every checkpoint must read `changed`). Both drive the SAME mechanism —
- * typed acceptance criteria (D-34) are the only thing that authors demo
+ * typed acceptance criteria (ADR 051) are the only thing that authors demo
  * checkpoints (`packages/stations/phases/derive-demo-model.ts`'s
  * `acDerivedCheckpoints`, delta honesty per bead `forge-mfv5.1.7`) and every
  * checkpoint is rendered as a recorded terminal capture (bead `forge-mfv5.2.1`,
@@ -303,7 +303,7 @@ export function planRun(kind, opts = {}) {
     // driver's worktree + hand-off WI-1.md are shaped for — never
     // `forge-architect`. `forge studio`'s supervised serve claims every
     // eligible manifest in `_queue/pending/` the instant it exists
-    // (D-12), so a manifest that ever names `forge-architect` risks a
+    // (ADR 011/031), so a manifest that ever names `forge-architect` risks a
     // REAL architect session being spawned against hand-authored, no-operator
     // state; naming the final flow directly closes that off completely rather
     // than relying on a repoint winning a race. See the driver's own header.

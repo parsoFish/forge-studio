@@ -8,7 +8,7 @@
  * the beat gave up with `expected "ready-for-review", got "in-flight"`. The
  * product had succeeded. The number was chosen when no S10 run had ever
  * completed a cycle, so it was derived from nothing — the third distinct
- * beat-8 blocker in three runs, after the D-17 quarantine and the unwired
+ * beat-8 blocker in three runs, after the ADR 037 quarantine and the unwired
  * wait anchor.
  *
  * WHY A BIGGER LITERAL IS NOT THE REPAIR. A cycle entitled to its own declared
