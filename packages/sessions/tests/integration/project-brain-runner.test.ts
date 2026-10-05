@@ -76,11 +76,11 @@ test('analyzing → awaiting-review when the agent stages themes', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — projectBrainAgentSpec
+// SPEC §5 (wave-6 kickoff model-tier seam) — projectBrainAgentSpec
 // stays strategy:fixed, so the only legal requested tier is the fixed one.
 // ---------------------------------------------------------------------------
 
-test('ADR-024: projectBrainAgentSpec derives tier (sonnet)', () => {
+test('SPEC §1: projectBrainAgentSpec derives tier (sonnet)', () => {
   assert.equal(projectBrainAgentSpec.tier, 'sonnet');
   assert.equal(PROJECT_BRAIN_MODEL, 'claude-sonnet-4-6');
 });
@@ -339,8 +339,8 @@ test("W7-C3 review (A-M9): every event row carries phase 'project-brain' — nev
   }
 });
 
-test('ADR-024 (A-M10): the SKILL.md frontmatter phase and the emitted phase agree', () => {
-  // Under ADR-024 the frontmatter is the single source of intent; the runner
+test('SPEC §1 (A-M10): the SKILL.md frontmatter phase and the emitted phase agree', () => {
+  // Under SPEC §1 the frontmatter is the single source of intent; the runner
   // emitting something else made the two contradict each other silently (no
   // live consumer reads PhaseAgentSpec.phase, so nothing failed).
   assert.equal(projectBrainAgentSpec.phase, 'project-brain');

@@ -1,5 +1,5 @@
 /**
- * Adapter conformance suite (M6-2, ADR 029).
+ * Adapter conformance suite (M6-2, SPEC §1).
  *
  * `runAdapterConformance(adapter, opts?)` — defines what EVERY RuntimeAdapter
  * must satisfy. This is the admission gate: a real second SDK adapter (Codex,

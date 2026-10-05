@@ -5492,12 +5492,6 @@
   {
     "file": "packages/sessions/design.md",
     "kind": "path",
-    "cited": "docs/decisions/003-skills-as-prompts.md",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/design.md",
-    "kind": "path",
     "cited": "tests/contract/routes-table.test.ts",
     "count": 1
   },

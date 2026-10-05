@@ -7,17 +7,17 @@ import { copyStagingToLibrary } from '../../../interactive-finalizers.ts';
 
 /**
  * R4-22 WI-2 (T3, acceptance tests) — pins the contract for
- * `packages/sessions/interactive-finalizers.ts` BEFORE it exists (ADR-043 §2/§5).
+ * `packages/sessions/interactive-finalizers.ts` BEFORE it exists (SPEC §5).
  *
- * ADR-043 §5 ratifies a deep-frozen `FINALIZERS` registry of pure exported
- * functions with explicit error contracts (ADR-042's third boundary), seeded
+ * SPEC §5 ratifies a deep-frozen `FINALIZERS` registry of pure exported
+ * functions with explicit error contracts (the third boundary), seeded
  * incrementally — THIS WI seeds exactly ONE entry: `copyStagingToLibrary`,
  * the step a generic interactive runner invokes at the `committing` phase to
  * install a drafted package from its session's staging dir into the real
  * library under the forge root.
  *
  * THE CONTRACT THIS FILE PINS (my call, as the writer of these tests, on the
- * parts ADR-043/the WI leave open — stated explicitly so the implementer has
+ * parts SPEC §5/the WI leave open — stated explicitly so the implementer has
  * one target):
  *
  *   export type FinalizerId = 'copyStagingToLibrary';
@@ -155,7 +155,7 @@ export function assertNamedThrow(err: (Error & { name: string }) | null, context
   assert.ok(err instanceof Error, `${context}: rejection must be a real Error instance`);
   assert.ok(
     !BUILTIN_ERROR_NAMES.has(err!.name),
-    `${context}: must throw a deliberately NAMED custom error (explicit error contract — ADR-042's third boundary), ` +
+    `${context}: must throw a deliberately NAMED custom error (explicit error contract), ` +
       `not a bare/accidental ${err!.name}. Got: ${err!.name}: ${err!.message}`,
   );
 }

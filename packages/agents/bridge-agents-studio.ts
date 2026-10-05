@@ -560,7 +560,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     };
 
     // 5b. Pre-load catalog guard ids for the composition/guard-unknown check
-    // below (ADR-027 §6: "the same validation runs at save (bridge PUT) and
+    // below ("the same validation runs at save (bridge PUT) and
     // at spawn") — mirrors apps/forge/studio-lint.ts's identical block; a missing
     // or malformed catalog leaves the set undefined so the rule simply does
     // not fire (a catalog load failure must not turn every save into a 400).
@@ -576,7 +576,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       }
     }
 
-    // 5c. Symmetric hooks/guards composition check (ADR-027 R3-03 amendment;
+    // 5c. Symmetric hooks/guards composition check (D-09 R3-03 amendment;
     // 2026-08-04 finding — the THIRD appearance of the same defect class in
     // this initiative: a rule implemented and unit-tested but inert because
     // production never invokes it). `checkHookComposition` is the SAME pure

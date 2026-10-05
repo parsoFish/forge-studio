@@ -22,9 +22,9 @@ export type StructuredResult<T> = {
 };
 
 /**
- * Architect-local thin wrapper over the shared `runStructuredTurn` (ADR 020 spine
+ * Architect-local thin wrapper over the shared `runStructuredTurn` (R-05 spine
  * extracted to interactive-session.ts). It binds the architect's model + tool
- * allow-list (derived from skills/architect/SKILL.md, ADR-024) and narrows the
+ * allow-list (derived from skills/architect/SKILL.md, SPEC §1) and narrows the
  * generic `reads` down to the `brain/` paths the PLAN's brain-context section
  * needs (ARCH-1). Callsites keep their `{ output, brainReads }` shape.
  */
@@ -48,7 +48,7 @@ export async function runStructured<T>(args: {
    *  record existed; this is the same value being USED rather than a fresh
    *  request-derived path entering here. */
   cwd: string;
-  /** ADR-043 §3 amendment (wave-6): the session's requested kickoff tier
+  /** SPEC §5 (wave-6): the session's requested kickoff tier
    *  (`status.modelTier`), resolved against `architectAgentSpec` — absent
    *  resolves to the unchanged `ARCHITECT_MODEL` default. */
   modelTier?: ModelTier;

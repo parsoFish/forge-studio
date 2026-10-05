@@ -51,7 +51,7 @@ import { skillsDir } from './skill-path.ts';
  */
 export type AgentHistoryDeps = AgentRunStateDeps & {
   projectsRoot: string; // the root the sessions pass enumerates — bead forge-b6af
-  /** `cachedListRuns` — ADR-044 P1's cached per-manifest derivation. */
+  /** `cachedListRuns` — D-27 P1's cached per-manifest derivation. */
   cachedListRuns(forgeRoot: string, nowMs: number): readonly AgentFlowRun[];
   /** `buildAgentSlugToNodeId` — agent slug → the node id it occupies. */
   buildAgentSlugToNodeId(forgeRoot: string): Map<string, string>;
@@ -97,7 +97,7 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
   }
   if (nodeIdByFlow.size === 0 && fallbackKey === undefined) return [];
   const rows: AgentHistoryRow[] = [];
-  // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
+  // D-27 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
   for (const run of deps.cachedListRuns(forgeRoot, Date.now())) {
     const nodeId = nodeIdByFlow.get(run.flowId) ?? fallbackKey;
     if (nodeId === undefined) continue; // this run's OWN flow never declared the slug, and no safe fallback applies

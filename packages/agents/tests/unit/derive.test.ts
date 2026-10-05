@@ -1,5 +1,5 @@
 /**
- * Frontmatter-regression lock for ADR-027 M2 ws-3: invocation files now derive
+ * Frontmatter-regression lock for D-09 M2 ws-3: invocation files now derive
  * from SKILL.md (single source), so the M0 dual-source deep-equal became a
  * tautology. This test replaces it: assert each derived spec deep-equals an
  * EXPLICIT expected literal (the known-good values). Any frontmatter regression
@@ -174,7 +174,7 @@ test('deriveAgentSpec: strategy:range with opus+haiku derives at haiku (cheapest
 });
 
 // ---------------------------------------------------------------------------
-// allowedTiers — ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// allowedTiers — SPEC §5 (wave-6 kickoff model-tier seam)
 // ---------------------------------------------------------------------------
 
 test('deriveAgentSpec: strategy:range populates allowedTiers cheapest-first', () => {
@@ -374,7 +374,7 @@ test('agentCapabilityDescriptor: empty-string runtime.sdk yields empty runtimeSd
 });
 
 // ---------------------------------------------------------------------------
-// agentCapabilityDescriptor — allowedTiers (ADR-043 §3 amendment, B5 reviewer
+// agentCapabilityDescriptor — allowedTiers (SPEC §5, B5 reviewer
 // fix): present + cost-sorted cheapest-first for strategy:range, entirely
 // absent for strategy:fixed.
 // ---------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 /**
- * Byte-fidelity serialization for Agent SKILL.md files (ADR-027, D5/D6 —
+ * Byte-fidelity serialization for Agent SKILL.md files (D-09, D5/D6 —
  * R2-09). Extracted from `registry.ts` (2026-08-05, finding C/11) to keep
  * that file under its 800-line hard cap — a pure import-home move, zero
  * behaviour change, matching the precedent already set by `yaml-fields.ts` /
  * `kb-descriptor.ts` / `materials.ts`. `serializeAgentDefinition` remains the
- * ONE canonical serializer (ADR-027); `registry.ts` re-exports it so every
+ * ONE canonical serializer (D-09); `registry.ts` re-exports it so every
  * existing importer keeps resolving it from `'./registry.ts'` — this module
  * is an implementation detail, not a new public seam.
  */
@@ -14,7 +14,7 @@ import matter from 'gray-matter';
 import type { AgentDefinition } from '@forge/contracts';
 
 /**
- * Build the frontmatter `data` record for an AgentDefinition (ADR-027 fixed
+ * Build the frontmatter `data` record for an AgentDefinition (D-09 fixed
  * key order: name, description, library?, phase?, surface?, executor?,
  * purpose, composition, runtime, fanout?, materials?, brainAccess,
  * interactivity, allowed-tools, disallowed-tools, tool-fence-exempt?,
@@ -182,7 +182,7 @@ function normalizeAbsentOptionalArrays(value: unknown): unknown {
 }
 
 /**
- * Serialize an AgentDefinition back to SKILL.md text (ADR-027; consumed by
+ * Serialize an AgentDefinition back to SKILL.md text (D-09; consumed by
  * the M2 bridge PUT routes, no production call site until then).
  *
  * D5/D6 (R2-09): when `originalRaw` is supplied and the freshly projected

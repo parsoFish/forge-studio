@@ -1,5 +1,5 @@
 /**
- * Derive a PhaseAgentSpec from a studio SKILL.md (ADR-027).
+ * Derive a PhaseAgentSpec from a studio SKILL.md (D-09).
  *
  * The SKILL.md is the single source: every invocation module calls
  * `deriveAgentSpec` on its agent's file, and no module holds a hardcoded
@@ -70,7 +70,7 @@ export function resolveModelTier(def: AgentDefinition, root = FORGE_ROOT): { tie
 }
 
 /**
- * Derive the PhaseAgentSpec view from a studio SKILL.md (ADR-027).
+ * Derive the PhaseAgentSpec view from a studio SKILL.md (D-09).
  *
  * @param skillPathFromRoot MUST be forge-root-relative (e.g.
  *   `skills/project-manager/SKILL.md`) — it is echoed verbatim into the
@@ -80,7 +80,7 @@ export function resolveModelTier(def: AgentDefinition, root = FORGE_ROOT): { tie
 export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): PhaseAgentSpec {
   const def = loadAgentDefinition(resolve(root, skillPathFromRoot));
   if (!def.phase) throw new Error(`${def.path}: cannot derive spec — no phase field`);
-  // ADR-043 §3 amendment (wave-6): the full SKILL-declared tier envelope, set
+  // SPEC §5 (wave-6): the full SKILL-declared tier envelope, set
   // ONLY for strategy:range (see PhaseAgentSpec.allowedTiers's own doc for
   // why strategy:fixed leaves this undefined rather than restating [tier]).
   const { tier, allowedTiers } = resolveModelTier(def, root);
@@ -91,11 +91,11 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): P
     tier,
     allowedTools: def.allowedTools,
     disallowedTools: def.disallowedTools,
-    // ADR 029: carry the SKILL.md runtime.sdk through to the spec so the
+    // SPEC §1: carry the SKILL.md runtime.sdk through to the spec so the
     // orchestrator can spawn the phase on a non-claude runtime. Previously
     // dropped here; resolveSdkId gates it at the dev-loop call site.
     sdk: def.runtime.sdk,
-    // ADR-043 §3 amendment: omit the key entirely for strategy:fixed (never
+    // SPEC §5: omit the key entirely for strategy:fixed (never
     // set to `undefined`) so the M0 frontmatter-regression literal-equality
     // lock (derive.test.ts) stays byte-identical for every fixed-strategy
     // skill — an explicit `allowedTiers: undefined` key would still show up
@@ -191,7 +191,7 @@ export type AgentCapabilityDescriptor = {
    */
   costCeilingEnforceable: boolean;
   /**
-   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam;
+   * SPEC §5 (2026-08-15, wave-6 kickoff model-tier seam;
    * reviewer fix, B5): the full SKILL-declared tier envelope, cheapest-first
    * — the SAME `rangeTiers` computation `deriveAgentSpec` uses for
    * `PhaseAgentSpec.allowedTiers` (see that field's own doc). Present ONLY

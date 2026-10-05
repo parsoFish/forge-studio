@@ -51,7 +51,7 @@ import type { InterviewRound, sessionPaths } from './architect-plan.ts';
 export type { QueryFn };
 
 // ---------------------------------------------------------------------------
-// ADR-024: spec derived from skills/architect-completeness-critic/SKILL.md
+// SPEC §1: spec derived from skills/architect-completeness-critic/SKILL.md
 // ---------------------------------------------------------------------------
 
 export const completenessCriticAgentSpec = deriveAgentSpec(
@@ -83,7 +83,7 @@ export type RunCompletenessCriticInput = {
   manifestsSummary: string;
   /** Inject a fake queryFn for tests; defaults to the pinned SDK. */
   queryFn?: QueryFn;
-  /** Absolute path to the critic skill prompt (ADR 003); tests override. */
+  /** Absolute path to the critic skill prompt (SPEC §1); tests override. */
   skillPromptPath?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;

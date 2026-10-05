@@ -1,14 +1,14 @@
 /**
- * Agent-band registry (R4-01-F2, ADR-039).
+ * Agent-band registry (R4-01-F2, SPEC §1).
  *
  * A "band" is orchestrator-owned pre/post work wrapped around a generic
  * agent-node spawn — the phase pipelines' judgment machinery (work-item
  * validation, decompose checkpointing, retention/lint/recap, queue-state
- * promotion) that ADR-036 keeps OUT of the agent primitive. The band an
+ * promotion) that D-15 keeps OUT of the agent primitive. The band an
  * agent gets is selected by DECLARED DATA: a `composition.guards` entry on
  * its SKILL.md, not a privileged executor enum. The band implementations
  * remain platform code (flow-runner registers them against these ids) —
- * deliberately, per ADR-039's "the platform bakes only execution machinery"
+ * deliberately, per SPEC §1's "the platform bakes only execution machinery"
  * doctrine; what this module makes compositional is the KEY.
  *
  * Kept tiny + import-light so `validate.ts`/UI surfaces can consult the
@@ -24,7 +24,7 @@ import type { AgentDefinition } from '@forge/contracts';
  * (R4-18) is the 5th band: it routes a `{gate:'contract'}` flow node to
  * `execOnboardPreflight`, which runs the REAL forge↔project contract
  * preflight (`runPreflight`, `packages/projects/preflight.ts`) orchestrator-side — no
- * agent spawn (ADR-036: the orchestrator runs gates, the agent never
+ * agent spawn (D-15: the orchestrator runs gates, the agent never
  * self-certifies).
  */
 export { BAND_GUARD_IDS } from '@forge/contracts';

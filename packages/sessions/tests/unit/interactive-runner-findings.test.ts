@@ -283,18 +283,18 @@ test('P1: a declared writes: dir that does not exist yet — the turn produced N
 // own prompt/options arguments entirely, so a defect threading the wrong
 // model, an empty allowedTools, or the wrong cwd into the real turn would
 // still pass unnoticed. This pin captures the {prompt, options} the spine
-// actually hands queryFn and asserts the ADR-024 derivation — derived from
+// actually hands queryFn and asserts the SPEC §1 derivation — derived from
 // the REAL helpers here, never hardcoded, so the pin cannot rot.
 // ---------------------------------------------------------------------------
 
 // Kills: any refactor of runAgentStyleStep that threads the wrong model
 // (e.g. a hardcoded default instead of `modelForSpec(deriveAgentSpec(...))`),
 // an empty/wrong `allowedTools` (e.g. forgetting to pass `agentSpec.
-// allowedTools` through to `runAgentTurn`), or otherwise breaks the ADR-024
+// allowedTools` through to `runAgentTurn`), or otherwise breaks the SPEC §1
 // derivation chain between `descriptor.agent` and what queryFn actually
 // receives — none of which AT-1 itself would catch, since AT-1's queryFn
 // stub never inspects its own arguments.
-test('Finding 4: the ADR-024 derivation actually threads into the queryFn call — model + allowedTools match the real skill-derived spec', async () => {
+test('Finding 4: the SPEC §1 derivation actually threads into the queryFn call — model + allowedTools match the real skill-derived spec', async () => {
   const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
@@ -337,7 +337,7 @@ test('Finding 4: the ADR-024 derivation actually threads into the queryFn call �
   assert.equal(
     options.model,
     expectedModel,
-    'the model handed to queryFn must be the ADR-024-derived model (modelForSpec(deriveAgentSpec(skillPathRelative(descriptor.agent)))), not a hardcoded/default one',
+    'the model handed to queryFn must be the SPEC §1-derived model (modelForSpec(deriveAgentSpec(skillPathRelative(descriptor.agent)))), not a hardcoded/default one',
   );
   assert.ok(
     Array.isArray(options.allowedTools) && (options.allowedTools as unknown[]).length > 0,
@@ -364,7 +364,7 @@ test('Finding 4: the ADR-024 derivation actually threads into the queryFn call �
 });
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — status.modelTier is
+// SPEC §5 (wave-6 kickoff model-tier seam) — status.modelTier is
 // read back and resolved through resolveSessionModel on EVERY turn.
 // descriptor.agent === 'project-brain-builder' here (strategy:fixed, sonnet).
 // ---------------------------------------------------------------------------

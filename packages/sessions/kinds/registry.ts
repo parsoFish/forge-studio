@@ -1,6 +1,6 @@
 /**
  * The session-kind runner registry — one row per PORTED bespoke runner
- * (ADR 043 as amended 2026-09-03, M4 ruling 60; exit row 3 of the M4 sessions
+ * (SPEC §5; exit row 3 of the M4 sessions
  * lane reads its count from here and from `AGENT_RUNNERS`).
  *
  * BEFORE the ports, `apps/forge/agent-run.ts`'s `AGENT_RUNNERS` held one

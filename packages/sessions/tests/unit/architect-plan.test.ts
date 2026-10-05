@@ -43,7 +43,7 @@ function fxInitiative(overrides: Partial<ProposedInitiative> = {}): ProposedInit
     cost_budget_usd: 1.0,
     estimated_cost_usd: 0.25,
     class: 'code',
-    // ADR 051: the criteria the renderer shows are these, declared on the
+    // SPEC §3: the criteria the renderer shows are these, declared on the
     // initiative. The body below still contains prose that LOOKS like an AC —
     // deliberately, so a test can prove the renderer no longer reads it.
     acceptance_criteria: [{ given: 'X exists', when: 'Y happens', then: 'Z is observable' }],
@@ -486,7 +486,7 @@ test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md', () => {
 });
 
 test('renderPlanHtml: a Given+Then-only AC (empty When) renders an em-dash for the missing clause, not a fabricated or blank cell', () => {
-  // ADR 051 keeps this shape legal: `when` may be empty because a criterion can
+  // D-34 keeps this shape legal: `when` may be empty because a criterion can
   // be a state assertion with no trigger, and real architect output carries
   // them. It is now DECLARED as an empty clause rather than inferred from prose
   // the parser failed to complete.
@@ -508,7 +508,7 @@ test('renderPlanHtml: a Given+Then-only AC (empty When) renders an em-dash for t
 // ---------------------------------------------------------------------------
 // 18. W7-B7 (artifact-plan-30) — the PLAN's operator notice must point at the
 // surface that exists (/artifact?run=_architect-<sid>&type=plan), not the
-// retired /architect/<sid> screen (M7-4 / ADR-031).
+// retired /architect/<sid> screen (M7-4 / D-12).
 // ---------------------------------------------------------------------------
 
 test('renderPlanHtml: the review notice names the /artifact plan surface, never the retired /architect route', () => {
@@ -525,16 +525,16 @@ test('renderPlanDoc: the PLAN.md operator note names the /artifact plan surface'
 
 
 // ---------------------------------------------------------------------------
-// ADR 051 — the renderer reads the DECLARED criteria, not the body's prose
+// D-34 — the renderer reads the DECLARED criteria, not the body's prose
 // ---------------------------------------------------------------------------
 
-test('ADR 051: PLAN.html renders the typed acceptance_criteria and does NOT parse the body — kills "keep the regex as a fallback"', () => {
+test('D-34: PLAN.html renders the typed acceptance_criteria and does NOT parse the body — kills "keep the regex as a fallback"', () => {
   // `fxInitiative`'s body carries a `## Acceptance criteria` section whose
   // clauses read PROSE ONLY. Before this change `extractGwtBlocks` would have
   // found them; the declared criteria say something else entirely, and only
   // those may reach the page. A fallback that read the body when the declared
   // list looked thin would pass every other test in this file and reintroduce
-  // exactly the silent-absence defect ADR 051 closes.
+  // exactly the silent-absence defect D-34 closes.
   const html = renderPlanHtml(fxSession({ initiatives: [fxInitiative()] }));
   // Scope the assertion to the AC table itself: the manifest body is ALSO
   // rendered, verbatim, in the card's drawer — that is the drawer's job — so a
@@ -545,13 +545,13 @@ test('ADR 051: PLAN.html renders the typed acceptance_criteria and does NOT pars
   assert.match(html, /PROSE ONLY/, 'the body drawer still shows the manifest verbatim — that is not the AC table');
 });
 
-test('ADR 051: an initiative that declares no criteria says so, rather than blaming a parser', () => {
+test('D-34: an initiative that declares no criteria says so, rather than blaming a parser', () => {
   const html = renderPlanHtml(fxSession({ initiatives: [fxInitiative({ acceptance_criteria: [] })] }));
   assert.match(html, /declares no acceptance criteria/);
   assert.doesNotMatch(html, /No GWT blocks parsed/, 'the old message described a parser that no longer runs');
 });
 
-test('ADR 051: PLAN.md shows the change class in the proposal table — the operator confirms the gates, not just the titles', () => {
+test('D-34: PLAN.md shows the change class in the proposal table — the operator confirms the gates, not just the titles', () => {
   const md = renderPlanDoc(fxSession({ initiatives: [fxInitiative({ class: 'docs' })] }));
   assert.match(md, /\| ID \| Title \| Class \| Iteration budget \| Depends on \|/);
   assert.match(md, /\| `docs` \|/);

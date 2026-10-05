@@ -1,6 +1,6 @@
 /**
  * band-agent-run.ts — standalone isolation surface for the band-guard node
- * agents (R4-10-F3, ADR-039). Carved out of `packages/agents/band-agent-run.ts`.
+ * agents (R4-10-F3, SPEC §1). Carved out of `packages/agents/band-agent-run.ts`.
  *
  * The develop flow's two successor agents — `demo-agent` and
  * `adversarial-review` — are "banded": in the flow they run through their
@@ -29,7 +29,7 @@
  *     the spawn cwd / git target outside the forge roots).
  * The initiative's demo bundle still authors on its own branch — a standalone
  * demo re-run legitimately refreshes it; only the cross-cycle `_logs` record
- * is isolated. NO gate/CI runs here (ADR-036 posture, same as `dispatchAgentRun`).
+ * is isolated. NO gate/CI runs here (D-15 posture, same as `dispatchAgentRun`).
  *
  * THE PORT, AND WHY IT IS NOT `PhaseExecutor` (measured 2026-09-03, M4-agents).
  * This package is rank 3; the two pipelines are `@forge/factory` (rank 7) and the
@@ -88,7 +88,7 @@ export type BandInitiativeFields = {
   worktree_path?: string | undefined;
   project_repo_path?: string | undefined;
   cost_budget_usd?: number | undefined;
-  class?: string | undefined; // ADR 051 — selects the review lenses downstream
+  class?: string | undefined; // D-34 — selects the review lenses downstream
 };
 
 /** What the injected pipeline runner is handed — the union of the two pipelines' inputs. */

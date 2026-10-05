@@ -14,7 +14,7 @@
  * flows-28 (session half), knowledge-17 (a drafting kb-cleanup now has a
  * reachable action).
  *
- * Semantics (operator-locked, README §4 Wave 7 + ADR-043 2026-08-19
+ * Semantics (operator-locked, README §4 Wave 7 + SPEC §5 2026-08-19
  * amendment §1): cancel writes the ONE universal reserved terminal phase
  * `CANCELLED_PHASE` (apps/forge/bridge-studio.ts) onto status.json —
  * `{ ...status, phase: 'cancelled', cancelled_at, cancelled_from }` — through

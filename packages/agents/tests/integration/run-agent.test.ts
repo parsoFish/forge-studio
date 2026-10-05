@@ -138,7 +138,7 @@ test('runAgent: every library roster agent (listAgentDefinitions) runs without t
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-roster-'));
   try {
     const allDefs = listAgentDefinitions(join(ROOT, 'skills'));
-    // R4-01-F2 (ADR-039): ralph-declaring defs (developer-ralph) are dispatched
+    // R4-01-F2 (SPEC §1): ralph-declaring defs (developer-ralph) are dispatched
     // by the flow engine's dev-loop pipeline — runAgent REJECTS them by design.
     // Assert the rejection explicitly, then sweep the rest.
     const ralphDefs = allDefs.filter((d) => d.runtime.loopStrategy === 'ralph');

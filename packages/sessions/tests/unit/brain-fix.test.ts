@@ -372,7 +372,7 @@ test('W6-B1: reasoning + thinking blocks are forwarded to the log (kind: reasoni
 // before now lived under brain/cycles/themes, where the defect cannot exist.
 // ---------------------------------------------------------------------------
 
-/** A project theme (ADR 035: brain/projects/<name>/themes/) carrying a link
+/** A project theme (SPEC §4: brain/projects/<name>/themes/) carrying a link
  *  that resolves to nothing, plus a dangling related_themes entry. */
 function buildProjectThemeFixture(): { forgeRoot: string; themePath: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'brain-fix-project-scope-'));

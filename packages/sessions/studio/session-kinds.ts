@@ -122,8 +122,8 @@ export function sessionArtifactKindState(id: string): 'live' | 'reserved' | unde
 }
 
 // ---------------------------------------------------------------------------
-// turnSpec vocabularies (R4-22 WI-1, ADR-043 §1 — docs/decisions/043-generic-
-// interactive-surface.md): the additive-optional producer/state-machine half
+// turnSpec vocabularies (R4-22 WI-1, SPEC §5):
+// the additive-optional producer/state-machine half
 // of a session-kind descriptor. Each is `readonly { id: string }[]`, rows-as-
 // data, mirroring SESSION_ARTIFACT_KINDS's shape exactly — including the same
 // deep-freeze discipline (each row frozen individually BEFORE the outer array
@@ -136,7 +136,7 @@ export type FinalizerIdRow = { readonly id: string };
 export type SchemaIdRow = { readonly id: string };
 
 /** `structured` drives runStructuredTurn, `agent` drives runAgentTurn
- *  (ADR-043 §1/§2) — exactly the two styles the ADR names, nothing
+ *  (SPEC §5) — exactly the two styles it names, nothing
  *  speculative added.
  *
  *  Typed `readonly TurnStyleRow[]`, exactly as SESSION_ARTIFACT_KINDS above:
@@ -176,7 +176,7 @@ export const TURN_STEPS: readonly TurnStepRow[] = Object.freeze([
 ]);
 export type TurnStep = (typeof TURN_STEPS)[number]['id'];
 
-/** Finalizer ids a `step: finalize` phase may name (ADR-043 §5, "the real
+/** Finalizer ids a `step: finalize` phase may name (SPEC §5, "the real
  *  bespoke residue") — seeded with the ADR's own worked example (
  *  `copyStagingToLibrary`, authoring's real turnSpec finalizer) plus two more
  *  the ADR §5 registry already names but which, per the 2026-08-14 amendment
@@ -212,7 +212,7 @@ export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
  *  `INTERVIEW_SCHEMA` `kinds/instructions.ts` already relies on for a real
  *  interview turn (reused, not duplicated — see that file's export). No
  *  `turnSpec` row names it yet (instructions itself never gains one — barred
- *  permanently, ADR-043 2026-08-14 amendment §1); this proves the resolver
+ *  permanently, SPEC §5); this proves the resolver
  *  against real content instead of an invented placeholder. Typed
  *  `readonly`, as TURN_STYLES. */
 export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([Object.freeze({ id: 'interview-qa' })]);
@@ -275,7 +275,7 @@ export type VerdictValueRow = { readonly id: string };
  *  `meta.verdicts`, and the client renders its buttons from the SAME field.
  *  Typed `readonly`, as AWAITS_KINDS.
  *
- *  W7-C2 (ADR-043 2026-08-21 amendment; beads forge-4ei, findings
+ *  W7-C2 (SPEC §5; beads forge-4ei, findings
  *  sessions-kinds-09/23, library-24): `revise` joins the vocabulary — the
  *  operator's "apply this feedback and draft again" branch every draft
  *  runner already supports (instructions/demo bespoke routes; the generic
@@ -303,7 +303,7 @@ export type SessionKindArtifactRef = {
   readonly label: string;
 };
 
-/** One row of a turnSpec's phase table (ADR-043 §1's worked example).
+/** One row of a turnSpec's phase table (SPEC §5's worked example).
  *  `writes`/`next`/`finalizer`/`awaits` are genuinely optional AT THE TYPE
  *  LEVEL — a `terminal` phase carries none of them. Structural only: `step`,
  *  `finalizer`, and `awaits` are NOT validated against TURN_STEPS/
@@ -387,7 +387,7 @@ export type TurnSpecPhase = {
 };
 
 /** The additive-optional producer/state-machine half of a session-kind
- *  descriptor (ADR-043 §1) — the "missing half" that turns a read-only
+ *  descriptor (SPEC §5) — the "missing half" that turns a read-only
  *  session shell into one that can actually run a turn. Structural only at
  *  load time (AT-R422-6 mirrors AT-16's split for the pre-existing fields):
  *  `style`, each phase's `step`/`finalizer`/`awaits`, and `schema` are
@@ -409,7 +409,7 @@ export type TurnSpec = {
   readonly phases: readonly TurnSpecPhase[];
 };
 
-/** The read-half twin of `turnSpec` for a legacy kind (ADR-043 2026-08-15
+/** The read-half twin of `turnSpec` for a legacy kind (SPEC §5 2026-08-15
  *  amendment §2) — `phases` rows use the SAME `TurnSpecPhase` shape and the
  *  SAME frozen vocabulary (TURN_STEPS/FINALIZER_IDS) as `turnSpec.phases`,
  *  but carry no `kindDir`/`style`/`schema`: `panel` is consumed ONLY by
@@ -434,11 +434,11 @@ export type SessionKindDescriptor = {
   readonly stages: readonly string[];
   readonly defaultStage: string;
   readonly artifact: SessionKindArtifactRef;
-  /** Additive-optional (ADR-043 §1) — absent on every real session kind
+  /** Additive-optional (SPEC §5) — absent on every real session kind
    *  shipped before R4-22 (AT-R422-5); a descriptor with none loads and
    *  validates exactly as before. */
   readonly turnSpec?: TurnSpec;
-  /** Additive-optional (ADR-043 2026-08-15 amendment §2) — the read-half twin
+  /** Additive-optional (SPEC §5) — the read-half twin
    *  of `turnSpec` for a legacy kind (demo/instructions/onboarding). Mutually
    *  exclusive with `turnSpec` — validateSessionKinds rejects a descriptor
    *  carrying both, naming the kind and both fields
@@ -574,12 +574,12 @@ function parseSessionKindDescriptor(raw: unknown, index: number, file: string): 
     kind: reqString(artifactRaw, 'kind', file),
     label: reqString(artifactRaw, 'label', file),
   };
-  // Additive-optional (ADR-043 §1): absent on every real session kind
+  // Additive-optional (SPEC §5): absent on every real session kind
   // shipped before R4-22 — only parse it when the yaml row actually carries
   // one, so descriptors without it are byte-for-byte the same shape as
   // before this initiative (AT-R422-5).
   const turnSpec = d.turnSpec !== undefined ? parseTurnSpec(reqObject(d, 'turnSpec', file), file, index) : undefined;
-  // Additive-optional (ADR-043 2026-08-15 amendment §2), same discipline as
+  // Additive-optional (SPEC §5), same discipline as
   // turnSpec above — only parse it when the yaml row actually carries one.
   const panel = d.panel !== undefined ? parseSessionKindPanel(reqObject(d, 'panel', file), file, index) : undefined;
   return {

@@ -1,5 +1,5 @@
 /**
- * composeProjectSkills (ADR 024 item 90) — fold a project's declared skills
+ * composeProjectSkills (SPEC §1 item 90) — fold a project's declared skills
  * (`@forge/projects`'s `loadDeclaredSkills`) into an
  * agent's system prompt, so `.forge/project.json`'s `skills[]` reaches every
  * agent that runs on the project instead of being a preflight-only fact

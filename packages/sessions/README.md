@@ -1,6 +1,6 @@
 # `@forge/sessions`
 
-The **ADR 043 interactive spine**: session kinds, turnSpec, transcript, lifecycle and finalizers. It owns the **5 Session** seam of `SPEC.md` — **run one interactive session** — and it is **rank 4**.
+The **SPEC §5 interactive spine**: session kinds, turnSpec, transcript, lifecycle and finalizers. It owns the **5 Session** seam of `SPEC.md` — **run one interactive session** — and it is **rank 4**.
 
 Rank is not trivia here; it is why several things in this package are shaped the way they are. `packages/knowledge` is rank 2 and may not import this package, so the guarded session-status IO it needs arrives as a **port knowledge declares and `apps/forge` binds** (M4 ruling 99). The manifest functions live in `packages/flows` at rank 5, so the architect kind takes its manifest work through `ArchitectManifestPorts` rather than importing them.
 

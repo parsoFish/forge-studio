@@ -1,5 +1,5 @@
 /**
- * Agent definition validation (ADR 027, §6) — the `agent` half of what was
+ * Agent definition validation (D-09) — the `agent` half of what was
  * `orchestrator/studio/validate.ts`'s five-kind pile, moved here by T1 ruling
  * 159 so the rule lives with the vocabulary it checks: every enum this file
  * reads (`SURFACE_KINDS`, `PHASE_EXECUTOR_KINDS`, `MATERIAL_KINDS`,
@@ -280,7 +280,7 @@ export function validateAgent(
     }
   }
 
-  // composition/guard-unknown — error (ADR-027 R3-03 amendment). Only fires
+  // composition/guard-unknown — error (D-09 R3-03 amendment). Only fires
   // when the caller supplies the catalog guard-id set (mirrors the
   // runtime/model-catalog check's validModelIds convention above) — a typo'd
   // guard id would otherwise silently resolve to no dispatch/observability

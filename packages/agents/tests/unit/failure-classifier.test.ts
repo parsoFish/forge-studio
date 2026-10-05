@@ -108,7 +108,7 @@ test('classifyCycleFailure: dev-loop.baseline-red still classified (phase guard 
 
 // G5 (2026-07-10 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
 // prereq-failed-cascade.md): a cycle's event log accumulates across scheduler
-// resumes (ADR 019 resume-preserves-work) — a superseded earlier attempt's
+// resumes (D-06 resume-preserves-work) — a superseded earlier attempt's
 // events stay in the SAME log file the next attempt appends to. Scanning the
 // FULL history let a stale signal from an already-resolved earlier attempt
 // win the fixed terminal-then-transient priority chain and mask the CURRENT

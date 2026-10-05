@@ -49,14 +49,14 @@ import type { FinalizerIdRow, SessionKindDescriptor, TurnSpecPhase } from './ses
  * (packages/sessions/interactive-runner.ts) resolves its `finalizer` id via
  * `resolveFinalizer`, which throws `InteractiveFinalizerError` at SPAWN TIME
  * for any id `FINALIZERS` does not carry. `FINALIZER_IDS` above is the
- * DESCRIPTIVE, ADR-043 §5 vocabulary (every finalizer the ADR names, whether
+ * DESCRIPTIVE, SPEC §5 vocabulary (every finalizer the spec names, whether
  * or not it is wired to the primitive yet) — validating a `turnSpec` row
  * against that WIDER set would lint-approve `writeToRepoRoot`/
  * `recordLockedDemo`, both of which are real, but neither of which
  * `FINALIZERS` implements (demo/instructions never migrate onto `turnSpec`,
  * 2026-08-14 amendment §1) — a shared vocabulary must never lint-approve
  * what dispatch will throw on. `panel.phases` rows are NEVER dispatched
- * (invisible to `cmdAgentRun`'s turnSpec fork — ADR-043 2026-08-15 amendment
+ * (invisible to `cmdAgentRun`'s turnSpec fork — SPEC §5
  * §2), so they correctly keep validating against the full descriptive
  * `FINALIZER_IDS`.
  */
@@ -108,8 +108,8 @@ const CHECK_UNKNOWN_AGENT = 'session-kinds/unknown-agent';
 const CHECK_RETIRED_KIND_ID = 'session-kinds/retired-kind-id';
 
 /**
- * forge-boqn — ids stay reserved and are never reused, the same rule ADR
- * numbers follow (docs/decisions/README.md). `CHECK_UNKNOWN_AGENT` above
+ * forge-boqn — ids stay reserved and are never reused, the same rule
+ * decision ids follow. `CHECK_UNKNOWN_AGENT` above
  * only catches a retired kind re-added under its OWN (now-deleted) agent
  * id; one re-animated under any still-live agent (e.g. `creation-agent`)
  * passed `forge studio lint` clean, with the class held only by
@@ -142,7 +142,7 @@ const CHECK_TURNSPEC_NO_TERMINAL_PHASE = 'session-kinds/turnspec-no-terminal-pha
 const CHECK_TURNSPEC_DUPLICATE_PHASE = 'session-kinds/turnspec-duplicate-phase';
 const CHECK_TURNSPEC_EMPTY_PHASES = 'session-kinds/turnspec-empty-phases';
 const CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED = 'session-kinds/turnspec-structured-unsupported';
-// W6-B3 (ADR-043 2026-08-15 amendment §2) — panel.phases reuses the SAME
+// W6-B3 (SPEC §5) — panel.phases reuses the SAME
 // phase-row vocab checks as turnSpec.phases (validatePhaseTable below is
 // shared by both), under a "panel-" prefix so a panel-side rejection is
 // never confused with a turnSpec-side one in test/log output. No panel
@@ -185,7 +185,7 @@ const CHECK_PANEL_VERDICTS_MISPLACED = 'session-kinds/panel-verdicts-misplaced';
 // discipline; see TurnSpecPhase.requires's own doc comment).
 const CHECK_TURNSPEC_REQUIRES_MISPLACED = 'session-kinds/turnspec-requires-misplaced';
 const CHECK_PANEL_REQUIRES_MISPLACED = 'session-kinds/panel-requires-misplaced';
-// The turnSpec⊕panel mutual-exclusion check (ADR-043 2026-08-15 amendment
+// The turnSpec⊕panel mutual-exclusion check (SPEC §5
 // §2): a descriptor carrying BOTH is rejected with exactly one finding
 // naming the kind and both fields — see the exclusivity guard in the main
 // loop below, which skips both the turnSpec AND panel blocks entirely when
@@ -202,7 +202,7 @@ const CHECK_TURNSPEC_DONEFIELD_NOT_AGENT_STEP = 'session-kinds/turnspec-donefiel
 /**
  * turnSpec.kindDir must be a safe single path segment — it becomes
  * `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic
- * runner (docs/decisions/043-generic-interactive-surface.md §1), the SEC-04
+ * runner (SPEC §5), the SEC-04
  * containment guard root. `d.id` one screen down is validated against
  * SLUG_RE (CHECK_SLUG) but SLUG_RE requires a leading `a-z` letter, and
  * every REAL kindDir value in this design is underscore-prefixed
@@ -266,7 +266,7 @@ const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
 
 /**
  * Shared phase-row-level validation for BOTH `turnSpec.phases` and
- * `panel.phases` (ADR-043 2026-08-15 amendment §2 — panel reuses the SAME
+ * `panel.phases` (SPEC §5 — panel reuses the SAME
  * frozen phase-row vocabulary as turnSpec, never a forked copy; AT-R422-13..18
  * originally lived inline in the turnSpec block only — this extraction keeps
  * every one of those six rules byte-identical for turnSpec while giving panel
@@ -602,7 +602,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
       );
     }
 
-    // turnSpec ⊕ panel (W6-B3, ADR-043 2026-08-15 amendment §2): mutually
+    // turnSpec ⊕ panel (W6-B3, SPEC §5): mutually
     // exclusive — a descriptor carrying BOTH gets exactly ONE finding, naming
     // the kind and both fields, and neither block below runs at all (running
     // them would produce a pile of secondary findings on a descriptor that is
@@ -617,7 +617,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
         ),
       );
     } else {
-      // turnSpec (R4-22 WI-1, ADR-043 §1): additive-optional, so a descriptor
+      // turnSpec (R4-22 WI-1, SPEC §5): additive-optional, so a descriptor
       // with none skips this block entirely (AT-R422-5) — no finding, no
       // default. Every closed-vocabulary rejection below names BOTH the
       // offending value AND the allowed set (the file's binding rule, header
@@ -625,7 +625,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
       if (d.turnSpec !== undefined) {
         const ts = d.turnSpec;
 
-        // kindDir (AT-R422-11, 12): the ONE containment segment (ADR-043 §1)
+        // kindDir (AT-R422-11, 12): the ONE containment segment (SPEC §5)
         // — checked BEFORE anything else in this block, matching the
         // review's finding that this is the single most important gap. See
         // isSafeKindDirSegment's own doc comment for why SLUG_RE/CHECK_SLUG
@@ -713,7 +713,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
         }
       }
 
-      // panel (W6-B3, ADR-043 2026-08-15 amendment §2): additive-optional,
+      // panel (W6-B3, SPEC §5): additive-optional,
       // same discipline as turnSpec above — a descriptor with none skips this
       // block entirely, no finding, no default. Only the phase-row-level
       // checks apply (panel carries no kindDir/style/schema to validate).

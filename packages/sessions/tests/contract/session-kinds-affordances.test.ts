@@ -8,7 +8,7 @@ import { REPO_ROOT, baseDescriptor, byId } from './test-fixtures/session-kinds-c
 
 // ===========================================================================
 // W6-B3 — deriveSessionAffordances: the derivation table, one test per
-// mapping (ADR-043 §1 "affordances are derived, not authored" + the
+// mapping (SPEC §5 "affordances are derived, not authored" + the
 // 2026-08-15 amendment's worked mapping — see the function's own doc comment
 // in session-kinds.ts for the full rule set this table exercises).
 // ===========================================================================
@@ -96,7 +96,7 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
     assert.deepEqual(result, [{ id: 'finalizing-next-turn', kind: 'next-turn', phase: 'finalizing', meta: { next: 'committed' } }]);
   });
 
-  it('positive control: a REAL turnSpec descriptor (authoring, the ADR-043 §1 worked example) derives correctly through turnSpec.phases, not just panel.phases — "analyzing" → [staged-review, next-turn]', () => {
+  it('positive control: a REAL turnSpec descriptor (authoring, the SPEC §5 worked example) derives correctly through turnSpec.phases, not just panel.phases — "analyzing" → [staged-review, next-turn]', () => {
     const authoring: SessionKindDescriptor = {
       ...baseDescriptor(),
       turnSpec: {

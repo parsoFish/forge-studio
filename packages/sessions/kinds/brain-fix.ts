@@ -25,7 +25,7 @@ import { writeRootFenceOptions } from '../session-write-fence.ts';
 import { runFixTurn, type FixTurnInput, type FixTurnResult, type FixTurnVariant } from './fix-turn.ts';
 
 // ---------------------------------------------------------------------------
-// ADR-024: spec derived from skills/brain-fix/SKILL.md
+// SPEC §1: spec derived from skills/brain-fix/SKILL.md
 // ---------------------------------------------------------------------------
 
 export const brainFixAgentSpec = deriveAgentSpec(skillPathRelative('brain-fix'));

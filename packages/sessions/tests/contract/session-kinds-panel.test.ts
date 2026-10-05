@@ -9,7 +9,7 @@ import type { Finding } from '@forge/kernel';
 import { type FixtureDescriptor, REPO_ROOT, baseDescriptor, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from './test-fixtures/session-kinds-core.ts';
 
 // ===========================================================================
-// R4-19-F2 — the "kb-cleanup" session kind (ADR-043 §1/§2/§3, brain-
+// R4-19-F2 — the "kb-cleanup" session kind (SPEC §5, brain-
 // maintenance / cleanup-plan). RED at branch base: `studio/session-kinds.yaml`
 // carries no "kb-cleanup" row yet, and `SESSION_ARTIFACT_KINDS` carries no
 // "cleanup-plan" row yet. This block pins the DESCRIPTOR/REGISTRY half of the
@@ -20,7 +20,7 @@ import { type FixtureDescriptor, REPO_ROOT, baseDescriptor, byId, makeForgeRoot,
 // ===========================================================================
 
 describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup-plan)', () => {
-  // The exact ADR-043-shaped turnSpec table the task brief specifies
+  // The exact SPEC §5-shaped turnSpec table the task brief specifies
   // verbatim. Binding note (deliberate, the approval gate this whole feature
   // hinges on): "awaiting-approval" carries NO `next` — re-running the turn
   // while a session sits there must never advance it.
@@ -45,7 +45,7 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
 
   // Kills: a "kb-cleanup" row that never lands in the real
   // studio/session-kinds.yaml at all (RED today — this is the primary red);
-  // a row whose turnSpec drifts from the ADR-043-shaped table (e.g. a `next`
+  // a row whose turnSpec drifts from the SPEC §5-shaped table (e.g. a `next`
   // added to awaiting-approval, which would silently defeat the approval
   // gate item #11 below pins); a wrong kindDir/agent/artifact.
   it('R4-19-F2 AT-1: loadSessionKinds(REPO_ROOT) returns a "kb-cleanup" descriptor with the exact agent/title/legacyRoutes/stages/defaultStage/artifact/turnSpec', () => {
@@ -64,7 +64,7 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
     assert.deepEqual(
       kbCleanup!.turnSpec,
       KB_CLEANUP_TURNSPEC,
-      `kb-cleanup's turnSpec must deep-equal the ADR-043-shaped table exactly — in particular "awaiting-approval" must declare NO "next" key at all (that absence IS the approval gate); got: ${JSON.stringify(kbCleanup!.turnSpec)}`,
+      `kb-cleanup's turnSpec must deep-equal the SPEC §5-shaped table exactly — in particular "awaiting-approval" must declare NO "next" key at all (that absence IS the approval gate); got: ${JSON.stringify(kbCleanup!.turnSpec)}`,
     );
   });
 
@@ -127,7 +127,7 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
 // applied (terminal) — has no `finalize` step at all, so it needs no
 // finalizer). Asserted against the REAL source, not a fixture or a hand-built
 // registry snapshot — this is the test that kills a "just add a fifth
-// runner" implementation, the exact per-kind re-invention ADR-043 dissolves.
+// runner" implementation, the exact per-kind re-invention SPEC §5 dissolves.
 //
 // The check below is ALREADY TRUE today (GREEN, not RED) — it is a
 // regression ratchet pinning an invariant a correct kb-cleanup
@@ -146,7 +146,7 @@ describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup
 });
 
 // ===========================================================================
-// W6-B3 — the additive-optional `panel` field (ADR-043 2026-08-15 amendment
+// W6-B3 — the additive-optional `panel` field (SPEC §5
 // §2: the read-half twin of `turnSpec` for a legacy kind — demo, onboarding,
 // instructions gain `panel.phases`; architect keeps none, permanently) +
 // `deriveSessionAffordances` (the read-half affordance view B6's UI will
@@ -440,7 +440,7 @@ function TURN_STEPS_FOR_TEST(): string[] {
   return ['agent', 'noop', 'finalize', 'terminal'];
 }
 
-describe('validateSessionKinds — turnSpec ⊕ panel mutual exclusion (W6-B3, ADR-043 2026-08-15 amendment §2)', () => {
+describe('validateSessionKinds — turnSpec ⊕ panel mutual exclusion (W6-B3, SPEC §5)', () => {
   it('W6-B3-6: a descriptor declaring BOTH turnSpec AND panel → EXACTLY ONE finding (session-kinds/turnspec-panel-exclusive), naming the kind AND both field names — and NEITHER field\'s own phase-table checks run (no turnspec-* or panel-* secondary findings, even though both tables here are individually well-formed)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
@@ -564,7 +564,7 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
       assert.equal(
         (d as SessionKindDescriptor & { panel?: unknown }).panel,
         undefined,
-        `"${id}" must carry NO panel field — architect keeps its bespoke panel permanently (ADR-043 amendment §4); authoring/kb-cleanup already have turnSpec, which is mutually exclusive with panel; project-brain has neither yet`,
+        `"${id}" must carry NO panel field — architect keeps its bespoke panel permanently (SPEC §5); authoring/kb-cleanup already have turnSpec, which is mutually exclusive with panel; project-brain has neither yet`,
       );
     }
   });

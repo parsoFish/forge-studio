@@ -73,7 +73,7 @@ export function guardedReadSessionStatus<S>(
   }
 }
 
-/** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
+/** W7-A2 (SPEC §5) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
  *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
  *  (packages/sessions/bridge-studio-session-cancel.ts) and read as terminal by
@@ -81,7 +81,7 @@ export function guardedReadSessionStatus<S>(
  *  the per-kind tables are consulted. Deliberately NOT a per-kind
  *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
  *  is the same fact for all kinds, and N copies of one fact in N tables is
- *  exactly the drift shape ADR-043's "derived, not authored" discipline
+ *  exactly the drift shape SPEC §5's "derived, not authored" discipline
  *  exists to prevent.
  *
  *  W7-FIX-A2 (W7A2-01): defined HERE, at the status-write seam, because the

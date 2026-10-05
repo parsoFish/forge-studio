@@ -13,7 +13,7 @@ up to the point the cycle emitted its own `failure_classification`.
 
 | fixture | cycle | full → trimmed | what really happened |
 |---|---|---|---|
-| `2026-07-11T07-29-19_…exclude-path-filter` | gitpulse `--exclude` path filter | 30 → 27 | PM emitted 3 WIs; WI-3 had no `creates` (ADR 037) |
+| `2026-07-11T07-29-19_…exclude-path-filter` | gitpulse `--exclude` path filter | 30 → 27 | PM emitted 3 WIs; WI-3 had no `creates` (D-18) |
 | `2026-07-11T14-57-10_…csv-output-flag` | gitpulse `--csv` | 35 → 32 | PM emitted 4 WIs; WI-2 and WI-4 had no `creates` |
 | `2026-07-11T16-18-59_…tags-command` | gitpulse `tags` subcommand | 35 → 32 | PM emitted 4 WIs; WI-4 had no `creates` |
 | `2026-07-11T17-26-34_…cli-sort-flag` | gitpulse `--sort` | 30 → 27 | PM emitted 3 WIs; WI-3 had no `creates` |

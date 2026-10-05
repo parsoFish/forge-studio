@@ -1,6 +1,6 @@
 /**
  * The `instructions` session kind — a registered step-handler variant
- * (ADR 043 as amended 2026-09-03, M4 ruling 60).
+ * (SPEC §5).
  *
  * Authors a project's AGENTS.md: an optional operator brief, then a bounded
  * interview, then a structured draft the operator approves, then a
@@ -9,7 +9,7 @@
  * This file holds ONLY that identity — the phase set, the two structured
  * schemas, seed matching with its provenance footer, the mode-conditional
  * turn-id, the interview CEILING and the interview -> draft SAME-TURN
- * fall-through. Those last four are precisely the behaviours ADR 043's own
+ * fall-through. Those last four are precisely the behaviours SPEC §5's own
  * 2026-09-03 amendment records as having NO phase-table form, which is why
  * this kind is a variant rather than data. Every piece of turn plumbing it
  * used to carry (containment, status read/write, logger, tool-event sink,
@@ -73,7 +73,7 @@ import {
 export { type InterviewQuestion } from '../session-status-io.ts';
 
 // ---------------------------------------------------------------------------
-// ADR-024: spec derived from skills/instructions-creator/SKILL.md (single source)
+// SPEC §1: spec derived from skills/instructions-creator/SKILL.md (single source)
 // ---------------------------------------------------------------------------
 
 export const instructionsAgentSpec = deriveAgentSpec(skillPathRelative('instructions-creator'));
@@ -111,7 +111,7 @@ export type InstructionsStatus = {
   prompt: string;
   updated_at: string;
   /**
-   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * SPEC §5 (2026-08-15, wave-6 kickoff model-tier seam): an
    * operator-chosen model tier, validated by the bridge's `/api/instructions/
    * start` route against `instructionsAgentSpec` (now `strategy:range` —
    * see the SKILL.md runtime block) before it is ever persisted here. Absent
@@ -192,7 +192,7 @@ export const instructionsKind: SessionKindVariant<
   initiativeId: (sessionId) => `instructions-${sessionId}`,
 
   steps: {
-    // The interview, and its two exits. This is the fall-through ADR 043's
+    // The interview, and its two exits. This is the fall-through SPEC §5's
     // amendment names as having no phase-table form: one turn either asks
     // another round of questions OR runs the draft step itself, and which it
     // does depends on the agent's own answer plus the round ceiling. A phase

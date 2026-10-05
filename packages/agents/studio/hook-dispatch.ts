@@ -317,7 +317,7 @@ function emitHookFire(
  * nothing.
  *
  * A pure function with an explicit contract, exported for direct test per
- * ADR 042; the alternative is proving four mappings through four real spawns,
+ * the alternative is proving four mappings through four real spawns,
  * one of which would make the suite wait out a real timeout.
  */
 export function describeHookRunFailure(e: unknown): { failure: HookRunFailureReason | 'unknown'; description: string } {

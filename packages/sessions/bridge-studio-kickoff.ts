@@ -310,7 +310,7 @@ export async function handleKickoffRoutes(
   // `creation-agent` — is CLOSED. `ctx.spawnAgentTurn(forgeRoot, 'authoring',
   // project, sessionId)` below spawns `forge agent run authoring <sid>
   // --project <p>`, which reaches the generic `runInteractiveTurn` spine
-  // (ADR-043 §3, `apps/forge/agent-run.ts`'s `cmdAgentRun` dispatch fork) via the
+  // (SPEC §5, `apps/forge/agent-run.ts`'s `cmdAgentRun` dispatch fork) via the
   // `authoring` session-kind's `turnSpec` — the SAME bounded-turn shape
   // architect/instructions/demo-builder/project-brain already use, just
   // through the generic spine rather than a bespoke `*-runner.ts`.
@@ -338,7 +338,7 @@ export async function handleKickoffRoutes(
       }
       const prompt = body.prompt;
 
-      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // SPEC §5 (wave-6) — validated EARLY, against the real
       // creation-agent SKILL.md envelope.
       const modelTierResult = resolveKickoffModelTier('creation-agent', body.modelTier);
       if (!modelTierResult.ok) {
@@ -384,7 +384,7 @@ export async function handleKickoffRoutes(
   }
 
   // POST /api/studio/kbs/:id/cleanup/start — R4-19-F2, the kb-cleanup
-  // session's kickoff route (ADR-043 §1/§3, brain-maintenance /
+  // session's kickoff route (SPEC §5, brain-maintenance /
   // cleanup-plan). Mirrors `POST /api/studio/authoring/start` immediately
   // above where the shapes match: the KB id is validated with KB_ID_RE
   // BEFORE any fs call, a server-generated `sessionId` (never
@@ -429,7 +429,7 @@ export async function handleKickoffRoutes(
         return true;
       }
 
-      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // SPEC §5 (wave-6) — validated EARLY, against the real
       // brain-maintenance SKILL.md envelope (the kb-cleanup session's agent —
       // see studio/session-kinds.yaml's `kb-cleanup` row).
       const body = (await ctx.readBody()) as { modelTier?: unknown };
@@ -669,7 +669,7 @@ export function writeAuthoringSession(
   project: string,
   runId: string,
   prompt: string,
-  /** ADR-043 §3 amendment (wave-6 kickoff model-tier seam): already validated
+  /** SPEC §5 (wave-6 kickoff model-tier seam): already validated
    *  by the caller (`resolveKickoffModelTier` against the real creation-agent
    *  SKILL.md envelope) before this ever runs. Absent ⇒ unchanged default
    *  behavior — the key is omitted from status.json entirely, not written

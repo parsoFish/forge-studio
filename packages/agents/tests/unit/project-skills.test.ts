@@ -1,5 +1,5 @@
 /**
- * composeProjectSkills — the pure composer (ADR 024 item 90) both agent
+ * composeProjectSkills — the pure composer (SPEC §1 item 90) both agent
  * builders (`runOneShotSpawn` / `createClaudeAgent`) call to fold a
  * project's declared skills into an agent's system prompt. Pure: never
  * mutates `systemPrompt` or the skills array; empty list leaves the prompt

@@ -13,7 +13,7 @@
  *
  * It is NOT true that the six catalog one-shot agents all gain from it, and
  * the first draft of this file said so: `contract-check` spawns no agent at
- * all (ADR-036 — `flow-runner.ts`'s own comment), `release-finalizer` spawns
+ * all (D-15 — `flow-runner.ts`'s own comment), `release-finalizer` spawns
  * through its own `pinnedSdkQuery` and never enters `run-agent.ts`, and
  * reflector / adversarial-review / project-manager / demo-agent do reach
  * `runOneShotSpawn` (caller lifecycle) but build their own `output_refs`

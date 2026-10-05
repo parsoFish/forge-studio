@@ -92,7 +92,7 @@ const T = (
 //   - unknown        → unrecognised signature; allow ONE bounded retry — if
 //                       it crashes identically again the repeat rule promotes
 //                       it to deterministic.
-// This only stops IDENTICAL futile re-spawns; ADR 012 resume-preserves-work
+// This only stops IDENTICAL futile re-spawns; D-05 resume-preserves-work
 // is untouched (committed work stays on the branch, crashed UWIs persist as
 // re-runnable `pending`).
 // ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ function errorOwnFieldsSignalRateLimit(msg: string, md: Record<string, unknown>)
 /**
  * G5 (2026-07-10 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
  * prereq-failed-cascade.md): a cycle's event log accumulates across
- * scheduler resumes (ADR 019 resume-preserves-work) — a superseded earlier
+ * scheduler resumes (D-06 resume-preserves-work) — a superseded earlier
  * attempt's events stay in the SAME log file the next attempt appends to.
  * Classifying from the FULL history let a stale signal from an
  * already-resolved earlier attempt win the fixed terminal-then-transient
@@ -580,7 +580,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // and returns `transient` for them, so a crash that reaches
     // `deterministic` is by construction NOT rate-limit death — it is context
     // overflow or the identical crash repeated at the same point.
-    if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
+    if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (D-05); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
     // Plan 2.11 carve-out, narrowed by W8-F3: a capped incremental-write run
     // legitimately leaves a TRUNCATED TAIL work item (per-item errors)
     // alongside usable ones, and a cap is stochastic — a fresh pass is a

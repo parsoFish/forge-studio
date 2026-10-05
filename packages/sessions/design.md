@@ -1,21 +1,19 @@
 # `@forge/sessions` — design
 
-The ADR-043 spine: interactive session lifecycle, transcript, turn and finalize,
+The SPEC §5 spine: interactive session lifecycle, transcript, turn and finalize,
 plus one module per **session kind** under `kinds/`.
 
-Governing decisions: [ADR 043](../../docs/decisions/043-generic-interactive-surface.md)
-(generic interactive surface) · [ADR 024](../../docs/decisions/024-phases-as-subagents-invoking-skills.md)
-(agents compose skills) · [ADR 003](../../docs/decisions/003-skills-as-prompts.md) (a prompt is skill
-content, not re-baked TS).
+Governing spec: SPEC §5 (generic interactive surface) · SPEC §1 (agents compose skills;
+a prompt is skill content, not re-baked TS).
 
 ## The two drivers, and why there are two
 
-ADR 043's original plan was that every bespoke runner would become **data** — a `turnSpec` phase
+The original plan was that every bespoke runner would become **data** — a `turnSpec` phase
 table the generic `runInteractiveTurn` walks. Measured against the code (M4 sessions PARK 2, recorded
-in the ADR's 2026-09-03 amendment) that is not reachable inside M4: `style: structured` is a stub
+in the 2026-09-03 amendment) that is not reachable inside M4: `style: structured` is a stub
 behind an empty `SCHEMA_IDS`, the dispatchable finalizer set is `copyStagingToLibrary` alone,
 `runFinalizeStep` slug-gates a `packageId` that instructions sessions never carry, and
-`FinalizerContext` cannot reach `status`. **M4 ruling 60** took the other half of the ADR's own
+`FinalizerContext` cannot reach `status`. **M4 ruling 60** took the other half of the spec's own
 architect carve-out instead: a runner that cannot become data becomes a **registered step-handler
 variant**, and the drivers own the shared plumbing while each kind owns its identity — *a spine
 dissolves shared plumbing, not identity*.
@@ -28,7 +26,7 @@ dissolves shared plumbing, not identity*.
 `kind-turn.ts` owns fifteen behaviours and permits **exactly two** optional hooks
 (`onMissingStatus`, `preamble`) — **M4 ruling 78** closed that budget, and a kind wanting a third
 gets its own entry point instead, because a hook added to a shared driver for one kind is the
-ADR-043 machinery ruling 60 declined arriving through the back door.
+machinery ruling 60 declined arriving through the back door.
 
 **`fix-turn.ts` is that "own entry point", taken deliberately rather than by bending the other
 driver.** `kind-turn.ts`'s first act is `resolveGuardedPath(projectRoot, [kindDir, sessionId])`
@@ -135,7 +133,7 @@ not assume symmetry.
 ## Per-session SDK / model / effort
 
 The model is exposed and proven live: each kind derives its spec from `skills/<name>/SKILL.md`
-(ADR 024) and `modelForSpec` resolves the tier, and the M1 `kickoff-model-tier` field is pinned by
+(SPEC §1) and `modelForSpec` resolves the tier, and the M1 `kickoff-model-tier` field is pinned by
 S9 beat 5. **Recording** it — the chosen tier appearing in the session's own transcript/cost line —
 is NOT built, and `effort` and an SDK selector do not exist in the product at all. Exit row 7 is
 half-met and this paragraph is the honest as-built statement, not a plan.
@@ -245,7 +243,7 @@ were red for as long as the assumption stood. The stories address the
 architect's own handles; the exclusion is the reason they must.
 
 **What this does NOT say.** It is not a claim that the architect can never join
-the generic spine. ADR 043 already records architect as the deliberate
+the generic spine. SPEC §5 already records architect as the deliberate
 branching-control-flow case that migrates last. If it ever does migrate, this
 section and its test are what must be changed on purpose rather than
 discovered.
@@ -266,7 +264,7 @@ dependency.
 **A leaf both halves stand on already existed.** Ten of the eleven are path
 facts and status types, so they move DOWN into `kinds/demo-session-store.ts`,
 beside the generation layout it already held. The eleventh,
-`demoBuilderAgentSpec`, is an ADR-024 derivation from
+`demoBuilderAgentSpec`, is a SPEC §1 derivation from
 `skills/demo-builder/SKILL.md` — the kind's IDENTITY, not a path fact — so it
 stays in the parent and arrives at the step as `args.agentSpec`. Deriving it a
 second time inside the step would have been a duplicate derivation; importing

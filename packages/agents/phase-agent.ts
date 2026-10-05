@@ -1,5 +1,5 @@
 /**
- * ADR 024 — the orchestrator → agent → skills seam, made concrete.
+ * SPEC §1 — the orchestrator → agent → skills seam, made concrete.
  *
  * A `PhaseAgentSpec` is the ORCHESTRATOR-SIDE declaration of a phase agent:
  * which skill it composes (the single source of phase intent), which model
@@ -14,7 +14,7 @@
  *
  * The seam is consumed by every phase agent's binding (e.g. the demo agent's
  * `deriveAgentSpec(skillPath('demo-agent'))`); each phase sources its intent
- * from its `SKILL.md` via `PhaseAgentSpec` (ADR 024, migration complete —
+ * from its `SKILL.md` via `PhaseAgentSpec` (SPEC §1, migration complete —
  * R4-01-F4 retired the last legacy phase, the unifier). Pure data + a resolver
  * — no SDK / IO.
  */
@@ -46,7 +46,7 @@ export type PhaseAgentSpec = {
   /** Tools explicitly denied. */
   disallowedTools: readonly string[];
   /**
-   * The runtime SDK id (ADR 029) this agent runs on — mirrors the SKILL.md
+   * The runtime SDK id (SPEC §1) this agent runs on — mirrors the SKILL.md
    * `runtime.sdk` frontmatter (e.g. `claude`, `gemini`, `aider`). Free-text
    * here is gated at the call site by `resolveSdkId` before it reaches
    * `getAdapter` (which throws on an unregistered id), so an unknown/unavailable
@@ -54,12 +54,12 @@ export type PhaseAgentSpec = {
    */
   sdk?: string;
   /**
-   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): the
+   * SPEC §5 (2026-08-15, wave-6 kickoff model-tier seam): the
    * full tier envelope this agent may spawn at, cheapest-first. Populated by
    * `deriveAgentSpec` ONLY for a `strategy:range` skill — a `strategy:fixed`
    * skill has exactly one legal tier (`tier` itself), so this field stays
    * absent rather than redundantly restating `[tier]`; `resolveSessionModel`
-   * treats an absent value as `[tier]`. Additive-optional (ADR 042).
+   * treats an absent value as `[tier]`. Additive-optional.
    */
   allowedTiers?: readonly ModelTier[];
 };
@@ -70,10 +70,10 @@ export function modelForSpec(spec: PhaseAgentSpec): string {
 }
 
 /**
- * ADR-043 §3 amendment (2026-08-15, wave-6): resolve the concrete model id
+ * SPEC §5 (2026-08-15, wave-6): resolve the concrete model id
  * for an interactive session's kickoff, honoring an operator-chosen model
  * TIER within the SKILL-declared envelope. `SKILL.md` remains the sole
- * source of both the agent's intent (ADR 024) AND its capability envelope —
+ * source of both the agent's intent (SPEC §1) AND its capability envelope —
  * this function never grants a tier the skill did not declare.
  *
  * - `requestedTier` absent -> unchanged `modelForSpec(spec)` behavior (the

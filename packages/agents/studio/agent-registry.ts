@@ -48,7 +48,7 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // import (flow-runner.ts already imports FROM validate.ts for
 // findFanOutViolations).
 //
-// R4-01-F2 (ADR-039) retired the enum row by row as each phase moved to
+// R4-01-F2 (SPEC §1) retired the enum row by row as each phase moved to
 // declared dispatch (loopStrategy + band guards): 'reflect' with the reflector
 // migration, 'pm' with the plan agent, 'dev' with the ralph loopStrategy
 // routing. 'unifier' was the LAST row — retired in R4-01-F4 (the develop flow's
@@ -136,7 +136,7 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
     rawComposition != null && typeof rawComposition === 'object' && !Array.isArray(rawComposition)
       ? (rawComposition as Record<string, unknown>)
       : {};
-  // ADR-027 R3-03 amendment ("R3-03, 2026-08-04"): composition.hooks is
+  // D-09 R3-03 amendment ("R3-03, 2026-08-04"): composition.hooks is
   // REINTRODUCED with a narrowed meaning — library lifecycle-hook ids only,
   // resolved against the hooks registry (packages/library/studio/hook-library.ts),
   // never a platform guard id. Symmetric enforcement of the split
@@ -236,12 +236,12 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
 // lives in ./skill-md-fidelity.ts (extracted to keep this file under the
 // 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
 // importers keep resolving `serializeAgentDefinition` from './registry.ts';
-// it remains the ONE canonical serializer (ADR-027).
+// it remains the ONE canonical serializer (D-09).
 
 // lives in ./skill-md-fidelity.ts (extracted to keep this file under the
 // 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
 // importers keep resolving `serializeAgentDefinition` from './registry.ts';
-// it remains the ONE canonical serializer (ADR-027).
+// it remains the ONE canonical serializer (D-09).
 export { serializeAgentDefinition } from './skill-md-fidelity.ts';
 
 /** Loads every studio agent under `skillsDirs` (one dir, or several — SEAM
@@ -267,7 +267,7 @@ export function listAgentDefinitions(skillsDirs: string | readonly string[]): Ag
 }
 
 /**
- * The curated "out of the box" starter agents (ADR-033) under
+ * The curated "out of the box" starter agents (D-14) under
  * `studio/starters/agents/`. These are templates the New-Agent picker offers,
  * copied into `skills/<name>/` on install rather than run in place — but
  * `forge studio lint` DOES scan this tree directly too (`lintSkillToolFence`

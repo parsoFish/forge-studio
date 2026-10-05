@@ -30,7 +30,7 @@
  * without also being coupled to unrelated SKILL.md prose edits — the model +
  * `allowedTools` in the captured `options` still come from the REAL
  * `skills/<name>/SKILL.md` frontmatter via each runner's `deriveAgentSpec`
- * call at module load (ADR-024) — that part is NOT overridable through
+ * call at module load (SPEC §1) — that part is NOT overridable through
  * `skillPromptPath` and is captured verbatim, since a fork changing the tool
  * grant/model reaching `queryFn` is exactly one of the wrong implementations
  * this pin must kill.

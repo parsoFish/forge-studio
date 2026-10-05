@@ -1,6 +1,6 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — C1-C4 of the
- * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename,
+ * D-09-amendment-#2 `composition.hooks` → `composition.guards` rename,
  * targeting `validateAgent`/`validateCatalog` — then in
  * `orchestrator/studio/validate.ts`, since ruling 159 in
  * `packages/agents/studio/validate-agent.ts` (this file moved with its subject).

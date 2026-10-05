@@ -1,18 +1,18 @@
 /**
- * The single generic interactive-turn runner (ADR-043 §2, R4-22 WI-3):
+ * The single generic interactive-turn runner (SPEC §5, R4-22 WI-3):
  * `runInteractiveTurn(descriptor, ctx)` is the ONE spine every future
  * `turnSpec`-bearing session kind runs through instead of a bespoke
  * `orchestrator/*-runner.ts` (architect-runner.ts / instructions-runner.ts /
  * demo-builder-runner.ts / kinds/project-brain.ts — all four stay
- * byte-for-byte untouched; ADR-043 §3's dispatch fork lives in
+ * byte-for-byte untouched; SPEC §5's dispatch fork lives in
  * `apps/forge/agent-run.ts`, NOT here).
  *
  * Owns, ONCE, everything those four duplicate:
  *   - the SEC-04 containment preamble: `resolveGuardedPath(projectRoot,
  *     [turnSpec.kindDir, sessionId])` -> `guardedReadSessionStatus`;
- *   - the ADR-024 spec/model/prompt derivation:
+ *   - the SPEC §1 spec/model/prompt derivation:
  *     `deriveAgentSpec(skillPathRelative(agent))` -> `resolveSessionModel`
- *     (ADR-043 §3 amendment, wave-6: honors an optional operator-chosen
+ *     (SPEC §5, wave-6: honors an optional operator-chosen
  *     `status.modelTier` within the SKILL-declared envelope; absent ⇒ the
  *     same `modelForSpec` default as before) -> the tool grant, `SKILL.md`
  *     as the runtime prompt;
@@ -30,7 +30,7 @@
  * re-implementing them.
  *
  * ---------------------------------------------------------------------------
- * Two design calls this WI had to make that ADR-043 / the WI-3 brief leave
+ * Two design calls this WI had to make that SPEC §5 / the WI-3 brief leave
  * open (stated explicitly, per this initiative's own precedent) — REVISED
  * by the R4-22 WI-3 adversarial-review round's Finding 5 ruling (superseding
  * this file's own original design call #1, which used `skillsDir`):
@@ -78,7 +78,7 @@
  *      pinned-suite fixture (AT-3, `interactive-runner.test.ts`) that shares
  *      exactly this fixture shape with Finding 5(c) and is affected by it.
  *
- * `result.artifacts` is deliberately always `{}` — ADR-043's signature
+ * `result.artifacts` is deliberately always `{}` — SPEC §5's signature
  * (`Record<string, unknown>`) states no key contract, and the pinned test
  * suite (`interactive-runner.test.ts`) explicitly leaves it unasserted
  * rather than guessing one.
@@ -114,7 +114,7 @@ export async function runInteractiveTurn(
   const turnSpec = descriptor.turnSpec;
   if (!turnSpec) {
     throw new Error(
-      `runInteractiveTurn: session kind "${descriptor.id}" has no turnSpec — this runner only drives turnSpec-bearing descriptors (ADR-043 §1).`,
+      `runInteractiveTurn: session kind "${descriptor.id}" has no turnSpec — this runner only drives turnSpec-bearing descriptors (SPEC §5).`,
     );
   }
 
@@ -231,7 +231,7 @@ export async function runInteractiveTurn(
     case 'noop':
     case 'terminal':
       // No `next` is ever declared on a noop/terminal row in practice
-      // (ADR-043's worked example); even if one were, a noop/terminal step
+      // (SPEC §5's worked example); even if one were, a noop/terminal step
       // performs no work to justify advancing on — the phase stays put.
       result = { phase: status.phase, wrote: [], artifacts: {} };
       break;

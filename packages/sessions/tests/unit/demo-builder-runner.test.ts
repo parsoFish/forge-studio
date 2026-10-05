@@ -10,7 +10,7 @@ import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus, readSessionStatus } from '../../interactive-session.ts';
 
 // ---------------------------------------------------------------------------
-// ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// SPEC §5 (wave-6 kickoff model-tier seam)
 // ---------------------------------------------------------------------------
 
 /** Like makeWritingQueryFn, but also captures the model handed to queryFn. */

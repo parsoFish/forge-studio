@@ -1,5 +1,5 @@
 /**
- * createClaudeAgent + declared project skills (ADR 024 item 90) — the
+ * createClaudeAgent + declared project skills (SPEC §1 item 90) — the
  * dev-loop builder. `worktreePath` (an explicit, call-time AgentInvocation
  * parameter — never guessed from `process.cwd()`) IS the project directory
  * for a per-WI Ralph iteration, so this closure resolves the SAME

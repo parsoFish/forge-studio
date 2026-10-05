@@ -58,7 +58,7 @@ export function renderPlanHtml(session: ArchitectSession): string {
   function renderInitiativeCard(init: ProposedInitiative, idx: number): string {
     const hue = (idx * 67) % 360;
     const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
-    // ADR 051: the criteria are DECLARED on the initiative, not recovered from
+    // SPEC §3: the criteria are DECLARED on the initiative, not recovered from
     // its prose. What was `extractGwtBlocks(init.body)` — four regex shapes
     // accreted from four real runs, each addition made after a run produced
     // something the parser did not expect, and every miss a silent absence.

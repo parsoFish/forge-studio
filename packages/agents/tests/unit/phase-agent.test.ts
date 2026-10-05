@@ -1,5 +1,5 @@
 /**
- * ADR 024 seam — the PhaseAgentSpec primitive (model-by-tier resolution).
+ * SPEC §1 seam — the PhaseAgentSpec primitive (model-by-tier resolution).
  */
 
 import { test } from 'node:test';
@@ -25,7 +25,7 @@ test('modelForSpec resolves the spec tier to a model', () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveSessionModel — ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// resolveSessionModel — SPEC §5 (wave-6 kickoff model-tier seam)
 // ---------------------------------------------------------------------------
 
 const FIXED_SPEC: PhaseAgentSpec = {

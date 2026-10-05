@@ -11,7 +11,7 @@
  * file pins all four so a re-authoring PR that breaks any of them fails a
  * test, not a code-review skim:
  *
- *   1. §2a brain-first injection (ADR-010) — the brain-navigation-index
+ *   1. §2a brain-first injection (SPEC §4) — the brain-navigation-index
  *      block must stay FIRST, composed in TS, with its per-phase framing
  *      sentence intact, in ALL THREE prompts.               → AT-5
  *   2. §2b fail-open `exploring` — an explore-stage crash must be swallowed
@@ -356,7 +356,7 @@ test('AT-4 (fail-loud): a marker-less skill fixture makes the turn THROW, naming
 });
 
 // ---------------------------------------------------------------------------
-// AT-5 — HAZARD PIN: ADR-010 brain-first injection survives (park §2a)
+// AT-5 — HAZARD PIN: SPEC §4 brain-first injection survives (park §2a)
 // ---------------------------------------------------------------------------
 
 const FRAMING_INTERVIEW =
@@ -366,7 +366,7 @@ const FRAMING_EXPLORE =
 const FRAMING_DRAFT =
   "Read relevant Brain 2 (brain/cycles/) and Brain 3 (projects/<project>/brain/) theme files listed below as your FIRST action. Record the paths you consulted — they surface in the PLAN's Brain context section.";
 
-test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-navigation-index block is FIRST, carries its per-phase framing sentence + index text, and the `---` separator closes it before the skill/base text — in all three phases', async () => {
+test('AT-5 (HAZARD PIN — SPEC §4 brain-first injection survives): the brain-navigation-index block is FIRST, carries its per-phase framing sentence + index text, and the `---` separator closes it before the skill/base text — in all three phases', async () => {
   const brainCwd = mkdtempSync(join(tmpdir(), 'arch-brain-fixture-'));
   const indexSentinel = 'SENTINEL_BRAIN_INDEX_e55a';
   mkdirSync(join(brainCwd, 'brain'), { recursive: true });
@@ -649,7 +649,7 @@ const FROZEN_ARCHITECT: ArchitectFrozenEntry[] = [
     text: 'recommended option with one-line rationale and an other (specify) escape',
   },
   {
-    // RETIRED BY ADR 051, not lost in a reshuffle — and the distinction is the
+    // RETIRED BY D-34, not lost in a reshuffle — and the distinction is the
     // whole point of this frozen set. The instruction said criteria live as GWT
     // BLOCKS IN THE BODY, one per outcome, and nothing parses the body for
     // criteria any more: they are the typed `acceptance_criteria` field, one
@@ -657,7 +657,7 @@ const FROZEN_ARCHITECT: ArchitectFrozenEntry[] = [
     // in its successor text below; the vehicle it named does not, so freezing
     // the old wording would pin the skill to a shape the product refuses.
     label: 'draft-step summary — one criterion per independently-deliverable outcome (draft turn section)',
-    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn"), retired to the typed field by ADR 051',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn"), retired to the typed field by D-34',
     text: 'one per independently-deliverable outcome',
   },
   {

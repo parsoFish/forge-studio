@@ -10,7 +10,7 @@
  *
  *   project-manager / error   (no message, `set_errors` in its metadata)
  *   orchestrator   / error    project-manager phase failed: set errors:
- *                             WI-3: creates is required (ADR 037) unless
+ *                             WI-3: creates is required (D-18) unless
  *                             verification_artifact is set …
  *
  * The cycle knew exactly what was wrong, named the work item, named the field
@@ -75,7 +75,7 @@ const read = (name: string): EventLogEntry[] =>
 const CYCLES = [
   {
     file: '2026-07-11T07-29-19_INIT-2026-07-11-exclude-path-filter.jsonl',
-    what: 'gitpulse --exclude path filter: PM emitted 3 WIs, WI-3 had no `creates` (ADR 037)',
+    what: 'gitpulse --exclude path filter: PM emitted 3 WIs, WI-3 had no `creates` (D-18)',
     wasBeforeTheFix: 'failure could not be classified — examine events.jsonl manually',
     kind: 'terminal',
     reasonMatches: /^PM emitted schema-invalid WIs — deterministic/,

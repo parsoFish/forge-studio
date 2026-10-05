@@ -56,7 +56,7 @@ export function decodeSegment(raw: string): string {
   return decodeURIComponent(raw);
 }
 
-// Exported (cli-side, uncapped — ADR 042) so apps/forge/ui-bridge.ts's kb-cleanup
+// Exported (cli-side, uncapped — D-31) so apps/forge/ui-bridge.ts's kb-cleanup
 // apply route (R4-19-F2 adversarial-review fix) can validate its own
 // `project`/`sessionId` body fields against this file's own stated
 // convention (length cap + charset, before any fs call) WITHOUT
@@ -78,7 +78,7 @@ export function invalidSessionIdReason(id: string): string | null {
 // but historical sessions still live under it) and `isPseudoProjectAnchor`
 // (the general leading-"." check `discoverProjects`, `@forge/kernel`,
 // mirrors categorically) are now a PURE TRANSFER, defined in
-// `@forge/contracts` (ADR 046 boundary fix, `studio-beyond-contracts` edge
+// `@forge/contracts` (D-29 boundary fix, `studio-beyond-contracts` edge
 // 3) and imported above. `apps/studio`'s own former mirror
 // (`apps/studio/lib/session-shell-view.ts`) now re-exports the same
 // contracts symbols instead of independently declaring them, so the parity
@@ -397,9 +397,9 @@ export function sessionShellHref(kind: string, sessionId: string, project: strin
  * Derives, never hand-writes a new list — checked in order:
  *   1. A descriptor carrying EITHER a `turnSpec` (kb-cleanup, authoring) OR a
  *      `panel` (demo, instructions, onboarding — the legacy kinds' read-only
- *      twin, ADR-043 2026-08-15 amendment §2) derives its terminal set from
+ *      twin, SPEC §5) derives its terminal set from
  *      THAT table — any phase whose row declares `step: 'terminal'` (the
- *      ADR-043 state-machine's own "this is where it stops" marker, already
+ *      SPEC §5 state-machine's own "this is where it stops" marker, already
  *      validated by validateSessionKinds to have at least one such row —
  *      CHECK_TURNSPEC_NO_TERMINAL_PHASE / CHECK_PANEL_NO_TERMINAL_PHASE).
  *      Mirrors `deriveSessionAffordances`'s own `turnSpec?.phases ??
@@ -435,7 +435,7 @@ export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string
   // TWO universal reserved terminal phases, checked FIRST for every kind: one
   // shared writer produces each for ALL kinds, so neither is a per-kind row a
   // table can be said to have forgotten. `cancelled` — the generic cancel route
-  // (W7-A2, ADR-043 §1). `failed` — writeSessionTerminalPhase (agent-run.ts:249
+  // (W7-A2, SPEC §5). `failed` — writeSessionTerminalPhase (agent-run.ts:249
   // /:381; 7.3.3: only onboarding listed it, so six kinds derived `working`).
   if (phase === CANCELLED_PHASE || phase === 'failed') return true;
   const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases;

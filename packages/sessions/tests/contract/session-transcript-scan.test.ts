@@ -18,7 +18,7 @@ import { architectDescriptor, authoringDescriptor, instructionsDescriptor, makeT
 // can never show an operator that an approved repair actually landed.
 //
 // `deriveSessionArtifact` gains one ADDITIVE-OPTIONAL field (mirrors
-// `contractStages`'s own disclose-not-park threading, ADR 042):
+// `contractStages`'s own disclose-not-park threading):
 //
 //   cleanupScan?: { readonly forgeRoot: string; readonly brainDir: string }
 //

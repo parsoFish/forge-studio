@@ -368,7 +368,7 @@ export function writeGeneration(
  *  scans on every session dir regardless of kind.
  *
  *  RENAMED from `package/` (R4-21 phase 1) to `staging/` (R4-21 phase 2, D2,
- *  `_wave5/unit-specs/R4-21-phase2.md`): ADR-043 §1's ratified turnSpec row
+ *  `_wave5/unit-specs/R4-21-phase2.md`): SPEC §5's ratified turnSpec row
  *  declares `writes: [staging]` for the `analyzing` phase, and
  *  `copyStagingToLibrary` (packages/sessions/interactive-finalizers.ts) sources
  *  `<sessionDir>/staging/` — `package/` predates the ADR and has zero

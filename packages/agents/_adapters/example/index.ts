@@ -1,5 +1,5 @@
 /**
- * Example adapter — dependency-free in-repo mock (M6-2, ADR 029).
+ * Example adapter — dependency-free in-repo mock (M6-2, SPEC §1).
  *
  * Proves that a SECOND runtime adapter can plug into the RuntimeAdapter
  * interface without importing any external SDK. This is the reference

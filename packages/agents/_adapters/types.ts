@@ -5,7 +5,7 @@
  *   QueryFn          (packages/agents/ralph/claude-agent.ts:22) — the raw SDK-call boundary.
  *   AgentInvocation  (packages/agents/ralph/runner.ts:133)      — one Ralph iteration.
  *
- * M6-1 (ADR 029): extraction, not redesign. The Claude adapter wraps
+ * M6-1 (SPEC §1): extraction, not redesign. The Claude adapter wraps
  * createClaudeAgent + sdkQuery and is the reference implementation.
  *
  * Re-exports the canonical contract types so adapter authors import from here,
@@ -30,13 +30,13 @@ import type { QueryFn, ClaudeAgentOptions } from '../ralph/claude-agent.ts';
  * cancellation, so a wedge-kill on a node running under one of those adapters
  * still leaves the in-flight iteration to finish on its own. The conformance
  * suite does not assert cancellation because those adapters are unprovisioned.
- * Tracked in known-gaps §4.12; the ADR-028 "no zombie work" guarantee is
+ * Tracked in known-gaps §4.12; the SPEC §2 "no zombie work" guarantee is
  * therefore scoped to the claude adapter until a second adapter honors it.
  */
 export type AdapterAgentOptions = ClaudeAgentOptions;
 
 /**
- * RuntimeAdapter — the pluggable SDK seam (ADR 029).
+ * RuntimeAdapter — the pluggable SDK seam (SPEC §1).
  *
  * Every adapter must satisfy this interface. The conformance suite
  * (packages/agents/_adapters/conformance.ts, M6-2) is the admission gate.

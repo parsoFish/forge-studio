@@ -1,5 +1,5 @@
 /**
- * runAgent + `ctx.bindings.project` (ADR 024 item 90) — a project's declared
+ * runAgent + `ctx.bindings.project` (SPEC §1 item 90) — a project's declared
  * `.forge/project.json` `skills[]` must reach the spawned agent's
  * `systemPrompt`, not just resolve at preflight time and go nowhere.
  *
