@@ -351,7 +351,7 @@ user-visible capabilities (Added) → minor.
   `.github/workflows/ci.yml` running the existing gates (build, test, studio
   lint, brain lint) plus `npm run lint` (markdownlint-cli2 over `docs/**` +
   root) and two drift guards proven to fail on injected drift:
-  `scripts/check-adr-index.mjs` (ADR-index completeness + next-free) and
+  the ADR-index check (completeness + next-free) and
   `scripts/check-docs-claims.mjs` (docs/README coverage vs `git ls-files`).
 
 ### Fixed
@@ -579,7 +579,7 @@ extension seams), and the productionisation pass.
 - **Forge Reflect** — the third seed flow (`studio/flows/forge-reflect`): a deep
   retrospective (repeated actions, roadblocks, operator notes) that writes the
   central forge-owned project brain post-merge (via `finalize-merged`).
-- **forge-cycle monolith retired** ([DEC-3]). The 3-flow set
+- **forge-cycle monolith retired** (DEC-3). The 3-flow set
   (forge-architect → forge-develop → forge-reflect) replaces it; there is no
   default flow and no fallback — every manifest names its flow.
 
@@ -634,15 +634,15 @@ real data-table dispatch and a second, gated implementation behind it).
 
 #### M8 — extension seams (modularity-as-subsumption)
 
-- **Node-executor registry for the flow engine** ([ADR-028](docs/decisions/028-flow-engine.md)).
+- **Node-executor registry for the flow engine** (ADR-028).
   Flow nodes are dispatched through a data-table + node-executor registry. The old
   hard-coded `classifyNode` switch is gone; adding a node type is a registry entry,
   not a code branch.
-- **Runtime adapter registry** ([ADR-029](docs/decisions/029-runtime-adapters.md)).
+- **Runtime adapter registry** (ADR-029).
   The dev-loop builds agents via `getAdapter(sdkId).createAgent` through the
   `RuntimeAdapter` registry instead of calling `createClaudeAgent` directly, so the
   underlying coding agent is swappable.
-- **`KbBackend` seam** ([ADR-027](docs/decisions/027-studio-object-model.md)).
+- **`KbBackend` seam** (ADR-027).
   The brain's store sits behind a `KbBackend` interface dispatched from `kb.yaml`
   (`orchestrator/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the
   seam is present for a future second backend.
@@ -650,7 +650,7 @@ real data-table dispatch and a second, gated implementation behind it).
   (`orchestrator/phases/developer-loop.ts`) is now an independently-dispatchable
   flow node rather than logic buried inside the cycle runner.
 - **Second implementation behind the runtime-adapter seam (subsumption proof)**
-  ([ADR-032](docs/decisions/032-subsumption-proof.md)). The runtime seam resolves
+  (ADR-032). The runtime seam resolves
   real drop-in alternatives, registered but **dependency- and credential-gated**
   (`available: false` until provisioned):
   - **Gemini** `RuntimeAdapter` — `loops/_adapters/gemini` (needs `@google/genai` + `GEMINI_API_KEY`).
@@ -659,13 +659,13 @@ real data-table dispatch and a second, gated implementation behind it).
 
 #### M7 — Studio consolidation (Forge Studio is the one product)
 
-- **Forge Studio is the single product surface** ([ADR-031](docs/decisions/031-studio-consolidation.md)).
+- **Forge Studio is the single product surface** (ADR-031).
 - **`forge studio` launches the operator UI** — a deterministic launcher; harnesses
   no longer scrape stdout to find the UI.
 - **Native architect in Studio** — the architect interview and the PLAN gate were
   rebuilt natively inside Studio.
 - **Unified `/artifact` viewer** — the `/review` and `/reflect` human moments now
-  render on the single `/artifact` viewer ([ADR-020](docs/decisions/020-architect-in-ui.md)).
+  render on the single `/artifact` viewer (ADR-020).
 - **Cycle-monitor regression guards** on the Studio flow monitor.
 
 ### Changed
@@ -694,4 +694,3 @@ real data-table dispatch and a second, gated implementation behind it).
 [1.0.0]: https://github.com/parsoFish/forge-studio/commits/main
 [0.1.1]: https://github.com/parsoFish/forge-studio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/parsoFish/forge-studio/releases/tag/v0.1.0
-[DEC-3]: docs/decisions/

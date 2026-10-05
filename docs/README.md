@@ -13,7 +13,7 @@ which question you have, then go straight to that quadrant:
 - Want to know *why* forge is built this way? **Explanation.**
 
 Every page here describes the **current state**. History is not narrated in
-these pages — it lives in git, in `DECISIONS.md` (and the retiring `decisions/` records), and in the brain
+these pages — it lives in git, in `DECISIONS.md`, and in the brain
 (`brain/forge-dev/themes/`, `brain/cycles/themes/`).
 
 ---
@@ -86,9 +86,7 @@ machine-readable contracts, not usage docs:
   single roadmap driving all current forge work; its companion
   [`1.0-skills.md`](./roadmaps/1.0-skills.md) and the
   [design spec](./superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md)
-  sit alongside it. [`roadmaps/archive/`](./roadmaps/README.md) keeps the
-  R1–R8 roadmaps that drove forge before the 1.0 plan — superseded for new
-  work, kept as the record of what was built and why.
+  sit alongside it.
 - **[Schemas](./schemas/project-config.schema.json)** — the JSON Schema a
   managed project's `forge.config.json` is validated against, with worked
   [examples](./schemas/examples/project.mdtoc.json) for

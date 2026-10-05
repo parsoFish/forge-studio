@@ -1,34 +1,14 @@
 {
   "aligns": [
     {
-      "path": "docs/decisions/040-review-send-back-develop-loop.md",
-      "digest": "89c1391531aa406f",
-      "why": "The review-loop beats (S10.review.mjs): one anchored blocking comment -> fix-WI -> same-branch re-dispatch -> re-review — \"the send-back the whole story is built around\""
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "D-20 send-back loop; D-03/D-04 _queue claim + emergency halt (beats 7-9); D-06 resume keeps finished WIs; D-15 orchestrator-owned gates; D-17/D-18 compiled-WI quarantine (beat8)"
     },
     {
-      "path": "docs/decisions/011-unattended-scheduler.md",
-      "digest": "1a17841855727f41",
-      "why": "Beats 7-9: _queue state machine and forge serve's always-on claim; the one emergency halt: ACT 1 pulls it mid-build and the run finishes, ACT 2 pulls it before resume and the run waits queued"
-    },
-    {
-      "path": "docs/decisions/019-cycle-resume-from-unifier.md",
-      "digest": "ff93d1c1084ae838",
-      "why": "Act2 (S10.act2.mjs): stop/resume-run (ruling 1794's inferRequeueResume path) keeps the finished work item and re-runs the unfinished one — \"the second attempt starts from what the first one finished\""
-    },
-    {
-      "path": "docs/decisions/028-flow-engine.md",
-      "digest": "a80db2b426cf4912",
-      "why": "forge-develop flow run: node ids dev/integrate/adversarial-review/review, timeline rows and per-node status/cost; Act2's non-destructive stop-run control (M7 row 150 amendment)"
-    },
-    {
-      "path": "docs/decisions/036-orchestrator-owned-gate-execution.md",
-      "digest": "1809484b13f19b68",
-      "why": "The integrate station assembles evidence for review before any human or agent judges it; gates are orchestrator verbs (plan gate, review gate, merge)"
-    },
-    {
-      "path": "docs/decisions/037-compiled-wi-contracts.md",
-      "digest": "8bdbba0605d9775f",
-      "why": "S10.constants.mjs CYCLE_BOUND comment explicitly names \"the ADR 037 quarantine\" as one of beat8's three distinct blockers"
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §2: forge-develop run node ids, timeline rows, per-node status/cost; D-11: Act2's non-destructive stop-run control (M7 row 150 amendment)"
     },
     {
       "path": "brain/forge-dev/themes/cost-restatement-rule.md",

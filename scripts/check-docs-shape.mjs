@@ -3,19 +3,19 @@
  * check-docs-shape.mjs — the Diátaxis shape + hand-written budget guard for docs/.
  *
  * Spec §4 "Docs" and §7 clause 4: `docs/` is four Diátaxis quadrants plus
- * three planning directories, and 1.0 caps the HAND-WRITTEN pages at 25.
+ * planning directories, and 1.0 caps the HAND-WRITTEN pages at 25.
  * Ruling 392 fixes what "hand-written" means, and this script is where that
  * definition lives — a rule moved out of prose, not a new bar.
  *
- * "prove-or-warn" style like scripts/check-adr-index.mjs: plain node, no deps,
+ * "prove-or-warn" style: plain node, no deps,
  * fail = non-zero exit + one actionable line per violation.
  *
  * Rules:
  *   1. every docs/**\/*.md lives in one of the four quadrants
  *      (tutorials|how-to|reference|explanation) or the three planning
- *      directories (decisions|roadmaps|superpowers) or product/ — the one
+ *      directories (roadmaps|superpowers) or product/ — the one
  *      exception is docs/README.md, the index itself;
- *   2. HAND-WRITTEN = every docs/**\/*.md minus decisions/, roadmaps/,
+ *   2. HAND-WRITTEN = every docs/**\/*.md minus roadmaps/,
  *      superpowers/ and product/, minus every file carrying `generated_from:`
  *      frontmatter (the story runner's output). That count is <= 25;
  *   3. a page under tutorials/ or how-to/ whose basename is a story id in
@@ -26,7 +26,7 @@
  *      (a) every HAND-WRITTEN page is linked from docs/README.md DIRECTLY —
  *          with ~17 pages there is no excuse for a directory fallback;
  *      (b) every OTHER tracked file under docs/ (`git ls-files docs/`, which
- *          includes non-markdown: schemas, the archived overview.html) is
+ *          includes non-markdown: schemas and other non-markdown) is
  *          covered directly OR by a directory-level mention.
  *      (b) is check-docs-claims.mjs's own rule, preserved verbatim in effect,
  *      because this check REPLACES that guard. Retiring it on (a) alone would
@@ -52,7 +52,7 @@ const STORIES_DIR = join(root, 'tests/stories');
 /** The four Diátaxis quadrants — the shape the tree is FOR. */
 const QUADRANTS = ['tutorials', 'how-to', 'reference', 'explanation'];
 /** Planning + catalogue directories: outside the four AND outside the count (392). */
-const UNCOUNTED = ['decisions', 'roadmaps', 'superpowers', 'product'];
+const UNCOUNTED = ['roadmaps', 'superpowers', 'product'];
 /** The index is the one page allowed to sit at the top of docs/. */
 const TOP_LEVEL_ALLOWED = 'README.md';
 const HANDWRITTEN_CAP = 25;

@@ -49,8 +49,7 @@
  * comment extraction is a crude, line-based, quote-aware scanner, the same
  * trade this tree already makes in check-request-path-sinks.mjs: it does not
  * parse template-literal `${...}` interpolation or regex literals. Prose in
- * `.md` files, except `brain/` (brain-lint's job), `docs/decisions/`
- * (history — ADRs record what used to be true), `_1.0/` (gitignored
+ * `.md` files, except `brain/` (brain-lint's job), `_1.0/` (gitignored
  * campaign scratch, never a permanent artifact), and individual files named
  * in EXCLUDED_PROSE_FILES below (their own reason travels with each entry —
  * mirrors check-identity.mjs's EXCLUDED_FILES for the same class of file: a
@@ -134,7 +133,7 @@ const CODE_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js'];
 /** Scanned-for-prose extensions. */
 const PROSE_EXTENSIONS = ['.md'];
 /** Prose trees excluded — each for a reason named in the header above. */
-const EXCLUDED_PROSE_TREES = ['brain', 'docs/decisions', '_1.0'];
+const EXCLUDED_PROSE_TREES = ['brain', '_1.0'];
 
 /**
  * Individual prose files excluded, each with its own reason — mirrors

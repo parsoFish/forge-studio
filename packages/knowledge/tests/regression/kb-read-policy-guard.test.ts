@@ -1,5 +1,5 @@
 /**
- * R1-01-F4: the asymmetric brain-read policy (ADR-010 as amended) is UNCHANGED
+ * R1-01-F4: the asymmetric brain-read policy (SPEC §4) is UNCHANGED
  * by the KB binding rework. Rebinding `cycles` from `scope: flow` to
  * `binding: { kind: flow, ref: forge-develop }` is a descriptor-only change; it
  * must not alter *who reads the brain*. This guards the invariant at the source
@@ -37,17 +37,16 @@ test('R1-01-F4: dev-loop and the reviewer do NOT read the forge brain (policy un
 });
 
 // ---------------------------------------------------------------------------
-// R1-06 WI-1 group B (4): the asymmetric brain-read policy (ADR-010 as
-// amended) extends past the 4 phase-binding source files above to KB
+// R1-06 WI-1 group B (4): the asymmetric brain-read policy (SPEC §4)
+// extends past the 4 phase-binding source files above to KB
 // DESCRIPTORS. The rule is now encoded as ONE pure, exported predicate —
 // `kbReadPolicyViolation` (packages/knowledge/kb-read-policy.ts) — that BOTH `forge studio
 // lint` (the production wiring, apps/forge/studio-lint.ts) and this guard drive, so
 // there is a single source of the policy rather than a hand-rolled helper.
 //
-// The policy (T1 ruling + ADR-010 amendment "R1-06 band-scoped reviewer
-// grant"):
+// The policy (SPEC §4, "Reviewer grants are band-scoped"):
 //   - a `project` binding is ALWAYS exempt (Brain-3 legitimately grants the
-//     full reader set incl. dev-loop + reviewer, ADR-010 / ADR-035);
+//     full reader set incl. dev-loop + reviewer, SPEC §4);
 //   - on a NON-project binding, granting `dev-loop` is NEVER ratified, and
 //     granting `reviewer` is ratified ONLY on { kind: flow, band: review-band }.
 //
@@ -55,24 +54,34 @@ test('R1-01-F4: dev-loop and the reviewer do NOT read the forge brain (policy un
 // helper (a) FALSE-POSITIVED on every real project KB (it flagged the
 // legitimate 'reviewer' grant that deriveKbUsageDefaults gives project
 // bindings) and (b) UNDER-CHECKED — it inspected only 'reviewer', never
-// 'dev-loop', which the ADR forbids on ANY non-project binding.
+// 'dev-loop', which SPEC §4 forbids on ANY non-project binding.
 // ---------------------------------------------------------------------------
 
-const ADR_010_PATH = resolve(FORGE_ROOT, 'docs/decisions/010-brain-first.md');
-const R1_06_AMENDMENT_MARKER = 'R1-06 band-scoped reviewer grant';
+const SPEC_PATH = resolve(FORGE_ROOT, 'SPEC.md');
+const BAND_SCOPED_CLAUSE = '- **Reviewer grants are band-scoped.**';
 
-/** The ratified exception is documented in ADR-010 (T1 landed the text). This
- *  guards that the amendment marker stays present — the predicate encodes the
- *  same exception in code. */
-test('R1-06: ADR-010 carries the "R1-06 band-scoped reviewer grant" amendment marker', () => {
-  assert.match(
-    readFileSync(ADR_010_PATH, 'utf8'),
-    new RegExp(R1_06_AMENDMENT_MARKER),
-    'ADR-010 must document the one ratified band->reader exception the predicate encodes',
+/** SPEC §4 is the text from its heading up to the next top-level section. */
+function specSection4(): string {
+  const spec = readFileSync(SPEC_PATH, 'utf8');
+  const start = spec.indexOf('\n## 4. Knowledge');
+  assert.notEqual(start, -1, 'SPEC.md must keep its "## 4. Knowledge" section');
+  const end = spec.indexOf('\n## 5.', start);
+  return spec.slice(start, end === -1 ? undefined : end);
+}
+
+/** The ratified exception is documented in SPEC §4. This guards that the
+ *  band-scoped reviewer clause stays present — the predicate encodes the same
+ *  exception in code. */
+test('R1-06: SPEC §4 carries the "Reviewer grants are band-scoped" clause', () => {
+  const section = specSection4();
+  assert.ok(
+    section.includes(BAND_SCOPED_CLAUSE),
+    'SPEC §4 must document the one ratified band->reader exception the predicate encodes',
   );
+  assert.match(section, /review-band/, 'the clause must name the review-band binding');
 });
 
-/** The 4 real central per-project brains (ADR 035). */
+/** The 4 real central per-project brains (SPEC §4). */
 const REAL_PROJECT_KB_PATHS = ['gitpulse', 'mdtoc', 'terraform-provider-betterado', 'trafficGame'].map((p) =>
   resolve(FORGE_ROOT, 'brain', 'projects', p, 'kb.yaml'),
 );

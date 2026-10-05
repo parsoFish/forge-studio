@@ -823,7 +823,7 @@ against the post-fan-in branch tip — becomes a **flow-engine merge-boundary ga
 orchestrator-executed band at the develop flow's merge boundary (not an agent
 node), per [D-15](../../DECISIONS.md)'s rule
 that agents judge and the orchestrator executes. It is keyed off the **new
-`testProcess` contract object** ([R1-03-F1](../roadmaps/archive/R1-contract-componentry.md),
+`testProcess` contract object** (R1-03-F1,
 introduced in this same PR; `.forge/project.json`, loader in
 `packages/projects/project-config.ts`) — mapping the old field names once:
 
@@ -850,8 +850,8 @@ live, not a fossil.
 **Unattended remediation.** A red merge-boundary baseline re-dispatches the
 develop agent with scoped fix work items compiled from
 `.forge/last-gate-failure.md` — the same capability D-20 already
-provided, successor-specified as `R4-10-F2`
-(`docs/roadmaps/archive/R4-ootb-suite.md`). Remediation is bounded by the flow's shared
+provided, successor-specified as `R4-10-F2`.
+Remediation is bounded by the flow's shared
 remediation cap (R4-10-F1's shared round/total-fix cap, config home per
 R4-08-F2(b), which R4-10-F2 inherits); cap exhaustion parks the initiative
 `needs-operator` rather than looping forever. In every case — remediated or

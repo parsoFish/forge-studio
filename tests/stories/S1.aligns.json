@@ -16,24 +16,14 @@
       "why": "Beat4: onboard-run-id published only \"from the moment the run actually begins... which is the declared-data-fails-open shape\" — the theme's own vocabulary reused near-verbatim"
     },
     {
-      "path": "docs/decisions/043-generic-interactive-surface.md",
-      "digest": "d0e89ce5f09d55fd",
-      "why": "Beat4: the onboarding brief form becomes \"a CLIENT of the affordance, which is ADR 043's own direction\" (explicit ADR citation)"
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §5: Beat4 brief form is a client of the generic session affordance. SPEC §6: beats 3, 9 preflight-status/flow-ready/checklist keys are the unified readiness contract"
     },
     {
-      "path": "docs/decisions/020-architect-in-ui.md",
-      "digest": "a223ff6e8f292498",
-      "why": "Act3 (beats 10-11, S1.act3.mjs): interview -> draft -> critique -> plan-gate -> approve loop, session-checkpointed"
-    },
-    {
-      "path": "docs/decisions/021-local-review-and-unified-demo.md",
-      "digest": "2169f0726f07bfd9",
-      "why": "Beat8: demo-builder session (briefing->generating->awaiting-review->locking->locked), verdict-approve finalising a locked demo"
-    },
-    {
-      "path": "docs/decisions/034-studio-aligned-contract.md",
-      "digest": "59f71bf30a3eb184",
-      "why": "Beats 3 and 9: preflight-status/flow-ready/checklist keys are the unified project-readiness contract"
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "R-05: Act3 interview->draft->critique->plan-gate loop is session-checkpointed. D-07: Beat8 demo-builder session, verdict-approve finalising a locked demo"
     }
   ]
 }

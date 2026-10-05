@@ -64,18 +64,12 @@ const IDENT_RE = new RegExp(`[A-Za-z]*[a-z](?:${IDENT_TOKENS.join('|')})[A-Za-z]
 
 /** Trees that are records of decisions taken, not statements of current state. */
 const EXCLUDED_TREES = [
-  'docs/decisions', // ADRs — append-only; they record the retirements themselves
   'docs/superpowers/specs', // design records; the 1.0 blueprint names what it retires
 ];
 
 /** Individual record files, each with the reason it is not current-state prose. */
 const EXCLUDED_FILES = new Map([
   ['docs/roadmaps/1.0.md', 'the active plan — it names the retired tokens as tokens'],
-  ['docs/roadmaps/archive/README.md', 'the R1–R8 register and driving order, archived by M6 (1.0.md §7)'],
-  ['docs/roadmaps/archive/R1-contract-componentry.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
-  ['docs/roadmaps/archive/R2-runnable-componentry.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
-  ['docs/roadmaps/archive/R4-ootb-suite.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
-  ['docs/roadmaps/archive/R5-hardening-operability.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
 ]);
 
 /** The scanned roots: a git pathspec, and which of its tracked files count. */

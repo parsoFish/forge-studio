@@ -2,8 +2,8 @@
  * check-docs-shape ratchet — proof the gate BITES.
  *
  * Spec §4 "Docs" + §7 clause 4 and ruling 392: `docs/` is a Diátaxis tree of
- * four quadrants plus three planning directories, and the ≤ 25 budget counts
- * HAND-WRITTEN pages only — every `docs/**\/*.md` minus `decisions/`,
+ * four quadrants plus planning directories, and the ≤ 25 budget counts
+ * HAND-WRITTEN pages only — every `docs/**\/*.md` minus
  * `roadmaps/`, `superpowers/` and `product/`, minus every file the story
  * runner generates (identified by its `generated_from:` frontmatter).
  *
@@ -124,12 +124,11 @@ test('rule 2: 26 hand-written pages FAIL the cap of 25, printing the measured co
 });
 
 test('rule 2: generated pages and the planning directories do NOT count toward the cap', () => {
-  // 24 pages + docs/README.md = exactly the cap; the six below must not add to it.
+  // 24 pages + docs/README.md = exactly the cap; the five below must not add to it.
   const files: Record<string, string> = {};
   for (let i = 0; i < 24; i++) files[`docs/reference/page-${i}.md`] = page(`Page ${i}`);
   files['docs/tutorials/S1.md'] = generated('tutorial', 'S1');
   files['docs/how-to/S3.md'] = generated('how-to', 'S3');
-  files['docs/decisions/001-a.md'] = page('ADR 1');
   files['docs/roadmaps/1.0.md'] = page('Roadmap');
   files['docs/superpowers/specs/spec.md'] = page('Spec');
   files['docs/product/user-stories.md'] = page('Catalogue');
@@ -138,11 +137,11 @@ test('rule 2: generated pages and the planning directories do NOT count toward t
   const index = `# Docs index\n\n${Object.keys(files)
     .filter((f) => f.startsWith('docs/reference/'))
     .map((f) => `- [${f}](./${f.replace(/^docs\//, '')})`)
-    .join('\n')}\n- [Decisions](./decisions/)\n- [Roadmaps](./roadmaps/)\n- [Spec](./superpowers/)\n- [Product](./product/)\n`;
+    .join('\n')}\n- [Roadmaps](./roadmaps/)\n- [Spec](./superpowers/)\n- [Product](./product/)\n`;
   const root = fixture(files, ['S1', 'S3'], index);
   const { code, out } = run(root);
   rmSync(root, { recursive: true, force: true });
-  assert.equal(code, 0, `25 hand-written + 2 generated + 4 planning pages must pass:\n${out}`);
+  assert.equal(code, 0, `25 hand-written + 2 generated + 3 planning pages must pass:\n${out}`);
   assert.match(out, /\b25\b/, 'the PASS line states the hand-written count');
 });
 
@@ -228,7 +227,7 @@ test('rule 4: a tracked NON-markdown file under docs/ must be covered by the ind
 
 test('rule 4: a DIRECTORY-level mention covers the files beneath it', () => {
   // check-docs-claims' two-tier rule, preserved: the index cannot be made to
-  // enumerate every ADR, and a link to the directory is the honest unit for
+  // enumerate every file, and a link to the directory is the honest unit for
   // a subtree. Hand-written PAGES still need their own direct link (above).
   const root = fixture({ 'docs/reference/cli.md': page('CLI') }, [],
     '# Docs index\n\n- [CLI](./reference/cli.md)\n- [Schemas](./schemas/)\n');

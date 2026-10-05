@@ -91,7 +91,7 @@
 // beyond dispatch-shape (two-value method gates collapsing to the ambiguous
 // '*', the inline-regex-literal requirement for match-var routes, the
 // DELETE-as-POST-suffix encoding above) are likewise accepted, documented
-// residue — owner R7 (docs/roadmaps/archive/R7-verification-infrastructure.md).
+// residue.
 //
 // Both directions are asserted: every derived real route must have a table
 // entry (direction 1 — the AC's "unclassified route" case), and every table

@@ -1,29 +1,14 @@
 {
   "aligns": [
     {
-      "path": "docs/decisions/028-flow-engine.md",
-      "digest": "a80db2b426cf4912",
-      "why": "The whole builder: FlowDef stations/edges, validateFlow's agent-ref check, save/lint (beats 4-7)"
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §2: the whole builder (FlowDef stations/edges, validateFlow, save/lint, beats 4-7). SPEC §3: Beat4 an edge says which artifact crosses it (ArtifactPicker)"
     },
     {
-      "path": "docs/decisions/030-canvas-tech.md",
-      "digest": "ad3892f8f2cf27c2",
-      "why": "Beat4: drag-and-drop canvas, place-station-<ref>/connect-from-<ref>/connect-into-<ref> handles"
-    },
-    {
-      "path": "docs/decisions/007-markdown-artifact-flow.md",
-      "digest": "bb1ae2d036d9658e",
-      "why": "Beat4: \"an edge has always had to say which artifact crosses it\" — the edge/artifact contract this ADR defines, held via ArtifactPicker"
-    },
-    {
-      "path": "docs/decisions/027-studio-object-model.md",
-      "digest": "533bfadb091c283f",
-      "why": "Beat6: flow saved as FlowDef data; roster seeding (seed-starter-agents) materialises agents-as-data"
-    },
-    {
-      "path": "docs/decisions/020-architect-in-ui.md",
-      "digest": "a223ff6e8f292498",
-      "why": "Beats 11-12: architect interview loop (round-increment, no ceiling) — same runner as S1/S2"
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "R-09: Beat4 drag-and-drop canvas handles. D-09: Beat6 flow saved as FlowDef data, roster seeding. R-05: Beats 11-12 architect interview loop, same runner as S1/S2"
     },
     {
       "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",

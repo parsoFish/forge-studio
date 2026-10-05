@@ -2,8 +2,7 @@
  * ACCEPTANCE TESTS (T3, R2-08-F4) — the trigger-provenance READ API, driven
  * at the REAL bridge routes (not by calling handler functions directly).
  *
- * Pins two surfaces (docs/roadmaps/archive/R2-runnable-componentry.md R2-08-F4 +
- * D-10 run-model trigger provenance):
+ * Pins two surfaces (R2-08-F4 + D-10 run-model trigger provenance):
  *
  *  1. The EXISTING `GET /api/runs` / `GET /api/runs/<id>` routes
  *     (apps/forge/bridge-studio.ts:9-12) must surface `run.trigger` for a

@@ -5,8 +5,7 @@
  * that is the expected, deliberate red. Do not stub the module into
  * existence to turn this green; red is the deliverable of this round.
  *
- * Contract this file pins (D-09's R3-03 amendment, 2026-08-04 + docs/roadmaps/archive/R3-library-componentry.md
- * §R3-03):
+ * Contract this file pins (D-09's R3-03 amendment, 2026-08-04):
  *
  *   A library HOOK is an agent-lifecycle customisation — {id, name,
  *   description, on (lifecycle event), matcher?, script, permissions} — read

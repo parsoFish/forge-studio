@@ -45,7 +45,6 @@ const CHANGELOG_NEXT = /^## \[/;
 
 /** `path` ending `/**` excludes the subtree; otherwise an exact file. */
 export const EXCLUDED = [
-  { path: 'docs/decisions/**', owner: 'W1 (this lane)', reason: 'the records themselves — retired in the same lane' },
   { path: 'tests/stories/**', owner: 'W3 (stories workstream)', reason: 'until W3 (stories workstream) — temporary; W3 widens this scope' },
   { path: 'scripts/stories/**', owner: 'W3 (stories workstream)', reason: 'until W3 (stories workstream) — story harness, edited only by W3/W6 (DOCS-COMMON §3); temporary' },
   { path: 'demos/**', owner: 'W3 (stories workstream)', reason: 'until W3 (stories workstream) — temporary; W3 widens this scope' },

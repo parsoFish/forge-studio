@@ -6,19 +6,14 @@
       "why": "Beat13: ledger-cost-usd \"OMITTED rather than zeroed... 'absent' and '0.00' are different facts\" — the theme's own honest-absent principle"
     },
     {
-      "path": "docs/decisions/003-skills-not-self-baked-agents.md",
-      "digest": "970e680036e20164",
-      "why": "Beat5 narration: \"an agent is not written, it is assembled out of skills the library already holds\""
+      "path": "SPEC.md",
+      "digest": "822f1517c85a4344",
+      "why": "SPEC §1: Beat5 narration: \"an agent is not written, it is assembled out of skills the library already holds\""
     },
     {
-      "path": "docs/decisions/025-live-observability.md",
-      "digest": "87e4f6d186aeff8a",
-      "why": "Beat13: a real recorded cost figure on the agent's own ledger row, live off a completed dispatch"
-    },
-    {
-      "path": "docs/decisions/027-studio-object-model.md",
-      "digest": "533bfadb091c283f",
-      "why": "Beats 5-8: agent-as-data — composed skills/tools/MCP fence, readiness checks over the definition"
+      "path": "DECISIONS.md",
+      "digest": "0f321b6fb94869d9",
+      "why": "R-16: Beat13 a real recorded cost on the agent's ledger row. D-09: Beats 5-8 agent-as-data, composed skills/tools/MCP fence, readiness over the definition"
     },
     {
       "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",
