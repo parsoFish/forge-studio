@@ -88,7 +88,7 @@ machine-readable contracts, not usage docs:
   [examples](./schemas/examples/project.mdtoc.json) for
   [two real projects](./schemas/examples/project.betterado.json). The prose
   contract these encode is
-  [`reference/project-contract.md`](./reference/project-contract.md).
+  the Project contract page of the docs site.
 - **[Product](./product/user-stories.md)** — the tiered catalogue of operator
   journeys forge supports, and its companion, the
   [Minimum Viable User Story](./product/minimum-viable-user-story.md) vision
