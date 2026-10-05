@@ -58,6 +58,18 @@ test('retired top-level dirs block', () => {
   }
 });
 
+test('retired decision records and roadmap archive block, pointing at DECISIONS.md', () => {
+  // kills: recreating docs/decisions/ (or the archive) after the records were retired
+  for (const f of ['docs/decisions/052-new.md', 'docs/decisions/README.md', 'docs/roadmaps/archive/R9.md']) {
+    const r = run('Write', `${P}/${f}`);
+    assert.equal(r.block, true, f);
+    assert.match(r.message!, /DECISIONS\.md/);
+  }
+  // kills: prefix matching that also catches a sibling with a similar name
+  assert.equal(run('Write', `${P}/docs/decisions-notes.md`).block, false);
+  assert.equal(run('Write', `${P}/docs/roadmaps/1.0.md`).block, false);
+});
+
 test('segment merely containing a retired word is allowed', () => {
   // kills: substring matching instead of first-segment equality
   assert.equal(run('Edit', `${P}/packages/orchestration/x.ts`).block, false);
