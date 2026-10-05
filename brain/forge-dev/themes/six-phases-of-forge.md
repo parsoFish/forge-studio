@@ -55,7 +55,7 @@ Three human interaction points: Architect (ideation), Review (closeout on `/revi
 ## Sources
 
 - [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — narrative architecture.
-- [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) through [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) — per-phase docs.
+- [How forge works](../../../apps/docs/src/content/docs/how-forge-works.md) — per-phase docs.
 
 ## See also
 

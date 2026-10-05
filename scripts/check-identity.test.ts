@@ -92,6 +92,7 @@ test('every retired token is caught, case-insensitively, across the whole scanne
       'docs/x.md': 'ZEP backend\n',
       'skills/demo/SKILL.md': 'the unifier\n',
       'docs/schemas/project-config.schema.json': '{"x":"unifier"}\n',
+      'apps/docs/src/content/docs/guides/x.md': 'the unifier\n',
     },
     (r) => {
       assert.equal(r.code, 1, r.out);
@@ -102,6 +103,7 @@ test('every retired token is caught, case-insensitively, across the whole scanne
         'docs/x.md',
         'skills/demo/SKILL.md',
         'docs/schemas/project-config.schema.json',
+        'apps/docs/src/content/docs/guides/x.md',
       ]) {
         assert.match(r.out, new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${f} not reported:\n${r.out}`);
       }
@@ -243,8 +245,8 @@ test('THE RATCHET: the real repo scans clean — zero hits, zero tolerance', () 
   const r = run(ROOT);
   assert.match(r.out, /scanned \d+ file/, `expected a real scan, got: ${r.out}`);
   const scanned = Number(/scanned (\d+) file/.exec(r.out)?.[1] ?? 0);
-  // The scanned set is CLAUDE/README/ARCHITECTURE + docs/**/*.{md,json} minus the
-  // record-type exclusions + skills/**/SKILL.md — 76 files today. The floor only
+  // The scanned set is CLAUDE/README/ARCHITECTURE/PRINCIPLES + docs/**/*.{md,json}
+  // minus the record-type exclusions + the published site's pages + skills/**/SKILL.md. The floor only
   // has to prove a real scan happened, not pin the count.
   assert.ok(scanned > 50, `expected a real scan (> 50 files), got ${scanned}`);
   assert.equal(r.code, 0, `retired vocabulary still present:\n${r.out}`);

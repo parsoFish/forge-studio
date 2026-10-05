@@ -23,7 +23,7 @@ A factory runs **primarily unattended** between the gates its flow declares;
 those gates are the factory's, not the platform's. The example develop factory
 pauses at its plan gate, starts on a named operator act (kickoff from the
 roadmap card), and pauses again at its verdict and reflection gates
-([example factory](./docs/explanation/example-factory.md)).
+([example factory](./apps/docs/src/content/docs/how-forge-works.md)).
 
 Judge every change against three questions: does it preserve unattended
 operation · does a battle-tested tool already do this · is it the simplest thing

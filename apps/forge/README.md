@@ -22,5 +22,5 @@ This tree absorbed `cli/` in the M4-flows host carve; the modules are
 byte-identical, and 115 `legacy-to-package` rows closed because a legacy tree
 importing a package is debt while an assembly importing a package is the design.
 
-See [docs/explanation/architecture.md](../../docs/explanation/architecture.md) · the committed CLI reference at
+See [ARCHITECTURE.md](../../ARCHITECTURE.md) · the committed CLI reference at
 [apps/docs/src/content/docs/reference/cli.md](../../apps/docs/src/content/docs/reference/cli.md).
