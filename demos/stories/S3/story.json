@@ -568,14 +568,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardSessionId": "2026-10-03T13-06-27-109148a7"
+        "onboardSessionId": "2026-10-05T14-38-52-bc5da95f"
       },
       "data": {
         "page": "projects",
         "project-id": "story-s3",
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-10-03T13-06-27-109148a7",
+        "onboard-session-id": "2026-10-05T14-38-52-bc5da95f",
         "onboard-attaching": "false"
       },
       "expect": {
@@ -615,35 +615,33 @@
     }
   ],
   "reap": {
-    "reaped": [],
-    "skipped": [
+    "reaped": [
       {
-        "pid": 1584457,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-06-27-637-t0oj",
-        "reason": "pid 1584457: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 400725,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-05T14-38-52-119-gexs",
+        "signal": "SIGTERM",
+        "via": "descendant"
       },
       {
-        "pid": 1584456,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-06-27-637-t0oj",
-        "reason": "pid 1584456: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
-      },
-      {
-        "pid": 1584263,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-06-27-637-t0oj",
-        "reason": "pid 1584263: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
-      },
-      {
-        "pid": 1584148,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-06-27-637-t0oj",
-        "reason": "pid 1584148: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
-      },
-      {
-        "pid": 1584026,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T13-06-27-637-t0oj",
-        "reason": "pid 1584026: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 400554,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-05T14-38-52-119-gexs",
+        "signal": "SIGTERM",
+        "via": "cwd",
+        "terminatedBeforeFirstPricedEvent": 30000
       }
     ],
-    "cancelled": []
+    "skipped": [],
+    "cancelled": [
+      {
+        "dir": "_logs/_agent-onboarding-agent-2026-10-05T14-38-52-119-gexs",
+        "kind": null,
+        "sessionId": null,
+        "project": null,
+        "cancelledFrom": null,
+        "written": false,
+        "reason": "no start event names the session — nothing to terminate"
+      }
+    ]
   },
   "sweep": {
     "removed": [
@@ -693,15 +691,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 0.8248593999999997,
-    "unmeasured": false
+    "usd": null,
+    "unmeasured": "UNMEASURED — terminated before first priced event (30000 ms)"
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "4a717a1774d9a3cb74929103781895472f143ee0",
+    "dirty": false
   },
   "storyDigest": "5518aea97d8db077"
 }

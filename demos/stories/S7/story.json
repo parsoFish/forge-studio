@@ -538,10 +538,10 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-10-03T13-20-05-ae0fa7bf"
+        "authoringSessionId": "2026-10-05T14-34-54-78118321"
       },
       "data": {
-        "minted-session-id": "2026-10-03T13-20-05-ae0fa7bf"
+        "minted-session-id": "2026-10-05T14-34-54-78118321"
       },
       "expect": {
         "minted-session-id": "<authoringSessionId>"
@@ -734,16 +734,16 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookTestFireRunCount": "2",
-        "hookTestFireAt": "2026-10-02T21:28:07.463Z"
+        "hookTestFireRunCount": "1",
+        "hookTestFireAt": "2026-10-05T14:35:44.093Z"
       },
       "data": {
         "page": "hook-detail",
         "hook-id": "story-s7-hook",
-        "test-fire-at": "2026-10-02T21:28:07.463Z",
-        "test-fire-event": "SessionEnd",
         "test-fire-outcome": "ran",
-        "test-fire-run-count": "2",
+        "test-fire-run-count": "1",
+        "test-fire-at": "2026-10-05T14:35:44.093Z",
+        "test-fire-event": "SessionEnd",
         "carried-by-count": "0"
       },
       "expect": {
@@ -831,10 +831,10 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "instructionsSessionId": "2026-10-03T13-20-49-c6b333a3"
+        "instructionsSessionId": "2026-10-05T14-35-47-57d3a988"
       },
       "data": {
-        "minted-session-id": "2026-10-03T13-20-49-c6b333a3"
+        "minted-session-id": "2026-10-05T14-35-47-57d3a988"
       },
       "expect": {
         "minted-session-id": "<instructionsSessionId>"
@@ -920,13 +920,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookRunId": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
+        "hookRunId": "_agent-brain-ingest-2026-10-05T14-35-49-344-xbzp"
       },
       "data": {
         "page": "agents",
         "agent-id": "brain-ingest",
         "run-status": "running",
-        "run-id": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
+        "run-id": "_agent-brain-ingest-2026-10-05T14-35-49-344-xbzp"
       },
       "expect": {
         "page": "agents",
@@ -942,13 +942,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookRunId": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
+        "hookRunId": "_agent-brain-ingest-2026-10-05T14-35-49-344-xbzp"
       },
       "data": {
         "page": "agents",
         "agent-id": "brain-ingest",
         "run-status": "done",
-        "run-id": "_agent-brain-ingest-2026-10-03T13-20-51-845-kztc"
+        "run-id": "_agent-brain-ingest-2026-10-05T14-35-49-344-xbzp"
       },
       "expect": {
         "page": "agents",
@@ -982,12 +982,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookLastFireAt": "2026-10-03T13:21:01.304Z"
+        "hookLastFireAt": "2026-10-05T14:36:00.451Z"
       },
       "data": {
         "page": "hook-detail",
         "hook-id": "story-s7-hook",
-        "hook-last-fire-at": "2026-10-03T13:21:01.304Z",
+        "hook-last-fire-at": "2026-10-05T14:36:00.451Z",
         "hook-last-fire-outcome": "ran",
         "carried-by-count": "1"
       },
@@ -1005,14 +1005,14 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 1688403,
-        "dir": "_logs/_agent-brain-ingest-2026-10-03T13-20-51-845-kztc",
-        "reason": "pid 1688403: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 385728,
+        "dir": "_logs/_agent-brain-ingest-2026-10-05T14-35-49-344-xbzp",
+        "reason": "pid 385728: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1684879,
-        "dir": "_logs/_authoring-2026-10-03T13-20-05-ae0fa7bf",
-        "reason": "pid 1684879: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 357534,
+        "dir": "_logs/_authoring-2026-10-05T14-34-54-78118321",
+        "reason": "pid 357534: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -1069,7 +1069,7 @@
         "entries": [
           {
             "path": "SKILL.md",
-            "bytes": 3561
+            "bytes": 3925
           }
         ],
         "truncated": false,
@@ -1097,15 +1097,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 0.2510673,
+    "usd": 0.3003804,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "4a717a1774d9a3cb74929103781895472f143ee0",
+    "dirty": false
   },
   "storyDigest": "2ffdddb8d67da86f"
 }

@@ -429,13 +429,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-10-03T22-52-57-b923e7af"
+        "authoringSessionId": "2026-10-05T15-51-54-c156213f"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "authoring",
-        "minted-session-id": "2026-10-03T22-52-57-b923e7af"
+        "minted-session-id": "2026-10-05T15-51-54-c156213f"
       },
       "expect": {
         "page": "session-kickoff",
@@ -475,13 +475,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.60"
+        "authoringCostUsd": "0.58"
       },
       "data": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "authoring",
-        "ledger-cost-usd": "0.60"
+        "ledger-cost-usd": "0.58"
       },
       "expect": {
         "page": "session",
@@ -565,13 +565,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardingSessionId": "2026-10-03T22-54-24-41800227"
+        "onboardingSessionId": "2026-10-05T15-52-57-288e113a"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "onboarding",
-        "minted-session-id": "2026-10-03T22-54-24-41800227"
+        "minted-session-id": "2026-10-05T15-52-57-288e113a"
       },
       "expect": {
         "page": "session-kickoff",
@@ -651,14 +651,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.60"
+        "authoringCostUsd": "0.58"
       },
       "data": {
         "page": "monitor",
         "page-ready": "true",
         "fetch-status": "ok",
         "ledger-agent": "creation-agent",
-        "ledger-cost-usd": "0.60"
+        "ledger-cost-usd": "0.58"
       },
       "expect": {
         "page": "monitor",
@@ -672,20 +672,14 @@
   "reap": {
     "reaped": [
       {
-        "pid": 2331678,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
+        "pid": 1158464,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-05T15-52-57-831-v6h9",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 2331606,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 2331478,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
+        "pid": 1158278,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-05T15-52-57-831-v6h9",
         "signal": "SIGTERM",
         "via": "cwd",
         "terminatedBeforeFirstPricedEvent": 30000
@@ -693,14 +687,14 @@
     ],
     "skipped": [
       {
-        "pid": 2325668,
-        "dir": "_logs/_authoring-2026-10-03T22-52-57-b923e7af",
-        "reason": "pid 2325668: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1154271,
+        "dir": "_logs/_authoring-2026-10-05T15-51-54-c156213f",
+        "reason": "pid 1154271: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_agent-onboarding-agent-2026-10-03T22-54-24-828-jenf",
+        "dir": "_logs/_agent-onboarding-agent-2026-10-05T15-52-57-831-v6h9",
         "kind": null,
         "sessionId": null,
         "project": null,
@@ -755,14 +749,14 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 0.6005244999999999,
+    "usd": 0.5761415,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "3c93dd1ceebe317666c992261b1d7648f4afa10e",
+    "sha": "7896bc61b48a8531ebcca977c73fceb3506e42bf",
     "dirty": false
   },
   "storyDigest": "284fc3a6569816c8"

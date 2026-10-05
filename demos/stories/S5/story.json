@@ -450,13 +450,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runId": "_agent-story-s5-2026-10-03T13-17-51-386-chj0"
+        "runId": "_agent-story-s5-2026-10-05T14-34-25-679-sz3g"
       },
       "data": {
         "page": "agents",
         "agent-id": "story-s5",
         "run-status": "running",
-        "run-id": "_agent-story-s5-2026-10-03T13-17-51-386-chj0"
+        "run-id": "_agent-story-s5-2026-10-05T14-34-25-679-sz3g"
       },
       "expect": {
         "page": "agents",
@@ -513,9 +513,9 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 1672862,
-        "dir": "_logs/_agent-story-s5-2026-10-03T13-17-51-386-chj0",
-        "reason": "pid 1672862: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 354562,
+        "dir": "_logs/_agent-story-s5-2026-10-05T14-34-25-679-sz3g",
+        "reason": "pid 354562: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -579,15 +579,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 0.15399910000000003,
+    "usd": 0.14566500000000002,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "6dafeaa72fd9c42d34bf8eb62e9c7912456c0315",
-    "dirty": true
+    "sha": "4a717a1774d9a3cb74929103781895472f143ee0",
+    "dirty": false
   },
   "storyDigest": "c49ecc168593257a"
 }
