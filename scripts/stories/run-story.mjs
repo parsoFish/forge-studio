@@ -692,7 +692,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     // LAST, and only on an empty trailing census (row 75 × D1): see
     // `describeFixtureTeardown`'s header, fixture-ground.mjs.
     const teardown = trailing.census.empty
-      ? teardownFixtureGround(ROOT, { storyId: story.id, project: story.ground.project })
+      ? teardownFixtureGround(ROOT, { storyId: story.id, project: story.ground.project, runStamp })
       : { removed: false, error: `not torn down — ${trailing.census.reason}` };
     const td = describeFixtureTeardown(teardown, { storyId: story.id, project: story.ground.project });
     console[td.level](td.line);
