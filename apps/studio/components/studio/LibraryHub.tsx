@@ -186,7 +186,7 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
 // shortest path from the Library to a session launcher was three hops
 // (Agents index -> `[data-nav="sessions-secondary"]` -> Sessions index ->
 // its kickoff row -> the launcher); this collapses that to one hop straight
-// from the parts bin (docs/how-to/S7.md's "fourth kind of part"). The
+// from the parts bin (story S7's "fourth kind of part"). The
 // `data-action="kickoff-<kind>"` handle is the SAME one the Sessions index
 // kickoff row already uses (docs/reference/studio-dom-contract.md) — one
 // vocabulary for "start this kind of session" regardless of entry point.

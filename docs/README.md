@@ -28,19 +28,19 @@ something they read.
 |---|---|
 | [Getting started](./tutorials/getting-started.md) | Install to first merged PR: bring a project under forge, preflight it, author or reuse a flow, kick off the architect, review and merge. The five-step path for someone who has never run forge before. |
 
-The rest of `tutorials/` is **generated**, one page per operator story in
-[`tests/stories/`](../tests/stories) — see [`tutorials/README.md`](./tutorials/README.md)
-for the full, current list.
+The story walkthroughs are generated how-to pages on the docs site
+(`apps/docs/src/content/docs/guides/how-to/`); see
+[`tutorials/README.md`](./tutorials/README.md).
 
 ## How-to guides — goal-directed recipes
 
 A how-to guide assumes you already know the ground and answers one question:
 how do I get *this* specific outcome. No teaching, no theory — just the steps.
 
-Every page in `how-to/` is **generated**, one page per operator story in
-[`tests/stories/`](../tests/stories) — see [`how-to/README.md`](./how-to/README.md)
-for the full, current list. There are no hand-written how-to pages: every
-recipe forge ships is proven by a story first.
+How-to pages are **generated**, one per operator story in
+[`tests/stories/`](../tests/stories), into the docs site at
+`apps/docs/src/content/docs/guides/how-to/`. There are no hand-written how-to
+pages: every recipe forge ships is proven by a story first.
 
 ## Reference — information about the machinery
 

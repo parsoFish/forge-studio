@@ -29,7 +29,7 @@ import { makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch } from
 import {
   makeReflectionWatch, REFLECTION_TERMINAL_STATE, REFLECTION_ANSWERED_TERMINAL_STATE,
 } from './beats-reflection-terminal.mjs';
-import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { readdirSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
@@ -77,7 +77,7 @@ import {
 } from './ground-merge-accounted.mjs';
 import { containmentVerdict } from './run-story-verdict.mjs';
 import { resolveBeatRoute } from './beats.mjs';
-import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
+import { writeHowTo, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGalleryForRun, storyRowFrom, artifactSpend } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap, withPricedTerminationLabel } from './reap.mjs';
 import { reappeared } from './quiesce.mjs';
@@ -489,7 +489,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
 
   // And the fence, over everything the product wrote that carries no story id.
   const fence = applyFence(
-    fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id, story.ground?.project ?? null, { root: ROOT }),
+    fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id, story.ground?.project ?? null, { root: ROOT, docPage: relative(ROOT, docPathFor(story, ROOT)) }),
     ROOT,
   );
   fence.escapes = attributeEscapes(siblingWorktreeEscapes(ROOT, siblingsBefore), { ...descendantSampler.stop(), mainRoot: mainCheckoutRoot(ROOT) }); // T1 1225/1226
@@ -727,9 +727,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     for (const f of held.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
   }
 
-  const docPath = docPathFor(story, ROOT);
-  mkdirSync(dirname(docPath), { recursive: true });
-  writeFileSync(docPath, renderDocFragment(result));
+  const docPath = writeHowTo(result, ROOT);
 
   const row = storyRowFrom(result);
   // Row 181 (`forge-8vfn.8.5.17`) used to print this story's own

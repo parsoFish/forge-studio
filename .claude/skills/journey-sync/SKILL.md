@@ -34,12 +34,12 @@ no longer describes the surface, update BOTH.
   booting; `--story <id>`, `--costless-only`, `--ceiling`, `--approve-spend`.
 - `scripts/stories/gallery.mjs` — `storyRowFrom` / `renderGalleryIndex` /
   `regenerateGallery`, and the committed-state readers the index door uses.
-- `scripts/stories/docs-fragment.mjs` — `renderDocFragment` and `docPathFor`.
+- `scripts/stories/docs-fragment.mjs` — `renderDocFragment`, `docPathFor`,
+  `writeHowTo` (the page plus the frames it shows).
 
-**Never hardcode a doc path.** `docPathFor(story, root)` resolves it — some
-stories live under `docs/tutorials/`, others under `docs/how-to/`, and a
-hardcoded `docs/how-to/` is wrong for four of ten. That mistake has been made
-twice in this repo, both times by someone reasoning from the common case.
+**Never hardcode a doc path.** `docPathFor(story, root)` resolves it: every
+story's page is `apps/docs/src/content/docs/guides/how-to/<slug of the story
+title>.md`, so the name moves when the title does.
 
 ## Rules encoded the hard way (violate = re-learn expensively)
 

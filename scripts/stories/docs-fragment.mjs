@@ -6,128 +6,116 @@
  * docs cannot drift from each other. A doc hand-written beside a test goes
  * stale silently; a doc derived from the passing run cannot.
  *
- * Shape (operator ruling): beat = numbered step. The `act` is the heading, the
- * `say` is the prose, the captured frame is the picture, and the asserted
- * `data-*` state is a collapsible "what you should see" — so the documentation
- * and the assertion are literally the same statement.
+ * Shape: a how-to page of the published site. Each beat is one numbered step —
+ * the `act` is the (imperative) heading, the first sentence of `say` is the
+ * one line of context, and the captured frame is the picture. The asserted
+ * `data-*` state stays in the story: it is the test's contract, not the
+ * reader's.
  *
- * A RED beat is rendered as red. A story that failed must never emit a
- * confident how-to telling an operator to do something that does not work.
+ * A RED beat is marked red, and a story with any red beat says so at the top.
+ * A story that failed must never emit a confident how-to telling an operator
+ * to do something that does not work.
  */
-import { join } from 'node:path';
-import { PLACEHOLDER } from './beats-page-read.mjs';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
+import { assertSafeStoryId } from './sweep.mjs';
 
-const DIR_FOR_KIND = { tutorial: 'tutorials', 'how-to': 'how-to' };
+/** The site directory every generated how-to lands in. */
+export const HOWTO_DIR = 'apps/docs/src/content/docs/guides/how-to';
+/** The site directory a story's frames are published under (served at /media/stories/). */
+export const MEDIA_DIR = 'apps/docs/public/media/stories';
+/** The owner the site footer names on every generated page. */
+export const GENERATED_OWNER = 'parsoFish';
 
-/** ANSI SGR sequence — `\x1b[` then digits/semicolons then `m`
- *  (`\x1b[2m`, `\x1b[22m`, …). Playwright colours its own `Call log:` lines
- *  with these; pasted verbatim they are literal control bytes in markdown. */
-const ANSI_SGR = /\x1b\[[0-9;]*m/g;
-
-/**
- * A beat failure, made safe to paste verbatim into a `> - ` blockquote list
- * item (forge-8vfn.2.20). Two things break that shape, both from playwright:
- * ANSI SGR escapes around its own log lines, and a multi-line `Call log:`
- * block appended after the message. Markdown does not know what an escape
- * byte is, and a bare embedded newline ends the list item early — the rest of
- * the block then reads as loose body text.
- *
- * ORDER MATTERS: the escapes are stripped FIRST so the `\nCall log:` search
- * below sees the literal text rather than a copy with codes still inside it,
- * then the cut discards the log block (and anything after it) rather than
- * trying to reformat it, then any newline still inside the KEPT text collapses
- * to " / " so the result is always one physical line.
- */
-export function sanitiseFailure(text) {
-  const noAnsi = text.replace(ANSI_SGR, '');
-  const cutAt = noAnsi.indexOf('\nCall log:');
-  const kept = cutAt === -1 ? noAnsi : noAnsi.slice(0, cutAt);
-  return kept.replace(/\n+/g, ' / ');
+/** A page name from a story title: lowercase words joined by hyphens. */
+export function slugFor(title) {
+  const slug = String(title).toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (slug === '') throw new Error(`docs.title ${JSON.stringify(title)} yields no slug`);
+  return slug;
 }
 
-/** Where this story's doc fragment belongs, from its declared kind. */
+/** Where this story's how-to page belongs. Every story kind is a how-to on the site. */
 export function docPathFor(story, root) {
-  const dir = DIR_FOR_KIND[story.docs.kind];
-  if (dir === undefined) {
-    throw new Error(`docs.kind: no output directory for ${JSON.stringify(story.docs.kind)}`);
-  }
-  return join(root, 'docs', dir, `${story.id}.md`);
+  return join(root, HOWTO_DIR, `${slugFor(story.docs.title)}.md`);
 }
 
-function renderBeat(beat, index) {
-  const lines = [];
-  lines.push(`## ${index + 1}. ${beat.act}`);
-  lines.push('');
-  lines.push(beat.say);
-  lines.push('');
+/** Where this story's frames are copied for the site. */
+export function mediaDirFor(story, root) {
+  assertSafeStoryId(story.id); // the directory is removed whole by writeHowTo
+  return join(root, MEDIA_DIR, story.id);
+}
 
+/** The site URL of a beat's captured frame (`frames/01-x.png` → `/media/stories/<id>/01-x.png`). */
+export function frameUrl(storyId, frame) {
+  return `/media/stories/${storyId}/${basename(frame)}`;
+}
+
+/** The first sentence of a beat's narration, on one line. */
+export function firstSentence(text) {
+  const flat = String(text).replace(/\s+/g, ' ').trim();
+  const m = /^.*?[.!?](?=\s|$)/.exec(flat);
+  return m ? m[0] : flat;
+}
+
+function renderBeat(storyId, beat, index) {
+  const lines = [`## ${index + 1}. ${beat.act}`, '', firstSentence(beat.say), ''];
   if (beat.status === 'red') {
-    lines.push(`> **This step is RED — not verified working.** The run asserted state the product did not show:`);
-    lines.push('>');
-    for (const f of beat.failures) lines.push(`> - ${sanitiseFailure(f)}`);
-    lines.push('');
+    lines.push('> **This step is RED — not verified working.** The run did not see the page this step describes.', '');
   }
-
-  if (beat.frame) {
-    lines.push(`![${beat.act}](${beat.frame})`);
-    lines.push('');
-  }
-
-  const entries = Object.entries(beat.data ?? {});
-  if (entries.length > 0) {
-    lines.push('<details><summary>What you should see</summary>');
-    lines.push('');
-    for (const [attr, value] of entries) {
-      // forge-8vfn.2.27 (labelling half). `beat.expect` (see `beats.mjs`) is
-      // the RAW declared value; a `<name>` there means the product MINTED
-      // `value` at run time, so it is expected to differ on every run. Stated
-      // as a bare fact it reads as drift on the next regeneration; labelled,
-      // a reader (or an agent diffing two generated docs) knows to ignore it.
-      const declared = beat.expect?.[attr];
-      const isPlaceholder = typeof declared === 'string' && PLACEHOLDER.test(declared);
-      lines.push(
-        isPlaceholder
-          ? `- \`data-${attr}\`: \`${declared}\` (bound at run time: \`${value}\`)`
-          : `- \`data-${attr}\` is \`${value}\``,
-      );
-    }
-    lines.push('');
-    lines.push('</details>');
-    lines.push('');
-  }
+  if (beat.frame) lines.push(`![${beat.act}](${frameUrl(storyId, beat.frame)})`, '');
   return lines.join('\n');
 }
 
-/** Render the whole fragment. Pure — the caller writes it. */
-export function renderDocFragment(result) {
+/**
+ * Render the whole page. Pure — the caller writes it and copies the frames.
+ * `verifiedOn` (YYYY-MM-DD) is the run's date: the page was checked against
+ * the product by that run.
+ */
+export function renderDocFragment(result, { verifiedOn } = {}) {
+  if (typeof verifiedOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(verifiedOn)) {
+    throw new Error(`renderDocFragment: verifiedOn must be a YYYY-MM-DD date, got ${JSON.stringify(verifiedOn)}`);
+  }
   const { story, beats } = result;
+  const source = `tests/stories/${story.id}.story.mjs`;
   const anyRed = beats.some((b) => b.status === 'red');
-
-  // NOTE: no `title:` in the front matter. markdownlint's MD025 counts a
-  // front-matter title as the document's h1, so carrying both it and the `#`
-  // heading below makes every generated page fail `npm run lint` — which CI
-  // runs. The `#` heading is the title; the front matter is metadata.
   const head = [
     '---',
-    `kind: ${story.docs.kind}`,
-    `story: ${story.id}`,
-    `generated_from: tests/stories/${story.id}.story.mjs`,
+    `title: ${JSON.stringify(story.docs.title)}`,
+    `description: ${JSON.stringify(`${story.docs.title}, step by step, as recorded by a run of forge's story suite.`)}`,
+    'type: how-to',
+    `owner: ${GENERATED_OWNER}`,
+    `last_verified: ${verifiedOn}`,
+    `covers: [${source}]`,
+    `generated_from: ${source}`,
     '---',
     '',
-    `# ${story.docs.title}`,
-    '',
-    `> Generated by \`npm run stories -- --story ${story.id}\` from ` +
-      `\`tests/stories/${story.id}.story.mjs\`. Do not hand-edit — edit the story and re-run it.`,
+    `<!-- Generated by \`npm run stories -- --story ${story.id}\` from ${source}. Do not hand-edit: edit the story and re-run it. -->`,
     '',
   ];
-
   if (anyRed) {
     head.push(
-      '> **This story did not pass.** The steps marked RED below describe what the ' +
-        'operator flow is meant to do, not what it currently does.',
+      '> **This story did not pass.** The steps marked RED describe what the flow is meant to do, not what it does today.',
       '',
     );
   }
+  return `${head.join('\n')}\n${beats.map((b, i) => renderBeat(story.id, b, i)).join('\n')}`;
+}
 
-  return `${head.join('\n')}\n${beats.map(renderBeat).join('\n')}`;
+/**
+ * Write the run's how-to page and publish the frames it shows. The story's
+ * media directory is its own (`mediaDirFor`), so it is replaced whole: a frame
+ * a renamed beat no longer captures must not linger on the site.
+ */
+export function writeHowTo(result, root, now = new Date()) {
+  const { story, beats } = result;
+  const media = mediaDirFor(story, root);
+  rmSync(media, { recursive: true, force: true });
+  mkdirSync(media, { recursive: true });
+  for (const beat of beats) {
+    if (beat.frame) copyFileSync(join(root, 'demos', 'stories', story.id, beat.frame), join(media, basename(beat.frame)));
+  }
+  const page = docPathFor(story, root);
+  mkdirSync(dirname(page), { recursive: true });
+  writeFileSync(page, renderDocFragment(result, { verifiedOn: now.toISOString().slice(0, 10) }));
+  return page;
 }

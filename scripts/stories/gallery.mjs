@@ -52,10 +52,10 @@ function defaultGitSha(root) {
   return res.error === undefined && res.status === 0 ? res.stdout.trim() : null;
 }
 
-/** The three trees a story RUN writes to, excluded from the dirty check below
- *  — the pathspec `git status --porcelain -- . ':!demos/stories'
- *  ':!docs/tutorials' ':!docs/how-to'` uses. */
-const GENERATED_TREES = ['demos/stories', 'docs/tutorials', 'docs/how-to'];
+/** The three trees a story RUN writes to, excluded from the dirty check below:
+ *  its frames and story.json, its how-to page on the docs site, and the frames
+ *  published for that page. */
+const GENERATED_TREES = ['demos/stories', 'apps/docs/src/content/docs/guides/how-to', 'apps/docs/public/media/stories'];
 
 /**
  * Whether `root`'s working tree has uncommitted changes, or `null` when that

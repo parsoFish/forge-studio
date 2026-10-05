@@ -4,8 +4,8 @@
  *
  * Coordinator review of the provenance fix: `git status --porcelain` with no
  * pathspec sees every file the run's OWN prior beats already rewrote —
- * `demos/stories/<id>/story.json`, its frames, and the generated docs under
- * `docs/tutorials/` and `docs/how-to/` — so on any multi-story run, every
+ * `demos/stories/<id>/story.json`, its frames, and the generated how-to pages
+ * and their frames on the docs site — so on any multi-story run, every
  * story after the first records `dirty: true` even though nothing an
  * OPERATOR touched changed. Scoping the status to exclude those three
  * generated trees answers the question `git.dirty` exists to answer: did the
@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import { writeStoryJson, defaultGitDirty } from './gallery.mjs';
 
-test('the dirty check excludes demos/stories, docs/tutorials and docs/how-to from its pathspec', () => {
+test('the dirty check excludes demos/stories and the docs site\'s generated how-to and media trees', () => {
   let seenArgs = null;
   const run = (_cmd, args) => {
     seenArgs = args;
@@ -33,7 +33,7 @@ test('the dirty check excludes demos/stories, docs/tutorials and docs/how-to fro
   };
   defaultGitDirty('/some/root', { run });
   assert.ok(seenArgs.includes('--'), `expected a "--" pathspec separator, got: ${JSON.stringify(seenArgs)}`);
-  for (const excluded of [':!demos/stories', ':!docs/tutorials', ':!docs/how-to']) {
+  for (const excluded of [':!demos/stories', ':!apps/docs/src/content/docs/guides/how-to', ':!apps/docs/public/media/stories']) {
     assert.ok(seenArgs.includes(excluded), `expected ${excluded} in the pathspec, got: ${JSON.stringify(seenArgs)}`);
   }
 });
