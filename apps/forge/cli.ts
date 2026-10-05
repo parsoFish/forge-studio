@@ -157,27 +157,22 @@ process.env['PATH'] = forgeBinOnPath(FORGE_ROOT, process.env['PATH']); // 6.11.2
 
 function cmdHelp(): void {
   console.log(
-    `forge — autonomous multi-agent orchestrator
+    `forge — construction platform for agentic software factories
 
 Usage:
   forge init                              Scaffold a runnable install (forge.config.json + _queue/ layout) and check the environment
-  forge studio [--bridge-only] [--no-open] [--dev] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
-                                          Bring up the forge operator UI — the SOLE operator surface (DEC-6).
-                                          Run a cycle, review/approve, recover a stuck initiative, inspect cost +
-                                          events + artifacts: all in the browser. Foreground (Ctrl-C quits).
-                                          Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over any
-                                          previous forge process so a pinned browser tab auto-reconnects).
+  forge studio [--bridge-only] [--no-open] [--dev] [--attach|--no-takeover] [--force-takeover] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+                                          Bring up Studio, the operator UI: run a cycle, review and approve, recover a
+                                          stuck initiative, inspect cost, events and artifacts. Foreground (Ctrl-C quits).
+                                          Defaults: bridge=4123, ui=4124. A second \`forge studio\` attaches to a healthy
+                                          forge bridge; --force-takeover replaces it.
                                           Serves a production build by default (\`next build\` once, then
                                           \`next start\`); pass --dev to keep the \`next dev\` dev-server path.
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
   forge preflight <project-name | path>    Check a managed project against the forge<->project contract; exit non-zero on an unmet hard clause
 
-S9/DEC-6: the CLI is retired as the operator surface. Cycle management, review, and
-recovery (cycle / enqueue / metrics / review / report / log / requeue) now live in the
-UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
-Run \`forge studio\` and drive everything from the browser.
-
-For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see DECISIONS.md.`,
+Cycle management, review and recovery are in Studio. Run \`forge studio\` and use the browser.
+For how a factory works, see the How forge works page of the docs site.`,
   );
 }
 
@@ -402,9 +397,9 @@ async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): P
   Bring up the forge operator UI at http://localhost:4124 (foreground; Ctrl-C quits).
   Awaits a health probe on the bridge then the UI before opening the browser,
   then emits a deterministic 'forge-studio-ready {json}' line on stdout.
-  By default a second \`forge studio\` ATTACHES read-only to a healthy running
-  bridge (the agent's session stays alive); only a free/stale/foreign port is
-  taken over so a pinned browser tab auto-reconnects via WebSocket backoff.
+  By default a second \`forge studio\` attaches read-only to a healthy forge
+  bridge and leaves it running. A free, stale or foreign port is taken over, so
+  a pinned browser tab reconnects on its own.
     --bridge-only    Run only the WebSocket bridge (no Next.js server).
     --no-open        Skip launching the browser.
     --dev            Serve via \`next dev\` instead of a production build (default:

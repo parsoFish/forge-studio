@@ -237,6 +237,9 @@ jobs:
         env:
           ASTRO_TELEMETRY_DISABLED: "1"
 
+      - name: Generated reference is current (config + CLI)
+        run: node scripts/docs-gen.mjs --check
+
       - name: Docs word ceilings (blocking on apps/docs)
         run: node scripts/check-docs-budget.mjs --strict
 
