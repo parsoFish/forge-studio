@@ -31,7 +31,7 @@
   "apps/studio/tests/integration/agent-ledger.test.ts": 1205,
   "apps/studio/tests/integration/session-artifact-view.test.ts": 1270,
   "apps/studio/tests/unit/community-view.test.ts": 867,
-  "apps/studio/tests/unit/history-ledger.test.ts": 892,
+  "apps/studio/tests/unit/history-ledger.test.ts": 891,
   "apps/studio/tests/unit/home-view.test.ts": 1071,
   "apps/studio/tests/unit/session-client.test.ts": 1259,
   "packages/stations/phases/developer-loop.ts": 1831,

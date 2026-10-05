@@ -24,7 +24,7 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 //
 // Its own file rather than more lines in `FlowHeader`: that file is 688 lines
 // against an 800-line cap, and its sibling `FlowBuilderCanvas` is at 799 with
-// no baseline. Contract: `docs/reference/studio-dom-contract.md`.
+// no baseline. Contract: `dev/studio-dom-contract.md`.
 // ---------------------------------------------------------------------------
 
 export function FlowStarterSeed() {

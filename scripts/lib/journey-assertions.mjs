@@ -136,8 +136,8 @@ export function sessionIdSegment(sid, who) {
  * PUBLISH AND STAY — read the id a surface just MINTED, off the handle it
  * renders. TWO FAMILIES of handle exist, which is why both the selector and the
  * attribute are arguments rather than constants
- * (`docs/reference/studio-dom-contract.md`, "A minted id is rendered BEFORE the
- * navigation that consumes it" / "Publish, never navigate"):
+ * (a minted id is rendered BEFORE the navigation that consumes it —
+ * publish, never navigate; see `.claude/rules/studio-ui.md`):
  *
  *   `data-minted-session-id` + `a[data-action="open-minted-session"]`, at four
  *   sites (generic kickoff, authoring launcher, instructions kickoff, architect

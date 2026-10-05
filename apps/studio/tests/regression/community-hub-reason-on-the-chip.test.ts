@@ -40,7 +40,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const BROWSE_PAGE = resolve(__dirname, '../../app/community/page.tsx');
-const DOM_CONTRACT = resolve(__dirname, '../../../../docs/reference/studio-dom-contract.md');
+const DOM_INVENTORY = resolve(__dirname, '../../../../dev/studio-dom-contract.md');
 
 /** Block comments and whole-line `//` comments only — never a mid-line `//`,
  *  which would truncate a line carrying an `https://` URL. */
@@ -101,14 +101,12 @@ test('the count span carries no data-hub-reason of its own', () => {
   }
 });
 
-test('the DOM contract names the chip, not the span', () => {
-  // journey-sync: the attribute, the doc and the journey move together. A doc
-  // that still says "the chip's count span" would send the next reader to the
-  // node this defect lived on.
-  const doc = readFileSync(DOM_CONTRACT, 'utf8');
-  const at = doc.indexOf('[data-hub-reason]');
-  expect(at).toBeGreaterThan(-1);
-  const around = doc.slice(at, at + 400);
-  expect(around).not.toContain('count span');
-  expect(around).toMatch(/chip button|chip itself|beside `data-hub-id`/);
+test('the generated DOM inventory attributes data-hub-reason to the browse page', () => {
+  // journey-sync: the attribute, the inventory and the journey move together.
+  // The inventory is generated from source (node scripts/dev-gen.mjs), so a
+  // stale one means the attribute moved without the inventory being re-run.
+  const doc = readFileSync(DOM_INVENTORY, 'utf8');
+  const row = doc.split('\n').find((l) => l.startsWith('| `data-hub-reason` |'));
+  expect(row).toBeDefined();
+  expect(row).toContain('apps/studio/app/community/page.tsx');
 });
