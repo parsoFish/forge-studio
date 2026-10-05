@@ -155,3 +155,63 @@ test('CLI unknown flag or missing --report exits 2', () => {
   assert.equal(run('--bogus').status, 2);
   assert.equal(run().status, 2);
 });
+
+const SITE = 'apps/docs/src/content/docs';
+const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
+const sitePage = (type: string, body: string, extra = '') => `---\ntitle: T\ntype: ${type}\n${extra}---\n\n${body}\n`;
+
+test('CLI --strict: a site guide over its 1,000-word ceiling fails and is named', () => {
+  const root = makeRoot({
+    [`${SITE}/guides/long.md`]: sitePage('guide', words(1001)),
+    [`${SITE}/guides/short.md`]: sitePage('guide', words(10)),
+    'docs/how-to/legacy.md': words(5000), // legacy tree: never judged by --strict
+  });
+  try {
+    const r = run('--strict', '--root', root);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /guides\/long\.md: 1001 words, ceiling 1000/);
+    assert.doesNotMatch(r.stderr, /short\.md|legacy\.md/);
+    assert.match(r.stdout, /== summary ==/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CLI --strict: at the ceiling passes; the legacy docs/ tree is not judged', () => {
+  const root = makeRoot({
+    [`${SITE}/guides/at.md`]: sitePage('guide', words(1000)),
+    [`${SITE}/reference/r.md`]: sitePage('reference', words(2000)),
+    'docs/how-to/legacy.md': words(5000),
+  });
+  try {
+    const r = run('--strict', '--root', root);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /check-docs-budget: PASS — 2 site pages within their ceilings/);
+    assert.doesNotMatch(r.stdout, /legacy\.md/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CLI --strict: more than 20 hand-written guides fails; generated how-tos do not count', () => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 21; i++) files[`${SITE}/guides/g${i}.md`] = sitePage('guide', 'x');
+  for (let i = 0; i < 5; i++) {
+    files[`${SITE}/guides/how-to/h${i}.md`] = sitePage('how-to', 'x', 'generated_from: tests/stories/s.story.mjs\n');
+  }
+  const root = makeRoot(files);
+  try {
+    const r = run('--strict', '--root', root);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /21 hand-written guides, cap 20/);
+    rmSync(join(root, SITE, 'guides/g20.md'));
+    const ok = run('--strict', '--root', root);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CLI: --report and --strict together is bad usage', () => {
+  assert.equal(run('--report', '--strict').status, 2);
+});

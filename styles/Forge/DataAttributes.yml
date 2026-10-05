@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' is a test attribute. Guides describe what the reader sees, not the DOM contract."
+level: error
+nonword: true
+scope: raw
+tokens:
+  - '\bdata-[a-z][a-z-]*'

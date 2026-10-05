@@ -69,6 +69,16 @@ test('rule 2 — apps/studio imports contracts and nothing else', () => {
   assert.equal(classify('apps/studio/lib/x.ts', 'orchestrator/config.ts'), 'studio-beyond-contracts');
 });
 
+test('rule 5 — apps/docs imports nothing from the product (R20)', () => {
+  assert.equal(classify('apps/docs/src/x.ts', 'apps/docs/src/freshness.mjs'), null);
+  assert.equal(classify('apps/docs/src/x.ts', 'node_modules/astro/index.js'), null);
+  assert.equal(classify('apps/docs/src/x.ts', 'packages/contracts/index.ts'), 'docs-app-imports-product');
+  assert.equal(classify('apps/docs/astro.config.mjs', 'packages/kernel/config.ts'), 'docs-app-imports-product');
+  assert.equal(classify('apps/docs/src/x.ts', 'apps/forge/cli.ts'), 'docs-app-imports-product');
+  assert.equal(classify('apps/docs/src/x.ts', 'apps/studio/lib/y.ts'), 'docs-app-imports-product');
+  assert.equal(classify('apps/docs/src/x.ts', 'orchestrator/config.ts'), 'docs-app-imports-product');
+});
+
 test('rule 3 — legacy never reaches a package', () => {
   assert.equal(classify('orchestrator/cycle.ts', 'packages/flows/index.ts'), 'legacy-to-package-not-via-shim');
   assert.equal(classify('cli/ui-bridge.ts', 'packages/kernel/index.ts'), 'legacy-to-package-not-via-shim');
@@ -135,6 +145,7 @@ test('every rule kind is producible by classify(), and nothing else is', () => {
     'legacy-to-package-not-via-shim',
     'package-layer-order',
     'unknown-package',
+    'docs-app-imports-product',
   ]);
   // Every kind in the set is REACHABLE, so the vocabulary is proven, not
   // asserted — `unknown-package` included.
@@ -146,6 +157,7 @@ test('every rule kind is producible by classify(), and nothing else is', () => {
     classify('cli/x.ts', 'packages/kernel/y.ts'),
     classify('packages/contracts/x.ts', 'packages/flows/y.ts'),
     classify('packages/nosuchpkg/x.ts', 'packages/kernel/y.ts'),
+    classify('apps/docs/src/x.ts', 'packages/contracts/y.ts'),
   ]);
   assert.deepEqual([...produced].sort(), [...KINDS].sort(),
     'every rule kind must be producible by classify(), and vice versa');
@@ -263,6 +275,20 @@ test('it FAILS on a NEW studio → beyond-contracts import (the defect it exists
     assert.equal(code, 1, `a new apps/studio -> non-contracts package import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__boundary_probe__\.ts/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('it FAILS on an apps/docs file importing @forge/contracts (R20, driven through the real cruise)', () => {
+  const { root, cleanup } = boundaryFixture({
+    'packages/contracts/index.ts': 'export const x = 1;\n',
+    'apps/docs/src/__docs_probe__.ts': "import { x } from '@forge/contracts';\nexport const probe = x;\n",
+  });
+  try {
+    const { code, out } = run(['--root', root]);
+    assert.equal(code, 1, `an apps/docs -> @forge/contracts import must fail — got exit 0:\n${out}`);
+    assert.match(out, /docs-app-imports-product: apps\/docs\/src\/__docs_probe__\.ts -> packages\/contracts/);
   } finally {
     cleanup();
   }

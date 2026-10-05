@@ -73,6 +73,13 @@ const STUDIO = /^apps\/studio\//;
  * though they had been fixed.
  */
 const ASSEMBLY = /^apps\/forge\//;
+/**
+ * The published docs site (R20). It documents the product and imports none of
+ * it — no package, no other app, no legacy tree — so it can build, and be
+ * deleted or replaced, without touching forge's code.
+ */
+const DOCS_APP = /^apps\/docs\//;
+const PRODUCT = /^(packages|apps\/(?!docs\/)[^/]+|orchestrator|cli|loops)\//;
 const PACKAGE = /^packages\/([^/]+)\//;
 
 /**
@@ -102,6 +109,9 @@ export function classify(from, to) {
     if (LEGACY.test(to)) return 'studio-beyond-contracts';
     if (toPkg && toPkg !== 'contracts') return 'studio-beyond-contracts';
   }
+
+  // 5. apps/docs imports nothing from the product (R20).
+  if (DOCS_APP.test(from) && PRODUCT.test(to)) return 'docs-app-imports-product';
 
   // 3. legacy never imports a package.
   //
@@ -190,7 +200,8 @@ async function edges(root) {
   const scope = SCOPE.filter((d) => existsSync(join(root, d)));
   const result = await cruise(scope, {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: 'node_modules|\\.next' },
+    // apps/docs/dist and .astro are build output (prerender chunks, generated types).
+    exclude: { path: 'node_modules|\\.next|apps/docs/(dist|\\.astro)/' },
     tsPreCompilationDeps: true,
     baseDir: root,
   });

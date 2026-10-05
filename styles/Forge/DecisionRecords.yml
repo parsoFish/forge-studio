@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' cites a decision record. Published pages state current behaviour; decisions live in DECISIONS.md."
+level: error
+ignorecase: true
+tokens:
+  - 'ADR[ -]?\d+'
+  - 'docs/decisions/'

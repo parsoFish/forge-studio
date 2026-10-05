@@ -52,6 +52,9 @@ from are archived at the git tag `pre-docs-refactor`.
 | D-36 | The plan gate rejects a manifest whose class the target flow does not accept, and flags a body that prescribes sizing or a gate command | The class selects the gates, so it is checked before any spend | packages/flows/plan-gate-class-check.test.ts |
 | D-37 | Docs word budgets are ceilings, never targets: guide 1,000 · how-to 800 · explanation and reference prose 2,000 · landing 600 words; at most 20 hand-written guides; budgets only ratchet down | A smaller page that answers the reader is worth more; the report shows every page and the median so short pages stay visible (operator ruling R22, replacing the 25-page cap) | scripts/check-docs-budget.mjs |
 | D-38 | A change that conflicts with SPEC.md or DECISIONS.md updates them in the same PR as the code, with the operator's approval | The ledger stays current only if it moves with the code it governs (operator ruling R24) | review |
+| D-39 | The docs site is Astro + Starlight with exactly four plugins (sidebar topics, links validator, llms.txt, page actions), pinned to exact versions and bumped by Renovate; Vale and lychee lint it in CI; anything else is a new dependency | A static site from markdown needs no server, and each extra plugin is a maintenance liability (operator ruling R14) | review |
+| D-40 | `apps/docs` imports nothing from the product: no package, no other app, no legacy tree | The site documents forge and must build, move or be replaced without touching its code (operator ruling R20) | scripts/check-boundaries.mjs |
+| D-41 | A generated page (`generated_from:`, the story how-tos) is never hand-edited; change the story and re-run it | A hand edit drifts from the run that proves the page, and the next regeneration erases it | scripts/hooks/guard-paths.mjs; scripts/check-docs-shape.mjs |
 
 ## Rejected — don't re-propose
 

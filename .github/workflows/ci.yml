@@ -203,3 +203,54 @@ jobs:
           path: demos/stories
           if-no-files-found: warn
 
+
+  # The published docs site (apps/docs). Builds static and uploads the build as
+  # an artifact only; publishing is the operator's hosting gate, not CI's.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `astro sync` + tsc, not `astro check`: @astrojs/check is outside the
+      # ratified dependency set (R14), so .astro files are not type-checked.
+      - name: Docs typecheck
+        run: npm run typecheck --workspace=docs
+
+      - name: Docs build (frontmatter schema + internal links)
+        run: npm run build --workspace=docs
+        env:
+          ASTRO_TELEMETRY_DISABLED: "1"
+
+      - name: Docs word ceilings (blocking on apps/docs)
+        run: node scripts/check-docs-budget.mjs --strict
+
+      - name: Docs markdown twins
+        run: node scripts/check-docs-md-twins.mjs
+
+      - name: Install Vale 3.24.0 (checksum-pinned)
+        run: |
+          curl -sSfL -o vale.tgz https://github.com/errata-ai/vale/releases/download/v3.24.0/vale_3.24.0_Linux_64-bit.tar.gz
+          echo "867534ddb678abca7f214bc4706ead0922bd5252ffe8035fc227013f66c8b214  vale.tgz" | sha256sum -c -
+          tar xzf vale.tgz vale
+          rm vale.tgz
+
+      - name: Vale (banned content on guides and reference)
+        run: ./vale sync && ./vale apps/docs/src/content/docs
+
+      - name: Upload docs build
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: apps/docs/dist
+          if-no-files-found: error
