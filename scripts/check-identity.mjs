@@ -10,6 +10,7 @@
  * when a CURRENT-STATE doc, skill or README still narrates one of them.
  *
  * Scanned: CLAUDE.md, README.md, ARCHITECTURE.md, PRINCIPLES.md, docs/**\/*.{md,json},
+ * the published site's pages (apps/docs/src/content/docs/**\/*.{md,mdx}),
  * skills/**\/SKILL.md — enumerated with `git ls-files`, so only TRACKED files
  * count. A checker must scan the REPO, not the working directory: walking the
  * tree made this gate red on the operator's checkout (gitignored local notes
@@ -76,6 +77,7 @@ const EXCLUDED_FILES = new Map([
 const SCANNED = [
   { pathspec: ['CLAUDE.md', 'README.md', 'ARCHITECTURE.md', 'PRINCIPLES.md'], keep: () => true },
   { pathspec: ['docs'], keep: (p) => p.endsWith('.md') || p.endsWith('.json') },
+  { pathspec: ['apps/docs/src/content/docs'], keep: (p) => p.endsWith('.md') || p.endsWith('.mdx') },
   { pathspec: ['skills'], keep: (p) => p.endsWith('SKILL.md') },
 ];
 

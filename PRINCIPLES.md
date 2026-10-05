@@ -34,7 +34,7 @@ The rejected-alternatives rows (R-xx) in [`DECISIONS.md`](./DECISIONS.md) are al
 **Codified by:**
 - [D-08](./DECISIONS.md) (the phase-isolation decision stands; the earlier per-phase `benchmarks/` realization was retired 2026-05-25 in favour of real-cycle outcomes)
 - The phase-isolation decision stands; the synthetic per-phase benchmark suites were removed 2026-05-25. Phase quality is now judged on real merged cycles (brain themes accumulate the evidence).
-- Each station's success signals are recorded in [`docs/explanation/example-factory.md`](./docs/explanation/example-factory.md).
+- Each station's success signals are recorded in [`apps/docs/src/content/docs/how-forge-works.md`](apps/docs/src/content/docs/how-forge-works.md).
 
 ---
 
