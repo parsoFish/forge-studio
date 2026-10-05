@@ -130,6 +130,9 @@ jobs:
       - name: Stale path citations ratchet (bead forge-8vfn.13)
         run: node scripts/check-stale-path-citations.mjs
 
+      - name: Decision-record citations ratchet (falls to zero)
+        run: node scripts/check-adr-citations.mjs
+
       # ADR 048 clause 3 — deleting the example package leaves the platform
       # running, proven by execution. The deletion happens in a throwaway `git
       # worktree` and the checkout is asserted untouched either side (bead
