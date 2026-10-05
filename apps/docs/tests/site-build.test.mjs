@@ -48,7 +48,8 @@ function buildWith(name, contents) {
       env: { ...process.env, ASTRO_TELEMETRY_DISABLED: '1' },
       timeout: 120_000,
     });
-    return { status: r.status, out: `${r.stdout}\n${r.stderr}` };
+    // CI sets FORCE_COLOR; the assertions read the text, not the colour codes.
+    return { status: r.status, out: `${r.stdout}\n${r.stderr}`.replace(/\x1b\[[0-9;]*m/g, '') };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

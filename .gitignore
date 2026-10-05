@@ -213,5 +213,5 @@ _1.0
 demos/stories/**/*.webm
 
 # Vale packages fetched by `vale sync` (.vale.ini Packages) — not source.
-styles/Google/
-styles/write-good/
+apps/docs/vale/Google/
+apps/docs/vale/write-good/

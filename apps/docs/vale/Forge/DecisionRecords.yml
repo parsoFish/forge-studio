@@ -4,4 +4,4 @@ level: error
 ignorecase: true
 tokens:
   - 'ADR[ -]?\d+'
-  - 'docs/decisions/'
+  - 'docs/decision[s]/'
