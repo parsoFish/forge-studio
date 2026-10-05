@@ -10,13 +10,11 @@
     "testProcess": {
       "type": "object",
       "description": "The test commands forge runs: a fast `local` gate on each work item, an optional full `ci` gate before a pull request opens, and an optional `acceptance` tier for live systems.",
-      "additionalProperties": false,
       "properties": {
         "local": {
           "type": "object",
           "description": "The fast gate forge runs on each work item between iterations. It must exit 0 on a green tree. When `cmd` is missing here, forge reads it from the `.forge/quality_gate_cmd` file (one command line split on whitespace); `cmd` in `project.json` wins when both exist. With neither, loading fails.",
           "required": ["cmd"],
-          "additionalProperties": false,
           "properties": {
             "cmd": {
               "type": "array",
@@ -39,7 +37,6 @@
           "type": "object",
           "description": "The full CI verification, run once as the last gate before a pull request opens. It mirrors the project's CI workflow. The command runs directly, so a `[\"bash\",\"-c\",\"a && b\"]` chain is allowed here.",
           "required": ["cmd"],
-          "additionalProperties": false,
           "properties": {
             "cmd": {
               "type": "array",
@@ -53,7 +50,12 @@
             },
             "unsetEnv": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string",
+                "not": {
+                  "enum": ["PATH", "HOME", "SHELL"]
+                }
+              },
               "description": "Environment variable names removed when running `cmd` and `fixCmd`, so the gate runs the same way as CI. Use it for variables that switch on live tests, such as `TF_ACC`. `PATH`, `HOME` and `SHELL` are refused."
             },
             "timeoutMs": {
@@ -67,15 +69,20 @@
           "type": "object",
           "description": "The live-acceptance tier, for projects whose behaviour only a live system can prove. Whether an initiative must pass it depends on the acceptance setting of its change class. A `required` key is refused.",
           "required": ["match"],
-          "additionalProperties": false,
           "properties": {
             "match": {
               "type": "string",
-              "description": "Text that marks a work item's gate as live acceptance: a gate matches when any argv token contains it, for example `acceptancetests`. Must not be empty."
+              "description": "Text that marks a work item's gate as live acceptance: a gate matches when any argv token contains it, for example `acceptancetests`. Must not be empty.",
+              "minLength": 1,
+              "pattern": "\\S"
             },
             "requiresEnv": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
               "description": "Environment variables that must be set for a matching gate to run live, for example `[\"TF_ACC\"]`. When one is unset, the gate fails instead of passing on a skipped test run. Entries must not be empty."
             },
             "timeoutMs": {
@@ -83,9 +90,13 @@
               "exclusiveMinimum": 0,
               "description": "Reserved. Acceptance gates run as work-item gates, so `FORGE_GATE_TIMEOUT_MS` applies."
             }
+          },
+          "not": {
+            "required": ["required"]
           }
         }
-      }
+      },
+      "required": ["local"]
     },
     "standing_work_item_acs": {
       "type": "array",
@@ -112,7 +123,6 @@
       "items": {
         "type": "object",
         "required": ["kind", "text"],
-        "additionalProperties": false,
         "properties": {
           "kind": {
             "type": "string",
@@ -122,6 +132,10 @@
           "text": {
             "type": "string",
             "description": "Description of the step."
+          },
+          "element": {
+            "type": "string",
+            "description": "Name of a demo element from the demo element library, for a composed demo."
           }
         }
       }
@@ -139,10 +153,30 @@
       "type": "string",
       "description": "Project-relative directory that holds the forge artifacts committed in the project repository. Must be a relative path with no leading slash, no backslash and no `..` segment. A value of `.` or an empty string means the project root."
     },
+    "appType": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Id of the app-type template the project was created from."
+    },
+    "buildProcess": {
+      "type": "object",
+      "description": "How the project builds. Both fields are optional.",
+      "properties": {
+        "local": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Build command as an argv array. An empty array counts as unset."
+        },
+        "remote": {
+          "type": "string",
+          "description": "Worktree-relative path to the CI workflow file. No leading slash, backslash or `..` segment."
+        }
+      }
+    },
     "logging": {
       "type": "object",
       "description": "Logging settings.",
-      "additionalProperties": false,
       "properties": {
         "heartbeat_seconds": {
           "type": "number",
@@ -154,8 +188,6 @@
     "metrics": {
       "type": "object",
       "description": "Metrics command and baseline settings.",
-      "required": ["command", "baselines_dir", "tolerance_pct"],
-      "additionalProperties": false,
       "properties": {
         "command": {
           "type": "array",
@@ -175,8 +207,6 @@
     "sweep": {
       "type": "object",
       "description": "Parameter-sweep hooks.",
-      "required": ["start_command", "draw_function", "measurement_extractor"],
-      "additionalProperties": false,
       "properties": {
         "start_command": {
           "type": "array",
@@ -197,7 +227,6 @@
       "type": "object",
       "description": "Release preparation that forge does in a cycle before merge. Tagging and publishing are left to CI.",
       "required": ["steps"],
-      "additionalProperties": false,
       "properties": {
         "steps": {
           "type": "array",
@@ -205,7 +234,6 @@
           "items": {
             "type": "object",
             "required": ["kind", "phase", "text"],
-            "additionalProperties": false,
             "properties": {
               "kind": {
                 "type": "string",

@@ -15,7 +15,13 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 ```json
 {
-  "testProcess": {}
+  "testProcess": {
+    "local": {
+      "cmd": [
+        "text"
+      ]
+    }
+  }
 }
 ```
 
@@ -32,6 +38,8 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `skills` | array of string | no | - | Skill names bound to this project. |
 | `kb` | string or null | no | - | Knowledge base id bound to this project, or `null` for none. |
 | `artifactRoot` | string | no | - | Project-relative directory that holds the forge artifacts committed in the project repository. Must be a relative path with no leading slash, no backslash and no `..` segment. A value of `.` or an empty string means the project root. |
+| `appType` | string | no | - | Id of the app-type template the project was created from. |
+| `buildProcess` | object | no | - | How the project builds. Both fields are optional. |
 | `logging` | object | no | - | Logging settings. |
 | `metrics` | object | no | - | Metrics command and baseline settings. |
 | `sweep` | object | no | - | Parameter-sweep hooks. |
@@ -41,7 +49,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `local` | object | no | - | The fast gate forge runs on each work item between iterations. It must exit 0 on a green tree. When `cmd` is missing here, forge reads it from the `.forge/quality_gate_cmd` file (one command line split on whitespace); `cmd` in `project.json` wins when both exist. With neither, loading fails. |
+| `local` | object | yes | - | The fast gate forge runs on each work item between iterations. It must exit 0 on a green tree. When `cmd` is missing here, forge reads it from the `.forge/quality_gate_cmd` file (one command line split on whitespace); `cmd` in `project.json` wins when both exist. With neither, loading fails. |
 | `ci` | object | no | - | The full CI verification, run once as the last gate before a pull request opens. It mirrors the project's CI workflow. The command runs directly, so a `["bash","-c","a && b"]` chain is allowed here. |
 | `acceptance` | object | no | - | The live-acceptance tier, for projects whose behaviour only a live system can prove. Whether an initiative must pass it depends on the acceptance setting of its change class. A `required` key is refused. |
 
@@ -76,6 +84,14 @@ A project's forge configuration, stored at `.forge/project.json`.
 | --- | --- | --- | --- | --- |
 | `kind` | string | yes | - | What the step does: `capture` records evidence, `verify` checks it, `present` attaches it to the pull request. |
 | `text` | string | yes | - | Description of the step. |
+| `element` | string | no | - | Name of a demo element from the demo element library, for a composed demo. |
+
+### buildProcess
+
+| Name | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `local` | array of string | no | - | Build command as an argv array. An empty array counts as unset. |
+| `remote` | string | no | - | Worktree-relative path to the CI workflow file. No leading slash, backslash or `..` segment. |
 
 ### logging
 
@@ -87,17 +103,17 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `command` | array of string | yes | - | Command as an argv array that prints scalar metrics to stdout. |
-| `baselines_dir` | string | yes | - | Directory of locked baseline files. |
-| `tolerance_pct` | number | yes | - | Percentage drift allowed before a regression is flagged. |
+| `command` | array of string | no | - | Command as an argv array that prints scalar metrics to stdout. |
+| `baselines_dir` | string | no | - | Directory of locked baseline files. |
+| `tolerance_pct` | number | no | - | Percentage drift allowed before a regression is flagged. |
 
 ### sweep
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `start_command` | array of string | yes | - | Command as an argv array that starts the test bed. |
-| `draw_function` | string | yes | - | Worktree-relative path to a module that exports a sample-draw function. |
-| `measurement_extractor` | string | yes | - | Worktree-relative path to a module that parses the output of `metrics.command`. |
+| `start_command` | array of string | no | - | Command as an argv array that starts the test bed. |
+| `draw_function` | string | no | - | Worktree-relative path to a module that exports a sample-draw function. |
+| `measurement_extractor` | string | no | - | Worktree-relative path to a module that parses the output of `metrics.command`. |
 
 ### releaseProcess
 
@@ -121,30 +137,24 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 - The top level requires `testProcess`.
 - The top level allows unknown keys.
-- `testProcess` rejects unknown keys.
+- `testProcess` requires `local`.
 - `testProcess.local` requires `cmd`.
-- `testProcess.local` rejects unknown keys.
 - `testProcess.local.timeoutMs` must be greater than 0.
 - `testProcess.ci` requires `cmd`.
-- `testProcess.ci` rejects unknown keys.
+- Each entry of `testProcess.ci.unsetEnv` is none of `PATH`, `HOME`, `SHELL`.
 - `testProcess.ci.timeoutMs` must be greater than 0.
 - `testProcess.acceptance` requires `match`.
-- `testProcess.acceptance` rejects unknown keys.
+- `testProcess.acceptance` refuses the key `required`.
+- `testProcess.acceptance.match` is not blank.
+- Each entry of `testProcess.acceptance.requiresEnv` is not blank.
 - `testProcess.acceptance.timeoutMs` must be greater than 0.
 - `repo` matches `^[\w.-]+/[\w.-]+$`.
 - `northStar` is at most 140 characters.
 - `demoProcess[]` requires `kind`, `text`.
-- `demoProcess[]` rejects unknown keys.
 - `demoProcess[].kind` is one of `capture`, `verify`, `present`.
-- `logging` rejects unknown keys.
+- `appType` is not blank.
 - `logging.heartbeat_seconds` must be greater than 0.
-- `metrics` requires `command`, `baselines_dir`, `tolerance_pct`.
-- `metrics` rejects unknown keys.
-- `sweep` requires `start_command`, `draw_function`, `measurement_extractor`.
-- `sweep` rejects unknown keys.
 - `releaseProcess` requires `steps`.
-- `releaseProcess` rejects unknown keys.
 - `releaseProcess.steps[]` requires `kind`, `phase`, `text`.
-- `releaseProcess.steps[]` rejects unknown keys.
 - `releaseProcess.steps[].kind` is one of `docs`, `changelog`, `version`.
 - `releaseProcess.steps[].phase` is one of `in-cycle`, `pre-merge`.

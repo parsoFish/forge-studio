@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateProjectConfig } from '../packages/projects/project-config.ts';
 // @ts-ignore -- plain .mjs module
 import { SOURCES, renderProjectJson, generate } from './docs-gen.mjs';
 
@@ -130,4 +131,19 @@ test('the committed page matches the committed schema', () => {
   const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
   const r = run(['--root', repo, '--check']);
   assert.equal(r.status, 0, r.stderr);
+});
+
+test('the generated Shape example is a config the validator accepts', () => {
+  const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const md = readFileSync(join(repo, PAGE), 'utf8');
+  const m = md.match(/## Shape\n\n```json\n([\s\S]*?)\n```/);
+  assert.ok(m, 'Shape block present');
+  const cfg = validateProjectConfig(JSON.parse(m[1]));
+  assert.ok(cfg.testProcess.local.cmd.length > 0);
+});
+
+test('limits state the refused key and the blocked env names', () => {
+  const md = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', PAGE), 'utf8');
+  assert.match(md, /`testProcess\.acceptance` refuses the key `required`/);
+  assert.match(md, /`PATH`, `HOME`, `SHELL`/);
 });

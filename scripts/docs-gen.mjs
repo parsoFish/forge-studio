@@ -80,6 +80,17 @@ function table(obj) {
   return ['| Name | Type | Required | Default | Description |', '| --- | --- | --- | --- | --- |', ...rows].join('\n');
 }
 
+function valueLimits(node, label, lines) {
+  if (node.enum) lines.push(`- ${label} is one of ${node.enum.map(code).join(', ')}.`);
+  if (node.not?.enum) lines.push(`- ${label} is none of ${node.not.enum.map(code).join(', ')}.`);
+  if (node.pattern === '\\S') lines.push(`- ${label} is not blank.`);
+  else if (node.pattern) lines.push(`- ${label} matches ${code(node.pattern)}.`);
+  if (node.minLength === 1 && node.pattern !== '\\S') lines.push(`- ${label} is not empty.`);
+  else if (node.minLength > 1) lines.push(`- ${label} is at least ${node.minLength} characters.`);
+  if (node.exclusiveMinimum !== undefined) lines.push(`- ${label} must be greater than ${node.exclusiveMinimum}.`);
+  if (node.maxLength !== undefined) lines.push(`- ${label} is at most ${node.maxLength} characters.`);
+}
+
 function limits(schema) {
   const lines = [];
   const walk = (obj, path) => {
@@ -87,12 +98,11 @@ function limits(schema) {
     if (obj.required?.length) lines.push(`- ${at} requires ${obj.required.map(code).join(', ')}.`);
     if (obj.additionalProperties === false) lines.push(`- ${at} rejects unknown keys.`);
     else if (obj.additionalProperties === true) lines.push(`- ${at} allows unknown keys.`);
+    if (obj.not?.required) lines.push(`- ${at} refuses the key ${obj.not.required.map(code).join(', ')}.`);
     for (const [name, node] of Object.entries(obj.properties ?? {})) {
       const p = (path ? path + '.' : '') + name;
-      if (node.enum) lines.push(`- ${code(p)} is one of ${node.enum.map(code).join(', ')}.`);
-      if (node.pattern) lines.push(`- ${code(p)} matches ${code(node.pattern)}.`);
-      if (node.exclusiveMinimum !== undefined) lines.push(`- ${code(p)} must be greater than ${node.exclusiveMinimum}.`);
-      if (node.maxLength !== undefined) lines.push(`- ${code(p)} is at most ${node.maxLength} characters.`);
+      valueLimits(node, code(p), lines);
+      if (node.type === 'array' && node.items && node.items.type !== 'object') valueLimits(node.items, `Each entry of ${code(p)}`, lines);
       const o = objectOf(node);
       if (o) walk(o.obj, p + o.suffix);
     }
