@@ -282,17 +282,20 @@ export function readGitPorcelain(root) {
 }
 
 /**
- * The run's own output. All four are listed so the fence is independent of
- * WHERE in the run it is called — the doc and the gallery are written after the
- * snapshot today, and an ordering nobody has to remember is one that cannot be
- * got wrong later (§15.80).
+ * The run's own output: frames + story.json, the gallery index, the generated
+ * how-to page (`docPage`, repo-relative — its name is the slug of the story
+ * title, so the caller passes it) and the frames published for that page. All
+ * are listed so the fence is independent of WHERE in the run it is called —
+ * the doc and the gallery are written after the snapshot today, and an
+ * ordering nobody has to remember is one that cannot be got wrong later
+ * (§15.80).
  */
-function runArtifactPaths(storyId) {
+function runArtifactPaths(storyId, docPage) {
   return [
     `demos/stories/${storyId}/`,
     'demos/stories/index.html',
-    `docs/tutorials/${storyId}.md`,
-    `docs/how-to/${storyId}.md`,
+    `apps/docs/public/media/stories/${storyId}/`,
+    ...(typeof docPage === 'string' && docPage !== '' ? [docPage] : []),
   ];
 }
 
@@ -330,9 +333,10 @@ function expandCollapsed(root, path) {
 export function fenceBreaches(before, after, storyId, groundProject = null, deps = {}) {
   assertSafeStoryId(storyId);
   const wasDirty = new Set(before.map((entry) => entry.path));
-  const artifacts = runArtifactPaths(storyId);
+  const artifacts = runArtifactPaths(storyId, deps.docPage);
   const isArtifact = (path) =>
     artifacts.some((a) => (a.endsWith('/') ? path.startsWith(a) : path === a));
+  const expand = deps.expand ?? ((x) => expandCollapsed(deps.root ?? '.', x));
 
   // Ruling 308 — the ground project's Brain 3 sub-wiki is a DESIGNED write, not
   // an escape: S1's onboarding creates it, and preflight clause C4 requires it,
@@ -351,13 +355,28 @@ export function fenceBreaches(before, after, storyId, groundProject = null, deps
   const unknown = [];
   for (const entry of after) {
     if (wasDirty.has(entry.path) || isArtifact(entry.path)) continue;
+    // A COLLAPSED untracked ancestor of this run's own artifacts (the first run
+    // into apps/docs reports `?? apps/docs/public/`): judged whole it would be
+    // an escape, deferred whole a foreign file beside the artifacts would ride
+    // along — so it is expanded and judged file by file, like the ground brain.
+    if (entry.xy === '??' && entry.path.endsWith('/') && artifacts.some((a) => a.startsWith(entry.path))) {
+      let expanded;
+      try {
+        expanded = expand(entry.path);
+      } catch (e) {
+        unknown.push({ path: entry.path, error: `could not expand ${entry.path}: ${e instanceof Error ? e.message : String(e)}` });
+        continue;
+      }
+      for (const p of expanded) if (!isArtifact(p)) remove.push(p);
+      continue;
+    }
     if (groundBrain !== null && entry.xy === '??' && entry.path.endsWith('/') && groundBrain.startsWith(entry.path)) {
       // A COLLAPSED ancestor of the ground brain. Deferring it whole would hold
       // a foreign project's brain too — the very escape the fence exists to
       // catch — so it is expanded and classified file by file.
       let expanded;
       try {
-        expanded = (deps.expand ?? ((x) => expandCollapsed(deps.root ?? '.', x)))(entry.path);
+        expanded = expand(entry.path);
       } catch (e) {
         // ROW 101 / M7-D finding 1 — UNKNOWN, never a safe-looking default:
         // the ancestor is HELD, not removed and not folded into the EXPECTED

@@ -92,7 +92,7 @@ TREES=()
 if [ -n "${FORGE_STORIES_GENERATED_TREES+x}" ]; then
   for t in $FORGE_STORIES_GENERATED_TREES; do [ -n "$t" ] && TREES+=("$t"); done
 else
-  TREES=(demos/stories docs/tutorials docs/how-to)
+  TREES=(demos/stories apps/docs/src/content/docs/guides/how-to apps/docs/public/media/stories)
 fi
 
 if [ "${#TREES[@]}" -gt 0 ]; then
@@ -121,7 +121,7 @@ if [ "${#TREES[@]}" -gt 0 ]; then
   # Plain (non `-z`) porcelain: bash command substitution mangles embedded
   # NULs (measured: `-z`'s own separator silently truncated the capture), and
   # every path this step ever writes is a plain kebab-case filename under
-  # demos/stories or docs/{tutorials,how-to} — never a space or a newline.
+  # demos/stories or the docs site's how-to/media trees — never a space or a newline.
   POST="$(git status --porcelain -- "${TREES[@]}" 2>/dev/null)"
   if [ -n "$POST" ]; then
     echo "[stories] restoring ${TREES[*]} to the tree this step found (a gate must leave the tree as it found it):"

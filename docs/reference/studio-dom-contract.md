@@ -1032,7 +1032,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   Before this it landed, the shortest path from the Library to a session
   launcher was three hops — Agents index's `[data-nav="sessions-secondary"]`
   → the Sessions index → its `sessions-kickoff` row → the launcher itself
-  (`docs/how-to/S7.md`'s "fourth kind of part") — this shelf collapses that
+  (story S7's "fourth kind of part") — this shelf collapses that
   to one hop straight from the parts bin. `LibraryHub.tsx`'s own render test
   (`apps/studio/tests/integration/library-hub-render.test.ts`) pins one link per
   `KICKOFF_ENTRIES` row and that the shelf renders after Community.

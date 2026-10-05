@@ -3,7 +3,7 @@
  * `gate.sh`'s local gate PASSED the stories step and then went
  * `GATE_SH_EXIT=3` on its own LATER pins check, because the story runner
  * regenerates tracked artefacts — `demos/stories/{smoke,proof}/story.json` +
- * frames, `docs/how-to/proof.md`, `demos/stories/index.html` — and
+ * frames, the proof story's how-to page, `demos/stories/index.html` — and
  * `gate-stories.sh` left them dirty for every later step to read. A gate is
  * a read of the tree as it stood when invoked; leaving the run's own output
  * in place made the pins check see it as this PR's undeclared change
@@ -20,13 +20,15 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 
 const SCRIPTS_DIR = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts');
 const GATE = join(SCRIPTS_DIR, 'gate.sh');
 const GATE_STORIES = join(SCRIPTS_DIR, 'gate-stories.sh');
+const HOWTO = 'apps/docs/src/content/docs/guides/how-to';
+const MEDIA = 'apps/docs/public/media/stories';
 
 function strippedEnv(extra: Record<string, string> = {}) {
   const { FORGE_SUITE_LOCK: _s, FORGE_RUN_LOCK: _r, ...env } = process.env;
@@ -138,6 +140,8 @@ describe('gate-stories.sh — restoring its own generated-tree scope', () => {
   });
 
   test('REGRESSION: the real default scope (no override at all) restores ALL THREE trees, including the last', () => {
+    // The three trees are the story runner's outputs: demos/stories, the docs
+    // site's generated how-to pages, and the frames published for them.
     // Pins the exact bug measured on a real gate run: an earlier version of
     // this script derived its scope from a spawned node subprocess's
     // stdout, piped through `while read -r t; do …` — and the LAST line,
@@ -150,7 +154,7 @@ describe('gate-stories.sh — restoring its own generated-tree scope', () => {
     // this file sets it; this is the one path that exercises the real
     // default).
     const d = gitRepoWithTrackedFile('demos/stories/x.txt', 'original\n');
-    for (const dir of ['docs/tutorials', 'docs/how-to']) {
+    for (const dir of [HOWTO, MEDIA]) {
       mkdirSync(join(d, dir), { recursive: true });
       writeFileSync(join(d, dir, 'y.txt'), 'original\n');
     }
@@ -159,7 +163,7 @@ describe('gate-stories.sh — restoring its own generated-tree scope', () => {
     try {
       const r = spawnSync(
         'bash',
-        [GATE_STORIES, 'printf changed >> demos/stories/x.txt && printf changed >> docs/tutorials/y.txt && printf changed >> docs/how-to/y.txt'],
+        [GATE_STORIES, `printf changed >> demos/stories/x.txt && printf changed >> ${HOWTO}/y.txt && printf changed >> ${MEDIA}/y.txt && printf new > ${MEDIA}/born.png`],
         {
           encoding: 'utf8',
           cwd: d,
@@ -167,10 +171,11 @@ describe('gate-stories.sh — restoring its own generated-tree scope', () => {
         },
       );
       assert.equal(r.status, 0, r.stdout + r.stderr);
-      for (const dir of ['demos/stories', 'docs/tutorials', 'docs/how-to']) {
+      for (const dir of ['demos/stories', HOWTO, MEDIA]) {
         assert.equal(gitStatus(d, dir), '', `${dir} must be restored — got dirty: ${gitStatus(d, dir)}`);
       }
-      assert.equal(readFileSync(join(d, 'docs', 'how-to', 'y.txt'), 'utf8'), 'original\n', 'docs/how-to — the LAST tree in the scope — must not be dropped');
+      assert.equal(readFileSync(join(d, MEDIA, 'y.txt'), 'utf8'), 'original\n', 'the media tree — the LAST tree in the scope — must not be dropped');
+      assert.equal(existsSync(join(d, MEDIA, 'born.png')), false, 'a frame born in the run is removed');
     } finally {
       rmSync(d, { recursive: true, force: true });
     }
