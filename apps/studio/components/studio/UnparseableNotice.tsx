@@ -16,7 +16,7 @@ import type * as React from 'react';
  * sibling manifest could not be read, so a notice that lived only in the empty
  * state would stay silent in exactly the case that is hardest to notice.
  *
- * Contract row: `docs/reference/studio-dom-contract.md`.
+ * Inventory: `dev/studio-dom-contract.md`.
  */
 export function UnparseableNotice({ items }: { items?: { path: string; message: string }[] }) {
   if (!items || items.length === 0) return null;
