@@ -295,9 +295,11 @@ function headSha(dir: string): string {
   return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 }
 
-test('--intake: a brain theme added since the pin, cited by nothing, reports', () => {
+test('--intake: a brain theme added since the pin, cited by nothing, reports; a file under the retired decision-record dir does not', () => {
   const dir = gitRepo();
   const since = headSha(dir);
+  // Built from parts: that directory no longer exists and no longer counts as an intake target.
+  commit(dir, ['docs', 'decisions', '910-retired.md'].join('/'), '# Retired record\n', 'add retired record');
   commit(dir, 'brain/forge-dev/themes/2026-09-26-new-theme.md', '# New theme\n', 'add theme');
 
   const { added, unaligned } = intakeReport(dir, since);
