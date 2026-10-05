@@ -143,6 +143,7 @@ const FORGE_INTERNAL_PREFIXES = [
   'bin/',
   'cli/',
   'demos/',
+  'dev/',
   'docs/',
   'loops/',
   'orchestrator/',
