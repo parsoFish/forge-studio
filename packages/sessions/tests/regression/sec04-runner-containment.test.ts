@@ -119,13 +119,13 @@ function planScratch(): Scratch {
   return { base, forgeRoot, projectsRoot, projectRoot, logsRoot, victimDir, victimStatus };
 }
 
-/** `join(projectRoot, kindDir, sessionId)` reaches `<base>/victim-secret` with
- *  four `..` (climbing kindDir → attacker → projects → forge → base). */
-const FOLD_SESSION_ID = '../../../../victim-secret';
+/** `join(logsRoot, '_sessions', project, kindDir, sessionId)` reaches
+ *  `<base>/victim-secret` with five `..` (climbing kindDir → attacker → _sessions → _logs → forge → base). */
+const FOLD_SESSION_ID = '../../../../../victim-secret';
 
 type RunnerLeg = {
   name: string;
-  builder: (projectRoot: string, sessionId: string) => string;
+  builder: (logsRoot: string, project: string, sessionId: string) => string;
   run: (s: Scratch, sessionId: string) => Promise<{ phase: string }>;
 };
 
@@ -136,6 +136,7 @@ const LEGS: RunnerLeg[] = [
     run: (s, sessionId) =>
       runInstructionsTurn({
         sessionId,
+        project: 'attacker',
         projectRoot: s.projectRoot,
         logsRoot: s.logsRoot,
         forgeRoot: s.forgeRoot,
@@ -148,6 +149,7 @@ const LEGS: RunnerLeg[] = [
     run: (s, sessionId) =>
       runProjectBrainTurn({
         sessionId,
+        project: 'attacker',
         projectRoot: s.projectRoot,
         logsRoot: s.logsRoot,
         forgeRoot: s.forgeRoot,
@@ -160,6 +162,7 @@ const LEGS: RunnerLeg[] = [
     run: (s, sessionId) =>
       runDemoBuilderTurn({
         sessionId,
+        project: 'attacker',
         projectRoot: s.projectRoot,
         logsRoot: s.logsRoot,
         forgeRoot: s.forgeRoot,
@@ -176,10 +179,10 @@ for (const leg of LEGS) {
       //     reading any verdict, so a "contained" verdict cannot be an accident.
       assert.ok(existsSync(s.victimStatus), 'fixture: out-of-root victim status.json must exist');
       assert.ok(
-        !existsSync(s.projectRoot),
-        'fixture: attacker projectRoot must NOT exist — there is no in-root file to read, so a contained run cannot pass by reading one',
+        !existsSync(join(s.logsRoot, '_sessions', 'attacker')),
+        'fixture: the attacker project sessions dir must NOT exist — there is no in-root file to read, so a contained run cannot pass by reading one',
       );
-      const naive = leg.builder(s.projectRoot, FOLD_SESSION_ID);
+      const naive = leg.builder(s.logsRoot, 'attacker', FOLD_SESSION_ID);
       assert.equal(
         naive,
         s.victimDir,
@@ -231,10 +234,12 @@ test('runInstructionsTurn contains a symlinked kind-dir (the shipped-vector shap
   const forgeRoot = join(base, 'forge');
   const projectRoot = join(forgeRoot, 'projects', 'attacker');
   const logsRoot = join(forgeRoot, '_logs');
+  const attackerSessionsDir = join(logsRoot, '_sessions', 'attacker');
   const victimKindDir = join(base, 'victim-secret', '_instructions');
   const victimSessionDir = join(victimKindDir, 'sess-VICTIM');
   try {
     mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(attackerSessionsDir, { recursive: true });
     mkdirSync(victimSessionDir, { recursive: true });
     const victimStatus = join(victimSessionDir, 'status.json');
     writeFileSync(
@@ -254,15 +259,15 @@ test('runInstructionsTurn contains a symlinked kind-dir (the shipped-vector shap
       ),
     );
     // Plant the symlink the ordinary attacker git commit would carry.
-    symlinkSync(victimKindDir, join(projectRoot, '_instructions'));
+    symlinkSync(victimKindDir, join(attackerSessionsDir, '_instructions'));
 
     // --- preconditions
     assert.ok(existsSync(victimStatus), 'fixture: victim status.json must exist');
     assert.ok(
-      lstatSync(join(projectRoot, '_instructions')).isSymbolicLink(),
-      'fixture: projectRoot/_instructions must be the planted symlink',
+      lstatSync(join(attackerSessionsDir, '_instructions')).isSymbolicLink(),
+      'fixture: <logsRoot>/_sessions/attacker/_instructions must be the planted symlink',
     );
-    const naive = instructionsSessionDir(projectRoot, 'sess-VICTIM');
+    const naive = instructionsSessionDir(logsRoot, 'attacker', 'sess-VICTIM');
     assert.ok(
       existsSync(join(naive, 'status.json')),
       'fixture: the bare-join builder resolves through the symlink to the victim status.json',
@@ -274,6 +279,7 @@ test('runInstructionsTurn contains a symlinked kind-dir (the shipped-vector shap
     try {
       const res = await runInstructionsTurn({
         sessionId: 'sess-VICTIM',
+        project: 'attacker',
         projectRoot,
         logsRoot,
         forgeRoot,

@@ -40,9 +40,8 @@ function repoDir(): string {
   return join(forgeRoot, 'projects', 'demo');
 }
 
-function demoSessionDirFor(sid: string): string {
-  return join(repoDir(), '_demo', sid);
-}
+const demoKindDir = (): string => join(forgeRoot, '_logs', '_sessions', 'demo', '_demo'); // under the logs root, never the ground
+const demoSessionDirFor = (sid: string): string => join(demoKindDir(), sid);
 
 async function post(path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
   const res = await fetch(`${url}${path}`, {
@@ -345,9 +344,9 @@ test('R4-16 AT-35: an unknown project/sessionId pair on the generation route →
 // Kills the current implementation, which returns 200 with the outside
 // file's real content for this exact request.
 test('R4-16 AT-36 (BLOCKER, live exploit reproduction): project=".." + sessionId="../OUTSIDE" escapes projectsRoot entirely — must be 400, and the outside marker must never appear in the body', async () => {
-  // demoSessionDir(join(projectsRoot, '..'), '../OUTSIDE') === join(forgeRoot, '_demo', '../OUTSIDE') === join(forgeRoot, 'OUTSIDE').
+  // project='..' + sessionId='../OUTSIDE' under logsRoot resolves to <logsRoot>/_sessions/../_demo/../OUTSIDE === <logsRoot>/OUTSIDE.
   const OUTSIDE_MARKER = 'TOP-SECRET-PROJECT-SESSIONID-ESCAPE-MARKER-3390';
-  const outsideGenDir = join(forgeRoot, 'OUTSIDE', 'generations', '1');
+  const outsideGenDir = join(forgeRoot, '_logs', 'OUTSIDE', 'generations', '1');
   mkdirSync(outsideGenDir, { recursive: true });
   writeFileSync(join(outsideGenDir, 'secret.html'), `<html>${OUTSIDE_MARKER}</html>`, 'utf8');
   try {
@@ -359,7 +358,7 @@ test('R4-16 AT-36 (BLOCKER, live exploit reproduction): project=".." + sessionId
     assert.equal(res.status, 400, `project/sessionId escaping projectsRoot must be rejected with 400, got ${res.status}: ${res.text}`);
     assert.ok(!res.text.includes(OUTSIDE_MARKER), `the outside file's content must NEVER appear in the body, got: ${res.text}`);
   } finally {
-    rmSync(join(forgeRoot, 'OUTSIDE'), { recursive: true, force: true });
+    rmSync(join(forgeRoot, '_logs', 'OUTSIDE'), { recursive: true, force: true });
   }
 });
 
@@ -461,8 +460,8 @@ const DEMO_MUTATING_ROUTES: Array<{ path: string; extraBody?: Record<string, unk
 ];
 
 function outsideDirForTraversal(): string {
-  // demoSessionDir(join(projectsRoot, '..'), '../OUTSIDE') === join(forgeRoot, '_demo', '../OUTSIDE') === join(forgeRoot, 'OUTSIDE').
-  return join(forgeRoot, 'OUTSIDE');
+  // project='..' + sessionId='../OUTSIDE' under logsRoot resolves to <logsRoot>/OUTSIDE.
+  return join(forgeRoot, '_logs', 'OUTSIDE');
 }
 
 for (const { path, extraBody } of DEMO_MUTATING_ROUTES) {
@@ -496,12 +495,12 @@ for (const { path, extraBody } of DEMO_MUTATING_ROUTES) {
 // reproduction shape is narrower: `demoSessionDir(join(projectsRoot, '..'),
 // <realSessionId>) === join(forgeRoot, '_demo', <realSessionId>)` — still
 // entirely outside `projectsRoot`.
-test('R4-16 AT-44 (Finding A, /start): POST /start with project=".." is rejected — 400, and no forgeRoot/_demo/ directory is ever created', async () => {
-  const outsideParent = join(forgeRoot, '_demo');
+test('R4-16 AT-44 (Finding A, /start): POST /start with project=".." is rejected — 400, and no <logsRoot>/_demo/ directory is ever created', async () => {
+  const outsideParent = join(forgeRoot, '_logs', '_demo');
   rmSync(outsideParent, { recursive: true, force: true });
   const { status, json } = await post('/api/demo-builder/start', { project: '..' });
   assert.equal(status, 400, `/start with project=".." must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
-  assert.ok(!existsSync(outsideParent), 'no forgeRoot/_demo/ directory may ever be created — /start must never write outside projectsRoot');
+  assert.ok(!existsSync(outsideParent), 'no <logsRoot>/_demo/ directory may ever be created — /start must never write outside the session home');
 });
 
 test('R4-16 AT-45: charset rejection — POST /lock with project failing PROJECT_ID_RE (e.g. "Bad Project"; W7-A4: uppercase + underscore are LEGAL) → 400, naming the offending value', async () => {
@@ -549,7 +548,7 @@ test('R4-16 AT-48 (Finding B, BLOCKER): GET generation route — a symlinked ses
     mkdirSync(join(outsideDir, 'generations', '1'), { recursive: true });
     writeFileSync(join(outsideDir, 'generations', '1', 'DEMO.html'), `<html>${OUTSIDE_MARKER}</html>`, 'utf8');
     const attackerSessionId = 'attackerSession123'; // a legitimate-looking id — passes SAFE_ID_RE
-    mkdirSync(join(repoDir(), '_demo'), { recursive: true });
+    mkdirSync(demoKindDir(), { recursive: true });
     symlinkSync(outsideDir, join(demoSessionDirFor(attackerSessionId)));
 
     const res = await fetch(`${url}/api/demo-builder/generation/demo/${attackerSessionId}/1/DEMO.html`);
@@ -569,7 +568,7 @@ test('R4-16 AT-49 (Finding B, BLOCKER): POST /lock — a symlinked session dir i
   const outsideDir = mkdtempSync(join(tmpdir(), 'symlinked-session-outside-post-'));
   try {
     const attackerSessionId = 'attackerLockSession456';
-    mkdirSync(join(repoDir(), '_demo'), { recursive: true });
+    mkdirSync(demoKindDir(), { recursive: true });
     symlinkSync(outsideDir, join(demoSessionDirFor(attackerSessionId)));
 
     // A status.json must exist at the symlink TARGET for this AT to mean
@@ -612,12 +611,12 @@ test('R4-16 AT-49 (Finding B, BLOCKER): POST /lock — a symlinked session dir i
 // packages/flows/tests/regression/manifest-path-fields.test.ts — not re-litigated here).
 // ===========================================================================
 
-/** Snapshot of session ids currently under `<repoDir()>/_demo/` — used to
+/** Snapshot of session ids currently under `<logsRoot>/_sessions/demo/_demo/` — used to
  *  prove a REJECTED /start call creates NO new session dir at all (an
  *  id-agnostic filesystem check, since a 400 response carries no sessionId
  *  to look up directly). */
 function listDemoSessionIds(): string[] {
-  const dir = join(repoDir(), '_demo');
+  const dir = demoKindDir();
   try {
     return readdirSync(dir).sort();
   } catch {
@@ -632,7 +631,7 @@ test('R4-16 AT-50 (PIN 4, BLOCKER): POST /api/demo-builder/start with projectRep
     const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: outsideDir });
     assert.equal(status, 400, `projectRepoPath outside forgeRoot/projects/ must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
     assert.ok(String(json.error ?? '').includes(outsideDir), `error must name the offending path, got: ${JSON.stringify(json)}`);
-    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _sessions/demo/_demo/');
   } finally {
     rmSync(outsideDir, { recursive: true, force: true });
   }
@@ -646,7 +645,7 @@ test('R4-16 AT-51 (PIN 4, BLOCKER): POST /api/demo-builder/start with a projectR
     const before_ = listDemoSessionIds();
     const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: evilProjectDir });
     assert.equal(status, 400, `a symlinked projectRepoPath must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
-    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _sessions/demo/_demo/');
   } finally {
     rmSync(evilProjectDir, { force: true });
     rmSync(outsideDir, { recursive: true, force: true });
@@ -657,7 +656,7 @@ test('R4-16 AT-52 (PIN 4): POST /api/demo-builder/start with a RELATIVE projectR
   const before_ = listDemoSessionIds();
   const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: 'nonexistent-relative-dir-xyz-9931/demo' });
   assert.equal(status, 400, `a relative projectRepoPath must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
-  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _sessions/demo/_demo/');
 });
 
 test('R4-16 AT-53 (PIN 4, positive controls, green today): projectRepoPath ABSENT still defaults to join(projectsRoot, project); a genuinely-contained projectRepoPath is still accepted and persisted verbatim', async () => {
@@ -715,7 +714,7 @@ for (const bad of [0, {}]) {
     const bodyText = JSON.stringify(json);
     assert.ok(!bodyText.includes('ERR_INVALID_ARG_TYPE'), `the response must never leak a raw Node TypeError, got: ${bodyText}`);
     assert.ok(!bodyText.includes('TypeError'), `the response must never leak a raw Node TypeError, got: ${bodyText}`);
-    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _sessions/demo/_demo/');
   });
 }
 
@@ -777,7 +776,7 @@ test('R4-16 AT-56 (PIN 6, mandatory adversarial AT): a depth-10,000 nested-array
   assert.ok(!result.text.includes('RangeError'), `the response must never leak the raw RangeError, got: ${result.text.slice(0, 200)}`);
   assert.ok(!result.text.includes('Maximum call stack'), `the response must never leak the raw stack-overflow message, got: ${result.text.slice(0, 200)}`);
   assert.ok(result.text.length > 0, 'the 400 body must still name the rejection somehow, not be empty');
-  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _sessions/demo/_demo/');
 });
 
 // The truncation case. A WIDE (not deep) non-string value — JSON.stringify
@@ -811,5 +810,5 @@ test('R4-16 AT-57 (PIN 6): a large-but-representable (WIDE, not deep) non-string
   assert.equal(res.status, 400, `a wide non-string projectRepoPath must be rejected with 400, got ${res.status}`);
   assert.ok(responseBytes < 5000, `the response body must be TRUNCATED (chosen bound: under 5,000 bytes — any sane truncated message comfortably fits), got ${responseBytes} bytes`);
   assert.ok(responseBytes < requestBytes * 0.05, `the response must be materially smaller than the request (chosen ratio: under 5% of the request's ${requestBytes} bytes), got ${responseBytes} bytes — today's unbounded interpolation produces a response LARGER than the request`);
-  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _sessions/demo/_demo/');
 });

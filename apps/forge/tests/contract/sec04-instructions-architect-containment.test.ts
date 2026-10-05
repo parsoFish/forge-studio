@@ -3,15 +3,17 @@
  * families build their session dir straight from request-supplied `project` /
  * `sessionId` via an unguarded `join()`:
  *
- *   architectSessionDir(projectsRoot, project, sessionId)
- *     = join(projectsRoot, project, '_architect', sessionId)
- *   instructionsSessionDir(join(projectsRoot, project), sessionId)
- *     = join(projectsRoot, project, '_instructions', sessionId)
+ *   architect session dir   = <logsRoot>/_sessions/<project>/_architect/<sessionId>
+ *   instructionsSessionDir(logsRoot, project, sessionId)
+ *     = <logsRoot>/_sessions/<project>/_instructions/<sessionId>
  *
- * Neither goes through the fixed `resolveSafeSessionDir`
- * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath, per-segment
+ * (session dirs live under the logs root, outside the project checkout, so a
+ * traversal escapes `<logsRoot>/_sessions`, which is the root these pins climb out of)
+ *
+ * Neither goes through the fixed `resolveSessionDir`
+ * (packages/kernel/session-dir.ts → resolveGuardedPath, per-segment
  * identity+charset+symlink). So a `..`-laden `project` OR `sessionId` escapes
- * `projectsRoot` entirely, and the two GET `/file/` routes' only check —
+ * `the sessions root` entirely, and the two GET `/file/` routes' only check —
  *   base     = <sessionDir> + sep
  *   requested = join(<sessionDir>, filename)
  *   requested.startsWith(base)
@@ -76,6 +78,7 @@ function tmp(prefix: string): string {
 
 let forgeRoot: string;
 let projectsRoot: string;
+let logsRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
 const outsideDirs: string[] = [];
@@ -83,7 +86,7 @@ let symlinksUnavailable = false;
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' } as const;
 
-/** A scratch dir OUTSIDE projectsRoot AND forgeRoot (sibling under tmpdir) —
+/** A scratch dir OUTSIDE the logs root AND forgeRoot (sibling under tmpdir) —
  *  any file that appears here proves an out-of-root escape. */
 function newOutsideDir(prefix: string): string {
   const d = tmp(prefix);
@@ -127,6 +130,11 @@ function plantStatusJson(dir: string, status: Record<string, unknown>): void {
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
 }
 
+/** The root every project's session dirs hang under — the traversal base. */
+function sessionsRoot(): string {
+  return join(logsRoot, '_sessions');
+}
+
 function is4xx(status: number): boolean {
   return status >= 400 && status < 500;
 }
@@ -136,7 +144,8 @@ before(async () => {
   projectsRoot = join(forgeRoot, 'projects');
   mkdirSync(projectsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, '_queue', 'pending'), { recursive: true });
-  mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+  logsRoot = join(forgeRoot, '_logs');
+  mkdirSync(logsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
 
@@ -180,25 +189,35 @@ function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
 // Positive controls (mandatory) — MUST pass before AND after any fix.
 // ---------------------------------------------------------------------------
 
-test('positive control: POST /api/instructions/start with an in-root project creates the session UNDER projectsRoot and returns 200', async () => {
+test('positive control: POST /api/instructions/start with an in-root project creates the session UNDER the logs root (not the ground) and returns 200', async () => {
   const { status, text } = await postJson('/api/instructions/start', { project: 'legit' });
   assert.equal(status, 200, `legit instructions/start must succeed — got ${status}: ${text}`);
   const sid = (JSON.parse(text) as { sessionId?: string }).sessionId;
   assert.ok(sid, `expected a sessionId — got: ${text}`);
   assert.ok(
-    existsSync(join(projectsRoot, 'legit', '_instructions', sid!)),
-    'the legit session dir must be created inside projectsRoot',
+    existsSync(join(sessionsRoot(), 'legit', '_instructions', sid!)),
+    'the legit session dir must be created under <logsRoot>/_sessions',
+  );
+  assert.equal(
+    existsSync(join(projectsRoot, 'legit', '_instructions')),
+    false,
+    'no session dir may be created in the project checkout (the ground)',
   );
 });
 
-test('positive control: POST /api/architect/start with an in-root project creates the session UNDER projectsRoot and returns 200', async () => {
+test('positive control: POST /api/architect/start with an in-root project creates the session UNDER the logs root (not the ground) and returns 200', async () => {
   const { status, text } = await postJson('/api/architect/start', { project: 'legit', idea: 'a real idea' });
   assert.equal(status, 200, `legit architect/start must succeed — got ${status}: ${text}`);
   const sid = (JSON.parse(text) as { sessionId?: string }).sessionId;
   assert.ok(sid, `expected a sessionId — got: ${text}`);
   assert.ok(
-    existsSync(join(projectsRoot, 'legit', '_architect', sid!)),
-    'the legit architect session dir must be created inside projectsRoot',
+    existsSync(join(sessionsRoot(), 'legit', '_architect', sid!)),
+    'the legit architect session dir must be created under <logsRoot>/_sessions',
+  );
+  assert.equal(
+    existsSync(join(projectsRoot, 'legit', '_architect')),
+    false,
+    'no session dir may be created in the project checkout (the ground)',
   );
 });
 
@@ -208,10 +227,10 @@ test('positive control: POST /api/architect/start with an in-root project create
 
 // --- /start : UNCONDITIONED write, project traversal, NO victim needed ------
 
-test('(RED) POST /api/architect/start with a "../.." project writes idea.md/status.json OUTSIDE projectsRoot with no pre-existing victim', async () => {
+test('(RED) POST /api/architect/start with a "../.." project writes idea.md/status.json OUTSIDE the logs root with no pre-existing victim', async () => {
   const outside = newOutsideDir('sec04-arch-start-outside-');
-  const rel = relative(projectsRoot, outside);
-  assert.equal(rel.split(sep)[0], '..', 'sanity: the traversal string must genuinely step outside projectsRoot');
+  const rel = relative(sessionsRoot(), outside);
+  assert.equal(rel.split(sep)[0], '..', 'sanity: the traversal string must genuinely step outside <logsRoot>/_sessions');
   // Precondition: nothing exists at the escape target yet.
   assert.equal(existsSync(join(outside, '_architect')), false, 'precondition: no _architect subtree out of root yet');
 
@@ -227,9 +246,9 @@ test('(RED) POST /api/architect/start with a "../.." project writes idea.md/stat
 
 // --- answer : project traversal (planted victim, phase awaiting-answers) ----
 
-test('(RED) POST /api/architect/answer with a "../.." project reads+writes a victim session OUTSIDE projectsRoot', async () => {
+test('(RED) POST /api/architect/answer with a "../.." project reads+writes a victim session OUTSIDE the logs root', async () => {
   const outside = newOutsideDir('sec04-arch-answer-project-outside-');
-  const rel = relative(projectsRoot, outside);
+  const rel = relative(sessionsRoot(), outside);
   const victimDir = join(outside, '_architect', 'sess-arch-answer-a');
   plantStatusJson(victimDir, { session_id: 'sess-arch-answer-a', project: 'irrelevant', phase: 'awaiting-answers', round: 1 });
   assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
@@ -251,11 +270,11 @@ test('(RED) POST /api/architect/answer with a "../.." project reads+writes a vic
 
 // --- answer : sessionId traversal (valid in-root project) -------------------
 
-test('(RED) POST /api/architect/answer with a valid project but "../.." sessionId escapes projectsRoot', async () => {
+test('(RED) POST /api/architect/answer with a valid project but "../.." sessionId escapes the logs root', async () => {
   const outside = newOutsideDir('sec04-arch-answer-sid-outside-');
   const victimDir = join(outside, 'sess-arch-answer-sid');
   plantStatusJson(victimDir, { session_id: 'x', project: 'legit', phase: 'awaiting-answers', round: 1 });
-  const sid = relative(join(projectsRoot, 'legit', '_architect'), victimDir);
+  const sid = relative(join(sessionsRoot(), 'legit', '_architect'), victimDir);
   assert.equal(sid.split(sep)[0], '..', 'sanity: sessionId must step outside');
   assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
   assert.equal(existsSync(join(victimDir, 'answers.json')), false, 'precondition: no answers.json yet');
@@ -276,9 +295,9 @@ test('(RED) POST /api/architect/answer with a valid project but "../.." sessionI
 
 // --- rerun : read-escape (200-with-planted-outside-victim == it read out of root) ---
 
-test('(RED) POST /api/architect/rerun with a "../.." project resolves+reads a victim session OUTSIDE projectsRoot (returns 200 instead of rejecting)', async () => {
+test('(RED) POST /api/architect/rerun with a "../.." project resolves+reads a victim session OUTSIDE the logs root (returns 200 instead of rejecting)', async () => {
   const outside = newOutsideDir('sec04-arch-rerun-outside-');
-  const rel = relative(projectsRoot, outside);
+  const rel = relative(sessionsRoot(), outside);
   const victimDir = join(outside, '_architect', 'sess-arch-rerun');
   plantStatusJson(victimDir, { session_id: 'sess-arch-rerun', project: 'irrelevant', phase: 'interviewing', round: 1 });
   assert.ok(existsSync(join(victimDir, 'status.json')), 'precondition: victim status.json planted');
@@ -296,9 +315,9 @@ test('(RED) POST /api/architect/rerun with a "../.." project resolves+reads a vi
 
 // --- file GET : self-defeating startsWith, arbitrary filename under a traversed project ---
 
-test('(RED) GET /api/architect/file with a %2F-smuggled "../.." project serves an arbitrary file OUTSIDE projectsRoot', async () => {
+test('(RED) GET /api/architect/file with a %2F-smuggled "../.." project serves an arbitrary file OUTSIDE the logs root', async () => {
   const outside = newOutsideDir('sec04-arch-file-outside-');
-  const rel = relative(projectsRoot, outside);
+  const rel = relative(sessionsRoot(), outside);
   const escapedSessionDir = join(outside, '_architect', 'sess-arch-file');
   mkdirSync(escapedSessionDir, { recursive: true });
   writeFileSync(join(escapedSessionDir, 'SECRET-ARCH.txt'), 'PWNED-ARCH-FILE-CONTENT-d44a0');
@@ -320,10 +339,10 @@ test('(RED) GET /api/architect/file with a %2F-smuggled "../.." project serves a
 
 // --- /start : UNCONDITIONED write, project traversal, NO victim needed ------
 
-test('(RED) POST /api/instructions/start with a "../.." project writes status.json OUTSIDE projectsRoot with no pre-existing victim', async () => {
+test('(RED) POST /api/instructions/start with a "../.." project writes status.json OUTSIDE the logs root with no pre-existing victim', async () => {
   const outside = newOutsideDir('sec04-instr-start-outside-');
-  const rel = relative(projectsRoot, outside);
-  assert.equal(rel.split(sep)[0], '..', 'sanity: the traversal string must genuinely step outside projectsRoot');
+  const rel = relative(sessionsRoot(), outside);
+  assert.equal(rel.split(sep)[0], '..', 'sanity: the traversal string must genuinely step outside <logsRoot>/_sessions');
   assert.equal(existsSync(join(outside, '_instructions')), false, 'precondition: no _instructions subtree out of root yet');
 
   const { status, text } = await postJson('/api/instructions/start', { project: rel });
@@ -348,9 +367,9 @@ test('(RED) POST /api/instructions/start with a "../.." project writes status.js
 
 // --- file GET : self-defeating startsWith, arbitrary filename ---------------
 
-test('(RED) GET /api/instructions/file with a %2F-smuggled "../.." project serves an arbitrary file OUTSIDE projectsRoot', async () => {
+test('(RED) GET /api/instructions/file with a %2F-smuggled "../.." project serves an arbitrary file OUTSIDE the logs root', async () => {
   const outside = newOutsideDir('sec04-instr-file-outside-');
-  const rel = relative(projectsRoot, outside);
+  const rel = relative(sessionsRoot(), outside);
   const escapedSessionDir = join(outside, '_instructions', 'sess-instr-file');
   mkdirSync(escapedSessionDir, { recursive: true });
   writeFileSync(join(escapedSessionDir, 'SECRET-INSTR.txt'), 'PWNED-INSTR-FILE-CONTENT-e11b7');
@@ -384,7 +403,8 @@ test('(RED) GET /api/instructions/sessions discloses an out-of-root status.json 
   // An ordinary in-root project whose _instructions dir is a symlink to it —
   // plantable by a plain git commit (git tracks symlinks as 120000 blobs).
   mkdirSync(join(projectsRoot, 'attacker'), { recursive: true });
-  symlinkSync(outside, join(projectsRoot, 'attacker', '_instructions'), 'dir');
+  mkdirSync(join(sessionsRoot(), 'attacker'), { recursive: true });
+  symlinkSync(outside, join(sessionsRoot(), 'attacker', '_instructions'), 'dir');
 
   const res = await fetch(`${bridgeUrl}/api/instructions/sessions`);
   const text = await res.text();

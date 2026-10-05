@@ -38,6 +38,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { sessionDirSegments } from '@forge/kernel';
+
 import { recordReapedCancellations } from './reap-cancel.mjs';
 
 const ARCHITECT_SESSION_ID = '2026-09-05T07-58-40-acb79ba9';
@@ -56,7 +58,7 @@ const REAL_ARCHITECT_START = {
   metadata: { session_id: ARCHITECT_SESSION_ID, phase: 'interviewing', round: 1 },
 };
 
-type Ground = { root: string; logDir: string; projectsRoot: string; statusPath: string };
+type Ground = { root: string; logDir: string; logsRoot: string; statusPath: string };
 
 function plantArchitectTurn(opts: { dirName?: string; sessionId?: string } = {}): Ground {
   const sessionId = opts.sessionId ?? ARCHITECT_SESSION_ID;
@@ -74,15 +76,15 @@ function plantArchitectTurn(opts: { dirName?: string; sessionId?: string } = {})
     ].join('\n') + '\n',
   );
 
-  const projectsRoot = join(root, 'projects');
-  const sessionDir = join(projectsRoot, 'gitpulse', '_architect', sessionId);
+  const logsRoot = join(root, '_logs');
+  const sessionDir = join(logsRoot, ...sessionDirSegments('gitpulse', '_architect', sessionId));
   mkdirSync(sessionDir, { recursive: true });
   const statusPath = join(sessionDir, 'status.json');
   writeFileSync(
     statusPath,
     JSON.stringify({ session_id: sessionId, project: 'gitpulse', phase: 'interviewing', round: 1 }, null, 2),
   );
-  return { root, logDir, projectsRoot, statusPath };
+  return { root, logDir, logsRoot, statusPath };
 }
 
 const readStatus = (g: Ground) => JSON.parse(readFileSync(g.statusPath, 'utf8')) as Record<string, unknown>;
@@ -93,7 +95,7 @@ test('[6.11.14] a REAPED architect is terminated even though its start event omi
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 3364642, dir: g.logDir, signal: 'SIGTERM', via: 'cwd' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner S4: first red at beat 11 of 12: gave up at the agent wait' },
+    { logsRoot: g.logsRoot, reason: 'story runner S4: first red at beat 11 of 12: gave up at the agent wait' },
   );
 
   assert.equal(outcomes[0].written, true, `expected the session to be terminated â€” got ${outcomes[0].reason}`);
@@ -113,21 +115,22 @@ test('[6.11.14] a HYPHENATED kind and a HYPHENATED session id resolve together â
   const g = plantArchitectTurn({ sessionId, dirName: `_project-brain-${sessionId}` });
   t.after(() => rmSync(g.root, { recursive: true, force: true }));
   // The session lives under the kind's own dir.
-  mkdirSync(join(g.projectsRoot, 'gitpulse', '_project-brain', sessionId), { recursive: true });
+  const pbDir = join(g.logsRoot, ...sessionDirSegments('gitpulse', '_project-brain', sessionId));
+  mkdirSync(pbDir, { recursive: true });
   writeFileSync(
-    join(g.projectsRoot, 'gitpulse', '_project-brain', sessionId, 'status.json'),
+    join(pbDir, 'status.json'),
     JSON.stringify({ session_id: sessionId, phase: 'building' }, null, 2),
   );
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes[0].kind, 'project-brain');
   assert.equal(outcomes[0].sessionId, sessionId);
   const status = JSON.parse(
-    readFileSync(join(g.projectsRoot, 'gitpulse', '_project-brain', sessionId, 'status.json'), 'utf8'),
+    readFileSync(join(pbDir, 'status.json'), 'utf8'),
   );
   assert.equal(status.phase, 'cancelled');
   assert.equal(status.cancelled_from, 'building');
@@ -141,7 +144,7 @@ test('[6.11.14] NEGATIVE CONTROL: a dir name that does not END with the session 
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes[0].written, false);
@@ -159,7 +162,7 @@ test('[6.11.14] NEGATIVE CONTROL: a start event with NO session_id at all is sti
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes[0].written, false);
@@ -182,7 +185,7 @@ test('[6.11.14] an explicit session_kind still WINS over the dir name', (t) => {
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes[0].kind, 'architect', 'the declared kind wins');

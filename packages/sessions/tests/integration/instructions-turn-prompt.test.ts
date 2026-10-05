@@ -71,7 +71,7 @@ function setupSession(overrides?: Partial<InstructionsStatus>): {
   mkdirSync(repoPath, { recursive: true });
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-14T00-00-00';
-  const sessionDir = instructionsSessionDir(projectRoot, sessionId);
+  const sessionDir = instructionsSessionDir(logsRoot, 'skillturn-demo', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const status: InstructionsStatus = {
     session_id: sessionId,
@@ -156,6 +156,7 @@ test('AT-6a: an interviewing turn selects ONLY the interview section (the draft 
 
   const result = await runInstructionsTurn({
     sessionId,
+    project: 'skillturn-demo',
     projectRoot,
     logsRoot,
     queryFn,
@@ -176,6 +177,7 @@ test('AT-6b: a drafting turn selects ONLY the draft section (the interview senti
 
   const result = await runInstructionsTurn({
     sessionId,
+    project: 'skillturn-demo',
     projectRoot,
     logsRoot,
     queryFn,
@@ -209,6 +211,7 @@ test('AT-7: a fixture skill with no turn markers makes runInstructionsTurn THROW
     () =>
       runInstructionsTurn({
         sessionId,
+        project: 'skillturn-demo',
         projectRoot,
         logsRoot,
         queryFn,
@@ -243,6 +246,7 @@ test('AT-8: a drafting prompt (real production SKILL.md, no override) still carr
 
   const result = await runInstructionsTurn({
     sessionId,
+    project: 'skillturn-demo',
     projectRoot,
     logsRoot,
     queryFn,
@@ -289,6 +293,7 @@ test('R2-AT-1a: real production SKILL.md, edit mode, INTERVIEW turn — no "exis
 
   await runInstructionsTurn({
     sessionId,
+    project: 'skillturn-demo',
     projectRoot,
     logsRoot,
     queryFn,
@@ -323,6 +328,7 @@ test('R2-AT-1b: real production SKILL.md, edit mode, DRAFT turn — no "existing
 
   await runInstructionsTurn({
     sessionId,
+    project: 'skillturn-demo',
     projectRoot,
     logsRoot,
     queryFn,
@@ -367,7 +373,7 @@ test("R2-AT-3a: an init-mode DRAFT turn prompt must not contain the edit-branch'
   const { projectRoot, logsRoot, sessionId } = setupSession({ phase: 'drafting', mode: 'init' });
   const { queryFn, prompts } = capturingQueryFn({ agents_md: '# Demo\n\nBuild: `npm test`.\n' });
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'skillturn-demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(prompts.length, 1);
   assert.ok(
@@ -380,7 +386,7 @@ test("R2-AT-3b: an edit-mode DRAFT turn prompt must not contain the init-branch'
   const { projectRoot, logsRoot, sessionId } = setupSession({ phase: 'drafting', mode: 'edit' });
   const { queryFn, prompts } = capturingQueryFn({ agents_md: '# Demo\n\nBuild: `npm test`.\n' });
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'skillturn-demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(prompts.length, 1);
   assert.ok(
@@ -398,7 +404,7 @@ test("R2-AT-3c: an init-mode INTERVIEW turn prompt must not contain the edit-bra
     ],
   });
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'skillturn-demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(prompts.length, 1);
   assert.ok(
@@ -416,7 +422,7 @@ test("R2-AT-3d: an edit-mode INTERVIEW turn prompt must not contain the init-bra
     ],
   });
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'skillturn-demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(prompts.length, 1);
   assert.ok(

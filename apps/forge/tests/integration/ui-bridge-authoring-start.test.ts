@@ -23,11 +23,21 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { sessionKindSegments } from '@forge/kernel';
 import { startBridge } from '../../ui-bridge.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
 let forgeRoot: string;
+
+/** Session dirs live under the logs root, never in the managed project's checkout (the "ground"). */
+function authoringKindDir(project = 'demoproj'): string {
+  return join(forgeRoot, '_logs', ...sessionKindSegments(project, '_authoring'));
+}
+/** Where a session dir used to be written — must stay absent. */
+function groundAuthoringDir(project = 'demoproj'): string {
+  return join(forgeRoot, 'projects', project, '_authoring');
+}
 let url: string;
 let close: () => Promise<void>;
 
@@ -59,7 +69,7 @@ function start(body: unknown): Promise<Response> {
 test('AT-1: malformed project slug -> 400, no _authoring dir created anywhere', async () => {
   const res = await start({ project: '../../etc', prompt: 'a skill that does x' });
   assert.equal(res.status, 400);
-  assert.ok(!existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring')), 'a rejected request must create nothing on disk');
+  assert.ok(!existsSync(authoringKindDir()) && !existsSync(groundAuthoringDir()), 'a rejected request must create nothing on disk');
 });
 
 test('AT-2: missing project -> 400', async () => {
@@ -70,7 +80,7 @@ test('AT-2: missing project -> 400', async () => {
 test('AT-3: missing prompt -> 400, no _authoring dir created', async () => {
   const res = await start({ project: 'demoproj' });
   assert.equal(res.status, 400);
-  assert.ok(!existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring')), 'a rejected request must create nothing on disk');
+  assert.ok(!existsSync(authoringKindDir()) && !existsSync(groundAuthoringDir()), 'a rejected request must create nothing on disk');
 });
 
 test('AT-4: empty/whitespace-only prompt -> 400', async () => {
@@ -81,7 +91,7 @@ test('AT-4: empty/whitespace-only prompt -> 400', async () => {
 test('AT-5: prompt exceeding the length cap -> 400, no _authoring dir created', async () => {
   const res = await start({ project: 'demoproj', prompt: 'x'.repeat(5000) });
   assert.equal(res.status, 400);
-  assert.ok(!existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring')), 'a rejected request must create nothing on disk');
+  assert.ok(!existsSync(authoringKindDir()) && !existsSync(groundAuthoringDir()), 'a rejected request must create nothing on disk');
 });
 
 test('AT-6: unknown project -> 404, no _authoring dir created', async () => {
@@ -106,7 +116,7 @@ test('AT-6: unknown project -> 404, no _authoring dir created', async () => {
 // phase ANY turnSpec row recognised — this corrects the seed to the phase
 // the state machine actually starts at, closing a session-bricking defect
 // rather than loosening a check.
-test('AT-7: a valid start writes a real session dir (status.json + prompt.md) under <project>/_authoring/<sessionId>, prompt.md carries the operator text verbatim', async () => {
+test('AT-7: a valid start writes a real session dir (status.json + prompt.md) under _logs/_sessions/<project>/_authoring/<sessionId> (never in the project checkout), prompt.md carries the operator text verbatim', async () => {
   const res = await start({ project: 'demoproj', prompt: 'A skill that summarizes PR diffs.' });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
@@ -115,10 +125,11 @@ test('AT-7: a valid start writes a real session dir (status.json + prompt.md) un
   assert.equal(body.project, 'demoproj');
   assert.ok(body.sessionId, 'sessionId must be present on a successful start');
 
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_authoring', body.sessionId);
+  const sessionDir = join(authoringKindDir(), body.sessionId);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string; project: string };
   assert.equal(status.phase, 'analyzing', 'D3: the seeded phase must be "analyzing" (the authoring turnSpec\'s first row) — "running" is not a row in ADR-043 §1\'s phase table and would brick the first real turn');
   assert.equal(status.project, 'demoproj');
+  assert.ok(!existsSync(groundAuthoringDir()), 'no session dir may be written into the managed project\'s checkout');
 
   const prompt = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
   assert.equal(prompt, 'A skill that summarizes PR diffs.\n', 'prompt.md must render the operator\'s own words verbatim — no fabricated interview question');
@@ -145,7 +156,7 @@ test('AT-11 (P4): a valid start seeds status.json with the operator\'s prompt ve
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { sessionId: string };
 
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_authoring', body.sessionId);
+  const sessionDir = join(authoringKindDir(), body.sessionId);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string; prompt?: string };
   assert.equal(status.phase, 'analyzing', 'positive control: phase must still be "analyzing" (D3) — unaffected by this fix');
   assert.equal(
@@ -169,21 +180,21 @@ test('AT-12: a valid modelTier ("opus", within the widened range) is persisted i
   const res = await start({ project: 'demoproj', prompt: 'A skill that summarizes PR diffs.', modelTier: 'opus' });
   const body = (await res.json()) as { sessionId: string };
   assert.equal(res.status, 200);
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_authoring', body.sessionId);
+  const sessionDir = join(authoringKindDir(), body.sessionId);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { modelTier?: string };
   assert.equal(status.modelTier, 'opus');
 });
 
 test('AT-13: an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set, no _authoring session dir created', async () => {
-  const before = existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
-    ? readdirSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
+  const before = existsSync(authoringKindDir())
+    ? readdirSync(authoringKindDir())
     : [];
   const res = await start({ project: 'demoproj', prompt: 'A skill that summarizes PR diffs.', modelTier: 'haiku' });
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
   assert.match(body.error, /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
-  const after = existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
-    ? readdirSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
+  const after = existsSync(authoringKindDir())
+    ? readdirSync(authoringKindDir())
     : [];
   assert.deepEqual(after, before, 'a rejected modelTier must not create a new session dir');
 });
@@ -194,26 +205,24 @@ test('AT-8: two starts against the same project mint two distinct session dirs',
   const b1 = (await r1.json()) as { sessionId: string };
   const b2 = (await r2.json()) as { sessionId: string };
   assert.notEqual(b1.sessionId, b2.sessionId);
-  assert.ok(existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring', b1.sessionId)));
-  assert.ok(existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring', b2.sessionId)));
+  assert.ok(existsSync(join(authoringKindDir(), b1.sessionId)));
+  assert.ok(existsSync(join(authoringKindDir(), b2.sessionId)));
 });
 
 // ---------------------------------------------------------------------------
 // Containment
 // ---------------------------------------------------------------------------
 
-test('AT-9 (containment): a project repo carrying a symlinked "_authoring" pointing outside the project is refused — nothing is written through it', async () => {
+test('AT-9 (containment): a logs-side symlinked "_authoring" kind dir pointing outside the logs root is refused — nothing is written through it', async () => {
   const outsideDir = mkdtempSync(join(tmpdir(), 'authoring-start-outside-'));
-  const linkPath = join(forgeRoot, 'projects', 'demoproj', '_authoring');
+  // A fresh project: the symlink must be creatable (an earlier test made a REAL demoproj/_authoring, which would turn this test into a silent no-op).
+  mkdirSync(join(forgeRoot, 'projects', 'escapeproj'), { recursive: true });
+  const linkPath = authoringKindDir('escapeproj');
+  mkdirSync(join(linkPath, '..'), { recursive: true });
+  symlinkSync(outsideDir, linkPath, 'dir');
   try {
-    symlinkSync(outsideDir, linkPath, 'dir');
-  } catch {
-    rmSync(outsideDir, { recursive: true, force: true });
-    return; // symlinks unsupported on this filesystem/platform — skip
-  }
-  try {
-    const res = await start({ project: 'demoproj', prompt: 'escape attempt' });
-    assert.equal(res.status, 400, 'a symlinked _authoring parent escaping the project dir must be refused');
+    const res = await start({ project: 'escapeproj', prompt: 'escape attempt' });
+    assert.equal(res.status, 400, 'a symlinked _authoring parent escaping the logs root must be refused');
     const outsideEntries = existsSync(outsideDir) ? readdirSync(outsideDir) : [];
     assert.deepEqual(outsideEntries, [], 'nothing may be written into the out-of-tree directory the symlink points at');
   } finally {

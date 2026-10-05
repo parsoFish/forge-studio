@@ -107,7 +107,9 @@ export function readRequestedModelTier(status: InteractiveTurnStatus): ModelTier
 
 export type RunInteractiveTurnCtx = {
   sessionId: string;
-  projectRoot: string;
+  /** The managed project's id — names the session dir's home under the logs
+   *  root (`<logsRoot>/_sessions/<project>/…`, forge-8vfn.8.5.58). */
+  project: string;
   /** Forge install root (finalizer library root, log root default). Defaults
    *  to `resolve('.')` — NOT threaded into skill/agent-spec resolution (see
    *  header note — those always resolve against the real forge install). */
@@ -199,6 +201,8 @@ export async function runAgentStyleStep(args: {
   turnSpec: TurnSpec;
   phaseRow: TurnSpecPhase;
   ctx: RunInteractiveTurnCtx;
+  /** Resolved `<forgeRoot>/_logs` — the containment root of `dirSegments`. */
+  logsRoot: string;
   sessionDir: string;
   dirSegments: string[];
   status: InteractiveTurnStatus;
@@ -229,7 +233,7 @@ export async function runAgentStyleStep(args: {
    *  (`turn-budget.ts`); evaluated right before the SDK call it bounds. */
   turnBudgetUsd?: () => number | undefined;
 }): Promise<RunInteractiveTurnResult> {
-  const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, onToolUse, onHeartbeat, onText, onThinking } = args;
+  const { descriptor, turnSpec, phaseRow, ctx, logsRoot, sessionDir, dirSegments, status, onToolUse, onHeartbeat, onText, onThinking } = args;
   // The pinned SDK default lives with the code that SPAWNS, not with the
   // dispatcher that hands it down: a file that imports the query as a value
   // and wires no hooks is hook-blind by the enumeration ratchet's definition,
@@ -382,7 +386,7 @@ export async function runAgentStyleStep(args: {
     }
   }
   if (nextPhase !== status.phase) {
-    writeStatus(ctx.projectRoot, dirSegments, { ...status, phase: nextPhase });
+    writeStatus(logsRoot, dirSegments, { ...status, phase: nextPhase });
   }
   return { phase: nextPhase, wrote, artifacts: {} };
 }
@@ -397,12 +401,13 @@ export async function runFinalizeStep(args: {
   turnSpec: TurnSpec;
   phaseRow: TurnSpecPhase;
   ctx: RunInteractiveTurnCtx;
+  logsRoot: string;
   sessionDir: string;
   dirSegments: string[];
   status: InteractiveTurnStatus;
   forgeRoot: string;
 }): Promise<RunInteractiveTurnResult> {
-  const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, forgeRoot } = args;
+  const { descriptor, turnSpec, phaseRow, ctx, logsRoot, sessionDir, dirSegments, status, forgeRoot } = args;
 
   const finalizerId = phaseRow.finalizer;
   if (!finalizerId) {
@@ -472,7 +477,7 @@ export async function runFinalizeStep(args: {
     forgeRoot,
     libraryRoot,
     status: statusRecord,
-    projectRoot: ctx.projectRoot, // commitToCentralBrain's inputs + promoteToQueue's ports below — call-time ctx seams.
+    logsRoot, // commitToCentralBrain's staged-themes home + promoteToQueue's ports below — call-time ctx seams.
     sessionId: ctx.sessionId,
     ...(ctx.manifestPorts !== undefined ? { manifestPorts: ctx.manifestPorts } : {}),
     ...(ctx.isContainedProjectRepoPath !== undefined ? { isContainedProjectRepoPath: ctx.isContainedProjectRepoPath } : {}),
@@ -490,7 +495,7 @@ export async function runFinalizeStep(args: {
   assertNextPhaseKnown(descriptor, turnSpec, phaseRow);
   const nextPhase = phaseRow.next ?? status.phase;
   if (phaseRow.next) {
-    writeStatus(ctx.projectRoot, dirSegments, { ...status, phase: phaseRow.next });
+    writeStatus(logsRoot, dirSegments, { ...status, phase: phaseRow.next });
   }
   return { phase: nextPhase, wrote, artifacts: {} };
 }
@@ -524,7 +529,7 @@ export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec
 // ---------------------------------------------------------------------------
 
 /** SEC-04 leaf: guarded status.json write. Routes the WHOLE
- *  `<projectRoot>/<dirSegments...>/status.json` path (leaf included) through
+ *  `<logsRoot>/<dirSegments...>/status.json` path (leaf included) through
  *  the containment guard and THROWS (fail closed) if the leaf escapes —
  *  never a silent skip.
  *
@@ -537,10 +542,10 @@ export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec
  *  that a turn finished after the cancel and its advance was discarded —
  *  the lifecycle derivation still reads `terminal`, never `crashed`, because
  *  terminal wins), a containment refusal keeps its own message. */
-export function writeStatus(projectRoot: string, dirSegments: readonly string[], status: InteractiveTurnStatus): void {
-  const p = guardedWriteSessionStatus(projectRoot, dirSegments, status);
+export function writeStatus(logsRoot: string, dirSegments: readonly string[], status: InteractiveTurnStatus): void {
+  const p = guardedWriteSessionStatus(logsRoot, dirSegments, status);
   if (p === null) {
-    if (statusWriteRefusalReason(projectRoot, dirSegments, status.phase) === 'cancelled') {
+    if (statusWriteRefusalReason(logsRoot, dirSegments, status.phase) === 'cancelled') {
       throw new InteractiveRunnerError(
         `runInteractiveTurn: the session was cancelled (phase "${CANCELLED_PHASE}") while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
       );

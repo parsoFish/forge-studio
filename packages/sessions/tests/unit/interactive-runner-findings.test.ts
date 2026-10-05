@@ -42,11 +42,11 @@ import { skillPathRelative } from '@forge/agents';
 // turn, and requires status.json to remain un-advanced (the artifact, not
 // just the caught error, is the proof).
 test('Finding 1: an agent-step phase whose `next` names a phase absent from turnSpec.phases throws LOUD on the triggering turn and does NOT persist the ghost phase to status.json', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-ghost-next-agent');
   assert.equal(descriptor.turnSpec?.phases[0]?.next, 'ghost-next-phase', 'arrange: fixture next must genuinely be dangling');
   const sessionId = 'ghost-next-agent-001';
-  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', descriptor.turnSpec!.kindDir, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   // Precondition, asserted before reading any verdict.
@@ -56,7 +56,7 @@ test('Finding 1: an agent-step phase whose `next` names a phase absent from turn
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: noopAgentQueryFn(),
@@ -79,11 +79,11 @@ test('Finding 1: an agent-step phase whose `next` names a phase absent from turn
 // normally here (a real staged file, a real destination) — the bug is
 // strictly in what happens to status.json AFTER a successful finalize.
 test('Finding 1: a finalize-step phase whose `next` names a phase absent from turnSpec.phases throws LOUD on the triggering turn and does NOT persist the ghost phase to status.json', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-ghost-next-finalize');
   assert.equal(descriptor.turnSpec?.phases[0]?.next, 'ghost-next-phase', 'arrange: fixture next must genuinely be dangling');
   const sessionId = 'ghost-next-finalize-001';
-  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', descriptor.turnSpec!.kindDir, sessionId);
   const stagingDir = join(sessionDir, 'staging');
   mkdirSync(stagingDir, { recursive: true });
   writeFileSync(join(stagingDir, 'x.md'), 'x');
@@ -95,7 +95,7 @@ test('Finding 1: a finalize-step phase whose `next` names a phase absent from tu
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: neverCalledQueryFn(),
@@ -132,7 +132,7 @@ test('Finding 1: a finalize-step phase whose `next` names a phase absent from tu
 // `discoverStagingEntries`'s own convention (interactive-finalizers.ts
 // ~208-212).
 test('Finding 2/3: a guard-rejected FILE symlink inside a writes: dir throws a named error identifying the offending entry, not a silent drop', async (t) => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   const stagingDir = join(sessionDir, 'staging');
@@ -157,7 +157,7 @@ test('Finding 2/3: a guard-rejected FILE symlink inside a writes: dir throws a n
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: noopAgentQueryFn(),
@@ -178,7 +178,7 @@ test('Finding 2/3: a guard-rejected FILE symlink inside a writes: dir throws a n
 // test pins that legitimate case must still return `[]`, not throw, so a
 // fix cannot conflate the two).
 test('Finding 2/3: a writes: dir that is ITSELF a symlink to an outside dir throws a named error, not a silent wrote:[] indistinguishable from "not yet populated"', async (t) => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   const outsideDir = mkdtempSync(join(tmpdir(), 'interactive-runner-f23-dirsym-outside-'));
@@ -199,7 +199,7 @@ test('Finding 2/3: a writes: dir that is ITSELF a symlink to an outside dir thro
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: noopAgentQueryFn(),
@@ -240,7 +240,7 @@ test('Finding 2/3: a writes: dir that is ITSELF a symlink to an outside dir thro
 // shipping an operator-facing empty package — strictly more protective, not
 // less; nothing that was correctly rejected before is now accepted.
 test('P1: a declared writes: dir that does not exist yet — the turn produced NOTHING — refuses the phase advance loudly, naming the session kind/phase/entry, and does NOT persist the ghost advance to status.json', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   // Precondition, asserted before reading any verdict: staging/ genuinely
@@ -257,7 +257,7 @@ test('P1: a declared writes: dir that does not exist yet — the turn produced N
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: noopAgentQueryFn(),
@@ -295,7 +295,7 @@ test('P1: a declared writes: dir that does not exist yet — the turn produced N
 // receives — none of which AT-1 itself would catch, since AT-1's queryFn
 // stub never inspects its own arguments.
 test('Finding 4: the ADR-024 derivation actually threads into the queryFn call — model + allowedTools match the real skill-derived spec', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   // Precondition, asserted before reading any verdict.
@@ -316,7 +316,7 @@ test('Finding 4: the ADR-024 derivation actually threads into the queryFn call �
 
   await runInteractiveTurn(descriptor, {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn,
@@ -370,7 +370,7 @@ test('Finding 4: the ADR-024 derivation actually threads into the queryFn call �
 // ---------------------------------------------------------------------------
 
 test('status.modelTier equal to the fixed tier ("sonnet") is honored — reaches queryFn as options.model', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString(), modelTier: 'sonnet' });
 
@@ -386,13 +386,13 @@ test('status.modelTier equal to the fixed tier ("sonnet") is honored — reaches
     return gen();
   };
 
-  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(capturedModel, 'claude-sonnet-4-6');
 });
 
 test('status.modelTier absent resolves to the unchanged default — byte-identical prior behavior (pins Finding 4\'s own expectation)', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -411,13 +411,13 @@ test('status.modelTier absent resolves to the unchanged default — byte-identic
     return gen();
   };
 
-  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(capturedModel, expectedModel);
 });
 
 test('status.modelTier mismatching the fixed tier throws naming the value and the allowed set', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString(), modelTier: 'opus' });
 
@@ -430,7 +430,7 @@ test('status.modelTier mismatching the fixed tier throws naming the value and th
   };
 
   await assert.rejects(
-    () => runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    () => runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /requested model tier "opus".*allowed tier\(s\): sonnet/,
   );
 });

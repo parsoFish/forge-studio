@@ -73,7 +73,7 @@ export type AgentSlugRouteDeps = AgentHistoryDeps & {
   spawnAgentDispatch(
     forgeRoot: string, slug: string, runId: string, project?: string,
     inputs?: Record<string, string>, sessionDir?: string,
-    costCeilingUsd?: number, projectsRoot?: string,
+    costCeilingUsd?: number, logsRoot?: string,
   ): void;
   dryBridgeAgentTurnMarker(logsRoot: string, route: string, runId: string): Record<string, unknown>;
   ensureAgentRunTail(runId: string): void;
@@ -530,11 +530,11 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
         },
       });
     }
-    // Bead forge-c6h — thread the bridge's own snapshot projects root
-    // through as --projects-root so a dispatch carrying a --session-dir
+    // Bead forge-c6h — thread the bridge's own logs root
+    // through as --logs-root so a dispatch carrying a --session-dir
     // (none on this generic route today — sessionDir is `undefined` here;
     // the flag is inert without it) never has to re-derive it downstream.
-    deps.spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd, deps.projectsRoot);
+    deps.spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd, ctx.logsRoot);
     // agents-20: start streaming this run's log to connected WS clients
     // now that events.jsonl exists (ensureTailFor no-ops on a missing
     // file, which is why the t0 event above must land first). The status

@@ -116,7 +116,7 @@ function tracingLogger(trace: string[]): { logger: EventLogger; messages: string
 function plant(over: Partial<ArchitectStatus>): { root: string; projectRoot: string; statusPath: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-stage-events-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
   const status: ArchitectStatus = {
     session_id: 'sess-1',
@@ -141,7 +141,7 @@ test('8.1.14: draft -> critic(HIGH) -> revise -> critic(clean) -> awaiting-verdi
   const { logger } = tracingLogger(trace);
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict');
@@ -191,7 +191,7 @@ test('8.1.14: the explore stage gets its own start event, before its structured 
   const { logger, entries } = tracingLogger(trace);
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict');
@@ -214,15 +214,15 @@ test('8.1.14: the explore stage gets its own start event, before its structured 
 
 test('8.1.14: finalize gets its own start event, at the top, before "plan-approved"', async () => {
   const { root, projectRoot } = plant({ phase: 'finalizing' });
-  const manifestsDir = join(projectRoot, '_architect', 'sess-1', 'manifests');
+  const manifestsDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'manifests');
   mkdirSync(manifestsDir, { recursive: true });
   writeFileSync(join(manifestsDir, 'INIT-1.md'), '---\ninitiative_id: INIT-1\n---\nbody\n', 'utf8');
   const trace: string[] = [];
-  const { queryFn, prompts } = tracingQueryFn([], trace, join(projectRoot, '_architect', 'sess-1', 'status.json'));
+  const { queryFn, prompts } = tracingQueryFn([], trace, join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'status.json'));
   const { logger, messages } = tracingLogger(trace);
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), queueRoot: join(root, '_queue'), brainCwd: root,
       queryFn: queryFn as never, logger,
     });

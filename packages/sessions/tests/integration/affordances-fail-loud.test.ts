@@ -116,7 +116,7 @@ after(async () => {
 });
 
 function seed(project: string, kind: string, sessionId: string, phase: string): string {
-  const dir = join(forgeRoot, 'projects', project, `_${kind}`, sessionId);
+  const dir = join(forgeRoot, '_logs', '_sessions', project, `_${kind}`, sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase }, null, 2), 'utf8');
   return dir;

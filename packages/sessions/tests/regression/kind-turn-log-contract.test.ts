@@ -45,7 +45,7 @@ const NON_SPAWNING_PHASE = 'rejected' as const;
 function setup(): { forgeRoot: string; projectRoot: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'kind-turn-log-'));
   const projectRoot = join(forgeRoot, 'projects', 'testproj');
-  const sessionDir = instructionsSessionDir(projectRoot, SESSION_ID);
+  const sessionDir = instructionsSessionDir(join(forgeRoot, '_logs'), 'testproj', SESSION_ID);
   mkdirSync(sessionDir, { recursive: true });
   const status: InstructionsStatus = {
     session_id: SESSION_ID,
@@ -78,7 +78,7 @@ function eventsUnder(logsRoot: string): Record<string, unknown>[] {
 test('an instructions turn TERMINATES its event log (bead 5.38 shape)', async () => {
   const { forgeRoot, projectRoot } = setup();
   try {
-    const result = await runInstructionsTurn({ sessionId: SESSION_ID, projectRoot, forgeRoot });
+    const result = await runInstructionsTurn({ sessionId: SESSION_ID, project: 'testproj', projectRoot, forgeRoot });
     assert.equal(result.phase, 'rejected', 'fixture precondition: the non-spawning step must have run');
 
     const events = eventsUnder(join(forgeRoot, '_logs'));
@@ -108,7 +108,7 @@ test('the _logs root is anchored on forgeRoot, never the process cwd (agents fin
     // The whole point: cwd is NOT forgeRoot. Under the pre-port
     // `resolve('_logs')` the events land here instead, and the run's log ends.
     process.chdir(elsewhere);
-    await runInstructionsTurn({ sessionId: SESSION_ID, projectRoot, forgeRoot });
+    await runInstructionsTurn({ sessionId: SESSION_ID, project: 'testproj', projectRoot, forgeRoot });
 
     assert.ok(
       eventsUnder(join(forgeRoot, '_logs')).length > 0,
@@ -155,7 +155,7 @@ test('the driver refuses a status advance over a cancelled phase, naming the rea
   const forgeRoot = mkdtempSync(join(tmpdir(), 'kind-turn-cancel-'));
   try {
     const projectRoot = join(forgeRoot, 'projects', 'testproj');
-    const sessionDir = join(projectRoot, '_probe', SESSION_ID);
+    const sessionDir = join(forgeRoot, '_logs', '_sessions', 'testproj', '_probe', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     writeSessionStatus(sessionDir, { session_id: SESSION_ID, phase: 'working' });
 
@@ -176,7 +176,7 @@ test('the driver refuses a status advance over a cancelled phase, naming the rea
       otherwise: (st) => ({ phase: st.phase, wrote: [] }),
     };
 
-    await runKindTurn(variant, { sessionId: SESSION_ID, projectRoot, forgeRoot });
+    await runKindTurn(variant, { sessionId: SESSION_ID, project: 'testproj', projectRoot, forgeRoot });
 
     const after = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
     assert.equal(after.phase, 'cancelled', 'the terminal cancelled phase is sticky — the advance must be discarded');
@@ -204,7 +204,7 @@ test('runKindTurn: a THROWING step still terminates the log with exactly one end
   const forgeRoot = mkdtempSync(join(tmpdir(), 'kind-turn-throw-'));
   try {
     const projectRoot = join(forgeRoot, 'projects', 'testproj');
-    const sessionDir = join(projectRoot, '_probe', SESSION_ID);
+    const sessionDir = join(forgeRoot, '_logs', '_sessions', 'testproj', '_probe', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     writeSessionStatus(sessionDir, { session_id: SESSION_ID, phase: 'working' });
 
@@ -221,7 +221,7 @@ test('runKindTurn: a THROWING step still terminates the log with exactly one end
     };
 
     await assert.rejects(
-      runKindTurn(variant, { sessionId: SESSION_ID, projectRoot, forgeRoot }),
+      runKindTurn(variant, { sessionId: SESSION_ID, project: 'testproj', projectRoot, forgeRoot }),
       /pinned step failure/,
       'the throw must still propagate — this fix changes event logging, not control flow',
     );

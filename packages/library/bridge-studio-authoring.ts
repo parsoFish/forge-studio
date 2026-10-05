@@ -163,7 +163,6 @@
 import type { AuthoringSessionPort, AuthoringStatus, AuthoringTurnResult } from './studio/authoring-session.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { rmSync } from 'node:fs';
-import { dirname } from 'node:path';
 import {
   sendJson,
   allowedOrigin,
@@ -172,8 +171,10 @@ import {
   type StudioContext,
   type RouteContext,
 } from '@forge/kernel';
-import { resolveGuardedPath } from '@forge/kernel';
-import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
+import { resolveGuardedPath, sessionDirSegments, resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
+
+/** The authoring session kind's on-disk kind dir under `<logsRoot>/_sessions/<project>/`. */
+const AUTHORING_KIND_DIR = '_authoring';
 // Static import — `interactive-finalizers.ts` imports only `node:fs`,
 // `node:path` and the path guard (no Claude Agent SDK), so pulling its named
 // error class in here does NOT regress the deliberate dynamic-import-of-the-
@@ -234,13 +235,13 @@ function isEntryScopedFinalizerRefusal(err: Error): boolean {
 // ---------------------------------------------------------------------------
 
 function revertToAwaitingReview(
-  projectsRoot: string,
+  logsRoot: string,
   dirSegments: readonly string[],
   preCommitStatus: AuthoringStatus,
   sessions: AuthoringSessionPort,
 ): void {
   try {
-    sessions.writeStatus(projectsRoot, dirSegments, { ...preCommitStatus, phase: REQUIRED_PHASE });
+    sessions.writeStatus(logsRoot, dirSegments, { ...preCommitStatus, phase: REQUIRED_PHASE });
   } catch {
     /* best-effort — see doc comment above */
   }
@@ -268,14 +269,17 @@ export async function runFinalize(
   const { project, sessionId, kind, id } = input;
 
   try {
-    // Step 1 — the projects root, resolved the way every other bridge route
-    // does. Never a hardcoded `<cwd>/projects`.
-    const projectsRoot = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
+    // Step 1 — session dirs live at `<logsRoot>/_sessions/<project>/_authoring/<sessionId>`, never in the ground.
+    const logsRoot = ctx.logsRoot;
+
+    // Step 1b — the project must be a contained, existing project (a symlink escaping the projects root is refused).
+    const projectGuard = resolveGuardedPath(resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot))), [project]);
+    if (!projectGuard.ok || !projectGuard.exists) return void sendJson(res, 400, { error: 'invalid project or session' }, origin);
 
     // Step 2 — `project` and `sessionId` EACH ride as their OWN guarded
     // segment. Never folded into the root.
-    const dirSegments = [project, '_authoring', sessionId];
-    const sessionGuard = resolveGuardedPath(projectsRoot, dirSegments);
+    const dirSegments = sessionDirSegments(project, AUTHORING_KIND_DIR, sessionId);
+    const sessionGuard = resolveGuardedPath(logsRoot, dirSegments);
     if (!sessionGuard.ok) {
       sendJson(res, 400, { error: 'invalid project or session' }, origin);
       return;
@@ -287,7 +291,7 @@ export async function runFinalize(
 
     // Step 3 — the guarded read (leaf included) — the SAME primitive
     // runInteractiveTurn itself uses for its own status reads.
-    const status = sessions.readStatus<AuthoringStatus>(projectsRoot, dirSegments);
+    const status = sessions.readStatus<AuthoringStatus>(logsRoot, dirSegments);
     if (!status) {
       sendJson(res, 404, { error: 'session status not found' }, origin);
       return;
@@ -300,7 +304,7 @@ export async function runFinalize(
     }
 
     // Step 4 — guarded-write package_id + phase:'committing'.
-    const written = sessions.writeStatus(projectsRoot, dirSegments, { ...status, package_id: id, phase: 'committing' });
+    const written = sessions.writeStatus(logsRoot, dirSegments, { ...status, package_id: id, phase: 'committing' });
     if (written === null) {
       sendJson(res, 500, { error: 'failed to advance session status to "committing"' }, origin);
       return;
@@ -318,14 +322,7 @@ export async function runFinalize(
     // there is exactly one place that decides how to recover — never a
     // bespoke per-branch write.
     // -------------------------------------------------------------------
-    const revert = (): void => revertToAwaitingReview(projectsRoot, dirSegments, status, sessions);
-
-    // sessionGuard.realPath === <projectsRoot realpath>/<project>/_authoring/
-    // <sessionId> (resolveGuardedPath's own per-segment join order) — the
-    // project root is the same value with the trailing two segments
-    // stripped. No second guard call needed: the identity of `project` was
-    // already fully verified by the walk above.
-    const projectRoot = dirname(dirname(sessionGuard.realPath));
+    const revert = (): void => revertToAwaitingReview(logsRoot, dirSegments, status, sessions);
 
     try {
       // library-37 fix (W8-B4/WI-3): the former "Step 4.5" preflight here
@@ -354,7 +351,7 @@ export async function runFinalize(
       // project-brain kind's dynamic-import precedent.
       const turnResult: AuthoringTurnResult | null = await sessions.runAuthoringTurn({
         sessionId,
-        projectRoot,
+        project,
         forgeRoot: ctx.forgeRoot,
       });
       if (turnResult === null) {
@@ -403,9 +400,9 @@ export async function runFinalize(
       // status.json to phase 'committed') and best-effort: the package HAS
       // landed and installed — a failed pointer write must never turn that
       // into a reported failure.
-      const committedStatus = sessions.readStatus<AuthoringStatus>(projectsRoot, dirSegments);
+      const committedStatus = sessions.readStatus<AuthoringStatus>(logsRoot, dirSegments);
       if (committedStatus) {
-        sessions.writeStatus(projectsRoot, dirSegments, { ...committedStatus, finalized: { kind, id } });
+        sessions.writeStatus(logsRoot, dirSegments, { ...committedStatus, finalized: { kind, id } });
       }
       sendJson(res, 200, { ok: true, kind, id }, origin);
     } catch (err) {

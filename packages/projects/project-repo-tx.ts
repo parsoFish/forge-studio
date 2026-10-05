@@ -35,7 +35,7 @@ export class StudioWritePathIgnoredError extends Error {
 }
 
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
-const SCRATCH_EXCLUDES = ['_instructions', '_demo', '_preflight-fix', '_architect', '_project-brain', '.forge/work-items'];
+const SCRATCH_EXCLUDES = ['_preflight-fix', '.forge/work-items'];
 
 function git(projectDir: string, args: string[], opts: { allowFail?: boolean; raw?: boolean } = {}): string { // raw: porcelain's leading status column survives (a trim eats it)
   try {

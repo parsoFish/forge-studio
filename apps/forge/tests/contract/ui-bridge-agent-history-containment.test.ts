@@ -19,7 +19,7 @@
  *     3. `events.jsonl` is a HARDLINK (nlink===2) to an outside file.
  *   SESSION (`collectSessionRows` — existsSync(kindDir) ~981, readdirSync ~984,
  *   readSessionStatus ~990):
- *     4. `projects/<p>/_<kind>` is a DIRECTORY symlink — the P0. Realistic
+ *     4. `_logs/_sessions/<p>/_<kind>` is a DIRECTORY symlink — the P0. Realistic
  *        fixture: a RELATIVE symlink of exactly the `git update-index
  *        --cacheinfo 120000` shape (host-path-agnostic, plantable by an
  *        ordinary commit to any onboarded project's own repo).
@@ -147,6 +147,12 @@ const SESSION_KINDS_YAML = `- id: esc4kind
     kind: roadmap-draft
     label: Ordinary artifact
 `;
+
+/** `<logsRoot>/_sessions/<project>[/<kindDir>/<sid>]` — session dirs live under
+ *  the logs root, never inside the project checkout. */
+function sessionsHome(project: string, ...rest: string[]): string {
+  return join(logsRoot, '_sessions', project, ...rest);
+}
 
 function seedSessionKindsYaml(): void {
   const dir = join(forgeRoot, 'studio');
@@ -285,27 +291,27 @@ before(async () => {
   esc3LegitDirName = '_agent-esc3-2026-01-01T00-05-00-000-legit';
   seedRealStandaloneRun(esc3LegitDirName, 'esc3', 5.43);
 
-  // --- Escape 4 (P0): projects/<p>/_esc4kind is a DIRECTORY symlink ----------
+  // --- Escape 4 (P0): _logs/_sessions/<p>/_esc4kind is a DIRECTORY symlink ----------
   // Realistic, host-path-agnostic RELATIVE symlink — exactly the shape
   // `git update-index --cacheinfo 120000` produces, plantable by an ordinary
   // commit to the malicious project's own repo with zero knowledge of the
   // operator's disk layout (only forge's own fixed internal shape:
-  // projects/<name>/_<kind>).
-  const victimProjectDir = join(projectsRoot, 'victim-project-esc4');
+  // _logs/_sessions/<name>/_<kind>).
+  const victimProjectDir = sessionsHome('victim-project-esc4');
   esc4VictimSessionId = '2026-05-01T00-00-00-victim';
   const victimSessionDir = join(victimProjectDir, '_esc4kind', esc4VictimSessionId);
   mkdirSync(victimSessionDir, { recursive: true });
   esc4VictimStatusPath = join(victimSessionDir, 'status.json');
   writeStatusJsonAt(esc4VictimStatusPath, esc4VictimSessionId, 'victim-project-esc4', ESC4_SENTINEL_PHASE);
 
-  const maliciousProjectDir = join(projectsRoot, 'malicious-project-esc4');
+  const maliciousProjectDir = sessionsHome('malicious-project-esc4');
   mkdirSync(maliciousProjectDir, { recursive: true });
   esc4MaliciousKindPath = join(maliciousProjectDir, '_esc4kind');
   symlinkSync('../victim-project-esc4/_esc4kind', esc4MaliciousKindPath, 'dir');
 
   // A THIRD, wholly unrelated legitimate project — never touched by the
   // malicious symlink at all — for the per-element-isolation pin.
-  const legitProjectDir = join(projectsRoot, 'legit-project-esc4');
+  const legitProjectDir = sessionsHome('legit-project-esc4');
   esc4LegitSessionId = '2026-05-02T00-00-00-legit';
   const legitSessionDir = join(legitProjectDir, '_esc4kind', esc4LegitSessionId);
   mkdirSync(legitSessionDir, { recursive: true });
@@ -317,12 +323,12 @@ before(async () => {
   esc5OutsideStatusPath = join(esc5OutsideDir, 'fake-status.json');
   esc5PoisonSessionId = 'esc5-poison-session';
   writeStatusJsonAt(esc5OutsideStatusPath, esc5PoisonSessionId, 'esc5project', ESC5_SENTINEL_PHASE);
-  const esc5PoisonSessionDir = join(projectsRoot, 'esc5project', '_esc5kind', esc5PoisonSessionId);
+  const esc5PoisonSessionDir = sessionsHome('esc5project', '_esc5kind', esc5PoisonSessionId);
   mkdirSync(esc5PoisonSessionDir, { recursive: true }); // REAL session dir
   esc5PoisonStatusPath = join(esc5PoisonSessionDir, 'status.json');
   symlinkSync(esc5OutsideStatusPath, esc5PoisonStatusPath, 'file');
   esc5LegitSessionId = 'esc5-legit-session';
-  const esc5LegitSessionDir = join(projectsRoot, 'esc5project', '_esc5kind', esc5LegitSessionId);
+  const esc5LegitSessionDir = sessionsHome('esc5project', '_esc5kind', esc5LegitSessionId);
   mkdirSync(esc5LegitSessionDir, { recursive: true });
   writeStatusJsonAt(join(esc5LegitSessionDir, 'status.json'), esc5LegitSessionId, 'esc5project', 'awaiting-verdict');
 
@@ -332,12 +338,12 @@ before(async () => {
   esc6OutsideStatusPath = join(esc6OutsideDir, 'fake-status.json');
   esc6PoisonSessionId = 'esc6-poison-session';
   writeStatusJsonAt(esc6OutsideStatusPath, esc6PoisonSessionId, 'esc6project', ESC6_SENTINEL_PHASE);
-  const esc6PoisonSessionDir = join(projectsRoot, 'esc6project', '_esc6kind', esc6PoisonSessionId);
+  const esc6PoisonSessionDir = sessionsHome('esc6project', '_esc6kind', esc6PoisonSessionId);
   mkdirSync(esc6PoisonSessionDir, { recursive: true }); // REAL session dir
   esc6PoisonStatusPath = join(esc6PoisonSessionDir, 'status.json');
   linkSync(esc6OutsideStatusPath, esc6PoisonStatusPath); // HARDLINK
   esc6LegitSessionId = 'esc6-legit-session';
-  const esc6LegitSessionDir = join(projectsRoot, 'esc6project', '_esc6kind', esc6LegitSessionId);
+  const esc6LegitSessionDir = sessionsHome('esc6project', '_esc6kind', esc6LegitSessionId);
   mkdirSync(esc6LegitSessionDir, { recursive: true });
   writeStatusJsonAt(join(esc6LegitSessionDir, 'status.json'), esc6LegitSessionId, 'esc6project', 'awaiting-verdict');
 
@@ -436,7 +442,7 @@ test('ESCAPE 3 (standalone events.jsonl hardlink): a hardlinked events.jsonl (nl
 });
 
 // ---------------------------------------------------------------------------
-// Escape 4 (P0): projects/<p>/_esc4kind is a DIRECTORY symlink
+// Escape 4 (P0): _logs/_sessions/<p>/_esc4kind is a DIRECTORY symlink
 // ---------------------------------------------------------------------------
 
 test('ESCAPE 4 P0 (session kind-dir symlink, realistic relative shape): the malicious project\'s symlinked _esc4kind never contributes its OWN row for the victim session — attribution stays exactly 1, never 2 — while a wholly unrelated legit project\'s session is unaffected', async () => {
@@ -453,7 +459,7 @@ test('ESCAPE 4 P0 (session kind-dir symlink, realistic relative shape): the mali
 
   // NOTE on oracle choice (why not a bare "sentinel absent" check): this
   // escape's realistic fixture requires `victim-project-esc4` to be a REAL,
-  // independently-onboarded sibling project under the SAME `projects/` root
+  // independently-onboarded sibling project under the SAME `_logs/_sessions/` root
   // the symlink's relative target resolves into — `collectSessionRows`'s own
   // enumeration loop visits `victim-project-esc4` DIRECTLY and produces its
   // OWN legitimate row for this session regardless of the attack. The
@@ -557,7 +563,7 @@ test('ESCAPE 6 (session status.json hardlink): a hardlinked status.json (nlink==
 test('FALSE-REJECTION: an ordinary standalone run and an ordinary session (plain names, no symlinks/hardlinks anywhere) are still found, even after every escape fixture above exists in the same forgeRoot', async () => {
   const ordinaryDirName = seedRealStandaloneRun('_agent-ordinary-standalone-2026-07-01T00-00-00-000-plain', 'ordinary-standalone-agent', 0.99).split('/').pop()!;
 
-  const ordinaryProjectDir = join(projectsRoot, 'ordinary-project-1');
+  const ordinaryProjectDir = sessionsHome('ordinary-project-1');
   const ordinarySessionId = '2026-07-01T00-00-00-ordinary';
   const ordinarySessionDir = join(ordinaryProjectDir, '_ordinarykind', ordinarySessionId);
   mkdirSync(ordinarySessionDir, { recursive: true });

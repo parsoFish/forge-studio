@@ -88,7 +88,7 @@ import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { createLogger, bridgeCycleId, installForgeRefGuardHook } from '@forge/kernel';
+import { createLogger, bridgeCycleId, installForgeRefGuardHook, ARCHITECT_KIND_DIR } from '@forge/kernel';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
@@ -257,7 +257,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // in-flight). Pure file hygiene, not a spawn: unlike the reflect-reconcile
   // above, this runs unconditionally — no isDryBridge/no-spawn guard applies,
   // since nothing here dispatches an agent.
-  const releasedKbCleanupCount = releaseInterruptedKbCleanupApplies(forgeRoot, projectsRoot, knowledgeSessionStatusIo);
+  const releasedKbCleanupCount = releaseInterruptedKbCleanupApplies(forgeRoot, logsRoot, knowledgeSessionStatusIo);
   if (releasedKbCleanupCount > 0) {
     console.error(`[bridge] released ${releasedKbCleanupCount} kb-cleanup session(s) stuck at 'applying' after a restart`);
   }
@@ -386,25 +386,25 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     ));
   };
 
-  // ADR 020 — watch each project's `_architect/` dir (recursively where the
+  // ADR 020 — watch each project's architect session dir (recursively where the
   // platform supports it) so the runner's file-checkpoint writes (questions,
   // PLAN, status) push a re-fetch signal to the UI. Mirrors `watchQueue`.
   const watchArchitect = (): void => {
-    architectWatchers.push(...watchProjectSubdirs(projectsRoot, '_architect', () => broadcast({ type: 'architect-list-changed' })));
+    architectWatchers.push(...watchProjectSubdirs(logsRoot, ARCHITECT_KIND_DIR, () => broadcast({ type: 'architect-list-changed' })));
   };
 
   // Stage A — watch each project's `_instructions/` dir so the runner's
   // file-checkpoint writes (questions, AGENTS.draft.md, status) push a re-fetch
   // signal to the UI. Mirrors `watchArchitect`.
   const watchInstructions = (): void => {
-    instructionsWatchers.push(...watchProjectSubdirs(projectsRoot, '_instructions', () => broadcast({ type: 'instructions-list-changed' })));
+    instructionsWatchers.push(...watchProjectSubdirs(logsRoot, '_instructions', () => broadcast({ type: 'instructions-list-changed' })));
   };
 
   // Stage B — watch each project's `_demo/` dir so the runner's file-checkpoint
   // writes (status, DEMO.html generation) push a re-fetch signal to the UI.
   // Mirrors `watchInstructions`.
   const watchDemo = (): void => {
-    demoWatchers.push(...watchProjectSubdirs(projectsRoot, '_demo', () => broadcast({ type: 'demo-list-changed' })));
+    demoWatchers.push(...watchProjectSubdirs(logsRoot, '_demo', () => broadcast({ type: 'demo-list-changed' })));
   };
 
   /** W7-C2 (A12) — the one place that knows which kinds have a `*-list-changed` WS event; a kind with none honestly no-ops. */
@@ -696,7 +696,7 @@ async function handleHttp(
     // readability predicate in rather than letting the runs routes import it
     // and close a module cycle. Same seam, same reason, as `ensureSessionTail`.
     sessionIsReadable: ({ kind, sessionId }) => sessionIsReadable({
-      projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot, kind, sessionId,
+      logsRoot: ctx.logsRoot, kind, sessionId,
     }),
   }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;

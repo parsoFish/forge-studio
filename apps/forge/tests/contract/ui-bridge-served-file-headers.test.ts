@@ -72,6 +72,11 @@ function repoDir(): string {
   return join(projectsRoot, 'demo');
 }
 
+/** Session dirs live under the logs root, never in the ground (repoDir()). */
+function sessionsHome(): string {
+  return join(logsRoot, '_sessions', 'demo');
+}
+
 function plantStatus(sessionDir: string, status: DemoBuilderStatus): void {
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
@@ -115,19 +120,19 @@ before(async () => {
   writeFileSync(join(logsRoot, CYCLE_ID, 'artifacts', 'evil".html'), '<!doctype html><body>quote</body>');
 
   // Route 2 — GET /api/architect/file/<project>/<sid>/<filename>
-  mkdirSync(join(repoDir(), '_architect', ARCH_SID), { recursive: true });
-  writeFileSync(join(repoDir(), '_architect', ARCH_SID, 'PLAN.html'), '<!doctype html><body>arch plan</body>');
+  mkdirSync(join(sessionsHome(), '_architect', ARCH_SID), { recursive: true });
+  writeFileSync(join(sessionsHome(), '_architect', ARCH_SID, 'PLAN.html'), '<!doctype html><body>arch plan</body>');
 
   // Route 3 — GET /api/instructions/file/<project>/<sid>/<filename>
-  mkdirSync(join(repoDir(), '_instructions', INSTR_SID), { recursive: true });
-  writeFileSync(join(repoDir(), '_instructions', INSTR_SID, 'AGENTS.draft.md'), '# draft');
+  mkdirSync(join(sessionsHome(), '_instructions', INSTR_SID), { recursive: true });
+  writeFileSync(join(sessionsHome(), '_instructions', INSTR_SID, 'AGENTS.draft.md'), '# draft');
 
   // Route 4 — GET /api/demo-builder/demo/<project>/<sid> (the fragment
   // route that was route 5 went with the per-element fragments, forge-mfv5.2.8)
   mkdirSync(join(repoDir(), '.forge', 'demo'), { recursive: true });
   writeFileSync(join(repoDir(), '.forge', 'demo', 'DEMO.html'), '<!doctype html><body>demo</body>');
   plantStatus(
-    join(repoDir(), '_demo', DEMO_SID),
+    join(sessionsHome(), '_demo', DEMO_SID),
     makeStatus({ session_id: DEMO_SID, project: 'demo', project_repo_path: repoDir() }),
   );
 
@@ -147,7 +152,7 @@ before(async () => {
   // written directly onto disk — mirrors apps/forge/tests/integration/ui-bridge-demo-generations.test.ts.
   const { json } = await post('/api/demo-builder/start', { project: 'demo' });
   genSid = json.sessionId as string;
-  const genDir = join(repoDir(), '_demo', genSid, 'generations', '1');
+  const genDir = join(sessionsHome(), '_demo', genSid, 'generations', '1');
   mkdirSync(genDir, { recursive: true });
   writeFileSync(join(genDir, 'DEMO.html'), '<!doctype html><body>generation</body>');
 });

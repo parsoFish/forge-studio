@@ -184,8 +184,9 @@ export type FinalizerContext = {
    *  isContainedProjectRepoPath before using it as a write root. */
   project_repo_path?: string;
   project?: string;
-  /** commitToCentralBrain's own inputs (mirrors kinds/project-brain.ts). */
-  projectRoot?: string;
+  /** commitToCentralBrain's own inputs (mirrors kinds/project-brain.ts): the
+   *  logs root the staged themes' session dir lives under. */
+  logsRoot?: string;
   sessionId?: string;
   /** See QueuePorts. Absent ⇒ promoteToQueue refuses (no silent no-op). */
   manifestPorts?: QueuePorts;
@@ -534,14 +535,14 @@ export function promoteToQueue(ctx: FinalizerContext): string[] {
 /** Generalizes project-brain's real `committing` phase by CALLING
  *  commitProjectBrain (theme copy + regenerateBrainIndex) directly. */
 export function commitToCentralBrain(ctx: FinalizerContext): string[] {
-  if (ctx.project === undefined || ctx.projectRoot === undefined || ctx.sessionId === undefined) {
-    throw new InteractiveFinalizerError('commitToCentralBrain: FinalizerContext.project/projectRoot/sessionId are all required.');
+  if (ctx.project === undefined || ctx.logsRoot === undefined || ctx.sessionId === undefined) {
+    throw new InteractiveFinalizerError('commitToCentralBrain: FinalizerContext.project/logsRoot/sessionId are all required.');
   }
   const statusRecord = ctx.status ?? {};
   const kbId = typeof statusRecord.kb_id === 'string' ? statusRecord.kb_id : undefined;
   const kbBinding = statusRecord.kb_binding as ProjectBrainCommitInput['kb_binding'];
   const committed = commitProjectBrain({
-    projectRoot: ctx.projectRoot,
+    logsRoot: ctx.logsRoot,
     sessionId: ctx.sessionId,
     forgeRoot: ctx.forgeRoot,
     status: {

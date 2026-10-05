@@ -56,12 +56,12 @@ After reading, emit `architect.brain-query` listing paths consulted. Include eve
 
 - Operator's free-form idea/brief (live in conversation).
 - Brain 2 (cycles) and Brain 3 (project) — read in required first action.
-- If a `revise` round: `<projectRepoPath>/_architect/<session-id>/feedback.md` — operator's bundled annotations. Treat as binding scope.
+- If a `revise` round: `<logsRoot>/_sessions/<project>/_architect/<session-id>/feedback.md` — operator's bundled annotations. Treat as binding scope.
 
 ## Outputs
 
-- **`<projectRepoPath>/_architect/<session-id>/PLAN.md`** (per C12). Runner renders PLAN.md + sibling PLAN.html via `packages/sessions/kinds/architect-plan.ts:writePlanDoc`.
-- **`<projectRepoPath>/_architect/<session-id>/manifests/INIT-*.md`** — draft manifests, NOT yet queued.
+- **`<logsRoot>/_sessions/<project>/_architect/<session-id>/PLAN.md`** (per C12). Runner renders PLAN.md + sibling PLAN.html via `packages/sessions/kinds/architect-plan.ts:writePlanDoc`.
+- **`<logsRoot>/_sessions/<project>/_architect/<session-id>/manifests/INIT-*.md`** — draft manifests, NOT yet queued.
 - **No direct writes to `_queue/pending/`.** That happens only on runner finalize (operator approve).
 - **No roadmap.md write.** The roadmap is a derived view from `_queue/pending/` manifests rendered by the forge UI.
 

@@ -97,12 +97,12 @@ function queryFn(writes: boolean): QueryFn {
 }
 
 test('AT-7.3.6-1 (RED) a turn that writes no demo makes NO commit — it never sweeps another agent’s work', async () => {
-  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  const { project, projectRoot, logsRoot, sessionId, repoPath } = setup();
   repoWithForeignWork(repoPath);
   const before = git(repoPath, ['rev-parse', 'HEAD']);
 
   await assert.rejects(() => runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: queryFn(false), logger: logger(logsRoot, sessionId),
   }));
 
@@ -114,11 +114,11 @@ test('AT-7.3.6-1 (RED) a turn that writes no demo makes NO commit — it never s
 });
 
 test('AT-7.3.6-2 a turn that DOES write commits its own demo and still leaves the other agent’s work alone', async () => {
-  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  const { project, projectRoot, logsRoot, sessionId, repoPath } = setup();
   repoWithForeignWork(repoPath);
 
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: queryFn(true), logger: logger(logsRoot, sessionId),
   });
 
@@ -130,12 +130,12 @@ test('AT-7.3.6-2 a turn that DOES write commits its own demo and still leaves th
 });
 
 test('AT-7.3.6-3 a SUCCESSFUL turn whose deliverable lands in a git-ignored path must reject naming the ignored path — never report success over an uncommitted demo', async () => {
-  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  const { project, projectRoot, logsRoot, sessionId, repoPath } = setup();
   repoWithIgnoredDemoDir(repoPath);
 
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+      sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
       queryFn: queryFn(true), logger: logger(logsRoot, sessionId),
     }),
     (err: unknown) => {
@@ -147,12 +147,12 @@ test('AT-7.3.6-3 a SUCCESSFUL turn whose deliverable lands in a git-ignored path
 });
 
 test('AT-7.3.6-4 when the step itself throws, the rejection is the step’s own error — never masked by a commit failure over the same partial write', async () => {
-  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  const { project, projectRoot, logsRoot, sessionId, repoPath } = setup();
   repoWithIgnoredDemoDir(repoPath);
 
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+      sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
       queryFn: partialWriteQueryFn(), logger: logger(logsRoot, sessionId),
     }),
     (err: unknown) => {

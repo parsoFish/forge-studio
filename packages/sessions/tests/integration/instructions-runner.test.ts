@@ -47,7 +47,7 @@ function setup(overrides?: Partial<InstructionsStatus>): {
   mkdirSync(repoPath, { recursive: true });
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-06-24T10-00-00';
-  const sessionDir = instructionsSessionDir(projectRoot, sessionId);
+  const sessionDir = instructionsSessionDir(logsRoot, 'demo', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const status: InstructionsStatus = {
     session_id: sessionId,
@@ -94,7 +94,7 @@ test('interviewing → needs answers: writes questions.json + status awaiting-an
     },
   });
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-answers');
   assert.equal(result.questions?.length, 1);
@@ -113,7 +113,7 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
     draft: { agents_md: '# Demo CLI\n\nBuild: `npm run build`. Test: `npm test`.\n\n## Conventions\n\n- dist/ is generated — never edit by hand.' },
   });
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   const draftPath = join(sessionDir, DRAFT_FILENAME);
@@ -146,7 +146,7 @@ test('W6-B1: drafting turn forwards thinking + coalesced redacted_thinking to th
     return gen();
   };
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   const events = readFileSync(join(logsRoot, `_instructions-${sessionId}`, 'events.jsonl'), 'utf8')
     .trim()
@@ -167,7 +167,7 @@ test('finalizing: writes the approved draft to <repo>/AGENTS.md + status committ
   writeFileSync(join(sessionDir, DRAFT_FILENAME), '# Demo CLI\n\nBuild: `npm run build`.\n');
 
   const result = await runInstructionsTurn({
-    sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId),
+    sessionId, project: 'demo', projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId),
     isContainedProjectRepoPath: containedUnder(repoPath),
   });
 
@@ -185,7 +185,7 @@ test('finalizing refuses loudly when isContainedProjectRepoPath is absent (no si
 
   let error: Error | null = null;
   try {
-    await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
+    await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
   } catch (err) {
     error = err as Error;
   }
@@ -207,7 +207,7 @@ test('SEC-03/path-guard CONTRACT: finalizing refuses a FORGED status.project_rep
   let error: Error | null = null;
   try {
     await runInstructionsTurn({
-      sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId),
+      sessionId, project: 'demo', projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId),
       isContainedProjectRepoPath: containedUnder(allowedRoot),
     });
   } catch (err) {
@@ -237,7 +237,7 @@ test('drafting bakes operator revision feedback into the draft prompt', async ()
     return gen();
   };
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   assert.match(draftPrompt, /Revision feedback/);
@@ -248,14 +248,14 @@ test('draft: empty agents_md throws a clear, recoverable error', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'drafting' });
   const queryFn = makeQueryFn({ draft: { agents_md: '   ' } });
   await assert.rejects(
-    () => runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    () => runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /empty AGENTS\.md content/,
   );
 });
 
 test('briefing turn is a no-op (the operator provides notes before the agent runs)', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'briefing', mode: 'edit' });
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
   assert.equal(result.phase, 'briefing');
   assert.equal(result.wrote.length, 0);
 });
@@ -272,7 +272,7 @@ test('edit mode: the draft prompt carries the existing AGENTS.md + an UPDATE fra
     }
     return gen();
   };
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
   assert.equal(result.phase, 'awaiting-verdict');
   assert.match(draftPrompt, /Existing AGENTS\.md/, 'existing file injected as context');
   assert.match(draftPrompt, /Keep the lint command/, 'the actual file content is included');
@@ -281,7 +281,7 @@ test('edit mode: the draft prompt carries the existing AGENTS.md + an UPDATE fra
 
 test('awaiting-answers turn is a no-op (bridge owns the wait state)', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'awaiting-answers' });
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
   assert.equal(result.phase, 'awaiting-answers');
   assert.equal(result.wrote.length, 0);
 });
@@ -289,7 +289,7 @@ test('awaiting-answers turn is a no-op (bridge owns the wait state)', async () =
 test('missing status.json throws a clear error', async () => {
   const root = mkdtempSync(join(tmpdir(), 'instr-runner-'));
   await assert.rejects(
-    runInstructionsTurn({ sessionId: 'nope', projectRoot: join(root, 'p'), queryFn: makeQueryFn({}) }),
+    runInstructionsTurn({ sessionId: 'nope', project: 'demo', projectRoot: join(root, 'p'), logsRoot: join(root, '_logs'), queryFn: makeQueryFn({}) }),
     /no status\.json/,
   );
 });
@@ -323,7 +323,7 @@ test('status.modelTier is honored: an operator-requested "opus" reaches queryFn 
     return gen();
   };
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   assert.equal(capturedModel, 'claude-opus-4-8');
@@ -341,7 +341,7 @@ test('status.modelTier absent resolves to the unchanged default (sonnet) — byt
     return gen();
   };
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(capturedModel, INSTRUCTIONS_MODEL);
   assert.equal(capturedModel, 'claude-sonnet-4-6');
@@ -350,7 +350,7 @@ test('status.modelTier absent resolves to the unchanged default (sonnet) — byt
 test('status.modelTier outside the declared range throws naming the value and the allowed set', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'drafting', modelTier: 'haiku' });
   await assert.rejects(
-    () => runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({ draft: { agents_md: 'x' } }), logger: logger(logsRoot, sessionId) }),
+    () => runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn: makeQueryFn({ draft: { agents_md: 'x' } }), logger: logger(logsRoot, sessionId) }),
     /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/,
   );
 });
@@ -381,7 +381,7 @@ test('R3-05-F3: a matching-shape project injects seeds into the draft prompt + r
     return gen();
   };
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   // The matched seed was injected into the draft prompt.
@@ -417,7 +417,7 @@ test('R3-05-F3: a no-match project falls back to a from-scratch draft (no seed s
     return gen();
   };
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   assert.doesNotMatch(draftPrompt, /Matching instruction seeds/);
@@ -454,7 +454,7 @@ test('R3-05-F3: edit-mode revision does not duplicate the composed-seeds footer 
     return gen();
   };
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
 
   const draft = readFileSync(join(sessionDir, DRAFT_FILENAME), 'utf8');
   const footerCount = (draft.match(/forge:composed-instruction-seeds/g) ?? []).length;
@@ -471,7 +471,7 @@ test("W7-C3 (sessions-kinds-25): every event row carries phase 'instructions' �
     },
   });
 
-  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInstructionsTurn({ sessionId, project: 'demo', projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   const events = readFileSync(join(logsRoot, `_instructions-${sessionId}`, 'events.jsonl'), 'utf8')
     .trim()

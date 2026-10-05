@@ -29,6 +29,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { sessionDirSegments } from '@forge/kernel';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
@@ -559,7 +560,7 @@ test('F2: POST /api/studio/kbs binding.band=review-band on a registered-but-empt
 // ("brain-creation") session shell for seeding, mirroring the ESTABLISHED
 // `POST /api/project-brain/start` contract (apps/forge/ui-bridge.ts:3797-3826):
 // `{ ok: true, sessionId }`, plus a REAL session dir + status.json (phase
-// 'briefing') at <projectsRoot>/<project>/_project-brain/<sessionId> — the
+// 'briefing') at <logsRoot>/_sessions/<project>/_project-brain/<sessionId> — the
 // exact anchor the generic session-shell route
 // (GET /api/studio/sessions/project-brain/:sessionId?project=<p>,
 // packages/sessions/bridge-studio-sessions.ts) resolves against. Today the create route
@@ -594,7 +595,7 @@ test('RED (R1-06 WI-2 group B, F2): POST /api/studio/kbs create hands off a proj
   // phase, exactly like a session started via POST /api/project-brain/start —
   // the shell the UI's /sessions/project-brain/:sessionId page reads through
   // packages/sessions/bridge-studio-sessions.ts.
-  const statusPath = join(forgeRoot, 'projects', 'demo-project', '_project-brain', sessionId, 'status.json');
+  const statusPath = join(forgeRoot, '_logs', ...sessionDirSegments('demo-project', '_project-brain', sessionId), 'status.json');
   assert.ok(existsSync(statusPath), `hand-off session status.json must exist at ${statusPath} — no project-brain session is started by create today`);
   const statusJson = JSON.parse(readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
   assert.equal(statusJson['phase'], 'briefing', 'hand-off session must start in the briefing phase, like /api/project-brain/start');

@@ -192,8 +192,8 @@ function writeSessionKindsYaml(root: string): void {
   );
 }
 
-function writeArchitectSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_architect', sessionId);
+function writeArchitectSession(sessionsRoot: string, project: string, sessionId: string): void {
+  const dir = join(sessionsRoot, project, '_architect', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'idea.md'), 'An idea.\n', 'utf8');
   writeFileSync(
@@ -204,14 +204,14 @@ function writeArchitectSession(projectsRoot: string, project: string, sessionId:
 }
 
 function writeInstructionsSession(
-  projectsRoot: string,
+  sessionsRoot: string,
   project: string,
   sessionId: string,
   phase: string,
   updatedAt: string,
   modelTier?: string,
 ): void {
-  const dir = join(projectsRoot, project, '_instructions', sessionId);
+  const dir = join(sessionsRoot, project, '_instructions', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Author AGENTS.md.\n', 'utf8');
   writeFileSync(
@@ -221,8 +221,8 @@ function writeInstructionsSession(
   );
 }
 
-function writeDemoSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_demo', sessionId);
+function writeDemoSession(sessionsRoot: string, project: string, sessionId: string): void {
+  const dir = join(sessionsRoot, project, '_demo', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -231,8 +231,8 @@ function writeDemoSession(projectsRoot: string, project: string, sessionId: stri
   );
 }
 
-function writeProjectBrainSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_project-brain', sessionId);
+function writeProjectBrainSession(sessionsRoot: string, project: string, sessionId: string): void {
+  const dir = join(sessionsRoot, project, '_project-brain', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Seed the brain.\n', 'utf8');
   writeFileSync(
@@ -242,8 +242,8 @@ function writeProjectBrainSession(projectsRoot: string, project: string, session
   );
 }
 
-function writeKbCleanupSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+function writeKbCleanupSession(sessionsRoot: string, project: string, sessionId: string): void {
+  const dir = join(sessionsRoot, project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -252,8 +252,8 @@ function writeKbCleanupSession(projectsRoot: string, project: string, sessionId:
   );
 }
 
-function writeOnboardingSession(projectsRoot: string, project: string, sessionId: string, phase: string): void {
-  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+function writeOnboardingSession(sessionsRoot: string, project: string, sessionId: string, phase: string): void {
+  const dir = join(sessionsRoot, project, '_onboarding', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Onboard.\n', 'utf8');
   writeFileSync(
@@ -276,22 +276,26 @@ before(async () => {
   );
   writeSessionKindsYaml(forgeRoot);
 
-  const projectsRoot = join(forgeRoot, 'projects');
-  writeArchitectSession(projectsRoot, 'proja', ARCHITECT_SESSION);
+  // Session dirs live under the logs root, never in the project checkout.
+  const sessionsRoot = join(forgeRoot, '_logs', '_sessions');
+  for (const p of ['proja', 'projb', 'projc', 'projd', 'victimproj', 'attackerproj', 'projunknown']) {
+    mkdirSync(join(forgeRoot, 'projects', p), { recursive: true });
+  }
+  writeArchitectSession(sessionsRoot, 'proja', ARCHITECT_SESSION);
   // Instructions: one active (needsYou true via awaiting-verdict's `verdict`
   // affordance), one terminal (filtered by ?active=1), one carrying a real
   // modelTier (threading proof).
-  writeInstructionsSession(projectsRoot, 'proja', INSTRUCTIONS_ACTIVE_SESSION, 'awaiting-verdict', '2026-08-02T11:00:00.000Z');
-  writeInstructionsSession(projectsRoot, 'proja', INSTRUCTIONS_TERMINAL_SESSION, 'committed', '2026-08-02T11:05:00.000Z');
-  writeInstructionsSession(projectsRoot, 'proja', INSTRUCTIONS_MODEL_TIER_SESSION, 'drafting', '2026-08-02T11:10:00.000Z', 'opus');
-  writeDemoSession(projectsRoot, 'projb', DEMO_SESSION);
-  writeProjectBrainSession(projectsRoot, 'projb', PROJECT_BRAIN_SESSION);
-  writeKbCleanupSession(projectsRoot, 'projc', KB_CLEANUP_SESSION);
+  writeInstructionsSession(sessionsRoot, 'proja', INSTRUCTIONS_ACTIVE_SESSION, 'awaiting-verdict', '2026-08-02T11:00:00.000Z');
+  writeInstructionsSession(sessionsRoot, 'proja', INSTRUCTIONS_TERMINAL_SESSION, 'committed', '2026-08-02T11:05:00.000Z');
+  writeInstructionsSession(sessionsRoot, 'proja', INSTRUCTIONS_MODEL_TIER_SESSION, 'drafting', '2026-08-02T11:10:00.000Z', 'opus');
+  writeDemoSession(sessionsRoot, 'projb', DEMO_SESSION);
+  writeProjectBrainSession(sessionsRoot, 'projb', PROJECT_BRAIN_SESSION);
+  writeKbCleanupSession(sessionsRoot, 'projc', KB_CLEANUP_SESSION);
   // Onboarding: one active ('running', no panel affordance -> needsYou
   // false), one at the TERMINAL 'complete' phase — the isTerminalPhase fix's
   // own regression lock.
-  writeOnboardingSession(projectsRoot, 'projd', ONBOARDING_ACTIVE_SESSION, 'running');
-  writeOnboardingSession(projectsRoot, 'projd', ONBOARDING_TERMINAL_SESSION, 'complete');
+  writeOnboardingSession(sessionsRoot, 'projd', ONBOARDING_ACTIVE_SESSION, 'running');
+  writeOnboardingSession(sessionsRoot, 'projd', ONBOARDING_TERMINAL_SESSION, 'complete');
 
   // Traversal-safety fixture (mirrors the repo's AT-47 idiom): a REAL victim
   // session holding a secret phase, and an attacker project whose
@@ -301,10 +305,10 @@ before(async () => {
   // resolve this through the SAME guarded choke point every other read in
   // this route uses and simply omit it, never leak the victim's phase.
   const SECRET_PHASE = 'TOP-SECRET-AGGREGATE-ESCAPE-MARKER';
-  const victimDir = join(projectsRoot, 'victimproj', '_kb-cleanup', '2026-08-07T16-00-00');
+  const victimDir = join(sessionsRoot, 'victimproj', '_kb-cleanup', '2026-08-07T16-00-00');
   mkdirSync(victimDir, { recursive: true });
   writeFileSync(join(victimDir, 'status.json'), JSON.stringify({ phase: SECRET_PHASE, project: 'victimproj' }), 'utf8');
-  const attackerKbCleanupDir = join(projectsRoot, 'attackerproj', '_kb-cleanup');
+  const attackerKbCleanupDir = join(sessionsRoot, 'attackerproj', '_kb-cleanup');
   mkdirSync(attackerKbCleanupDir, { recursive: true });
   symlinkSync(victimDir, join(attackerKbCleanupDir, 'evil-session'));
 
@@ -313,7 +317,7 @@ before(async () => {
   // collector only ever probes disk for a REGISTERED kind, so this session
   // must surface as a NAMED, counted gap (`unknownKinds`), never a silent
   // drop with 0 diagnostic.
-  const unknownKindDir = join(projectsRoot, 'projunknown', '_community-refresh', '2026-08-18T12-54-32');
+  const unknownKindDir = join(sessionsRoot, 'projunknown', '_community-refresh', '2026-08-18T12-54-32');
   mkdirSync(unknownKindDir, { recursive: true });
   writeFileSync(join(unknownKindDir, 'status.json'), JSON.stringify({ phase: 'committed', project: 'projunknown' }), 'utf8');
 

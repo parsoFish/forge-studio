@@ -28,7 +28,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
@@ -61,7 +61,7 @@ function setupGround(): { repoPath: string; logsRoot: string; sessionId: string 
   git(repoPath, 'add', '.');
   git(repoPath, 'commit', '-q', '-m', 'ground');
   const sessionId = '2026-10-02T16-06-29-a9be4882';
-  const sessionDir = demoSessionDir(repoPath, sessionId);
+  const sessionDir = demoSessionDir(join(root, "_logs"), "story-s1", sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const status: DemoBuilderStatus = {
     session_id: sessionId, project: 'story-s1', project_repo_path: repoPath,
@@ -69,7 +69,7 @@ function setupGround(): { repoPath: string; logsRoot: string; sessionId: string 
     updated_at: new Date().toISOString(),
   };
   writeSessionStatus(sessionDir, status);
-  return { repoPath, logsRoot: join(root, '_logs'), sessionId };
+  return { repoPath, logsRoot: join(root, "_logs"), sessionId };
 }
 
 /** Pass 2 writes the two deliverables; pass 3 (the Bash-holding grounding
@@ -112,7 +112,7 @@ test('row 190: a grounding pass that edits the project source FAILS the turn nam
   const { repoPath, logsRoot, sessionId } = setupGround();
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+      sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
       queryFn: groundingQueryFn(capturedSchemaEdit), logger: logger(logsRoot, sessionId),
     }),
     (err: Error) => {
@@ -122,8 +122,8 @@ test('row 190: a grounding pass that edits the project source FAILS the turn nam
   );
   const fenced = events(logsRoot, sessionId).find((e) => e.event_type === 'error' && /ground/.test(e.message));
   assert.ok(fenced, 'a structured error event records the breach');
-  // Exactly the schema: the deliverables under `.forge/demo/` and the untracked
-  // `_demo/<sid>/` session dir inside the repo are the demo's own, not breaches.
+  // Exactly the schema: the deliverables under `.forge/demo/` and the session
+  // dir (under the logs root, not in the repo) is the demo's own.
   assert.deepEqual(fenced.metadata?.paths, [SCHEMA_REL]);
   assert.notEqual(events(logsRoot, sessionId).at(-1)?.message, 'demo-generated', 'no generation was recorded');
   // Named and failed, NOT reverted (ruling 1973en): the operator sees the edit.
@@ -133,11 +133,12 @@ test('row 190: a grounding pass that edits the project source FAILS the turn nam
 test('row 190: a grounding pass that writes only under .forge/demo/ passes — editing its own sample is the pass\'s job', async () => {
   const { repoPath, logsRoot, sessionId } = setupGround();
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: groundingQueryFn((cwd) => writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>grounded: 141 passed</body></html>')),
     logger: logger(logsRoot, sessionId),
   });
   assert.equal(result.phase, 'awaiting-review');
+  assert.ok(!existsSync(join(repoPath, '_demo')), 'the ground holds no session dir');
 });
 
 test('row 190: a ground already dirty BEFORE the turn is the baseline — only changes made during it count', async () => {
@@ -145,7 +146,7 @@ test('row 190: a ground already dirty BEFORE the turn is the baseline — only c
   writeFileSync(join(repoPath, SCHEMA_REL), '{"operator": "work in progress"}\n');
   writeFileSync(join(repoPath, 'NOTES.md'), 'untracked operator notes\n');
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: groundingQueryFn(() => {}), logger: logger(logsRoot, sessionId),
   });
   assert.equal(result.phase, 'awaiting-review', 'pre-existing dirt is not the agent\'s');
@@ -156,7 +157,7 @@ test('row 190: a further edit to an ALREADY-dirty file is still caught — the b
   writeFileSync(join(repoPath, SCHEMA_REL), '{"operator": "work in progress"}\n');
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+      sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
       queryFn: groundingQueryFn((cwd) => writeFileSync(join(cwd, SCHEMA_REL), '{"operator": "work in progress", "agent": "too"}\n')),
       logger: logger(logsRoot, sessionId),
     }),
@@ -173,7 +174,7 @@ test('row 190b: a ground COMMIT does not red this fence — HEAD is the host fen
   // no longer names it.
   const { repoPath, logsRoot, sessionId } = setupGround();
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: groundingQueryFn((cwd) => { capturedSchemaEdit(cwd); git(cwd, 'commit', '-q', '-am', 'tweak'); }),
     logger: logger(logsRoot, sessionId),
   });
@@ -190,20 +191,18 @@ test('row 190b: a ground COMMIT does not red this fence — HEAD is the host fen
  * agent wrote its status, its compliance report and its commit between this
  * fence's snapshot and its check. Forge's own actors, not project source.
  */
-const R9_ONBOARDING_STATUS = '_onboarding/2026-10-02T17-42-10-91476d29/status.json';
 const R9_COMPLIANCE = '.forge/contract-compliance-report.json';
 
 test('row 190b: forge\'s own actors writing the ground mid-pass (the r9 capture) do NOT red the fence', async () => {
   const { repoPath, logsRoot, sessionId } = setupGround();
-  // Before the demo turn: the onboarding session (born 17:42:10) already holds its dir.
-  mkdirSync(join(repoPath, '_onboarding', '2026-10-02T17-42-10-91476d29'), { recursive: true });
-  writeFileSync(join(repoPath, R9_ONBOARDING_STATUS), '{"phase":"running"}\n');
+  // Before the demo turn. (The onboarding session's own dir is no longer in the
+  // ground at all — it lives under the logs root, forge-8vfn.8.5.58 — so only
+  // its compliance report and its commit remain forge actors in the ground.)
   writeFileSync(join(repoPath, R9_COMPLIANCE), '{"ok":false}\n');
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+    sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
     queryFn: groundingQueryFn(() => {
       // 17:50:42 — the onboarding session finishes while the demo grounds.
-      writeFileSync(join(repoPath, R9_ONBOARDING_STATUS), '{"phase":"done"}\n');
       writeFileSync(join(repoPath, R9_COMPLIANCE), '{"ok":true}\n');
       writeFileSync(join(repoPath, 'AGENTS.md'), '# story-s1\n');
       git(repoPath, 'add', 'AGENTS.md');
@@ -219,10 +218,8 @@ test('row 190b: forge-owned writes beside a real source edit — the fence names
   const { repoPath, logsRoot, sessionId } = setupGround();
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+      sessionId, project: "story-s1", projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
       queryFn: groundingQueryFn((cwd) => {
-        mkdirSync(join(repoPath, '_onboarding', '2026-10-02T17-42-10-91476d29'), { recursive: true });
-        writeFileSync(join(repoPath, R9_ONBOARDING_STATUS), '{"phase":"done"}\n');
         writeFileSync(join(repoPath, R9_COMPLIANCE), '{"ok":true}\n');
         capturedSchemaEdit(cwd);
       }),

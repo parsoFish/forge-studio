@@ -61,7 +61,7 @@ export {
 // forge-8vfn.8.5.1 — the boot-time reconcile for a kb-cleanup apply a hard
 // bridge crash left wedged at 'applying'. Public because its one caller
 // (apps/forge/ui-bridge.ts, called once at startup) is cross-package.
-export { releaseInterruptedKbCleanupApplies } from './kb-drain-store.ts';
+export { releaseInterruptedKbCleanupApplies, KB_CLEANUP_KIND_DIR } from './kb-drain-store.ts';
 // The seam itself (SPEC.md §4, ADR 018): every per-KB read and write goes
 // through `KbBackend`. M7-C KN1 — `@forge/sessions` is this seam's first
 // cross-package consumer, which is what makes it a public-door export rather

@@ -316,16 +316,16 @@ export function buildAgentDispatchArgs(
    *  validated (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) by the route
    *  before this is ever called. */
   costCeilingUsd?: number,
-  /** Bead forge-c6h — the bridge's own SNAPSHOT `ctx.projectsRoot` (resolved
+  /** Bead forge-c6h — the bridge's own SNAPSHOT `ctx.logsRoot` (resolved
    *  once at `startBridge`), threaded through as `forge agent dispatch`'s
-   *  `--projects-root <abs>` so the spawned subprocess's
+   *  `--logs-root <abs>` so the spawned subprocess's
    *  `writeSessionTerminalPhase` (apps/forge/agent-run.ts) can honour THIS exact
    *  root verbatim instead of re-deriving its own from `forge.config.json`/
    *  env at write time — the re-derivation was the defect (see that
    *  function's docstring). `cmdAgentDispatch` re-validates this value
    *  itself (absolute/exists/contained-in-forgeRoot) before trusting it, so
    *  no extra validation is needed at this spawn-arg boundary. */
-  projectsRoot?: string,
+  logsRoot?: string,
 ): string[] {
   const args = [slug, '--run-id', runId];
   if (project) args.push('--project', project);
@@ -335,7 +335,7 @@ export function buildAgentDispatchArgs(
   }
   if (sessionDir) args.push('--session-dir', sessionDir);
   if (costCeilingUsd !== undefined) args.push('--cost-ceiling-usd', String(costCeilingUsd));
-  if (projectsRoot) args.push('--projects-root', projectsRoot);
+  if (logsRoot) args.push('--logs-root', logsRoot);
   return args;
 }
 
@@ -356,10 +356,10 @@ export function spawnAgentDispatch(
   sessionDir?: string,
   costCeilingUsd?: number,
   /** Bead forge-c6h — see `buildAgentDispatchArgs`'s matching parameter. */
-  projectsRoot?: string,
+  logsRoot?: string,
 ): void {
   claimAgentDispatchSlot(forgeRoot, slug, runId);
-  spawnClaimedAgentDispatch(forgeRoot, slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
+  spawnClaimedAgentDispatch(forgeRoot, slug, runId, project, inputs, sessionDir, costCeilingUsd, logsRoot);
 }
 
 /**
@@ -393,13 +393,13 @@ export function spawnClaimedAgentDispatch(
   inputs?: Record<string, string>,
   sessionDir?: string,
   costCeilingUsd?: number,
-  projectsRoot?: string,
+  logsRoot?: string,
 ): void {
   // Argv construction is pure (no I/O, no side effects) — safe to build
   // above the spawn-suppression early-return below, so it stays observable
   // as ordinary function composition rather than something only a real spawn
   // attempt could exercise.
-  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
+  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd, logsRoot);
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
     console.error(`spawnClaimedAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);

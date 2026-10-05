@@ -11,7 +11,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { guardedFile, guardedReadDir } from '@forge/kernel';
+import { guardedFile, guardedReadDir, sessionDirSegments, type SessionHome } from '@forge/kernel';
 import type { ModelTier } from '@forge/agents';
 
 /** R4-16 — session-dir-relative home for per-generation snapshots
@@ -26,7 +26,7 @@ export const GENERATION_DEMO_FILENAME = 'DEMO.html';
 export const GENERATION_DECLARATION_FILENAME = 'demo-process.json';
 export const GENERATION_META_FILENAME = 'meta.json';
 
-/** The kind-dir under a project root that holds demo-builder sessions. */
+/** The kind-dir under `<logsRoot>/_sessions/<project>/` that holds demo-builder sessions. */
 export const DEMO_KIND_DIR = '_demo';
 
 
@@ -37,9 +37,9 @@ export const DEMO_KIND_DIR = '_demo';
 /** The generation numbers that DO have a `generations/<n>/` dir on disk —
  *  used only to name what's available in the R4-16 fail-closed lock error.
  *  Best-effort: a missing/unreadable `generations/` dir yields []. */
-export function listExistingGenerationNumbers(projectRoot: string, sessionId: string): number[] {
+export function listExistingGenerationNumbers(home: SessionHome, sessionId: string): number[] {
   // SEC-04 leaf: the generations/ dir readdir routed through the guard.
-  const names = guardedReadDir(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME]);
+  const names = guardedReadDir(home.logsRoot, [...sessionDirSegments(home.project, DEMO_KIND_DIR, sessionId), GENERATIONS_DIRNAME]);
   if (names === null) return [];
   return names
     .map((n) => Number(n))
@@ -53,8 +53,8 @@ export function listExistingGenerationNumbers(projectRoot: string, sessionId: st
  * runner contract) if the leaf escapes. Returns the path (not the write) so the
  * caller keeps its Buffer/string write for byte-identical snapshots.
  */
-export function guardedGenerationWritePath(projectRoot: string, segs: readonly string[], what: string): string {
-  const p = guardedFile(projectRoot, segs, 'write');
+export function guardedGenerationWritePath(logsRoot: string, segs: readonly string[], what: string): string {
+  const p = guardedFile(logsRoot, segs, 'write');
   if (p === null) {
     throw new Error(`demo-builder runner: ${what} write failed containment (symlinked/escaping leaf) — refusing to write.`);
   }

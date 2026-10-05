@@ -79,12 +79,13 @@ test('row 206 (double-call, real spawn): two sequential /api/project-brain/appro
   delete process.env.FORGE_DRY_BRIDGE;
 
   const sid = '2026-05-29T22-00-00';
-  const dir = join(forgeRoot, 'projects', 'demo', '_project-brain', sid);
+  const dir = join(forgeRoot, '_logs', '_sessions', 'demo', '_project-brain', sid);
+  mkdirSync(join(forgeRoot, 'projects', 'demo'), { recursive: true });
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
     JSON.stringify({
-      session_id: sid, project: 'demo', project_repo_path: dir,
+      session_id: sid, project: 'demo', project_repo_path: join(forgeRoot, 'projects', 'demo'),
       phase: 'awaiting-review', prompt: 'x', updated_at: new Date().toISOString(),
     }),
   );

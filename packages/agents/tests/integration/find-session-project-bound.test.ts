@@ -18,8 +18,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { findSessionProject } from '../../find-session-project.ts';
@@ -41,7 +41,7 @@ test('a separator-shaped session id is bounded out (returns null)', async () => 
   mkdirSync(join(fixture, 'projects'), { recursive: true });
   try {
     await withCwd(fixture, async () => {
-      assert.equal(findSessionProject('a/b/c'), null, 'a session id containing a separator must be bounded out');
+      assert.equal(findSessionProject(join(fixture, '_logs'), 'a/b/c'), null, 'a session id containing a separator must be bounded out');
     });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
@@ -53,7 +53,7 @@ test('a traversal-shaped session id is bounded out (returns null)', async () => 
   mkdirSync(join(fixture, 'projects'), { recursive: true });
   try {
     await withCwd(fixture, async () => {
-      assert.equal(findSessionProject('..'), null, 'a ".." session id must be bounded out');
+      assert.equal(findSessionProject(join(fixture, '_logs'), '..'), null, 'a ".." session id must be bounded out');
     });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
@@ -64,16 +64,33 @@ test('a legitimate session id still resolves to its project dir (the bound does 
   const fixture = mkdtempSync(join(tmpdir(), 'sec07-findsession-'));
   const project = 'realproj';
   const legitSid = 'sec07-legit-sid';
-  const sessionDir = join(fixture, 'projects', project, '_architect', legitSid);
+  const sessionDir = join(fixture, '_logs', '_sessions', project, '_architect', legitSid);
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'drafting' }));
   try {
     await withCwd(fixture, async () => {
-      // findSessionProject builds `candidate = join(resolve('projects'), name)`
-      // — compute the expected value the identical way under the same cwd.
-      const expected = join(resolve('projects'), project);
-      assert.equal(findSessionProject(legitSid), expected, 'a legitimate session id must resolve to its containing project dir');
+      assert.equal(findSessionProject(join(fixture, '_logs'), legitSid), project, 'a legitimate session id must resolve to its containing project name');
     });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('a symlinked kind dir (or status.json leaf) under <logsRoot>/_sessions is NOT a match — no out-of-root existence oracle', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'sec07-findsession-link-'));
+  try {
+    const outside = join(fixture, 'outside');
+    mkdirSync(join(outside, 'victim-sid'), { recursive: true });
+    writeFileSync(join(outside, 'victim-sid', 'status.json'), JSON.stringify({ phase: 'drafting' }));
+    mkdirSync(join(fixture, '_logs', '_sessions', 'attacker'), { recursive: true });
+    symlinkSync(outside, join(fixture, '_logs', '_sessions', 'attacker', '_architect'), 'dir');
+    assert.equal(findSessionProject(join(fixture, '_logs'), 'victim-sid'), null, 'a symlinked _architect dir must not resolve');
+
+    const sessionDir = join(fixture, '_logs', '_sessions', 'leaky', '_architect', 'leaf-sid');
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(join(outside, 'secret.json'), '{}');
+    symlinkSync(join(outside, 'secret.json'), join(sessionDir, 'status.json'));
+    assert.equal(findSessionProject(join(fixture, '_logs'), 'leaf-sid'), null, 'a symlinked status.json leaf must not resolve');
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

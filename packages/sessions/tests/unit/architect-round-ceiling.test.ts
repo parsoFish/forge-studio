@@ -56,7 +56,7 @@ const STILL_ASKING = { done: false, questions: [{ question: 'Which schema defaul
 function plant(round: number): { root: string; projectRoot: string; statusPath: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-round-ceiling-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
   mkdirSync(join(root, '_logs', '_architect-sess-1'), { recursive: true });
   const status: ArchitectStatus = {
@@ -104,12 +104,12 @@ test('UNDER the ceiling the architect asks again — the operator gets the quest
   const { queryFn } = oneShotQueryFn(STILL_ASKING);
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger: silentLogger(),
     });
     assert.equal(result.phase, 'awaiting-answers', 'below the ceiling a turn with questions asks them');
     assert.equal(readStatus(statusPath).phase, 'awaiting-answers');
-    assert.ok(existsSync(join(projectRoot, '_architect', 'sess-1', 'questions.json')), 'the questions reach disk for the operator');
+    assert.ok(existsSync(join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'questions.json')), 'the questions reach disk for the operator');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -125,14 +125,14 @@ test('AT the ceiling the architect STOPS ASKING AND DRAFTS — cap-then-proceed,
   const { queryFn, calls } = oneShotQueryFn(STILL_ASKING);
   try {
     await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger: silentLogger(),
     }).catch(() => undefined);
 
     const status = readStatus(statusPath);
     assert.notEqual(status.phase, 'awaiting-answers',
       `at round ${RATIFIED_CEILING} the architect must not ask again — it drafted instead (got phase "${status.phase}")`);
-    assert.ok(!existsSync(join(projectRoot, '_architect', 'sess-1', 'questions.json')),
+    assert.ok(!existsSync(join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'questions.json')),
       'no questions are written at the ceiling — the operator is not asked a question the loop cannot afford');
     assert.ok(calls() > 1, 'the turn went PAST the interview step — cap-then-proceed, not a stop');
   } finally {
@@ -150,7 +150,7 @@ test('the operator is never REFUSED at the ceiling — no 409-shaped throw out o
   let thrown: unknown = null;
   try {
     await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger: silentLogger(),
     });
   } catch (err) {

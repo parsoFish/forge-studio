@@ -24,12 +24,13 @@ let close: () => Promise<void>;
 const sid = '2026-05-29T12-00-00';
 
 function sessionDir(s = sid): string {
-  return join(forgeRoot, 'projects', 'demo', '_architect', s);
+  return join(forgeRoot, '_logs', '_sessions', 'demo', '_architect', s);
 }
 
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-arch-'));
   const dir = sessionDir();
+  mkdirSync(join(forgeRoot, 'projects', 'demo'), { recursive: true });
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -91,6 +92,7 @@ test('POST /api/plan-verdict approve advances to finalizing (no selections.json 
   });
   assert.equal(res.status, 200);
   const dir = sessionDir();
+  mkdirSync(join(forgeRoot, 'projects', 'demo'), { recursive: true });
   assert.ok(!existsSync(join(dir, 'selections.json')), 'selections.json must NOT be written');
   const status = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
   assert.equal(status.phase, 'finalizing');
@@ -428,11 +430,11 @@ async function postArchitectStart(body: unknown): Promise<{ status: number; json
   return { status: res.status, json: (await res.json()) as Record<string, unknown> };
 }
 
-/** Snapshot of session ids currently under `<forgeRoot>/projects/demo/_architect/`
+/** Snapshot of session ids currently under `<forgeRoot>/_logs/_sessions/demo/_architect/`
  *  — used to prove a REJECTED /start creates NO new session dir (id-agnostic,
  *  since a 400 response carries no sessionId to look up directly). */
 function listArchitectSessionIds(): string[] {
-  const dir = join(forgeRoot, 'projects', 'demo', '_architect');
+  const dir = join(forgeRoot, '_logs', '_sessions', 'demo', '_architect');
   try {
     return readdirSync(dir).sort();
   } catch {

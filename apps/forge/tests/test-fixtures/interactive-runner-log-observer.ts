@@ -194,7 +194,9 @@ export function setupTurnspecFixture(): TurnspecFixture {
   // `resolve(forgeRoot, 'projects', projectArg)` would land.
   const projectRoot = join(forgeRoot, 'projects', projectArg);
   const sessionId = '2026-08-11T00-00-00-wi5fixture';
-  const sessionDir = join(projectRoot, KIND_DIR, sessionId);
+  // Session dirs live under the LOGS root, never in the project's checkout.
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, KIND_DIR, sessionId);
+  mkdirSync(projectRoot, { recursive: true });
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
 
@@ -213,7 +215,8 @@ export function setupPromoteQueueFixture(): TurnspecFixture {
   const projectArg = 'fixtureproj';
   const projectRoot = join(forgeRoot, 'projects', projectArg);
   const sessionId = '2026-09-25T00-00-00-promotequeue';
-  const sessionDir = join(projectRoot, PROMOTE_QUEUE_KIND_DIR, sessionId);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, PROMOTE_QUEUE_KIND_DIR, sessionId);
+  mkdirSync(projectRoot, { recursive: true });
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date(0).toISOString() });
 

@@ -27,15 +27,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { ModelTier } from '@forge/agents';
 
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, sendIfDispatchRefused, KB_ID_RE, SAFE_ID_RE } from '@forge/kernel';
 import { isSafeRunId } from '@forge/kernel';
-import { guardedReadDir, guardedWriteFile } from '@forge/kernel';
+import { guardedReadDir, guardedWriteFile, resolveGuardedPath, sessionDirSegments, sessionKindSegments } from '@forge/kernel';
 import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
 import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge';
-import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
+import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX, KB_CLEANUP_KIND_DIR } from '@forge/knowledge';
 import { resolveContainedProjectDir } from '@forge/projects';
 import { deriveAgentSpec } from '@forge/agents';
 import { skillPathRelative } from '@forge/library';
@@ -158,49 +158,32 @@ export async function handleKickoffRoutes(
         }
       }
 
-      const realProjectDir = resolveContainedProjectDir(ctx.projectsRoot, project);
-      if (realProjectDir === null) {
+      if (resolveContainedProjectDir(ctx.projectsRoot, project) === null) {
         sendJson(res, 404, { error: `project not found: ${project}` }, origin);
         return true;
       }
 
       const sessionId = newArchitectSessionId();
       const runId = `_agent-onboarding-agent-${ctx.newRunStamp()}`;
-      // `sessionId` is this code's own generated value (never request-
-      // derived) and `_onboarding` is a fixed literal — joining it onto the
-      // already realpath-verified `realProjectDir` cannot escape.
-      // R4-17 round-2 BLOCKER: `resolveContainedProjectDir` proves the PROJECT
-      // dir is contained — it says NOTHING about what is written beneath it.
-      // `_onboarding` is a path segment inside a CHECKED-OUT REPO, so it is
-      // attacker-supplied content: a commit carrying a symlink named
-      // `_onboarding` redirects every write here, because
-      // `mkdirSync(recursive:true)` transparently follows a symlinked
-      // intermediate segment. Reproduced live before this guard existed —
-      // `status.json` and `prompt.md` landed outside `projectsRoot` from a
-      // project that passed containment. "Validating a root does not validate
-      // what you write beneath it", one level deeper than the round-1 fix.
-      //
-      // The parent is therefore created and realpath-verified BEFORE the
-      // session dir is created beneath it, and the session dir is verified in
-      // turn — the same realpath + `startsWith(root + sep)` shape used
-      // throughout, applied at every level that is written rather than only at
-      // the root. A pre-existing REAL `_onboarding` directory (the second and
-      // every later onboarding run) passes unchanged; only one whose realpath
-      // leaves the verified project dir is refused.
-      const onboardingParent = join(realProjectDir, '_onboarding');
-      mkdirSync(onboardingParent, { recursive: true });
-      const realOnboardingParent = realpathSync(onboardingParent);
-      if (!realOnboardingParent.startsWith(realProjectDir + sep)) {
-        sendJson(res, 400, { error: `onboarding session directory for project "${project}" resolves outside the project` }, origin);
+      // The session dir lives under the LOGS root (forge-8vfn.8.5.58), never in
+      // the project's checkout: `<logsRoot>/_sessions/<project>/_onboarding/`.
+      // `project` is validated above and rides as its OWN guarded segment; the
+      // parent is created and identity-checked BEFORE the session dir is
+      // created beneath it (the exclusive mkdir below then refuses a
+      // pre-existing entry at the session path).
+      mkdirSync(ctx.logsRoot, { recursive: true });
+      const onboardingParentGuard = resolveGuardedPath(ctx.logsRoot, sessionKindSegments(project, ONBOARDING_KIND_DIR));
+      if (!onboardingParentGuard.ok) {
+        sendJson(res, 400, { error: `onboarding session directory for project "${project}" failed containment` }, origin);
         return true;
       }
+      const realOnboardingParent = onboardingParentGuard.realPath;
+      mkdirSync(realOnboardingParent, { recursive: true });
       // R4-17 round-3 BLOCKER pin 5, item 1: the leaf writes below (session
       // dir + status.json + prompt.md) are guarded independently of the
-      // realpath checks above — see writeOnboardingSession's own docstring
+      // checks above — see writeOnboardingSession's own docstring
       // for the three closes (exclusive dir create, exclusive leaf writes,
-      // sessionId entropy). A guessable, colliding sessionId directory could
-      // otherwise be pre-planted with symlinked leaves that both writes
-      // below would silently follow.
+      // sessionId entropy).
       writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs, modelTier);
 
       // W7-B5 (agents-20/31 + projects-31): the t0 `agent-run.dispatched`
@@ -241,8 +224,7 @@ export async function handleKickoffRoutes(
       const project = decodeURIComponent(url.slice('/api/studio/projects/'.length, url.length - '/onboarding/active'.length));
       const projectReason = invalidGenerationProjectReason(project);
       if (projectReason) { sendJson(res, 400, { error: projectReason }, origin); return true; }
-      const realProjectDir = resolveContainedProjectDir(ctx.projectsRoot, project);
-      if (realProjectDir === null) { sendJson(res, 404, { error: `project not found: ${project}` }, origin); return true; }
+      if (resolveContainedProjectDir(ctx.projectsRoot, project) === null) { sendJson(res, 404, { error: `project not found: ${project}` }, origin); return true; }
 
       // SEC-04 — route the `_onboarding` LISTING itself through the shared
       // guard (`guardedReadDir`, same primitive `listInstructionsSessions`'s
@@ -253,7 +235,7 @@ export async function handleKickoffRoutes(
       // otherwise redirect this enumeration outside `projectsRoot` (the
       // exact escape `writeOnboardingSession`'s own header above documents
       // for the WRITE side of this same directory).
-      const sessionIds = (guardedReadDir(ctx.projectsRoot, [project, '_onboarding']) ?? [])
+      const sessionIds = (guardedReadDir(ctx.logsRoot, sessionKindSegments(project, ONBOARDING_KIND_DIR)) ?? [])
         .filter((name) => !name.startsWith('_'));
       if (sessionIds.length === 0) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null }, origin); return true; }
 
@@ -269,7 +251,7 @@ export async function handleKickoffRoutes(
       let latestStartedAt = '';
       for (const sessionId of sessionIds) {
         const status = guardedReadSessionStatus<{ phase?: unknown; runId?: unknown; startedAt?: unknown }>(
-          ctx.projectsRoot, [project, '_onboarding', sessionId],
+          ctx.logsRoot, sessionDirSegments(project, ONBOARDING_KIND_DIR, sessionId),
         );
         const startedAt = typeof status?.startedAt === 'string' ? status.startedAt : '';
         if (latest === null || startedAt > latestStartedAt) {
@@ -292,7 +274,7 @@ export async function handleKickoffRoutes(
       // own graceful fallback).
       const descriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'onboarding');
       const lifecycle: SessionLifecycle | null = descriptor && phase !== null
-        ? deriveRowLifecycle({ projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot }, descriptor, phase, project, latest).lifecycle
+        ? deriveRowLifecycle({ logsRoot: ctx.logsRoot }, descriptor, phase, project, latest).lifecycle
         : null;
 
       sendJson(res, 200, {
@@ -365,26 +347,24 @@ export async function handleKickoffRoutes(
       }
 
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      const realProjectDir = resolveContainedProjectDir(projectsRoot, project);
-      if (realProjectDir === null) {
+      if (resolveContainedProjectDir(projectsRoot, project) === null) {
         sendJson(res, 404, { error: `project not found: ${project}` }, origin);
         return true;
       }
 
       const sessionId = newArchitectSessionId();
       const runId = `_agent-creation-agent-${ctx.newRunStamp()}`;
-      // Same two-level containment shape as onboarding's start route: the
-      // `_authoring` parent is created + realpath-verified BEFORE the
-      // session dir is created beneath it (a project repo could carry a
-      // committed symlink named `_authoring`, redirecting every write here —
-      // "validating a root does not validate what you write beneath it").
-      const authoringParent = join(realProjectDir, '_authoring');
-      mkdirSync(authoringParent, { recursive: true });
-      const realAuthoringParent = realpathSync(authoringParent);
-      if (!realAuthoringParent.startsWith(realProjectDir + sep)) {
-        sendJson(res, 400, { error: `authoring session directory for project "${project}" resolves outside the project` }, origin);
+      // Same shape as onboarding's start route: the session dir lives under the
+      // LOGS root (forge-8vfn.8.5.58), its `_authoring` parent created and
+      // identity-checked BEFORE the session dir is created beneath it.
+      mkdirSync(ctx.logsRoot, { recursive: true });
+      const authoringParentGuard = resolveGuardedPath(ctx.logsRoot, sessionKindSegments(project, AUTHORING_KIND_DIR));
+      if (!authoringParentGuard.ok) {
+        sendJson(res, 400, { error: `authoring session directory for project "${project}" failed containment` }, origin);
         return true;
       }
+      const realAuthoringParent = authoringParentGuard.realPath;
+      mkdirSync(realAuthoringParent, { recursive: true });
       writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt, modelTierResult.tier);
 
       ctx.spawnAgentTurn(ctx.forgeRoot, 'authoring', project, sessionId);
@@ -421,7 +401,7 @@ export async function handleKickoffRoutes(
   // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
   // here (unlike authoring/start): `guardedWriteSessionStatus`
   // (packages/sessions/interactive-session.ts) already realpath-guards the whole
-  // `[sessionProject, '_kb-cleanup', sessionId, 'status.json']` path AND
+  // `sessionDirSegments(sessionProject, KB_CLEANUP_KIND_DIR, sessionId)+status.json` path AND
   // creates the session dir (`mkdirSync(dirname(p), {recursive:true})`) as
   // part of the SAME guarded write — a project (or a fresh `.kb-<id>`
   // anchor) need not pre-exist, mirroring the KB-create hand-off's own
@@ -475,7 +455,8 @@ export async function handleKickoffRoutes(
       // would then never show as cleared.
       const findings = computeAgentCleanupFindings(ctx.forgeRoot, kbId);
 
-      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      // The session dir lives under the logs root (forge-8vfn.8.5.58).
+      mkdirSync(ctx.logsRoot, { recursive: true });
 
       // W8-B3 (ON-5) — the operator's request, recorded as the session's
       // opening turn. Written through the SAME guarded leaf sibling as
@@ -494,8 +475,8 @@ export async function handleKickoffRoutes(
       // spawned, which is unrecoverable except by hand. This needs no
       // rollback and adds no unguarded fs sink.
       if (guardedWriteFile(
-        projectsRoot,
-        [sessionProject, '_kb-cleanup', sessionId, 'prompt.md'],
+        ctx.logsRoot,
+        [...sessionDirSegments(sessionProject, KB_CLEANUP_KIND_DIR, sessionId), 'prompt.md'],
         renderKbCleanupPrompt(kbId, kb.binding, findings.length),
       ) === null) {
         sendJson(res, 500, { error: `kb-cleanup start: session prompt.md for kb "${kbId}" failed containment` }, origin);
@@ -503,8 +484,8 @@ export async function handleKickoffRoutes(
       }
 
       const written = guardedWriteSessionStatus(
-        projectsRoot,
-        [sessionProject, '_kb-cleanup', sessionId],
+        ctx.logsRoot,
+        sessionDirSegments(sessionProject, KB_CLEANUP_KIND_DIR, sessionId),
         {
           session_id: sessionId,
           project: sessionProject,
@@ -614,6 +595,10 @@ function renderOnboardingPrompt(inputs: Record<string, string>): string {
  */
 /** The single question onboarding asks before it spends anything (441). It is
  *  the one thing only the operator knows, and the agent's whole brief. */
+/** The kind dirs of the two kickoff-minted session kinds (`_<descriptor.id>`). */
+export const ONBOARDING_KIND_DIR = '_onboarding';
+export const AUTHORING_KIND_DIR = '_authoring';
+
 export const ONBOARDING_BRIEF_QUESTION =
   'What is this project for, and what command decides whether a change is good?';
 
@@ -744,7 +729,7 @@ export async function handleOnboardingBrief(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -768,8 +753,8 @@ export async function handleOnboardingBrief(
   // between the caller's status read and the writes.
   ctx.claimAgentDispatchSlot(ctx.forgeRoot, 'onboarding-agent', runId);
   if (
-    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], renderOnboardingPrompt(inputs)) === null ||
-    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'running' }) === null
+    guardedWriteFile(logsRoot, [...dirSegs, 'prompt.md'], renderOnboardingPrompt(inputs)) === null ||
+    guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'running' }) === null
   ) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
@@ -784,7 +769,7 @@ export async function handleOnboardingBrief(
   });
   ctx.spawnClaimedAgentDispatch(
     ctx.forgeRoot, 'onboarding-agent', runId, project, inputs,
-    join(projectsRoot, ...dirSegs), undefined, ctx.projectsRoot,
+    join(logsRoot, ...dirSegs), undefined, ctx.logsRoot,
   );
   ctx.broadcastKindChanged('onboarding');
   sendJson(res, 200, { ok: true, phase: 'running', ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/sessions/onboarding/question-form', sessionId) }, origin);

@@ -26,6 +26,11 @@ function repoDir(): string {
   return join(forgeRoot, 'projects', 'demo');
 }
 
+/** Session dirs live under the logs root, never in the project checkout. */
+function sessionsDir(): string {
+  return join(forgeRoot, '_logs', '_sessions', 'demo');
+}
+
 async function post(path: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
   const res = await fetch(`${url}${path}`, {
     method: 'POST',
@@ -36,10 +41,10 @@ async function post(path: string, body: unknown): Promise<{ status: number; json
 }
 
 function readInstrStatus(sid: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(repoDir(), '_instructions', sid, 'status.json'), 'utf8'));
+  return JSON.parse(readFileSync(join(sessionsDir(), '_instructions', sid, 'status.json'), 'utf8'));
 }
 function readDemoStatus(sid: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(repoDir(), '_demo', sid, 'status.json'), 'utf8'));
+  return JSON.parse(readFileSync(join(sessionsDir(), '_demo', sid, 'status.json'), 'utf8'));
 }
 
 before(async () => {
@@ -99,11 +104,11 @@ test('POST /api/instructions/start with a valid modelTier ("opus", within the wi
 });
 
 test('POST /api/instructions/start with an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set — no session dir created', async () => {
-  const before = existsSync(join(repoDir(), '_instructions')) ? readdirSync(join(repoDir(), '_instructions')).length : 0;
+  const before = existsSync(join(sessionsDir(), '_instructions')) ? readdirSync(join(sessionsDir(), '_instructions')).length : 0;
   const { status, json } = await post('/api/instructions/start', { project: 'demo', modelTier: 'haiku' });
   assert.equal(status, 400);
   assert.match(String(json.error), /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
-  const after = existsSync(join(repoDir(), '_instructions')) ? readdirSync(join(repoDir(), '_instructions')).length : 0;
+  const after = existsSync(join(sessionsDir(), '_instructions')) ? readdirSync(join(sessionsDir(), '_instructions')).length : 0;
   assert.equal(after, before, 'a rejected modelTier must not create a new session dir');
 });
 
@@ -147,11 +152,11 @@ test('POST /api/demo-builder/start with a valid modelTier ("opus", within the wi
 });
 
 test('POST /api/demo-builder/start with an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set — no session dir created', async () => {
-  const before = existsSync(join(repoDir(), '_demo')) ? readdirSync(join(repoDir(), '_demo')).length : 0;
+  const before = existsSync(join(sessionsDir(), '_demo')) ? readdirSync(join(sessionsDir(), '_demo')).length : 0;
   const { status, json } = await post('/api/demo-builder/start', { project: 'demo', modelTier: 'haiku' });
   assert.equal(status, 400);
   assert.match(String(json.error), /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
-  const after = existsSync(join(repoDir(), '_demo')) ? readdirSync(join(repoDir(), '_demo')).length : 0;
+  const after = existsSync(join(sessionsDir(), '_demo')) ? readdirSync(join(sessionsDir(), '_demo')).length : 0;
   assert.equal(after, before, 'a rejected modelTier must not create a new session dir');
 });
 
@@ -205,11 +210,11 @@ test('start does not 400 on a missing project (only project is required)', async
 // /instructions/start tests they extend.
 // ===========================================================================
 
-/** Snapshot of session ids currently under `<repoDir()>/_instructions/` —
+/** Snapshot of session ids currently under `<logsRoot>/_sessions/demo/_instructions/` —
  *  used to prove a REJECTED /start creates NO new session dir (id-agnostic,
  *  since a 400 response carries no sessionId to look up directly). */
 function listInstructionsSessionIds(): string[] {
-  const dir = join(repoDir(), '_instructions');
+  const dir = join(sessionsDir(), '_instructions');
   try {
     return readdirSync(dir).sort();
   } catch {

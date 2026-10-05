@@ -108,7 +108,7 @@ function setupSession(overrides?: Partial<ArchitectStatus>): {
   const logsRoot = join(root, '_logs');
   const queueRoot = join(root, '_queue');
   const sessionId = '2026-05-29T10-00-00';
-  const sessionDir = join(projectRoot, '_architect', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'demo', '_architect', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const status: ArchitectStatus = {
     session_id: sessionId,
@@ -292,7 +292,7 @@ test('AT-3 (loaded-AND-USED + per-turn selection): the interview prompt carries 
       { done: false, questions: [{ question: 'Q?', header: 'hdr', options: [{ label: 'A', description: 'a' }] }] },
     ]);
     await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, skillPromptPath,
       logger: logger(logsRoot, sessionId),
     });
     const prompt = prompts[0];
@@ -307,7 +307,7 @@ test('AT-3 (loaded-AND-USED + per-turn selection): the interview prompt carries 
     const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'drafting' });
     const { queryFn, prompts } = makeOrderedQueryFn([validDraftOutput()]);
     await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, skillPromptPath,
       logger: logger(logsRoot, sessionId),
     });
     const prompt = prompts[0];
@@ -343,7 +343,7 @@ test('AT-4 (fail-loud): a marker-less skill fixture makes the turn THROW, naming
 
   await assert.rejects(
     () => runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, skillPromptPath,
       logger: logger(logsRoot, sessionId),
     }),
     (err: unknown) => {
@@ -416,7 +416,7 @@ test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-na
       { done: false, questions: [{ question: 'Q?', header: 'hdr', options: [{ label: 'A', description: 'a' }] }] },
     ]);
     await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
       logger: logger(logsRoot, sessionId),
     });
     assertBrainFirst(prompts[0], FRAMING_INTERVIEW, S.interview);
@@ -428,7 +428,7 @@ test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-na
     const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'exploring' });
     const { queryFn, prompts } = makeOrderedQueryFn([validExploreOutput(), validDraftOutput()]);
     await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
       logger: logger(logsRoot, sessionId),
     });
     assertBrainFirst(prompts[0], FRAMING_EXPLORE, S.explore);
@@ -439,7 +439,7 @@ test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-na
     const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'drafting' });
     const { queryFn, prompts } = makeOrderedQueryFn([validDraftOutput()]);
     await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
       logger: logger(logsRoot, sessionId),
     });
     assertBrainFirst(prompts[0], FRAMING_DRAFT, S.draft);
@@ -470,7 +470,7 @@ test('AT-6 (HAZARD PIN — fail-open exploring): an explore step whose structure
   };
 
   const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-    sessionId, projectRoot, logsRoot, queueRoot, queryFn,
+    sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn,
     logger: logger(logsRoot, sessionId),
   });
 
@@ -497,7 +497,7 @@ test('AT-7 (HAZARD PIN — forced-emit retry): empty first draft triggers exactl
     const { queryFn, prompts } = makeOrderedQueryFn(responses);
 
     const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-      sessionId, projectRoot, logsRoot, queueRoot, queryFn,
+      sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn,
       logger: logger(logsRoot, sessionId),
     });
 
@@ -534,7 +534,7 @@ test('AT-7 (HAZARD PIN — forced-emit retry): empty first draft triggers exactl
 
     await assert.rejects(
       () => runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-        sessionId, projectRoot, logsRoot, queueRoot, queryFn,
+        sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn,
         logger: logger(logsRoot, sessionId),
       }),
       /no initiatives after a forced-emit retry/,
@@ -571,7 +571,7 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
   };
 
   const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-    sessionId, projectRoot, logsRoot, queueRoot, queryFn,
+    sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn,
     logger: logger(logsRoot, sessionId),
   });
 

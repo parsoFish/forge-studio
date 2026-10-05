@@ -26,6 +26,7 @@
  * so it stays its own helper, `watchDirsFlat`.
  */
 import { existsSync, readFileSync, readdirSync, statSync, watch as fsWatch, type FSWatcher } from 'node:fs';
+import { guardedReadDir, resolveGuardedPath, sessionKindSegments, SESSIONS_DIRNAME } from '@forge/kernel';
 import { join } from 'node:path';
 
 import { listInFlight, type QueuePaths } from '@forge/flows';
@@ -239,14 +240,13 @@ export function watchDirsFlat(dirs: readonly string[], onChange: () => void): FS
  * `fs.watch` support still catches new sessions; the UI re-fetches anyway),
  * same silent catch when `fs.watch` is unavailable entirely.
  */
-export function watchProjectSubdirs(projectsRoot: string, subdirName: string, onChange: () => void): FSWatcher[] {
+export function watchProjectSubdirs(logsRoot: string, subdirName: string, onChange: () => void): FSWatcher[] {
   const watchers: FSWatcher[] = [];
-  if (!existsSync(projectsRoot)) return watchers;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return watchers; }
-  for (const name of projects) {
-    const dir = join(projectsRoot, name, subdirName);
-    if (!existsSync(dir)) continue;
+  // Session dirs live under `<logsRoot>/_sessions/<project>/<kindDir>` (forge-8vfn.8.5.58).
+  for (const name of guardedReadDir(logsRoot, [SESSIONS_DIRNAME]) ?? []) {
+    const guarded = resolveGuardedPath(logsRoot, sessionKindSegments(name, subdirName));
+    if (!guarded.ok || !guarded.exists) continue;
+    const dir = guarded.realPath;
     try {
       watchers.push(fsWatch(dir, { persistent: false, recursive: true }, onChange));
     } catch {

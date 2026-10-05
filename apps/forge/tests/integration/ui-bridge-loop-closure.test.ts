@@ -45,7 +45,7 @@ const INIT_B = 'INIT-2026-08-18-second';
 const INIT_PENDING = 'INIT-2026-08-01-flow-run-probe';
 
 function sessionDir(sid: string): string {
-  return join(forgeRoot, 'projects', 'demo-project', '_architect', sid);
+  return join(forgeRoot, '_logs', '_sessions', 'demo-project', '_architect', sid);
 }
 
 function writeStatus(sid: string, phase: string): void {
@@ -102,7 +102,7 @@ before(async () => {
   // Drafting session — no manifests dir yet.
   writeStatus(SID_DRAFTING, 'drafting');
 
-  // A session whose `manifests` is a symlink OUT of the projects root.
+  // A session whose `manifests` is a symlink OUT of the session root.
   writeStatus(SID_SYMLINK, 'committed');
   mkdirSync(outsideRoot, { recursive: true });
   writeFileSync(join(outsideRoot, 'INIT-2026-01-01-planted.md'), manifestBody('INIT-2026-01-01-planted', 'forge-develop'));

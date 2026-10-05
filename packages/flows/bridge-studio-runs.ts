@@ -18,7 +18,7 @@ import { planGateClassRefusals } from './plan-gate-class-check.ts';
 import { getPaths } from './queue.ts';
 import { PROJECT_ID_RE } from '@forge/kernel';
 import { runRequeue } from './forge-requeue.ts';
-import { resolveGuardedPath, guardedReadDir, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadDir, guardedReadFile, guardedWriteFile, sessionDirSegments, ARCHITECT_KIND_DIR } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { sendJson, allowedOrigin, sanitizeError, SAFE_ID_RE, pathOnly } from '@forge/kernel';
 
@@ -40,7 +40,7 @@ export type { StudioPostContext, ReleaseFinalizeHookInput };
 // ---------------------------------------------------------------------------
 
 // SEC-04 (bd forge-ebj): both helpers take the TRUSTED `projectsRoot` plus the
-// request-derived session directory segments (`project`, `'_architect'`,
+// request-derived session directory segments (`project`, `the architect kind dir`,
 // `sessionId`) as their OWN `segments[]` elements — never folded into the root —
 // and route the WHOLE path, `status.json` leaf included, through the guarded
 // primitives, so a symlinked/hardlinked `status.json` leaf inside an otherwise
@@ -140,12 +140,12 @@ export async function applyPlanVerdict(
   // an out-of-root session whose status.json would be read AND mutated (a
   // reject rewrites phase:'rejected'). Gate every subsequent read/write on a
   // per-segment IDENTITY guard of project + `_architect` + sessionId (each its
-  // own segment against the fixed projectsRoot base); any escape — a symlinked
+  // own segment against the fixed logsRoot base); any escape — a symlinked
   // `_architect`, a cross-object alias — collapses to a 404, indistinguishable
   // from a genuinely missing session (no oracle). Only once the guard has
   // proven the bare-joined `dir` is contained is it safe to read/write.
-  const dirSegments: readonly string[] = [project, '_architect', sessionId];
-  const guarded = resolveGuardedPath(ctx.projectsRoot, dirSegments);
+  const dirSegments: readonly string[] = sessionDirSegments(project, ARCHITECT_KIND_DIR, sessionId);
+  const guarded = resolveGuardedPath(ctx.logsRoot, dirSegments);
   if (!guarded.ok) {
     sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     return;
@@ -156,7 +156,7 @@ export async function applyPlanVerdict(
   // included, via `_readStatus`/`_writeStatus`/`guardedWriteFile` (SEC-04), not
   // a raw `join(dir, leaf)`.
   const dir = guarded.realPath;
-  if (!_readStatus(ctx.projectsRoot, dirSegments)) {
+  if (!_readStatus(ctx.logsRoot, dirSegments)) {
     sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     return;
   }
@@ -175,7 +175,7 @@ export async function applyPlanVerdict(
     return;
   }
   try {
-    const status = _readStatus(ctx.projectsRoot, dirSegments);
+    const status = _readStatus(ctx.logsRoot, dirSegments);
     if (!status) {
       sendJson(res, 404, { error: 'session not found', sessionId }, origin);
       return;
@@ -204,10 +204,10 @@ export async function applyPlanVerdict(
       // family as every other read on this path: a symlinked `manifests` dir
       // yields [] rather than being followed out of root.
       const refusals = planGateClassRefusals(
-        (guardedReadDir(ctx.projectsRoot, [...dirSegments, 'manifests']) ?? [])
+        (guardedReadDir(ctx.logsRoot, [...dirSegments, 'manifests']) ?? [])
           .filter((f) => f.endsWith('.md'))
           .flatMap((f) => {
-            const raw = guardedReadFile(ctx.projectsRoot, [...dirSegments, 'manifests', f]);
+            const raw = guardedReadFile(ctx.logsRoot, [...dirSegments, 'manifests', f]);
             if (raw === null) return [];
             try {
               const m = parseManifest(raw);
@@ -233,28 +233,28 @@ export async function applyPlanVerdict(
         return;
       }
       if (rationale) {
-        if (guardedWriteFile(ctx.projectsRoot, [...dirSegments, 'feedback.md'], rationale.trim() + '\n') === null) {
+        if (guardedWriteFile(ctx.logsRoot, [...dirSegments, 'feedback.md'], rationale.trim() + '\n') === null) {
           refuse();
           return;
         }
       }
-      if (_writeStatus(ctx.projectsRoot, dirSegments, { ...status, phase: 'finalizing' }) === null) {
+      if (_writeStatus(ctx.logsRoot, dirSegments, { ...status, phase: 'finalizing' }) === null) {
         refuse();
         return;
       }
       spawnTurn(ctx.forgeRoot, project, sessionId);
     } else if (kind === 'revise') {
-      if (guardedWriteFile(ctx.projectsRoot, [...dirSegments, 'feedback.md'], (rationale ?? '').trim() + '\n') === null) {
+      if (guardedWriteFile(ctx.logsRoot, [...dirSegments, 'feedback.md'], (rationale ?? '').trim() + '\n') === null) {
         refuse();
         return;
       }
-      if (_writeStatus(ctx.projectsRoot, dirSegments, { ...status, phase: 'interviewing', round: status.round + 1 }) === null) {
+      if (_writeStatus(ctx.logsRoot, dirSegments, { ...status, phase: 'interviewing', round: status.round + 1 }) === null) {
         refuse();
         return;
       }
       spawnTurn(ctx.forgeRoot, project, sessionId);
     } else {
-      if (_writeStatus(ctx.projectsRoot, dirSegments, { ...status, phase: 'rejected' }) === null) {
+      if (_writeStatus(ctx.logsRoot, dirSegments, { ...status, phase: 'rejected' }) === null) {
         refuse();
         return;
       }

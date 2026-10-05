@@ -82,6 +82,7 @@ export function makeNoopQueryFn(): QueryFn {
 }
 
 export function setup(overrides?: Partial<DemoBuilderStatus>): {
+  project: string;
   projectRoot: string;
   repoPath: string;
   logsRoot: string;
@@ -98,11 +99,12 @@ export function setup(overrides?: Partial<DemoBuilderStatus>): {
   );
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-06-24T11-00-00';
-  const sessionDir = demoSessionDir(projectRoot, sessionId);
+  const project = 'demo';
+  const sessionDir = demoSessionDir(logsRoot, project, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   const status: DemoBuilderStatus = {
     session_id: sessionId,
-    project: 'demo',
+    project,
     project_repo_path: repoPath,
     phase: 'generating',
     iteration: 1,
@@ -111,15 +113,15 @@ export function setup(overrides?: Partial<DemoBuilderStatus>): {
     ...overrides,
   };
   writeSessionStatus(sessionDir, status);
-  return { projectRoot, repoPath, logsRoot, sessionId, sessionDir };
+  return { project, projectRoot, repoPath, logsRoot, sessionId, sessionDir };
 }
 
 export const logger = (logsRoot: string, sid: string) => createLogger(`_demo-${sid}`, logsRoot);
 
 test('generating → agent produces the declaration + sample → awaiting-review', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
+  const { project, projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
   assert.equal(result.phase, 'awaiting-review');
   assert.equal(readFileSync(join(sessionDir, 'generations', '1', 'demo-process.json'), 'utf8'), JSON.stringify(DRIVABLE_DECLARATION), 'the declaration draft is the generation');
@@ -131,23 +133,23 @@ test('generating → agent produces the declaration + sample → awaiting-review
 });
 
 test('generating but neither file produced → throws a clear, recoverable error', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    () => runDemoBuilderTurn({ sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
     /without producing .*DEMO\.html/,
   );
 });
 
 test('generating with the sample but NOT the declaration → throws (the declaration is the output)', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeSampleOnlyQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    () => runDemoBuilderTurn({ sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeSampleOnlyQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
     /without producing \.forge\/demo\/demo-process\.json — /,
   );
 });
 
 test('generate prompt carries the demoProcess, look-and-feel, feedback, and the inlined base CSS', async () => {
-  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating' });
+  const { project, projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating' });
   writeFileSync(join(sessionDir, 'feedback.md'), 'Make the diff bigger and drop the footer.');
   // Bead 7.3.6 (T1 ruling 642): a generate turn now runs THREE agent passes —
   // READ, then WRITE, then GROUND — so `prompts[1]` is the write pass. 6.11.49
@@ -157,7 +159,7 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
   // proving something nobody asked for.
   const prompts: string[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
   const captured = prompts[1];
   assert.match(captured, /Output matches the golden file/, 'demoProcess steps injected');
@@ -176,7 +178,7 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
 });
 
 test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to the event log, and Read tool_use events are unsampled', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const READ_CALLS = 6;
   // 6.11.49: a generate turn runs two agent passes. The stream under test is
   // emitted by the WRITE pass only — this test is about how ONE pass's blocks
@@ -210,7 +212,7 @@ test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to 
   };
 
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn, logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn, logger: logger(logsRoot, sessionId), logsRoot,
   });
 
   const events = readFileSync(join(logsRoot, `_demo-${sessionId}`, 'events.jsonl'), 'utf8')
@@ -228,14 +230,14 @@ test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to 
 });
 
 test('locking → writes the declaration into demoProcess + demo.lock.json + status locked', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
+  const { project, projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
   writeSessionStatus(sessionDir, { ...readSessionStatus<DemoBuilderStatus>(sessionDir)!, phase: 'locking', iteration: 3 });
 
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
   assert.equal(result.phase, 'locked');
   assert.deepEqual(JSON.parse(readFileSync(join(repoPath, '.forge', 'project.json'), 'utf8')).demoProcess, DRIVABLE_DECLARATION);
@@ -254,18 +256,18 @@ test('locking → writes the declaration into demoProcess + demo.lock.json + sta
 });
 
 test('locking with no generation on disk → throws', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'locking' });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ phase: 'locking' });
   await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    () => runDemoBuilderTurn({ sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
     /cannot lock — no generation on disk/,
   );
 });
 
 test('the generate prompt carries the current declaration and the demo-element library', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   const prompts: string[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
   const captured = prompts[1];
   assert.match(captured, /## The current demo declaration/, 'the declaration to revise is framed');
@@ -275,10 +277,10 @@ test('the generate prompt carries the current declaration and the demo-element l
 });
 
 test('per-element iteration: targetElement narrows the revision to that element\'s steps', async () => {
-  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating', targetElement: 'cli-capture' });
+  const { project, projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating', targetElement: 'cli-capture' });
   const prompts: string[] = [];
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
   assert.equal(result.phase, 'awaiting-review');
   assert.match(prompts[1], /Revise ONLY the steps bound to element 'cli-capture'/);
@@ -286,21 +288,21 @@ test('per-element iteration: targetElement narrows the revision to that element\
 });
 
 test('briefing turn is a no-op (the operator provides notes before the agent runs)', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'briefing', mode: 'update' });
-  const result = await runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ phase: 'briefing', mode: 'update' });
+  const result = await runDemoBuilderTurn({ sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });
   assert.equal(result.phase, 'briefing');
   assert.equal(result.wrote.length, 0);
 });
 
 test('update mode: the generate prompt carries an UPDATE framing over the locked declaration', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', mode: 'update' });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', mode: 'update' });
   // Bead 6.11.49: a generate turn now runs TWO agent passes, so a capture that
   // keeps the last prompt would silently start asserting against the grounding
   // pass. `captured` is the WRITE pass's prompt — the one these assertions have
   // always been about.
   const prompts: string[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
   const captured = prompts[1];
   assert.match(captured, /UPDATE MODE/, 'update framing present');
@@ -309,8 +311,8 @@ test('update mode: the generate prompt carries an UPDATE framing over the locked
 });
 
 test('awaiting-review turn is a no-op (bridge owns the wait state)', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'awaiting-review' });
-  const result = await runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ phase: 'awaiting-review' });
+  const result = await runDemoBuilderTurn({ sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });
   assert.equal(result.phase, 'awaiting-review');
   assert.equal(result.wrote.length, 0);
 });
@@ -318,7 +320,7 @@ test('awaiting-review turn is a no-op (bridge owns the wait state)', async () =>
 test('missing status.json throws a clear error', async () => {
   const root = mkdtempSync(join(tmpdir(), 'demo-runner-'));
   await assert.rejects(
-    runDemoBuilderTurn({ sessionId: 'nope', projectRoot: join(root, 'p'), forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn() }),
+    runDemoBuilderTurn({ sessionId: 'nope', project: 'p', projectRoot: join(root, 'p'), forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn() }),
     /no status\.json/,
   );
 });

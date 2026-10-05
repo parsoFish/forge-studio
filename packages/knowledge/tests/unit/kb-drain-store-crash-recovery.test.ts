@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os';
 
 import { releaseInterruptedKbCleanupApplies, KB_CLEANUP_RECONCILE_LOG_BUCKET } from '../../kb-drain-store.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '../../bridge-studio-kbs.ts';
+import { sessionDirSegments } from '@forge/kernel';
 import { testSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 
 /** Mirrors `apps/forge/tests/integration/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture. */
@@ -39,31 +40,31 @@ function writeKb(forgeRoot: string, id: string, bindingYaml = '{ kind: unique }'
   writeFileSync(join(dir, 'kb.yaml'), `id: ${id}\nname: Fixture KB ${id}\nbinding: ${bindingYaml}\ndesc: A fixture KB for crash-recovery tests.\n`, 'utf8');
 }
 
-function makeRoot(): { forgeRoot: string; projectsRoot: string } {
+function makeRoot(): { forgeRoot: string; logsRoot: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'kb-drain-store-crash-'));
   const projectsRoot = join(forgeRoot, 'projects');
   mkdirSync(projectsRoot, { recursive: true });
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
-  return { forgeRoot, projectsRoot };
+  return { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 }
 
 test('releaseInterruptedKbCleanupApplies releases a kb-cleanup session a crash left at "applying" back to "awaiting-approval" with an apply_error naming the interruption', () => {
-  const { forgeRoot, projectsRoot } = makeRoot();
+  const { forgeRoot, logsRoot } = makeRoot();
   try {
     writeKb(forgeRoot, 'crash-kb');
     const anchor = `${KB_SEEDING_ANCHOR_PREFIX}crash-kb`;
-    const dirSegs = [anchor, '_kb-cleanup', 'stuck-session'];
-    testSessionStatusIo.write(projectsRoot, dirSegs, {
+    const dirSegs = sessionDirSegments(anchor, '_kb-cleanup', 'stuck-session');
+    testSessionStatusIo.write(logsRoot, dirSegs, {
       session_id: 'stuck-session',
       project: anchor,
       phase: 'applying',
       kb_id: 'crash-kb',
     });
 
-    const released = releaseInterruptedKbCleanupApplies(forgeRoot, projectsRoot, testSessionStatusIo);
+    const released = releaseInterruptedKbCleanupApplies(forgeRoot, logsRoot, testSessionStatusIo);
     assert.equal(released, 1, 'exactly one orphaned session should be released');
 
-    const status = testSessionStatusIo.read<{ phase?: unknown; apply_error?: unknown }>(projectsRoot, dirSegs);
+    const status = testSessionStatusIo.read<{ phase?: unknown; apply_error?: unknown }>(logsRoot, dirSegs);
     assert.ok(status, 'status.json must still exist and be readable');
     assert.equal(status!.phase, 'awaiting-approval', 'a crash-orphaned "applying" session must be released back to "awaiting-approval"');
     assert.equal(
@@ -77,27 +78,27 @@ test('releaseInterruptedKbCleanupApplies releases a kb-cleanup session a crash l
 });
 
 test('releaseInterruptedKbCleanupApplies never touches a session at "awaiting-approval" or "applied"', () => {
-  const { forgeRoot, projectsRoot } = makeRoot();
+  const { forgeRoot, logsRoot } = makeRoot();
   try {
     writeKb(forgeRoot, 'calm-kb');
     const anchor = `${KB_SEEDING_ANCHOR_PREFIX}calm-kb`;
-    const awaitingSegs = [anchor, '_kb-cleanup', 'awaiting-session'];
-    const appliedSegs = [anchor, '_kb-cleanup', 'applied-session'];
-    testSessionStatusIo.write(projectsRoot, awaitingSegs, {
+    const awaitingSegs = sessionDirSegments(anchor, '_kb-cleanup', 'awaiting-session');
+    const appliedSegs = sessionDirSegments(anchor, '_kb-cleanup', 'applied-session');
+    testSessionStatusIo.write(logsRoot, awaitingSegs, {
       session_id: 'awaiting-session', project: anchor, phase: 'awaiting-approval', kb_id: 'calm-kb',
     });
-    testSessionStatusIo.write(projectsRoot, appliedSegs, {
+    testSessionStatusIo.write(logsRoot, appliedSegs, {
       session_id: 'applied-session', project: anchor, phase: 'applied', kb_id: 'calm-kb', finalized: { kind: 'kb', id: 'calm-kb' },
     });
 
-    const released = releaseInterruptedKbCleanupApplies(forgeRoot, projectsRoot, testSessionStatusIo);
+    const released = releaseInterruptedKbCleanupApplies(forgeRoot, logsRoot, testSessionStatusIo);
     assert.equal(released, 0, 'neither fixture session is at "applying", so nothing should be released');
 
-    const awaiting = testSessionStatusIo.read<{ phase?: unknown; apply_error?: unknown }>(projectsRoot, awaitingSegs);
+    const awaiting = testSessionStatusIo.read<{ phase?: unknown; apply_error?: unknown }>(logsRoot, awaitingSegs);
     assert.equal(awaiting!.phase, 'awaiting-approval');
     assert.equal(awaiting!.apply_error, undefined, 'an untouched session must never gain an apply_error');
 
-    const applied = testSessionStatusIo.read<{ phase?: unknown; apply_error?: unknown }>(projectsRoot, appliedSegs);
+    const applied = testSessionStatusIo.read<{ phase?: unknown; apply_error?: unknown }>(logsRoot, appliedSegs);
     assert.equal(applied!.phase, 'applied');
     assert.equal(applied!.apply_error, undefined);
   } finally {
@@ -106,16 +107,16 @@ test('releaseInterruptedKbCleanupApplies never touches a session at "awaiting-ap
 });
 
 test('releaseInterruptedKbCleanupApplies emits a structured JSONL event per released session', () => {
-  const { forgeRoot, projectsRoot } = makeRoot();
+  const { forgeRoot, logsRoot } = makeRoot();
   try {
     writeKb(forgeRoot, 'logged-kb');
     const anchor = `${KB_SEEDING_ANCHOR_PREFIX}logged-kb`;
-    const dirSegs = [anchor, '_kb-cleanup', 'logged-session'];
-    testSessionStatusIo.write(projectsRoot, dirSegs, {
+    const dirSegs = sessionDirSegments(anchor, '_kb-cleanup', 'logged-session');
+    testSessionStatusIo.write(logsRoot, dirSegs, {
       session_id: 'logged-session', project: anchor, phase: 'applying', kb_id: 'logged-kb',
     });
 
-    releaseInterruptedKbCleanupApplies(forgeRoot, projectsRoot, testSessionStatusIo);
+    releaseInterruptedKbCleanupApplies(forgeRoot, logsRoot, testSessionStatusIo);
 
     const eventsPath = join(forgeRoot, '_logs', KB_CLEANUP_RECONCILE_LOG_BUCKET, 'events.jsonl');
     const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);

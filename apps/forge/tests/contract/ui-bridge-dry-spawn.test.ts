@@ -186,7 +186,7 @@ const FAMILIES: Array<{
     eventRoute: '/api/plan-verdict',
     drive: async () => {
       const sid = '2026-07-17T10-00-00';
-      const dir = join(forgeRoot, 'projects', PROJECT, '_architect', sid);
+      const dir = join(forgeRoot, '_logs', '_sessions', PROJECT, '_architect', sid);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'status.json'), JSON.stringify({
         session_id: sid, project: PROJECT, project_repo_path: dir,
@@ -224,7 +224,7 @@ const FAMILIES: Array<{
       assert.equal(start.status, 200, JSON.stringify(start.json));
       assert.equal(start.json.dryBridge, undefined, 'exempt-local start must NOT carry a marker');
       const sessionId = start.json.sessionId as string;
-      const statusPath = join(forgeRoot, 'projects', PROJECT, '_demo', sessionId, 'status.json');
+      const statusPath = join(forgeRoot, '_logs', '_sessions', PROJECT, '_demo', sessionId, 'status.json');
       const current = JSON.parse(readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
       writeFileSync(statusPath, JSON.stringify({ ...current, phase: 'awaiting-review' }));
       const { status, json } = await post('/api/demo-builder/lock', { project: PROJECT, sessionId });
@@ -289,7 +289,7 @@ test('R4-17 pin 5, item 3: POST /api/studio/onboarding/start still performs its 
     project: PROJECT, inputs: { northStar: 'dry-bridge bookkeeping probe 7f3c91' },
   });
   assert.equal(status, 200, JSON.stringify(json));
-  const sessionDir = join(forgeRoot, 'projects', PROJECT, '_onboarding', json.sessionId as string);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', PROJECT, '_onboarding', json.sessionId as string);
   assert.ok(existsSync(join(sessionDir, 'status.json')), 'status.json must still land under dry-bridge');
   const prompt = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
   assert.ok(prompt.includes('dry-bridge bookkeeping probe 7f3c91'), 'prompt.md must still render the real operator inputs under dry-bridge (D8 — never fabricated)');

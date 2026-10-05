@@ -104,10 +104,9 @@ async function runCapturedTurn(kindId: string, kindDir: string): Promise<Record<
   const forgeRoot = join(root, 'forge');
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
-  const projectRoot = join(root, 'project');
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-20T00-00-00';
-  const sessionDir = join(projectRoot, kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', kindDir, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, {
     session_id: sessionId,
@@ -117,7 +116,7 @@ async function runCapturedTurn(kindId: string, kindDir: string): Promise<Record<
   const captured: { options?: Record<string, unknown> } = {};
   await runInteractiveTurn(descriptorFor(forgeRoot, kindId), {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn: capturingQueryFn(sessionDir, captured),

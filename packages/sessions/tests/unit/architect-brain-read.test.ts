@@ -59,7 +59,7 @@ function scriptedInterviewStream(): QueryFn {
 function plantSession(): { projectRoot: string; logsRoot: string; root: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-brain-read-'));
   const projectRoot = join(root, 'projects', 'p1');
-  mkdirSync(join(projectRoot, '_architect', SESSION_ID), { recursive: true });
+  mkdirSync(join(root, '_logs', '_sessions', 'p1', '_architect', SESSION_ID), { recursive: true });
   const status: ArchitectStatus = {
     session_id: SESSION_ID,
     project: 'p1',
@@ -69,7 +69,7 @@ function plantSession(): { projectRoot: string; logsRoot: string; root: string }
     idea: 'Add a dark-mode toggle.',
     updated_at: new Date(0).toISOString(),
   };
-  writeFileSync(join(projectRoot, '_architect', SESSION_ID, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+  writeFileSync(join(root, '_logs', '_sessions', 'p1', '_architect', SESSION_ID, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
   const logsRoot = join(root, '_logs');
   return { projectRoot, logsRoot, root };
 }
@@ -85,6 +85,7 @@ test('AT-8.3.5-0 an architect interview turn emits one brain.read event per KB i
     await runArchitectTurn({
       sessionId: SESSION_ID,
       projectRoot,
+      project: 'p1',
       logsRoot,
       brainCwd: root,
       queryFn: scriptedInterviewStream(),
@@ -145,7 +146,7 @@ test('AT-8.3.5-1b Grep and Glob tool calls into brain/ are tallied through the s
       },
     });
 
-    await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, logsRoot, brainCwd: root, queryFn });
+    await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn });
 
     const reads = readEvents(logsRoot).filter((e) => e.message === 'brain.read');
     assert.equal(reads.length, 2, `expected one brain.read event per KB (Grep -> kbA, Glob -> kbB), got ${JSON.stringify(reads)}`);
@@ -175,7 +176,7 @@ test('AT-8.3.5-1 (positive control) a turn that reads no brain/ path emits no br
       },
     });
 
-    await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, logsRoot, brainCwd: root, queryFn });
+    await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn });
 
     const reads = readEvents(logsRoot).filter((e) => e.message === 'brain.read');
     assert.equal(reads.length, 0, 'no brain/ path was read this turn, so no brain.read event should exist');

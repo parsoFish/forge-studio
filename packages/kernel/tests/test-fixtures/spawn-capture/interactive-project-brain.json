@@ -1,6 +1,6 @@
 {
   "spawn": {
-    "prompt": "You are the forge project-brain builder (golden-capture fixture v2).\n\nFIXTURE project-brain ANALYZE-PROJECT-REPO turn.\n\nProject: testproj\nProject repo (your working directory — READ from here): <TMP>/projects/testproj\nStaging directory (WRITE every theme + profile.md here, as absolute paths): <TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes\n\nOperator focus / guidance:\nFocus on the build + test conventions.",
+    "prompt": "You are the forge project-brain builder (golden-capture fixture v2).\n\nFIXTURE project-brain ANALYZE-PROJECT-REPO turn.\n\nProject: testproj\nProject repo (your working directory — READ from here): <TMP>/projects/testproj\nStaging directory (WRITE every theme + profile.md here, as absolute paths): <TMP>/_logs/_sessions/testproj/_project-brain/2026-01-01T00-00-00/themes\n\nOperator focus / guidance:\nFocus on the build + test conventions.",
     "options": {
       "cwd": "<TMP>/projects/testproj",
       "model": "claude-sonnet-4-6",
@@ -28,8 +28,8 @@
   "result": {
     "phase": "awaiting-review",
     "wrote": [
-      "<TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes/profile.md",
-      "<TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes/structure.md"
+      "<TMP>/_logs/_sessions/testproj/_project-brain/2026-01-01T00-00-00/themes/profile.md",
+      "<TMP>/_logs/_sessions/testproj/_project-brain/2026-01-01T00-00-00/themes/structure.md"
     ],
     "themes": [
       "profile.md",

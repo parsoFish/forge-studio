@@ -9,9 +9,9 @@
  * `join(...)` and read/mutate through it with no containment check:
  *
  *   (1) listArchitectSessions (orchestrator/architect-runner.ts:1421)
- *       bare `join(projectsRoot, project, '_architect')` + `readStatus(join(archDir, sid))`.
+ *       bare `join(logsRoot, "_sessions", project, "_architect")` + `readStatus(join(archDir, sid))`.
  *       Reached by GET /api/architect/sessions. THE reproduced escape: a
- *       symlinked `projects/<p>/_architect` dir (a plain 120000 blob in git)
+ *       symlinked `_logs/_sessions/<p>/_architect` dir (a plain 120000 blob in git)
  *       is enumerated with no guard and every out-of-root `status.json` under
  *       it — idea, session_id, project_repo_path — is disclosed in the listing.
  *
@@ -83,6 +83,12 @@ function newOutsideDir(prefix: string): string {
   return d;
 }
 
+/** Where a project's architect sessions live: `<logsRoot>/_sessions/<p>/_architect`
+ *  (OUTSIDE the project checkout — the ground). */
+function archDir(project: string): string {
+  return join(forgeRoot, '_logs', '_sessions', project, '_architect');
+}
+
 /** Plant a full architect `status.json` at `dir` (the victim's own on-disk
  *  location, wherever that is). */
 function plantStatusJson(dir: string, status: Record<string, unknown>): void {
@@ -123,7 +129,8 @@ before(async () => {
 
   // A real, legitimately-shaped in-root project — the base for the positive
   // controls and the sessionId-only traversal vector.
-  mkdirSync(join(projectsRoot, 'legit', '_architect'), { recursive: true });
+  mkdirSync(join(projectsRoot, 'legit'), { recursive: true });
+  mkdirSync(archDir('legit'), { recursive: true });
 
   // Probe symlink availability once (the symlinked-_architect vectors skip
   // cleanly where the fs cannot make one; the traversing-sessionId vector does
@@ -156,7 +163,7 @@ after(async () => {
 
 test('positive control: GET /api/architect/sessions lists a legit in-root session and discloses its idea (that is the intended behaviour)', async () => {
   const sid = 'legit-ctrl-session';
-  plantStatusJson(join(projectsRoot, 'legit', '_architect', sid), {
+  plantStatusJson(join(archDir('legit'), sid), {
     session_id: sid,
     project: 'legit',
     project_repo_path: join(projectsRoot, 'legit'),
@@ -173,7 +180,7 @@ test('positive control: GET /api/architect/sessions lists a legit in-root sessio
 
 test('positive control: runArchitectTurn on a legit in-root awaiting-verdict session returns cleanly (no throw)', async () => {
   const sid = 'legit-runner-ctrl';
-  plantStatusJson(join(projectsRoot, 'legit', '_architect', sid), {
+  plantStatusJson(join(archDir('legit'), sid), {
     session_id: sid,
     project: 'legit',
     project_repo_path: join(projectsRoot, 'legit'),
@@ -183,6 +190,7 @@ test('positive control: runArchitectTurn on a legit in-root awaiting-verdict ses
   });
   const r = await runArchitectTurn({
     sessionId: sid,
+    project: 'legit',
     projectRoot: join(projectsRoot, 'legit'),
     logsRoot: join(forgeRoot, '_logs'),
     brainCwd: forgeRoot,
@@ -195,7 +203,7 @@ test('positive control: runArchitectTurn on a legit in-root awaiting-verdict ses
 
 // ===========================================================================
 // Consumer (1): GET /api/architect/sessions -> listArchitectSessions
-//   symlinked projects/<p>/_architect -> out-of-root victim disclosed
+//   symlinked _logs/_sessions/<p>/_architect -> out-of-root victim disclosed
 // ===========================================================================
 
 test('(RED) GET /api/architect/sessions discloses an out-of-root architect session reached through a symlinked _architect dir', async (t) => {
@@ -217,7 +225,8 @@ test('(RED) GET /api/architect/sessions discloses an out-of-root architect sessi
   // An ordinary in-root project whose `_architect` dir is a symlink to it —
   // plantable by a plain git commit (git tracks symlinks as 120000 blobs).
   mkdirSync(join(projectsRoot, 'attacker'), { recursive: true });
-  symlinkSync(outside, join(projectsRoot, 'attacker', '_architect'), 'dir');
+  mkdirSync(join(forgeRoot, '_logs', '_sessions', 'attacker'), { recursive: true });
+  symlinkSync(outside, archDir('attacker'), 'dir');
 
   const res = await fetch(`${bridgeUrl}/api/architect/sessions`);
   const text = await res.text();
@@ -256,7 +265,8 @@ test('(RED) POST /api/plan-verdict with a valid-charset project+sessionId but a 
 
   // In-root project whose `_architect` is a symlink to the outside victim root.
   mkdirSync(join(projectsRoot, project), { recursive: true });
-  symlinkSync(outside, join(projectsRoot, project, '_architect'), 'dir');
+  mkdirSync(join(forgeRoot, '_logs', '_sessions', project), { recursive: true });
+  symlinkSync(outside, archDir(project), 'dir');
 
   const { status, text } = await postJson('/api/plan-verdict', { project, sessionId: sid, kind: 'reject' });
 
@@ -306,13 +316,15 @@ test('(RED) runArchitectTurn with a symlinked _architect dir must REFUSE (throw)
 
   const projectRoot = join(projectsRoot, project);
   mkdirSync(projectRoot, { recursive: true });
-  symlinkSync(outside, join(projectRoot, '_architect'), 'dir');
+  mkdirSync(join(forgeRoot, '_logs', '_sessions', project), { recursive: true });
+  symlinkSync(outside, archDir(project), 'dir');
 
   let threw = false;
   let result: unknown;
   try {
     result = await runArchitectTurn({
       sessionId: sid,
+      project,
       projectRoot,
       logsRoot: join(forgeRoot, '_logs'),
       brainCwd: forgeRoot,
@@ -342,9 +354,9 @@ test('(RED) runArchitectTurn with a traversing sessionId must REFUSE (throw) rat
   });
 
   const projectRoot = join(projectsRoot, 'legit');
-  // sessionPaths does resolve(projectRoot, '_architect', sessionId); a `../`
+  // the session dir is <logsRoot>/_sessions/<project>/_architect/<sessionId>; a `../`
   // sessionId escapes both projectsRoot and forgeRoot to the planted victim.
-  const traversingSid = relative(join(projectRoot, '_architect'), victimDir);
+  const traversingSid = relative(archDir('legit'), victimDir);
   assert.ok(traversingSid.startsWith('..'), `precondition: sessionId traverses out — got "${traversingSid}"`);
 
   let threw = false;
@@ -352,6 +364,7 @@ test('(RED) runArchitectTurn with a traversing sessionId must REFUSE (throw) rat
   try {
     result = await runArchitectTurn({
       sessionId: traversingSid,
+      project: 'legit',
       projectRoot,
       logsRoot: join(forgeRoot, '_logs'),
       brainCwd: forgeRoot,

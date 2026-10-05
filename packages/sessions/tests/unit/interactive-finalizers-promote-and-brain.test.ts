@@ -115,17 +115,18 @@ test('resolveFinalizer("commitToCentralBrain") resolves to the exported commitTo
 
 test('POSITIVE CONTROL: commitToCentralBrain CALLS the real commitProjectBrain â€” a staged theme lands under <forgeRoot>/brain/projects/<project>/themes/', async () => {
   const { forgeRoot } = scratch('finalizer-commit-brain-');
-  const projectRoot = join(forgeRoot, 'proj-root');
+  const logsRoot = join(forgeRoot, 'logs-root');
   const sessionId = 'sess-001';
-  const themesDir = join(projectRoot, '_project-brain', sessionId, 'themes');
+  const sessionHome = join(logsRoot, '_sessions', 'fixture-project', '_project-brain', sessionId);
+  const themesDir = join(sessionHome, 'themes');
   mkdirSync(themesDir, { recursive: true });
   writeFileSync(join(themesDir, 'patterns.md'), '# Patterns\ncontent-marker-9f1c\n');
 
   const wrote = await commitToCentralBrain({
-    sessionDir: join(projectRoot, '_project-brain', sessionId),
+    sessionDir: sessionHome,
     forgeRoot,
     libraryRoot: forgeRoot,
-    projectRoot,
+    logsRoot,
     sessionId,
     project: 'fixture-project',
   });
@@ -136,7 +137,7 @@ test('POSITIVE CONTROL: commitToCentralBrain CALLS the real commitProjectBrain â
   assert.equal(readFileSync(dest, 'utf8'), '# Patterns\ncontent-marker-9f1c\n');
 });
 
-test('commitToCentralBrain refuses loudly when project/projectRoot/sessionId are absent', async () => {
+test('commitToCentralBrain refuses loudly when project/logsRoot/sessionId are absent', async () => {
   const { forgeRoot } = scratch('finalizer-commit-brain-missing-');
   let error: Error | null = null;
   try {

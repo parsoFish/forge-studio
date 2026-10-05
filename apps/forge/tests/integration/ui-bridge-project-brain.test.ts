@@ -122,7 +122,7 @@ test('row 206: a SECOND /api/project-brain/approve after the first already advan
   // Drive the session to awaiting-review by hand (no real agent runs in this
   // NO_SPAWN suite) — mirrors how the demo/instructions fixtures seed a
   // mid-flight phase directly rather than running a real turn.
-  const dir = join(forgeRoot, 'projects', PROJECT, '_project-brain', sessionId);
+  const dir = join(forgeRoot, '_logs', '_sessions', PROJECT, '_project-brain', sessionId);
   const status = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ ...status, phase: 'awaiting-review' }));
 
@@ -189,11 +189,11 @@ test('POST /api/project-brain/start with an out-of-envelope modelTier ("opus") 4
 // intended default.
 // ===========================================================================
 
-/** Snapshot of session ids currently under `<forgeRoot>/projects/<PROJECT>/_project-brain/`
+/** Snapshot of session ids currently under `<forgeRoot>/_logs/_sessions/<PROJECT>/_project-brain/`
  *  — used to prove a REJECTED /start creates NO new session dir (id-agnostic,
  *  since a 400 response carries no sessionId to look up directly). */
 function listProjectBrainSessionIds(): string[] {
-  const dir = join(forgeRoot, 'projects', PROJECT, '_project-brain');
+  const dir = join(forgeRoot, '_logs', '_sessions', PROJECT, '_project-brain');
   try {
     return readdirSync(dir).sort();
   } catch {

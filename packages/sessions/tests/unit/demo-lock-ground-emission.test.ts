@@ -52,7 +52,7 @@ const noopQueryFn: QueryFn = () => {
 
 /** A repo whose generate pass already left the sample behind, and a session
  *  whose generation 1 snapshot carries a drivable declaration (forge-mfv5.2.8). */
-function setupLockable(): { projectRoot: string; repoPath: string; logsRoot: string } {
+function setupLockable(): { project: string; projectRoot: string; repoPath: string; logsRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'demo-lock-emit-'));
   const projectRoot = join(root, 'project');
   const repoPath = join(root, 'repo');
@@ -63,7 +63,7 @@ function setupLockable(): { projectRoot: string; repoPath: string; logsRoot: str
   );
   writeFileSync(join(repoPath, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>demo</body></html>');
 
-  const sessionDir = demoSessionDir(projectRoot, SESSION_ID);
+  const sessionDir = demoSessionDir(join(root, '_logs'), 'demo', SESSION_ID);
   const generation = join(sessionDir, 'generations', '1');
   mkdirSync(generation, { recursive: true });
   writeFileSync(join(generation, 'DEMO.html'), '<!DOCTYPE html><html><body>demo</body></html>');
@@ -79,7 +79,7 @@ function setupLockable(): { projectRoot: string; repoPath: string; logsRoot: str
     updated_at: new Date().toISOString(),
   };
   writeSessionStatus(sessionDir, status);
-  return { projectRoot, repoPath, logsRoot: join(root, '_logs') };
+  return { project: 'demo', projectRoot, repoPath, logsRoot: join(root, '_logs') };
 }
 
 /** What the containment fence reads: `file_change` rows only. */
@@ -98,10 +98,11 @@ function fileChangeRows(logsRoot: string): { path: string; op: string; cause: st
 }
 
 test('locking declares every one of its ground writes as a file_change row', async () => {
-  const { projectRoot, repoPath, logsRoot } = setupLockable();
+  const { project, projectRoot, repoPath, logsRoot } = setupLockable();
 
   const result = await runDemoBuilderTurn({
     sessionId: SESSION_ID,
+    project,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     queryFn: noopQueryFn,
@@ -137,7 +138,7 @@ test('locking declares every one of its ground writes as a file_change row', asy
 });
 
 test("a re-lock declares demo.lock.json as a MODIFY — the file it overwrote already existed", async () => {
-  const { projectRoot, repoPath, logsRoot } = setupLockable();
+  const { project, projectRoot, repoPath, logsRoot } = setupLockable();
   // A previous session already locked this project. Only `demo.lock.json`
   // survives a session boundary: `history/<sid>/` is per-session and is always
   // a creation, which is why the two are emitted with different ops.
@@ -145,6 +146,7 @@ test("a re-lock declares demo.lock.json as a MODIFY — the file it overwrote al
 
   await runDemoBuilderTurn({
     sessionId: SESSION_ID,
+    project,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     queryFn: noopQueryFn,
@@ -166,10 +168,11 @@ test("a re-lock declares demo.lock.json as a MODIFY — the file it overwrote al
 });
 
 test('the lock step emits into the SESSION log, not a fresh bridge run', async () => {
-  const { projectRoot, logsRoot } = setupLockable();
+  const { project, projectRoot, logsRoot } = setupLockable();
 
   await runDemoBuilderTurn({
     sessionId: SESSION_ID,
+    project,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     queryFn: noopQueryFn,

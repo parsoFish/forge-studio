@@ -58,7 +58,7 @@ type ActiveBody = {
 };
 
 function writeOnboardingFixture(project: string, sid: string, staleMs: number): string {
-  const sessionDir = join(forgeRoot, 'projects', project, '_onboarding', sid);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', project, '_onboarding', sid);
   mkdirSync(sessionDir, { recursive: true });
   const startedAt = new Date(staleMs).toISOString();
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({

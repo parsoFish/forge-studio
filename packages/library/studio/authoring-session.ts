@@ -16,16 +16,16 @@ export type AuthoringTurnResult = { readonly phase: string };
 export type AuthoringStatus = Record<string, unknown> & { readonly phase?: string };
 
 export type AuthoringSessionPort = {
-  readonly readStatus: <S>(projectsRoot: string, dirSegments: readonly string[]) => S | null;
+  readonly readStatus: <S>(logsRoot: string, dirSegments: readonly string[]) => S | null;
   readonly writeStatus: <S extends Record<string, unknown>>(
-    projectsRoot: string,
+    logsRoot: string,
     dirSegments: readonly string[],
     status: S,
   ) => string | null;
   /** Load the `authoring` kind and run one turn. `null` = no descriptor on disk. */
   readonly runAuthoringTurn: (input: {
     readonly sessionId: string;
-    readonly projectRoot: string;
+    readonly project: string;
     readonly forgeRoot: string;
   }) => Promise<AuthoringTurnResult | null>;
   /** Did this error come from the staging copy layer? Only the CLASS is sessions'. */

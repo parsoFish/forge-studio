@@ -152,8 +152,8 @@ function writeResolvableKb(root: string, id: string): void {
  * nothing here should be read as pinning that writer's format. The writer
  * itself is exercised by the kickoff routes' own tests.
  */
-function writeAuthoringFixture(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_authoring', sessionId);
+function writeAuthoringFixture(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_authoring', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -168,8 +168,8 @@ function writeAuthoringFixture(projectsRoot: string, project: string, sessionId:
   );
 }
 
-function writeCleanupSession(projectsRoot: string, project: string, sessionId: string, kbId: string, phase = 'awaiting-approval'): void {
-  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+function writeCleanupSession(logsRoot: string, project: string, sessionId: string, kbId: string, phase = 'awaiting-approval'): void {
+  const dir = join(logsRoot, '_sessions', project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -227,10 +227,11 @@ before(async () => {
   writeSkillAgent(forgeRoot, 'creation-agent');
 
   const projectsRoot = join(forgeRoot, 'projects');
-  mkdirSync(projectsRoot, { recursive: true });
+  mkdirSync(join(projectsRoot, PROJECT), { recursive: true }); // the routes validate the project; sessions live under the logs root
+  const logsRoot = join(forgeRoot, '_logs');
 
   writeResolvableKb(forgeRoot, KB_ID);
-  writeCleanupSession(projectsRoot, PROJECT, KB_CLEANUP_SESSION, KB_ID);
+  writeCleanupSession(logsRoot, PROJECT, KB_CLEANUP_SESSION, KB_ID);
   seedEventLog(forgeRoot, 'kb-cleanup', KB_CLEANUP_SESSION);
 
   // W6-B2 review fix (MEDIUM 2 / LOW) — the terminal-phase fixture: the
@@ -238,10 +239,10 @@ before(async () => {
   // fixture above, so a tail that started (wrongly) would replay it on its
   // first 200ms poll — the negative test below proves no such replay
   // happens.
-  writeCleanupSession(projectsRoot, PROJECT, KB_CLEANUP_TERMINAL_SESSION, KB_ID, 'applied');
+  writeCleanupSession(logsRoot, PROJECT, KB_CLEANUP_TERMINAL_SESSION, KB_ID, 'applied');
   seedEventLog(forgeRoot, 'kb-cleanup', KB_CLEANUP_TERMINAL_SESSION);
 
-  writeAuthoringFixture(projectsRoot, PROJECT, AUTHORING_SESSION);
+  writeAuthoringFixture(logsRoot, PROJECT, AUTHORING_SESSION);
   seedEventLog(forgeRoot, 'authoring', AUTHORING_SESSION);
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';

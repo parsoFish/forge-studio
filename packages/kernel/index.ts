@@ -29,6 +29,8 @@ export * from './init.ts';
 export * from './halt.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+/** Where a session dir lives: `<logsRoot>/_sessions/<project>/<kindDir>/<sid>`, never in the ground. */
+export * from './session-dir.ts';
 export { safeReadFileInSession } from './contained-read.ts';
 /** The direct-filesystem case-folding probe shared by every staging module
  *  that dedupes entries by resolved path before writing them (forge-qn8,

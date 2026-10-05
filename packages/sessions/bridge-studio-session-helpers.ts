@@ -30,7 +30,7 @@ import type { OutgoingHttpHeaders } from 'node:http';
 import type { ModelTier } from '@forge/agents';
 import { MAX_EXACT_ID_LENGTH, PROJECT_ID_RE } from '@forge/kernel';
 import { discoverProjects } from '@forge/kernel';
-import { isSafeSegment, resolveGuardedPath } from '@forge/kernel';
+import { guardedReadDir, isSafeSegment, resolveSessionDir, sessionKindSegments, SESSIONS_DIRNAME } from '@forge/kernel';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // packages/sessions/kinds/architect-session.ts's own module doc).
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -123,7 +123,7 @@ export type SessionHostSurface = {
     inputs?: Record<string, string>,
     sessionDir?: string,
     costCeilingUsd?: number,
-    projectsRoot?: string,
+    logsRoot?: string,
   ) => void;
   /** Row 206 part (a) — the CLAIM half of `spawnAgentDispatch`, mirroring
    *  `claimAgentTurnSlot` above: claim FIRST, write state, then
@@ -139,7 +139,7 @@ export type SessionHostSurface = {
     inputs?: Record<string, string>,
     sessionDir?: string,
     costCeilingUsd?: number,
-    projectsRoot?: string,
+    logsRoot?: string,
   ) => void;
   readonly spawnAgentSpecs: Readonly<Record<string, { readonly argvPrefix: readonly string[]; readonly logPrefix: string }>>;
   /** `safeParseJson` — still called by `handleReflect` in the host. */
@@ -238,7 +238,7 @@ export function sessionStaleMs(
   return lifecycle?.idleMs ?? 0;
 }
 export function deriveRowLifecycle(
-  ctx: { projectsRoot: string; logsRoot: string },
+  ctx: { logsRoot: string },
   descriptor: SessionKindDescriptor,
   phase: string,
   project: string,
@@ -252,7 +252,7 @@ export function deriveRowLifecycle(
   // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
   // computed at read time, never stored.
   const lifecycle = deriveSessionLifecycleFor({
-    descriptor, phase, terminal, project, sessionId, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot,
+    descriptor, phase, terminal, project, sessionId, logsRoot: ctx.logsRoot,
   });
   return { terminal, lifecycle };
 }
@@ -305,13 +305,23 @@ export function findSessionKindDescriptorSafe(forgeRoot: string, kind: string): 
  * route mkdirs under a dir this function already proved contained.
  */
 export function guardedSessionDir(
-  projectsRoot: string,
+  logsRoot: string,
   project: string,
   kindDirName: string,
   sessionId: string,
 ): string | null {
-  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId]);
+  const guarded = resolveSessionDir(logsRoot, project, kindDirName, sessionId);
   return guarded.ok ? guarded.realPath : null;
+}
+/** Every project that has a session dir: the server-enumerated names under
+ *  `<logsRoot>/_sessions` (never request data). Empty when none exist yet. */
+export function listSessionProjects(logsRoot: string): string[] {
+  return guardedReadDir(logsRoot, [SESSIONS_DIRNAME]) ?? [];
+}
+/** Every entry under `<logsRoot>/_sessions/<project>/<kindDir>` (session ids,
+ *  plus an `_archived` dir the callers skip). Empty when the kind has none. */
+export function listSessionKindIds(logsRoot: string, project: string, kindDirName: string): string[] {
+  return guardedReadDir(logsRoot, sessionKindSegments(project, kindDirName)) ?? [];
 }
 /** Longest rendering of a rejected value echoed back in a 400. */
 const MAX_REJECTED_VALUE_CHARS = 200;

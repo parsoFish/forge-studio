@@ -29,10 +29,10 @@ function makeWritingQueryFnCapturingModel(onModel: (model: string | undefined) =
 }
 
 test('status.modelTier is honored: an operator-requested "opus" reaches queryFn as options.model', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup({ modelTier: 'opus' });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ modelTier: 'opus' });
   let capturedModel: string | undefined;
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT,
     queryFn: makeWritingQueryFnCapturingModel((m) => { capturedModel = m; }),
     logger: logger(logsRoot, sessionId), logsRoot,
   });
@@ -40,10 +40,10 @@ test('status.modelTier is honored: an operator-requested "opus" reaches queryFn 
 });
 
 test('status.modelTier absent resolves to the unchanged default (sonnet) — byte-identical prior behavior', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   let capturedModel: string | undefined;
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT,
     queryFn: makeWritingQueryFnCapturingModel((m) => { capturedModel = m; }),
     logger: logger(logsRoot, sessionId), logsRoot,
   });
@@ -52,10 +52,10 @@ test('status.modelTier absent resolves to the unchanged default (sonnet) — byt
 });
 
 test('status.modelTier outside the declared range throws naming the value and the allowed set', async () => {
-  const { projectRoot, logsRoot, sessionId } = setup({ modelTier: 'haiku' });
+  const { project, projectRoot, logsRoot, sessionId } = setup({ modelTier: 'haiku' });
   await assert.rejects(
     () => runDemoBuilderTurn({
-      sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+      sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
     }),
     /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/,
   );
@@ -105,15 +105,15 @@ async function generateAgain(ctx: ReturnType<typeof setup>, queryFn: QueryFn, fe
   const after = readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!;
   if (feedback) writeFileSync(join(ctx.sessionDir, 'feedback.md'), feedback);
   writeSessionStatus(ctx.sessionDir, { ...after, phase: 'generating', iteration: after.iteration + 1 });
-  await runDemoBuilderTurn({ sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn, logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot });
+  await runDemoBuilderTurn({ sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn, logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot });
 }
 
 // R4-16 AT-1: a successful generate turn snapshots DEMO.html + the declaration
 // + meta.json into generations/<iteration>/.
 test('R4-16 AT-1: generate turn snapshots DEMO.html + demo-process.json + meta.json into generations/<iteration>/', async () => {
-  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  const { project, projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V1 demo</html>', declarationTagged('v1')), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V1 demo</html>', declarationTagged('v1')), logger: logger(logsRoot, sessionId), logsRoot,
   });
   const gdir = generationDir(sessionDir, 1);
   assert.equal(readFileSync(join(gdir, 'DEMO.html'), 'utf8'), '<html>V1 demo</html>');
@@ -125,9 +125,9 @@ test('R4-16 AT-1: generate turn snapshots DEMO.html + demo-process.json + meta.j
 // R4-16 AT-2: meta.json fidelity — kills an implementation that invents/omits
 // fields or defaults feedback to "" instead of null.
 test('R4-16 AT-2: meta.json carries iteration, a real createdAt, feedback:null, targetElement:null — and no skill path', async () => {
-  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  const { project, projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V1</html>', declarationTagged('v1')), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V1</html>', declarationTagged('v1')), logger: logger(logsRoot, sessionId), logsRoot,
   });
   const meta = readMeta(sessionDir, 1);
   assert.equal(meta.iteration, 1);
@@ -140,10 +140,10 @@ test('R4-16 AT-2: meta.json carries iteration, a real createdAt, feedback:null, 
 // R4-16 AT-3: feedback attribution — the feedback.md content that drove THIS
 // generation is captured verbatim.
 test('R4-16 AT-3: meta.json.feedback captures the feedback.md content that drove THIS generation, verbatim', async () => {
-  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 2 });
+  const { project, projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 2 });
   writeFileSync(join(sessionDir, 'feedback.md'), 'Make it punchier and shorter.');
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V2</html>', declarationTagged('v2')), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V2</html>', declarationTagged('v2')), logger: logger(logsRoot, sessionId), logsRoot,
   });
   const meta = readMeta(sessionDir, 2);
   assert.equal(meta.feedback, 'Make it punchier and shorter.');
@@ -155,7 +155,7 @@ test('R4-16 AT-3: meta.json.feedback captures the feedback.md content that drove
 test('R4-16 AT-5: a revision turn revises the newest earlier generation\'s declaration', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('draft-one')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('draft-one')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   const prompts: string[] = [];
   const capturing: QueryFn = (args) => { prompts.push(args.prompt as string); return makeVersionedWritingQueryFn('<html>G2</html>', declarationTagged('draft-two'))(args); };
@@ -169,7 +169,7 @@ test('R4-16 AT-5: a revision turn revises the newest earlier generation\'s decla
 test('R4-16 AT-6: generation snapshots accumulate — generation 1 is untouched after generation 2 is written', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>GEN-ONE</html>', declarationTagged('one')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>GEN-ONE</html>', declarationTagged('one')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   await generateAgain(ctx, makeVersionedWritingQueryFn('<html>GEN-TWO</html>', declarationTagged('two')), 'Round 2 feedback.');
   assert.equal(readFileSync(join(generationDir(ctx.sessionDir, 1), 'DEMO.html'), 'utf8'), '<html>GEN-ONE</html>', 'generation 1 DEMO.html must be untouched by generation 2');
@@ -183,7 +183,7 @@ test('R4-16 AT-6: generation snapshots accumulate — generation 1 is untouched 
 test('R4-16 AT-7: choosing an earlier generation at lock writes ITS declaration and restores ITS sample, not the latest', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT,
     queryFn: makeVersionedWritingQueryFn('<html>GENERATION-ONE-BYTES</html>', declarationTagged('generation-one')),
     logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
@@ -192,7 +192,7 @@ test('R4-16 AT-7: choosing an earlier generation at lock writes ITS declaration 
 
   writeSessionStatus(ctx.sessionDir, { ...readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!, phase: 'locking', selectedGeneration: 1 });
   const result = await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   assert.equal(result.phase, 'locked');
   assert.equal(readFileSync(join(ctx.repoPath, DEMO_HTML_REL_PATH), 'utf8'), '<html>GENERATION-ONE-BYTES</html>', "generation 1's sample is restored");
@@ -207,7 +207,7 @@ test('R4-16 AT-7: choosing an earlier generation at lock writes ITS declaration 
 test('R4-16 AT-8: selectedGeneration naming a generation with no snapshot on disk throws, naming the requested + existing generations, and writes nothing', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT,
     queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')),
     logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
@@ -216,7 +216,7 @@ test('R4-16 AT-8: selectedGeneration naming a generation with no snapshot on dis
   writeSessionStatus(ctx.sessionDir, { ...readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!, phase: 'locking', selectedGeneration: 99 });
 
   await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot }),
+    () => runDemoBuilderTurn({ sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot }),
     /generation 99 has no readable snapshot .*Generations on disk: 1, 2\./,
   );
   assert.equal(readFileSync(join(ctx.repoPath, DEMO_HTML_REL_PATH), 'utf8'), '<html>G2-LATEST</html>', 'no partial restore');
@@ -230,12 +230,12 @@ test('R4-16 AT-8: selectedGeneration naming a generation with no snapshot on dis
 test('R4-16 AT-9: locking without selectedGeneration locks the newest generation and records it, never status.iteration', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   await generateAgain(ctx, makeVersionedWritingQueryFn('<html>G2</html>', declarationTagged('g2')));
   writeSessionStatus(ctx.sessionDir, { ...readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!, phase: 'locking', iteration: 7 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   assert.equal(JSON.parse(readFileSync(join(ctx.repoPath, DEMO_LOCK_REL_PATH), 'utf8')).generation, 2, 'the newest generation, never status.iteration (7)');
   assert.deepEqual(readDemoProcess(ctx.repoPath), declarationTagged('g2'));
@@ -247,13 +247,13 @@ test('R4-16 AT-9: locking without selectedGeneration locks the newest generation
 test('R4-16 AT-43: a generation meta.json carrying skillRelPath="../OUTSIDE-pwned.md" names no write target — nothing lands outside the repo', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   const metaPath = join(generationDir(ctx.sessionDir, 1), 'meta.json');
   writeFileSync(metaPath, JSON.stringify({ ...JSON.parse(readFileSync(metaPath, 'utf8')), skillRelPath: '../OUTSIDE-pwned.md' }));
   writeSessionStatus(ctx.sessionDir, { ...readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!, phase: 'locking', selectedGeneration: 1 });
   const result = await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   assert.equal(result.phase, 'locked');
   assert.ok(!existsSync(join(resolve(ctx.repoPath, '..'), 'OUTSIDE-pwned.md')), 'no file may ever be written outside the repo');
@@ -264,7 +264,7 @@ test('R4-16 AT-43: a generation meta.json carrying skillRelPath="../OUTSIDE-pwne
 test('locking an undrivable declaration is refused with the rule\'s reason — project.json, DEMO.html and the lock are untouched', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT,
     queryFn: makeVersionedWritingQueryFn('<html>G1</html>', [{ kind: 'capture', text: 'Run `npm run demo | tee out` to see it.' }]),
     logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
@@ -272,7 +272,7 @@ test('locking an undrivable declaration is refused with the rule\'s reason — p
   writeFileSync(join(ctx.repoPath, DEMO_HTML_REL_PATH), '<html>REPO</html>');
   writeSessionStatus(ctx.sessionDir, { ...readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!, phase: 'locking' });
   await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot }),
+    () => runDemoBuilderTurn({ sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot }),
     /generation 1's declaration is refused: capture step 0 .* shell metacharacters in `npm run demo \| tee out`/,
   );
   assert.deepEqual(readDemoProcess(ctx.repoPath), declaredBefore);
@@ -283,21 +283,21 @@ test('locking an undrivable declaration is refused with the rule\'s reason — p
 test('locking a declaration draft that is not JSON is refused naming the generation', async () => {
   const ctx = setup({ iteration: 1 });
   await runDemoBuilderTurn({
-    sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
+    sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', declarationTagged('g1')), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot,
   });
   writeFileSync(join(generationDir(ctx.sessionDir, 1), 'demo-process.json'), '{not json');
   writeSessionStatus(ctx.sessionDir, { ...readSessionStatus<DemoBuilderStatus>(ctx.sessionDir)!, phase: 'locking' });
   await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId: ctx.sessionId, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot }),
+    () => runDemoBuilderTurn({ sessionId: ctx.sessionId, project: ctx.project, projectRoot: ctx.projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(ctx.logsRoot, ctx.sessionId), logsRoot: ctx.logsRoot }),
     /generation 1's declaration is not JSON/,
   );
   assert.ok(!existsSync(join(ctx.repoPath, DEMO_LOCK_REL_PATH)));
 });
 
 test("W7-C3 (sessions-kinds-26): every event row carries phase 'demo' — never the retired 'unifier'", async () => {
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { project, projectRoot, logsRoot, sessionId } = setup();
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, project, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
 
   const events = readFileSync(join(logsRoot, `_demo-${sessionId}`, 'events.jsonl'), 'utf8')

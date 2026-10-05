@@ -115,7 +115,8 @@ test('POST /api/architect/rerun under halt: 409 { error: "halted" }, nothing spa
     `import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; writeFileSync(join(import.meta.dirname, '..', '..', 'spawned.json'), '1');`,
   );
   const sid = '2026-05-29T21-00-00';
-  const dir = join(forgeRoot, 'projects', 'demo', '_architect', sid);
+  const dir = join(forgeRoot, '_logs', '_sessions', 'demo', '_architect', sid);
+  mkdirSync(join(forgeRoot, 'projects', 'demo'), { recursive: true });
   mkdirSync(dir, { recursive: true });
   const status = JSON.stringify({ session_id: sid, project: 'demo', project_repo_path: dir, phase: 'drafting', round: 1, idea: 'i', updated_at: '2026-01-01T00:00:00.000Z' });
   writeFileSync(join(dir, 'status.json'), status);

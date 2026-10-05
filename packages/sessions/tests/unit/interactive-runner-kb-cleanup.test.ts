@@ -65,7 +65,7 @@ function setupRealKbCleanup(): RealKbCleanupFixture {
   mkdirSync(projectRoot, { recursive: true });
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-08-14T00-00-00';
-  const sessionDir = join(projectRoot, descriptor.turnSpec.kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', descriptor.turnSpec.kindDir, sessionId);
   return { root, forgeRoot, projectRoot, logsRoot, sessionId, sessionDir, descriptor };
 }
 
@@ -97,7 +97,7 @@ test('R4-19-F2 BYPASS-REFUSAL: a kb-cleanup session at awaiting-approval does NO
   const before = snapshotDir(fx.sessionDir);
   const result = await runInteractiveTurn(fx.descriptor, {
     sessionId: fx.sessionId,
-    projectRoot: fx.projectRoot,
+    project: 'proj',
     forgeRoot: fx.forgeRoot,
     logsRoot: fx.logsRoot,
     queryFn: neverCalledQueryFn(),
@@ -139,7 +139,7 @@ test('R4-19-F2: the real kb-cleanup descriptor\'s drafting phase declares writes
     () =>
       runInteractiveTurn(fx.descriptor, {
         sessionId: fx.sessionId,
-        projectRoot: fx.projectRoot,
+        project: 'proj',
         forgeRoot: fx.forgeRoot,
         logsRoot: fx.logsRoot,
         // Deliberately does NOT create plan/ — the agent produced nothing.
@@ -181,7 +181,7 @@ test('R4-19-F2 (positive control): the real kb-cleanup descriptor\'s drafting ph
 
   const result = await runInteractiveTurn(fx.descriptor, {
     sessionId: fx.sessionId,
-    projectRoot: fx.projectRoot,
+    project: 'proj',
     forgeRoot: fx.forgeRoot,
     logsRoot: fx.logsRoot,
     queryFn,
@@ -244,7 +244,7 @@ test('bead forge-eip: the REAL authoring turn installs a canUseTool that denies 
 
   const result = await runInteractiveTurn(fx.descriptor, {
     sessionId: fx.sessionId,
-    projectRoot: fx.projectRoot,
+    project: 'proj',
     forgeRoot: fx.forgeRoot,
     logsRoot: fx.logsRoot,
     queryFn,

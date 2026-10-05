@@ -42,16 +42,16 @@ function fallThroughQueryFn(sessionDir: string, firstDone: boolean): { queryFn: 
 }
 
 test('doneField:true drives the SAME-TURN fall-through: interviewing -> drafting runs BOTH turns in one runInteractiveTurn call', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T01-00-00';
-  const sessionDir = join(projectRoot, '_interactivetest-fallthrough', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-fallthrough', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<Status>(sessionDir, { session_id: sessionId, phase: 'interviewing', updated_at: new Date().toISOString(), round: 1 });
 
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-falls-through');
   const { queryFn, calls } = fallThroughQueryFn(sessionDir, true);
 
-  const result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(calls(), 2, 'both the interview turn AND the draft turn must have spawned in this ONE call');
   assert.equal(result.phase, 'awaiting-verdict', 'the fall-through must land on drafting\'s OWN next, not stop at drafting itself');
@@ -60,16 +60,16 @@ test('doneField:true drives the SAME-TURN fall-through: interviewing -> drafting
 });
 
 test('doneField:false, round UNDER ceiling: stays at awaiting-answers — the draft turn never spawns', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T01-00-01';
-  const sessionDir = join(projectRoot, '_interactivetest-fallthrough', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-fallthrough', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<Status>(sessionDir, { session_id: sessionId, phase: 'interviewing', updated_at: new Date().toISOString(), round: 1 });
 
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-falls-through');
   const { queryFn, calls } = fallThroughQueryFn(sessionDir, false);
 
-  const result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(calls(), 1, 'the draft turn must NOT spawn — round 1 is under the fixture\'s ceiling:2');
   assert.equal(result.phase, 'awaiting-answers');
@@ -78,9 +78,9 @@ test('doneField:false, round UNDER ceiling: stays at awaiting-answers — the dr
 });
 
 test('doneField:false, round AT ceiling: the ceiling FORCES the same-turn fall-through despite the agent saying not done', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T01-00-02';
-  const sessionDir = join(projectRoot, '_interactivetest-fallthrough', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-fallthrough', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   // Fixture declares ceiling: 2 — round already AT the ceiling.
   writeSessionStatus<Status>(sessionDir, { session_id: sessionId, phase: 'interviewing', updated_at: new Date().toISOString(), round: 2 });
@@ -88,14 +88,14 @@ test('doneField:false, round AT ceiling: the ceiling FORCES the same-turn fall-t
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-falls-through');
   const { queryFn, calls } = fallThroughQueryFn(sessionDir, false);
 
-  const result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(calls(), 2, 'the ceiling must force the fall-through even though the agent reported done:false');
   assert.equal(result.phase, 'awaiting-verdict');
 });
 
 test('a phase with NO doneField behaves exactly as before — a single turn, no fall-through machinery touched', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -111,7 +111,7 @@ test('a phase with NO doneField behaves exactly as before — a single turn, no 
     return gen();
   };
 
-  const result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(n, 1, 'a kind with no doneField/nextOnDone must spawn exactly ONE turn, as before this bead');
   assert.equal(result.phase, 'awaiting-review');

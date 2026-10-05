@@ -37,11 +37,10 @@ import { SLUG_RE } from '@forge/kernel';
 // fail for an unrelated reason.
 test('Finding 5(a)+(b): finalize lands the package under <forgeRoot>/_interactive-library/, NOT <forgeRoot>/skills, and does not create skills/ as a side effect', async () => {
   const { forgeRoot, logsRoot } = setup();
-  const projectRoot = mkdtempSync(join(tmpdir(), 'interactive-runner-f5ab-proj-'));
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
   const packageId = 'finding5-valid-slug';
   assert.match(packageId, SLUG_RE, 'arrange: packageId fixture must itself be a genuinely valid slug (SLUG_RE) or the test is vacuous');
-  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, packageId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', descriptor.turnSpec!.kindDir, packageId);
 
   // Precondition, asserted before reading any verdict — doubles as pin (b)'s
   // baseline: skills/ must not pre-exist so a later re-appearance is
@@ -59,7 +58,7 @@ test('Finding 5(a)+(b): finalize lands the package under <forgeRoot>/_interactiv
 
   const result = await runInteractiveTurn(descriptor, {
     sessionId: packageId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn: neverCalledQueryFn(),
@@ -96,7 +95,7 @@ test('Finding 5(a)+(b): finalize lands the package under <forgeRoot>/_interactiv
 // leading lowercase letter is required), while still passing today's looser
 // isSafeSegment check — exactly the gap the finding names.
 test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refused, not silently accepted into an oddly-named library directory', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   // Precondition, asserted before reading any verdict.
   assert.doesNotMatch(sessionId, SLUG_RE, 'arrange: fixture sessionId must genuinely be an invalid slug or the test is vacuous');
 
@@ -112,7 +111,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: neverCalledQueryFn(),
@@ -184,7 +183,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
 
     const result = await runInteractiveTurn(fx.descriptor, {
       sessionId: fx.sessionId,
-      projectRoot: fx.projectRoot,
+      project: 'proj',
       forgeRoot: fx.forgeRoot,
       logsRoot: fx.logsRoot,
       queryFn,
@@ -214,7 +213,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
     const before = snapshotDir(fx.sessionDir);
     const result = await runInteractiveTurn(fx.descriptor, {
       sessionId: fx.sessionId,
-      projectRoot: fx.projectRoot,
+      project: 'proj',
       forgeRoot: fx.forgeRoot,
       logsRoot: fx.logsRoot,
       queryFn: neverCalledQueryFn(),
@@ -252,7 +251,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
 
     const result = await runInteractiveTurn(fx.descriptor, {
       sessionId: fx.sessionId,
-      projectRoot: fx.projectRoot,
+      project: 'proj',
       forgeRoot: fx.forgeRoot,
       logsRoot: fx.logsRoot,
       queryFn: neverCalledQueryFn(),
@@ -284,7 +283,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
 // shapes identically, per the unit spec's own wording ("is the same refusal
 // as a missing one").
 test('P1: a declared writes: dir that EXISTS but is EMPTY is the SAME refusal as a missing one — both mean "the turn produced nothing"', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   const statusPath = join(sessionDir, 'status.json');
@@ -305,7 +304,7 @@ test('P1: a declared writes: dir that EXISTS but is EMPTY is the SAME refusal as
     () =>
       runInteractiveTurn(descriptor, {
         sessionId,
-        projectRoot,
+        project: 'proj',
         forgeRoot,
         logsRoot,
         queryFn: emptyDirQueryFn,
@@ -344,16 +343,15 @@ test('P1 (true carve-out, must survive the fix): a phase row that declares NO wr
     'arrange: fixture phase row must genuinely declare no writes: or this test is vacuous',
   );
   const sessionId = 'no-writes-declared-001';
-  const projectRoot = mkdtempSync(join(tmpdir(), 'interactive-runner-nowrites-proj-'));
   const logsRoot = join(mkdtempSync(join(tmpdir(), 'interactive-runner-nowrites-logs-')), '_logs');
-  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', descriptor.turnSpec!.kindDir, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
   assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
 
   const result = await runInteractiveTurn(descriptor, {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn: noopAgentQueryFn(),
@@ -372,7 +370,7 @@ test('P1 (true carve-out, must survive the fix): a phase row that declares NO wr
 // exact mechanism's own mutation-proof ("Kills:" comment there), so it is
 // not re-derived from scratch here.
 test('P1 (positive control): a declared writes: dir that DOES contain a file still advances normally', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -388,7 +386,7 @@ test('P1 (positive control): a declared writes: dir that DOES contain a file sti
 
   const result = await runInteractiveTurn(descriptor, {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn,
@@ -421,7 +419,7 @@ test('P1 (positive control): a declared writes: dir that DOES contain a file sti
 // WI's report): temporarily narrowing buildTurnPrompt's JSON.stringify to
 // `{phase: status.phase}` turns this test red; reverted afterward.
 test('P4: with status.prompt present, the actual prompt string handed to queryFn CONTAINS the operator\'s text — the end-to-end proof the words reach the model', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   const OPERATOR_TEXT = 'Build a hook that blocks commits containing TODO markers, marker-f4c2ab';
   writeSessionStatus<TestStatus & { prompt?: string }>(sessionDir, {
@@ -451,7 +449,7 @@ test('P4: with status.prompt present, the actual prompt string handed to queryFn
 
   await runInteractiveTurn(descriptor, {
     sessionId,
-    projectRoot,
+    project: 'proj',
     forgeRoot,
     logsRoot,
     queryFn,
@@ -475,7 +473,7 @@ test('P4: with status.prompt present, the actual prompt string handed to queryFn
 // ===========================================================================
 
 test('C2-FIX-A5-2: an agent turn folds feedback.md into its prompt and then CONSUMES it — the next turn is not re-steered by the previous round\'s words', async () => {
-  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  const { forgeRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   const FEEDBACK = 'Make the button blue, marker-a5c0de';
   writeFileSync(join(sessionDir, 'feedback.md'), FEEDBACK, 'utf8');
@@ -493,14 +491,14 @@ test('C2-FIX-A5-2: an agent turn folds feedback.md into its prompt and then CONS
     return gen();
   };
 
-  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
   assert.ok(prompts[0].includes(FEEDBACK), `turn 1 must actually carry the operator's words: ${JSON.stringify(prompts[0])}`);
   assert.equal(existsSync(join(sessionDir, 'feedback.md')), false, 'the note is consumed once it has been folded into a prompt');
 
   // A SECOND turn from the same phase (the shape a redraft takes) must not
   // re-inject the already-applied round.
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
-  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
   assert.equal(prompts.length, 2);
   assert.ok(!prompts[1].includes(FEEDBACK), `turn 2 must NOT be re-steered by round 1's words: ${JSON.stringify(prompts[1])}`);
 });

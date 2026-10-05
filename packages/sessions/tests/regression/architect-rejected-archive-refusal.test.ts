@@ -53,12 +53,13 @@ function plantRejectedSessionWithPoisonedArchiveRoot(): { root: string; projectR
   const root = mkdtempSync(join(tmpdir(), 'arch-rejected-refusal-'));
   const projectRoot = join(root, 'projects', 'p1');
   const sessionId = '2026-09-19T00-00-00';
-  const sessionDir = join(projectRoot, '_architect', sessionId);
+  const archRoot = join(root, '_logs', '_sessions', 'p1', '_architect');
+  const sessionDir = join(archRoot, sessionId);
   mkdirSync(sessionDir, { recursive: true });
-  mkdirSync(join(root, '_logs'), { recursive: true });
+  mkdirSync(projectRoot, { recursive: true });
   const victim = join(root, 'victim');
   mkdirSync(victim, { recursive: true });
-  symlinkSync(victim, join(projectRoot, '_architect', '_archived'), 'dir');
+  symlinkSync(victim, join(archRoot, '_archived'), 'dir');
   const status: ArchitectStatus = {
     session_id: sessionId,
     project: 'p1',
@@ -79,6 +80,7 @@ test('a containment refusal while archiving a rejected session is NOT silently s
   const result = await runArchitectTurn({
     manifestPorts: stubArchitectManifestPorts(),
     sessionId,
+    project: 'p1',
     projectRoot,
     logsRoot: join(root, '_logs'),
     brainCwd: root,
@@ -113,8 +115,9 @@ test('POSITIVE CONTROL: a repeat reject turn on an already-archived session stay
   // `archiveSessionDir`'s "session dir not found" Error covers when reached
   // from inside the `rejected` step directly. Both are the genuine no-op this
   // fix must leave quiet.
-  mkdirSync(join(projectRoot, '_architect'), { recursive: true });
-  mkdirSync(join(root, '_logs'), { recursive: true });
+  const archRoot = join(root, '_logs', '_sessions', 'p1', '_architect');
+  mkdirSync(archRoot, { recursive: true });
+  mkdirSync(projectRoot, { recursive: true });
   const status: ArchitectStatus = {
     session_id: sessionId,
     project: 'p1',
@@ -124,17 +127,18 @@ test('POSITIVE CONTROL: a repeat reject turn on an already-archived session stay
     idea: 'idempotent reject after the session already archived',
     updated_at: new Date().toISOString(),
   };
-  mkdirSync(join(projectRoot, '_architect', sessionId), { recursive: true });
-  writeFileSync(join(projectRoot, '_architect', sessionId, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+  mkdirSync(join(archRoot, sessionId), { recursive: true });
+  writeFileSync(join(archRoot, sessionId, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
   // Archive it for real up front, through the SAME function, so the second
   // reject turn below finds a genuinely gone session dir.
   const { archiveSessionDir } = await import('../../kinds/architect-plan.ts');
-  archiveSessionDir(projectRoot, sessionId);
+  archiveSessionDir({ logsRoot: join(root, '_logs'), project: 'p1' }, sessionId);
 
   const { logger, rows } = capturingLogger();
   const result = await runArchitectTurn({
     manifestPorts: stubArchitectManifestPorts(),
     sessionId,
+    project: 'p1',
     projectRoot,
     logsRoot: join(root, '_logs'),
     brainCwd: root,

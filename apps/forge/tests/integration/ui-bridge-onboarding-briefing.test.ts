@@ -75,7 +75,7 @@ function dispatched(runId: string): boolean {
   return existsSync(p) && readFileSync(p, 'utf8').includes('agent-run.dispatched');
 }
 
-const sessionDirOf = (sessionId: string) => join(forgeRoot, 'projects', 'demoproj', '_onboarding', sessionId);
+const sessionDirOf = (sessionId: string) => join(forgeRoot, '_logs', '_sessions', 'demoproj', '_onboarding', sessionId);
 const statusOf = (sessionId: string) =>
   JSON.parse(readFileSync(join(sessionDirOf(sessionId), 'status.json'), 'utf8')) as Record<string, unknown>;
 

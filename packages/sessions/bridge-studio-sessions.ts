@@ -407,7 +407,7 @@ export async function handleStudioSessionsRoutes(
     // SAME response this route sent before, byte-identical (AT-70..74 pin the
     // two status buckets; AT-F6-R3/R4 re-pin them from the outside).
     const resolved = resolveReadableSession({
-      projectsRoot, logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId, project: projectRaw,
+      logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId, project: projectRaw,
     });
     if (!resolved.ok) {
       if (resolved.reason === 'ambiguous') {
@@ -644,7 +644,7 @@ export async function handleStudioSessionsRoutes(
         // nothing here is ever stored on status.json (derive-don't-store).
         // ALWAYS present, mirroring `affordances`/`terminal`.
         lifecycle: deriveSessionLifecycleFor({
-          descriptor, phase, terminal, project, sessionId, projectsRoot, logsRoot: ctx.logsRoot,
+          descriptor, phase, terminal, project, sessionId, logsRoot: ctx.logsRoot,
         }),
         // W7-C2 (sessions-kinds-36) — ALWAYS present, mirroring
         // `modelTier`'s own null-is-honest convention: the persisted

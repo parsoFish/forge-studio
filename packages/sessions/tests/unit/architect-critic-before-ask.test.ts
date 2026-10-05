@@ -91,7 +91,7 @@ function recordingLogger(): { logger: EventLogger; messages: string[] } {
 function plant(over: Partial<ArchitectStatus>): { root: string; projectRoot: string; statusPath: string } {
   const root = mkdtempSync(join(tmpdir(), 'arch-critic-order-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
   const status: ArchitectStatus = {
     session_id: 'sess-1',
@@ -115,13 +115,13 @@ test('380: a draft the critic faults NEVER reaches awaiting-verdict — the arch
   const { logger } = recordingLogger();
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict', 'the operator is asked only once the critic is clean');
     assert.equal(prompts.length, 4, 'draft → critic(HIGH) → draft → critic(clean): four turns, in that order');
     // The plan the operator is asked about is the SECOND draft, not the faulted first.
-    assert.match(readFileSync(join(projectRoot, '_architect', 'sess-1', 'PLAN.md'), 'utf8'), /second/);
+    assert.match(readFileSync(join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'PLAN.md'), 'utf8'), /second/);
     // The re-draft was TOLD what the critic faulted — a round that does not know
     // what was wrong is a coin flip, not a round.
     assert.match(prompts[2], /nothing covers the migration/, 'the second draft prompt carries the findings');
@@ -139,7 +139,7 @@ test('380 (positive control): a clean draft reaches awaiting-verdict in one roun
   const { logger } = recordingLogger();
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict');
@@ -164,7 +164,7 @@ test('380: the round key — a SECOND draft round is checked too, never waved th
   const { logger } = recordingLogger();
   try {
     await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(prompts.length, 4, 'the stale flag did not skip this round`s critic');
@@ -186,7 +186,7 @@ test('380: a critic that never clears asks the operator at the ceiling — bound
   const { logger } = recordingLogger();
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict', 'at the ceiling the operator is asked — never a stranded session');
@@ -207,7 +207,7 @@ test('380: a CRASHED critic is advisory — the session proceeds to the ask with
   const { logger } = recordingLogger();
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     assert.equal(result.phase, 'awaiting-verdict', 'a critic that fell over must not strand the session');
@@ -224,7 +224,7 @@ test('380: the finding events survive the move — one architect.completeness-cr
   const { logger, messages } = recordingLogger();
   try {
     await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), brainCwd: root, queryFn: queryFn as never, logger,
     });
     const findings = messages.filter((m) => m.startsWith('architect.completeness-critic.finding'));
@@ -240,14 +240,14 @@ test('380: FINALIZE no longer runs the critic — approve commits on ONE press',
   const { root, projectRoot, statusPath } = plant({ phase: 'finalizing' });
   // No completenessCritic on the status at all: under the old order that is
   // exactly the state that made finalize run the critic and re-arm the gate.
-  const manifestsDir = join(projectRoot, '_architect', 'sess-1', 'manifests');
+  const manifestsDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1', 'manifests');
   mkdirSync(manifestsDir, { recursive: true });
   writeFileSync(join(manifestsDir, 'INIT-1.md'), '---\ninitiative_id: INIT-1\n---\nbody\n', 'utf8');
   const { queryFn, prompts } = scriptedQueryFn([]);
   const { logger } = recordingLogger();
   try {
     const result = await runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot: join(root, '_logs'), queueRoot: join(root, '_queue'), brainCwd: root,
       queryFn: queryFn as never, logger,
     });

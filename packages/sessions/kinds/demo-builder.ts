@@ -39,7 +39,7 @@ import {
   type KindTurnPlumbing,
   type SessionKindVariant,
 } from './kind-turn.ts';
-import { emitGroundFileChanges, guardedFile, guardedReadFile, guardedWriteFile, sendJson } from '@forge/kernel';
+import { emitGroundFileChanges, guardedFile, guardedReadFile, guardedWriteFile, sendJson, sessionDirSegments } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import {
   DEMO_HISTORY_REL_DIR,
@@ -56,8 +56,8 @@ import {
 } from './demo-session-store.ts';
 import { runGenerateStep } from './demo-generate.ts';
 
-export function demoSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, DEMO_KIND_DIR, sessionId);
+export function demoSessionDir(logsRoot: string, project: string, sessionId: string): string {
+  return join(logsRoot, ...sessionDirSegments(project, DEMO_KIND_DIR, sessionId));
 }
 import {
   affordanceDryBridgeMarker,
@@ -179,17 +179,17 @@ function runLockStep(args: {
   // exist — no project.json write, no lock file, no history entry, phase not
   // flipped (declared-data-fails-open is exactly the antipattern this guards
   // against; it must never silently lock something else).
-  const existing = listExistingGenerationNumbers(input.projectRoot, input.sessionId);
+  const existing = listExistingGenerationNumbers({ logsRoot: plumbing.logsRoot, project: input.project }, input.sessionId);
   const generation = status.selectedGeneration ?? existing[existing.length - 1];
   if (generation === undefined) {
     throw new Error('demo-builder runner: cannot lock — no generation on disk. Generate a demo before locking.');
   }
-  const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(generation)];
+  const genSegs = [...plumbing.dirSegments, GENERATIONS_DIRNAME, String(generation)];
   // SEC-04 leaf: resolve the snapshot leaves under the session dir through the
   // guard (leaf included) — a symlinked snapshot slot collapses to null, the
   // same no-oracle answer as absent.
-  const snapshotDemoPath = guardedFile(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'read');
-  const declarationRaw = guardedReadFile(input.projectRoot, [...genSegs, GENERATION_DECLARATION_FILENAME]);
+  const snapshotDemoPath = guardedFile(plumbing.logsRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'read');
+  const declarationRaw = guardedReadFile(plumbing.logsRoot, [...genSegs, GENERATION_DECLARATION_FILENAME]);
   if (snapshotDemoPath === null || declarationRaw === null) {
     throw new Error(
       `demo-builder runner: cannot lock — generation ${generation} has no readable snapshot at ` +
@@ -329,7 +329,7 @@ export async function handleDemoBrief(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -349,8 +349,8 @@ export async function handleDemoBrief(
   // header note.
   ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', sessionId);
   if (
-    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
-    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: 1, prompt: brief }) === null
+    guardedWriteFile(logsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+    guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'generating', iteration: 1, prompt: brief }) === null
   ) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
@@ -370,7 +370,7 @@ export async function handleDemoVerdict(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -384,7 +384,7 @@ export async function handleDemoVerdict(
   // this file's header note.
   if (verdict === 'reject') {
     ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', sessionId);
-    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
+    if (guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
       sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
       return;
     }
@@ -403,7 +403,7 @@ export async function handleDemoVerdict(
   }
   ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', sessionId);
   if (
-    guardedWriteSessionStatus(projectsRoot, dirSegs, {
+    guardedWriteSessionStatus(logsRoot, dirSegs, {
       ...status,
       phase: 'locking',
       ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),

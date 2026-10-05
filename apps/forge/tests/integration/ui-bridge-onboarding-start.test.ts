@@ -102,6 +102,7 @@ test('R4-17 AT-1: POST /api/studio/onboarding/start — malformed project slug �
   });
   assert.equal(res.status, 400);
   assert.ok(!existsSync(join(forgeRoot, 'projects', 'demoproj', '_onboarding')), 'a rejected request must create nothing on disk');
+  assert.ok(!existsSync(join(forgeRoot, '_logs', '_sessions', 'demoproj')), 'a rejected request must create no session home either');
 });
 
 test('R4-17 AT-2: POST /api/studio/onboarding/start — unknown project (valid slug, no such directory under projectsRoot) → 404', async () => {
@@ -115,7 +116,7 @@ test('R4-17 AT-2: POST /api/studio/onboarding/start — unknown project (valid s
 // D5 — no caller-supplied repo path field is accepted, period (AT-3)
 // ---------------------------------------------------------------------------
 
-test('R4-17 AT-3 (D5, load-bearing): a caller-supplied "projectRepoPath" pointing OUTSIDE the forge tree has ZERO effect — the session lands strictly under <projectsRoot>/<project>/_onboarding/, never at the injected path, and nothing is created at the injected path', async () => {
+test('R4-17 AT-3 (D5, load-bearing): a caller-supplied "projectRepoPath" pointing OUTSIDE the forge tree has ZERO effect — the session lands strictly under <logsRoot>/_sessions/<project>/_onboarding/, never at the injected path, and nothing is created at the injected path', async () => {
   const outsideDir = mkdtempSync(join(tmpdir(), 'onboarding-start-escape-target-'));
   try {
     const res = await fetch(`${url}/api/studio/onboarding/start`, {
@@ -129,8 +130,8 @@ test('R4-17 AT-3 (D5, load-bearing): a caller-supplied "projectRepoPath" pointin
     assert.equal(body.ok, true);
     assert.equal(body.project, 'demoproj');
 
-    // The session dir must be exactly <projectsRoot>/demoproj/_onboarding/<sid>/.
-    const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_onboarding', body.sessionId);
+    // The session dir must be exactly <logsRoot>/_sessions/demoproj/_onboarding/<sid>/.
+    const sessionDir = join(forgeRoot, '_logs', '_sessions', 'demoproj', '_onboarding', body.sessionId);
     assert.ok(existsSync(join(sessionDir, 'status.json')), `expected the session to land at ${sessionDir} regardless of the injected projectRepoPath`);
 
     // Nothing whatsoever was written into the caller-supplied outside dir.
@@ -158,7 +159,7 @@ test('R4-17 AT-4: POST /api/studio/onboarding/start — valid project + inputs �
   assert.ok(body.sessionId.length > 0);
   assert.ok(body.runId.length > 0);
 
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_onboarding', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', 'demoproj', '_onboarding', body.sessionId);
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as {
     phase: string; project: string; runId: string; startedAt: string;
   };
@@ -182,7 +183,7 @@ test('R4-17 AT-5: POST /api/studio/onboarding/start — no "inputs" field at all
   const text = await res.text();
   assert.equal(res.status, 200, text);
   const body = JSON.parse(text) as { sessionId: string };
-  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_onboarding', body.sessionId);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', 'demoproj', '_onboarding', body.sessionId);
   assert.ok(existsSync(join(sessionDir, 'prompt.md')));
 });
 
@@ -369,11 +370,9 @@ test('R4-17 AT-8 (BLOCKER, ACCEPT / false-rejection control — mirrors cli/cont
     const text = await res.text();
     assert.equal(res.status, 200, `a symlink resolving back inside projectsRoot must be ACCEPTED, got ${res.status}: ${text}`);
     const body = JSON.parse(text) as { sessionId: string };
-    const realSessionDir = join(projectsRoot, realTargetName, '_onboarding', body.sessionId);
-    assert.ok(
-      existsSync(join(realSessionDir, 'status.json')),
-      `expected the session to land at the REAL target ${realSessionDir} (reached via the accepted symlink), proving the guard resolves+re-checks containment rather than rejecting every symlink`,
-    );
+    const sessionDir = join(forgeRoot, '_logs', '_sessions', 'alias-back-inside', '_onboarding', body.sessionId);
+    assert.ok(existsSync(join(sessionDir, 'status.json')), `expected the session at ${sessionDir} (logs-root dir keyed by project NAME; project reached via the accepted symlink), proving the guard resolves+re-checks containment rather than rejecting every symlink`);
+    assert.ok(!existsSync(join(projectsRoot, realTargetName, '_onboarding')), 'the ground (the symlink real target) must hold no session dir');
   } finally {
     rmSync(aliasLink, { force: true });
     rmSync(join(projectsRoot, realTargetName), { recursive: true, force: true });
@@ -466,12 +465,12 @@ test('R4-17 AT-10 (BLOCKER, pin 4 item 1): POST /api/studio/onboarding/start hon
       `expected the route to find "configuredproj" under the CONFIGURED root ${customProjectsRoot} and succeed, got ${res.status}: ${text} — this route only ever looks under the hardcoded <forgeRoot>/projects literal today, regardless of FORGE_PROJECTS_DIR`,
     );
     const body = JSON.parse(text) as { sessionId: string };
-    const correctSessionDir = join(customProjectsRoot, 'configuredproj', '_onboarding', body.sessionId);
-    const wrongSessionDir = join(scopedForgeRoot, 'projects', 'configuredproj', '_onboarding', body.sessionId);
+    const correctSessionDir = join(scopedForgeRoot, '_logs', '_sessions', 'configuredproj', '_onboarding', body.sessionId);
     assert.ok(
       existsSync(join(correctSessionDir, 'status.json')),
-      `the session must land at ${correctSessionDir} (under the CONFIGURED projects root) — a route that ignores FORGE_PROJECTS_DIR would instead try (and fail, or write to the wrong place) at ${wrongSessionDir}`,
+      `the session must land at ${correctSessionDir} (under the logs root, project found under the CONFIGURED projects root)`,
     );
+    assert.ok(!existsSync(join(customProjectsRoot, 'configuredproj', '_onboarding')), 'the ground (the CONFIGURED project dir) must hold no session dir');
   } finally {
     if (scopedClose) await scopedClose();
     if (priorProjectsDir === undefined) delete process.env.FORGE_PROJECTS_DIR;
@@ -529,12 +528,13 @@ test('R4-17 AT-10 (BLOCKER, pin 4 item 1): POST /api/studio/onboarding/start hon
 // silently assumed away — see the T3 pin-5 report for the full reasoning.
 // ---------------------------------------------------------------------------
 
-test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, not a lexical string test): a project whose "_onboarding" entry is a SYMLINK to an outside directory must be refused — non-2xx, AND nothing written at the symlink target', async () => {
+test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, not a lexical string test): a project whose "_onboarding" entry (under <logsRoot>/_sessions/<project>) is a SYMLINK to an outside directory must be refused — non-2xx, AND nothing written at the symlink target', async () => {
   const project = 'symlinkonboardproj';
   const projectDir = join(forgeRoot, 'projects', project);
   mkdirSync(projectDir, { recursive: true });
+  const sessionHome = join(forgeRoot, '_logs', '_sessions', project); mkdirSync(sessionHome, { recursive: true });
   const outsideDir = mkdtempSync(join(tmpdir(), 'onboarding-start-onboarding-escape-target-'));
-  const onboardingLink = join(projectDir, '_onboarding');
+  const onboardingLink = join(sessionHome, '_onboarding');
   try {
     symlinkSync(outsideDir, onboardingLink, 'dir');
     const res = await fetch(`${url}/api/studio/onboarding/start`, {
@@ -560,7 +560,8 @@ test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, no
 test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-rejection-control shape): a project with a REAL, pre-existing (non-symlink) "_onboarding" directory — the shape every SECOND onboarding run on the same project has — must still succeed and write into it. A guard that refuses every pre-existing "_onboarding" dir, symlinked or not, would break re-running onboarding on any project more than once', async () => {
   const project = 'realonboardingdirproj';
   const projectDir = join(forgeRoot, 'projects', project);
-  mkdirSync(join(projectDir, '_onboarding'), { recursive: true });
+  mkdirSync(projectDir, { recursive: true });
+  const sessionHome = join(forgeRoot, '_logs', '_sessions', project); mkdirSync(join(sessionHome, '_onboarding'), { recursive: true });
   try {
     const res = await fetch(`${url}/api/studio/onboarding/start`, {
       method: 'POST', headers: CSRF, body: JSON.stringify({ project }),
@@ -572,8 +573,8 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
     );
     const body = JSON.parse(text) as { sessionId: string };
     assert.ok(
-      existsSync(join(projectDir, '_onboarding', body.sessionId, 'status.json')),
-      `expected the session to land inside the REAL pre-existing "_onboarding" directory at ${join(projectDir, '_onboarding', body.sessionId)}`,
+      existsSync(join(sessionHome, '_onboarding', body.sessionId, 'status.json')),
+      `expected the session to land inside the REAL pre-existing "_onboarding" directory at ${join(sessionHome, '_onboarding', body.sessionId)}`,
     );
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
@@ -662,8 +663,9 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
 test('R4-17 AT-16 (pin 5 item 1, ACCEPT control): a project with a REAL EARLIER onboarding session already inside "_onboarding" (the shape every SECOND run has) — a fresh start must still succeed, land in its OWN distinct session dir, and leave the earlier session completely untouched', async () => {
   const project = 'secondrunwithearliersession';
   const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(projectDir, { recursive: true }); const sessionHome = join(forgeRoot, '_logs', '_sessions', project);
   const earlierSessionId = '2020-01-01T00-00-00'; // deliberately historical — never collides with "now"
-  const earlierDir = join(projectDir, '_onboarding', earlierSessionId);
+  const earlierDir = join(sessionHome, '_onboarding', earlierSessionId);
   mkdirSync(earlierDir, { recursive: true });
   const earlierStatus = JSON.stringify(
     { phase: 'done', project, runId: '_agent-onboarding-agent-earlier', startedAt: '2020-01-01T00:00:00.000Z' },
@@ -679,7 +681,7 @@ test('R4-17 AT-16 (pin 5 item 1, ACCEPT control): a project with a REAL EARLIER 
     assert.equal(res.status, 200, `a second onboarding run on a project with an existing earlier session must succeed, got ${res.status}: ${text}`);
     const body = JSON.parse(text) as { sessionId: string };
     assert.notEqual(body.sessionId, earlierSessionId, 'the new session must land in its OWN distinct directory, not the earlier one');
-    const newSessionDir = join(projectDir, '_onboarding', body.sessionId);
+    const newSessionDir = join(sessionHome, '_onboarding', body.sessionId);
     assert.ok(existsSync(join(newSessionDir, 'status.json')), `expected the new session to land at ${newSessionDir}`);
     assert.equal(
       readFileSync(join(earlierDir, 'status.json'), 'utf8'), earlierStatus,

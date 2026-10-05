@@ -72,12 +72,14 @@ test('row 206 (double-call, real spawn): two concurrent /api/architect/rerun cal
   delete process.env.FORGE_DRY_BRIDGE;
 
   const sid = '2026-05-29T21-00-00';
-  const dir = join(forgeRoot, 'projects', 'demo', '_architect', sid);
+  const dir = join(forgeRoot, '_logs', '_sessions', 'demo', '_architect', sid);
   mkdirSync(dir, { recursive: true });
+  const projectDir = join(forgeRoot, 'projects', 'demo');
+  mkdirSync(projectDir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
     JSON.stringify({
-      session_id: sid, project: 'demo', project_repo_path: dir,
+      session_id: sid, project: 'demo', project_repo_path: projectDir,
       phase: 'drafting', round: 1, idea: 'stalled idea', updated_at: new Date().toISOString(),
     }),
   );

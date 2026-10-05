@@ -19,8 +19,8 @@
  * This handler is a SUBTLER case than the instructions/start precedent it
  * mirrors (forge-osz, apps/forge/tests/regression/instructions-start-read-guard.test.ts). There, NO
  * guard preceded the read at all. Here, a containment guard —
- * `resolveDemoSessionDir`, which itself calls `resolveGuardedPath(projectsRoot,
- * [project, '_demo', sessionId])` — DOES run earlier in this very block and
+ * `resolveDemoSessionDir`, which itself calls `resolveGuardedPath(logsRoot,
+ * [..sessionDirSegments(project, '_demo', sessionId)])` — DOES run earlier in this very block and
  * DOES reject an out-of-root `project` today. But `repoPath` is
  * independently RE-DERIVED a few lines later via `body.projectRepoPath ||
  * join(ctx.projectsRoot, body.project)` — a raw fold that never consumes the

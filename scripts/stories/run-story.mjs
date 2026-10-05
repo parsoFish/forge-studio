@@ -346,7 +346,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // (`beatBound`'s label, bead 6.11.10), so the session says why it stopped
   // rather than only that it did.
   reap.cancelled = recordReapedCancellations(reap, {
-    projectsRoot: join(ROOT, 'projects'),
+    logsRoot: join(ROOT, '_logs'),
     reason: reapReasonFor(story, beats),
   });
   for (const line of describeReap(reap)) console.log(line);

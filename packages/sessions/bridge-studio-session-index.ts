@@ -24,11 +24,10 @@
  * `architect-runner.ts` and is imported directly.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 import { allowedOrigin, parseQuery, pathOnly, sanitizeError, sendJson } from '@forge/kernel';
-import { resolveGuardedPath } from '@forge/kernel';
+import { guardedReadDir, resolveGuardedPath, sessionDirSegments, SESSIONS_DIRNAME } from '@forge/kernel';
 
 import { readSessionCostUsd } from './session-readability.ts';
 import { listArchitectSessions } from './kinds/architect.ts';
@@ -37,12 +36,15 @@ import { sessionShellHref } from './session-resolution.ts';
 import {
   deriveRowLifecycle,
   guardedSessionDir,
+  listSessionKindIds,
+  listSessionProjects,
   type SessionRootsContext,
 } from './bridge-studio-session-helpers.ts';
-import type { DemoBuilderStatus } from './kinds/demo-session-store.ts';
-import type { InstructionsStatus } from './kinds/instructions.ts';
+import { DEMO_KIND_DIR, type DemoBuilderStatus } from './kinds/demo-session-store.ts';
+import { INSTRUCTIONS_KIND_DIR, type InstructionsStatus } from './kinds/instructions.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import type { ProjectBrainRow as ProjectBrainStatus } from './bridge-studio-project-brain.ts';
+import { PROJECT_BRAIN_KIND_DIR } from '@forge/knowledge';
 import { fixedTierForSessionKind } from './session-model-tier.ts';
 import { loadSessionKinds } from './studio/session-kinds.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
@@ -116,12 +118,12 @@ export type SessionIndexRow = {
  *  is `''` — honest-absent, never fabricated — when neither exists
  *  (kb-cleanup's status.json carries no timestamp field at all today). */
 function readGuardedSessionIndexSummary(
-  projectsRoot: string,
+  logsRoot: string,
   project: string,
   kindDirName: string,
   sessionId: string,
 ): { phase: string; modelTier: string | null; updatedAt: string; runId: string | null } | null {
-  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
+  const guarded = resolveGuardedPath(logsRoot, [...sessionDirSegments(project, kindDirName, sessionId), 'status.json']);
   if (!guarded.ok || !guarded.exists) return null;
   let parsed: unknown;
   try {
@@ -139,103 +141,43 @@ function readGuardedSessionIndexSummary(
     runId: typeof obj.runId === 'string' ? obj.runId : null,
   };
 }
-/** Discover every instructions session under `projects/<name>/_instructions/<sid>/`
- *  — used by the bridge's `GET /api/instructions/sessions`. Best-effort; never
- *  throws on a malformed dir. Mirrors architect-runner's `listArchitectSessions`,
- *  kept local to the bridge (not added to the runner). */
-export function listInstructionsSessions(projectsRoot: string): InstructionsStatus[] {
-  const out: InstructionsStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return out; }
-  for (const project of projects) {
-    const instrDir = join(projectsRoot, project, '_instructions');
-    if (!existsSync(instrDir)) continue;
-    let sids: string[];
-    try {
-      sids = readdirSync(instrDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch { continue; }
-    for (const sid of sids) {
+/** Every status of one kind's sessions, across projects, read through the
+ *  per-segment identity guard (SEC-04): the dir guard resolves the session dir
+ *  and the leaf read refuses a symlinked `status.json`. Best-effort; never
+ *  throws on a malformed dir. `_`-prefixed entries (`_archived/`) are skipped. */
+function listKindStatuses<T>(logsRoot: string, kindDirName: string): T[] {
+  const out: T[] = [];
+  for (const project of listSessionProjects(logsRoot)) {
+    for (const sid of listSessionKindIds(logsRoot, project, kindDirName)) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
-      // symlinked `_instructions` (git-plantable inside any onboarded project's
-      // own repo) cannot fold this enumeration onto a victim dir outside root.
-      const dir = guardedSessionDir(projectsRoot, project, '_instructions', sid);
+      const dir = guardedSessionDir(logsRoot, project, kindDirName, sid);
       if (!dir) continue;
-      // SEC-04 (bd forge-ebj) — route the status.json READ through the guarded
-      // leaf sibling so a symlinked `status.json` inside a real session dir is
-      // refused, not followed (the dir guard alone did not cover the leaf).
-      const status = guardedReadSessionStatus<InstructionsStatus>(projectsRoot, [project, '_instructions', sid]);
+      const status = guardedReadSessionStatus<T>(logsRoot, sessionDirSegments(project, kindDirName, sid));
       if (status) out.push(status);
     }
   }
   return out;
+}
+/** Discover every instructions session under `<logsRoot>/_sessions/<name>/_instructions/<sid>/`
+ *  — used by the bridge's `GET /api/instructions/sessions`. */
+export function listInstructionsSessions(logsRoot: string): InstructionsStatus[] {
+  return listKindStatuses<InstructionsStatus>(logsRoot, INSTRUCTIONS_KIND_DIR);
 }
 /** R1-3b — list every project-brain session with its current state. */
-export function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
-  const out: ProjectBrainStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return out; }
-  for (const project of projects) {
-    const base = join(projectsRoot, project, '_project-brain');
-    if (!existsSync(base)) continue;
-    let sids: string[];
-    try { sids = readdirSync(base); } catch { continue; }
-    for (const sid of sids) {
-      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
-      // symlinked `_project-brain` cannot fold this enumeration onto a victim
-      // dir outside root.
-      const dir = guardedSessionDir(projectsRoot, project, '_project-brain', sid);
-      if (!dir) continue;
-      // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
-      // sibling (leaf-symlink close; the dir guard did not cover the leaf).
-      const status = guardedReadSessionStatus<ProjectBrainStatus>(projectsRoot, [project, '_project-brain', sid]);
-      if (status) out.push(status);
-    }
-  }
-  return out;
+export function listProjectBrainSessions(logsRoot: string): ProjectBrainStatus[] {
+  return listKindStatuses<ProjectBrainStatus>(logsRoot, PROJECT_BRAIN_KIND_DIR);
 }
-/** Discover every demo-builder session under `projects/<name>/_demo/<sid>/`
- *  — used by the bridge's `GET /api/demo-builder/sessions`. Best-effort; never
- *  throws on a malformed dir. Mirrors `listInstructionsSessions`. */
-export function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
-  const out: DemoBuilderStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return out; }
-  for (const project of projects) {
-    const demoDir = join(projectsRoot, project, '_demo');
-    if (!existsSync(demoDir)) continue;
-    let sids: string[];
-    try {
-      sids = readdirSync(demoDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch { continue; }
-    for (const sid of sids) {
-      if (sid.startsWith('_')) continue; // skip _archived/
-      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
-      // symlinked `_demo` cannot fold this enumeration onto a victim dir
-      // outside root.
-      const dir = guardedSessionDir(projectsRoot, project, '_demo', sid);
-      if (!dir) continue;
-      // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
-      // sibling (leaf-symlink close; the dir guard did not cover the leaf).
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(projectsRoot, [project, '_demo', sid]);
-      if (status) out.push(status);
-    }
-  }
-  return out;
+/** Discover every demo-builder session under `<logsRoot>/_sessions/<name>/_demo/<sid>/`
+ *  — used by the bridge's `GET /api/demo-builder/sessions`. */
+export function listDemoSessions(logsRoot: string): DemoBuilderStatus[] {
+  return listKindStatuses<DemoBuilderStatus>(logsRoot, DEMO_KIND_DIR);
 }
 /** `rows` — every row the registered-kind loop below finds. `unknownKinds` —
  *  forge-7kzj's diagnostic: bare kind ids with a real `_*` session dir on
  *  disk that no registered kind claims (see {@link discoverUnknownSessionKindIds}). */
 type SessionIndexCollection = { rows: SessionIndexRow[]; unknownKinds: string[] };
 
-function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexCollection {
+function collectStudioSessionIndexRows(ctx: { forgeRoot: string; logsRoot: string }): SessionIndexCollection {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
   // W8-B3 (sessions-kinds-R06/31) — resolved ONCE PER KIND for this request,
@@ -302,48 +244,34 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
 
   for (const descriptor of descriptors) {
     if (descriptor.id === 'architect') {
-      for (const s of listArchitectSessions(ctx.projectsRoot)) {
+      for (const s of listArchitectSessions(ctx.logsRoot)) {
         pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at ?? '');
       }
     } else if (descriptor.id === 'instructions') {
-      for (const s of listInstructionsSessions(ctx.projectsRoot)) {
+      for (const s of listInstructionsSessions(ctx.logsRoot)) {
         pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at ?? '');
       }
     } else if (descriptor.id === 'demo') {
-      for (const s of listDemoSessions(ctx.projectsRoot)) {
+      for (const s of listDemoSessions(ctx.logsRoot)) {
         pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
       }
     } else if (descriptor.id === 'project-brain') {
-      for (const s of listProjectBrainSessions(ctx.projectsRoot)) {
+      for (const s of listProjectBrainSessions(ctx.logsRoot)) {
         pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
       }
     } else {
       const kindDirName = `_${descriptor.id}`;
-      let projects: string[];
-      try {
-        projects = existsSync(ctx.projectsRoot) ? readdirSync(ctx.projectsRoot) : [];
-      } catch {
-        projects = [];
-      }
-      for (const project of projects) {
-        const kindDir = join(ctx.projectsRoot, project, kindDirName);
-        if (!existsSync(kindDir)) continue;
-        let sessionIds: string[];
-        try {
-          sessionIds = readdirSync(kindDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-        } catch {
-          continue;
-        }
-        for (const sessionId of sessionIds) {
+      for (const project of listSessionProjects(ctx.logsRoot)) {
+        for (const sessionId of listSessionKindIds(ctx.logsRoot, project, kindDirName)) {
           if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors collectSessionRows
-          const summary = readGuardedSessionIndexSummary(ctx.projectsRoot, project, kindDirName, sessionId);
+          const summary = readGuardedSessionIndexSummary(ctx.logsRoot, project, kindDirName, sessionId);
           if (summary === null) continue; // unreadable/missing/escaping/hardlinked -> not a real session row
           pushRow(descriptor, sessionId, project, summary.phase, summary.modelTier, summary.updatedAt, summary.runId);
         }
       }
     }
   }
-  return { rows, unknownKinds: discoverUnknownSessionKindIds(ctx.projectsRoot, descriptors) };
+  return { rows, unknownKinds: discoverUnknownSessionKindIds(ctx.logsRoot, descriptors) };
 }
 
 /**
@@ -357,23 +285,11 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
  * named finding the /sessions page can surface instead of a silent drop.
  * Returns sorted, deduped bare kind ids (no leading `_`).
  */
-function discoverUnknownSessionKindIds(projectsRoot: string, descriptors: readonly SessionKindDescriptor[]): string[] {
+function discoverUnknownSessionKindIds(logsRoot: string, descriptors: readonly SessionKindDescriptor[]): string[] {
   const knownDirNames = new Set(descriptors.map((d) => `_${d.id}`));
   const unknown = new Set<string>();
-  let projects: string[];
-  try {
-    projects = existsSync(projectsRoot) ? readdirSync(projectsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name) : [];
-  } catch {
-    projects = [];
-  }
-  for (const project of projects) {
-    let entries: string[];
-    try {
-      entries = readdirSync(join(projectsRoot, project), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-    } catch {
-      continue;
-    }
-    for (const name of entries) {
+  for (const project of listSessionProjects(logsRoot)) {
+    for (const name of guardedReadDir(logsRoot, [SESSIONS_DIRNAME, project]) ?? []) {
       if (!name.startsWith('_') || knownDirNames.has(name)) continue;
       unknown.add(name.slice(1));
     }
@@ -429,7 +345,7 @@ export async function handleStudioSessionsIndex(
   const origin = allowedOrigin(req);
   try {
     const activeOnly = parseQuery(url).get('active') === '1';
-    const { rows: allRows, unknownKinds } = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot });
+    const { rows: allRows, unknownKinds } = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot });
     const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
     const sessions = sortAndCapSessionIndexRows(filtered);
     sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS, unknownKinds }, origin);

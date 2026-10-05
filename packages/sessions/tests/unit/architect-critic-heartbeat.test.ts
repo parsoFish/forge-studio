@@ -64,7 +64,7 @@ test('row 176: a critic call still in flight past the architect ceiling keeps .h
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
   const root = mkdtempSync(join(tmpdir(), 'arch-critic-hb-'));
   const projectRoot = join(root, 'projects', 'p1');
-  const sessionDir = join(projectRoot, '_architect', 'sess-1');
+  const sessionDir = join(root, '_logs', '_sessions', 'p1', '_architect', 'sess-1');
   mkdirSync(sessionDir, { recursive: true });
   const statusPath = join(sessionDir, 'status.json');
   const status: ArchitectStatus = {
@@ -89,7 +89,7 @@ test('row 176: a critic call still in flight past the architect ceiling keeps .h
 
   try {
     const turn = runArchitectTurn({
-      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot,
+      manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1',
       logsRoot, brainCwd: root, queryFn: queryFn as never, logger,
     });
 

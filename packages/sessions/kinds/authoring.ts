@@ -62,9 +62,9 @@ export const AUTHORING_PACKAGE_SHAPES: ReadonlyArray<{ readonly filename: string
  *  `id` is, and that is what `meta.requires` now enforces generically).
  *  `null` when no marker file exists yet under `staging/` — still
  *  drafting, never guessed. */
-function deriveAuthoringPackageKind(projectsRoot: string, dirSegs: readonly string[]): 'skill' | 'hook' | 'template' | null {
+function deriveAuthoringPackageKind(logsRoot: string, dirSegs: readonly string[]): 'skill' | 'hook' | 'template' | null {
   for (const shape of AUTHORING_PACKAGE_SHAPES) {
-    if (guardedReadFile(projectsRoot, [...dirSegs, 'staging', shape.filename]) !== null) return shape.kind;
+    if (guardedReadFile(logsRoot, [...dirSegs, 'staging', shape.filename]) !== null) return shape.kind;
   }
   return null;
 }
@@ -73,7 +73,7 @@ export async function handleAuthoringVerdict(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   project: string,
@@ -86,7 +86,7 @@ export async function handleAuthoringVerdict(
   // spawn, nothing landed in either library; the staged draft stays on disk
   // as the session's own record but is never installed.
   if (verdict === 'reject') {
-    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
+    if (guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
       sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
       return;
     }
@@ -102,7 +102,7 @@ export async function handleAuthoringVerdict(
   // the main dispatcher above (studio/session-kinds.yaml's `requires: [id]`
   // on this row), and `kind` is derived here, from the REAL staging files,
   // never trusted from the request body.
-  const kind = deriveAuthoringPackageKind(projectsRoot, dirSegs);
+  const kind = deriveAuthoringPackageKind(logsRoot, dirSegs);
   if (kind === null) {
     // The enumeration pin: built FROM AUTHORING_PACKAGE_SHAPES, never a
     // hand-typed literal list — a shape added to that array is a shape this

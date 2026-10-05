@@ -30,7 +30,7 @@ export async function handleKbCleanupVerdict(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
-  projectsRoot: string,
+  logsRoot: string,
   dirSegs: readonly string[],
   status: Record<string, unknown>,
   sessionId: string,
@@ -43,7 +43,7 @@ export async function handleKbCleanupVerdict(
   // discarded plan runs nothing. The drafted plan file stays on disk (the
   // session dir is the audit trail), it just never drains.
   if (verdict === 'reject') {
-    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
+    if (guardedWriteSessionStatus(logsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
       sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
       return;
     }
@@ -65,7 +65,7 @@ export async function handleKbCleanupVerdict(
   // `/cleanup/apply` route).
   // Ruling 99: knowledge declares the guarded status IO as a port and cannot
   // import it; sessions owns those functions, so this kind supplies them.
-  const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, {
+  const outcome = await approveKbCleanup(ctx.forgeRoot, logsRoot, dirSegs, {
     runFixTurn: ctx.runFixTurn,
     sessionStatusIo: { read: guardedReadSessionStatus, write: guardedWriteSessionStatus },
   });

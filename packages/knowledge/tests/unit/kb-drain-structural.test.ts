@@ -248,7 +248,7 @@ test('runKbDrain — a prose-touching agent fix NEVER lands directly: reverted +
 
     // 4. The draft session exists on disk: awaiting-approval + draft_apply +
     //    a plan carrying a reviewable diff.
-    const anchor = join(root, 'projects', 'gated-kb', '_kb-cleanup');
+    const anchor = join(root, '_logs', '_sessions', 'gated-kb', '_kb-cleanup');
     const sids = readdirSync(anchor);
     assert.equal(sids.length, 1, `expected exactly one draft session — got ${JSON.stringify(sids)}`);
     const sessionDir = join(anchor, sids[0]);
@@ -305,7 +305,7 @@ test('W8-F1 — a prose rewrite that ALSO deletes a live link is REFUSED, not dr
     const row = status.perFinding.find((f) => f.tier === 'agent');
     assert.ok(row, JSON.stringify(status.perFinding));
     assert.equal(row.draftSession, undefined, 'an unsound edit must not become an approvable draft');
-    assert.ok(!existsSync(join(root, 'projects', 'gated-kb', '_kb-cleanup')), 'no kb-cleanup session may be minted');
+    assert.ok(!existsSync(join(root, '_logs', '_sessions', 'gated-kb', '_kb-cleanup')), 'no kb-cleanup session may be minted');
 
     // 3. …and it still reaches the operator, with the proposal and the reason.
     assert.equal(row.outcome, 'needs-you', 'a refused proposal is waiting on a human, not silently not-cleared');
@@ -344,8 +344,10 @@ test('runKbDrain — structural edit within the KB dir is applied, drain reaches
     });
     assert.equal(status.state, 'green', JSON.stringify(status));
     assert.equal(readFileSync(themeFile, 'utf8'), fixed, 'the structural edit must land');
-    assert.ok(!existsSync(join(root, 'projects', 'gated-kb')), 'no draft session for a structural edit');
-    assert.ok(!existsSync(join(root, 'projects', '.kb-gated-kb')), 'no draft session for a structural edit');
+    assert.ok(!existsSync(join(root, '_logs', '_sessions', 'gated-kb')), 'no draft session for a structural edit');
+    assert.ok(!existsSync(join(root, '_logs', '_sessions', '.kb-gated-kb')), 'no draft session for a structural edit');
+    assert.ok(!existsSync(join(root, 'projects', 'gated-kb')), 'the ground holds no session dir');
+    assert.ok(!existsSync(join(root, 'projects', '.kb-gated-kb')), 'the ground holds no session dir');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -356,7 +358,7 @@ test('runKbDrain — structural edit within the KB dir is applied, drain reaches
 // ---------------------------------------------------------------------------
 
 function makeDraftSessionRoot(opts: { targetRel: string; blockWritesAt?: string }): {
-  root: string; projectsRoot: string; sid: string; themeFile: string;
+  root: string; logsRoot: string; sid: string; themeFile: string;
 } {
   const root = mkdtempSync(join(tmpdir(), 'kb-draft-apply-'));
   const brainDir = join(root, 'brain', 'dkb');
@@ -368,9 +370,9 @@ function makeDraftSessionRoot(opts: { targetRel: string; blockWritesAt?: string 
   mkdirSync(join(root, 'brain', 'other', 'themes'), { recursive: true });
   writeFileSync(join(root, 'brain', 'other', 'themes', 'y.md'), 'other kb content\n');
 
-  const projectsRoot = join(root, 'projects');
+  const logsRoot = join(root, '_logs');
   const sid = '2026-08-20T10-00-00-w7b2test';
-  const sessionDir = join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid);
+  const sessionDir = join(logsRoot, '_sessions', '.kb-dkb', '_kb-cleanup', sid);
   mkdirSync(join(sessionDir, 'drafts'), { recursive: true });
   mkdirSync(join(sessionDir, 'plan'), { recursive: true });
   writeFileSync(join(sessionDir, 'drafts', '0.md'), 'proposed content\n');
@@ -387,16 +389,16 @@ function makeDraftSessionRoot(opts: { targetRel: string; blockWritesAt?: string 
   // un-mocked write failure inside the queued callback.
   if (opts.blockWritesAt) writeFileSync(join(root, opts.blockWritesAt), 'not a directory\n');
   mkdirSync(join(root, '_logs'), { recursive: true });
-  return { root, projectsRoot, sid, themeFile };
+  return { root, logsRoot, sid, themeFile };
 }
 
 test('approveKbCleanup — a draft-carrying session applies the DRAFT files, not a consolidate', async () => {
-  const { root, projectsRoot, sid, themeFile } = makeDraftSessionRoot({ targetRel: 'brain/dkb/themes/x.md' });
+  const { root, logsRoot, sid, themeFile } = makeDraftSessionRoot({ targetRel: 'brain/dkb/themes/x.md' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, true, JSON.stringify(outcome));
     assert.equal(readFileSync(themeFile, 'utf8'), 'proposed content\n');
-    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
+    const status = JSON.parse(readFileSync(join(logsRoot, '_sessions', '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
     assert.equal(status.phase, 'applied');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -404,9 +406,9 @@ test('approveKbCleanup — a draft-carrying session applies the DRAFT files, not
 });
 
 test('approveKbCleanup — a draft target OUTSIDE the session\'s own KB dir is refused, nothing written', async () => {
-  const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/other/themes/y.md' });
+  const { root, logsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/other/themes/y.md' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.equal(readFileSync(join(root, 'brain', 'other', 'themes', 'y.md'), 'utf8'), 'other kb content\n', 'the foreign KB file must be untouched');
   } finally {
@@ -415,9 +417,9 @@ test('approveKbCleanup — a draft target OUTSIDE the session\'s own KB dir is r
 });
 
 test('approveKbCleanup — a traversal-shaped draft target is refused', async () => {
-  const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: '../outside.md' });
+  const { root, logsRoot, sid } = makeDraftSessionRoot({ targetRel: '../outside.md' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.ok(!existsSync(join(root, '..', 'outside.md')), 'nothing may be written outside the root');
   } finally {
@@ -434,14 +436,14 @@ test('approveKbCleanup — a draft WRITE failure is never swallowed: ok:false, s
   // run's own rejection by contract), so a callback with no internal error
   // handling made every write failure vanish: the session was stamped
   // phase:'applied' and ok:true returned while nothing had landed on disk.
-  const { root, projectsRoot, sid } = makeDraftSessionRoot({
+  const { root, logsRoot, sid } = makeDraftSessionRoot({
     targetRel: 'brain/dkb/blocked/x.md',
     blockWritesAt: 'brain/dkb/blocked',
   });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
-    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as {
+    const status = JSON.parse(readFileSync(join(logsRoot, '_sessions', '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as {
       phase: string; apply_error?: string;
     };
     assert.notEqual(status.phase, 'applied', 'a failed apply must NEVER be recorded as applied');
@@ -453,12 +455,12 @@ test('approveKbCleanup — a draft WRITE failure is never swallowed: ok:false, s
 });
 
 test('approveKbCleanup — a draft target that IS the kb brain dir itself is refused', async () => {
-  const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/dkb' });
+  const { root, logsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/dkb' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.equal(outcome.ok === false ? outcome.status : 0, 422);
-    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
+    const status = JSON.parse(readFileSync(join(logsRoot, '_sessions', '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
     assert.equal(status.phase, 'awaiting-approval', 'a pre-claim refusal leaves the session approvable');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -480,9 +482,9 @@ test('approveKbCleanup — the consolidate path stakes its log dir SYNCHRONOUSLY
     writeFileSync(join(brainDir, 'kb.yaml'), 'id: ckb\nname: ckb\nbinding: { kind: unique }\ndesc: consolidate fixture.\n');
     mkdirSync(join(root, '_logs'), { recursive: true });
 
-    const projectsRoot = join(root, 'projects');
+    const logsRoot = join(root, '_logs');
     const sid = '2026-08-21T09-00-00-w7b2rev';
-    const sessionDir = join(projectsRoot, '.kb-ckb', '_kb-cleanup', sid);
+    const sessionDir = join(logsRoot, '_sessions', '.kb-ckb', '_kb-cleanup', sid);
     mkdirSync(sessionDir, { recursive: true });
     writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({
       session_id: sid, project: '.kb-ckb', phase: 'awaiting-approval', kb_id: 'ckb',
@@ -490,7 +492,7 @@ test('approveKbCleanup — the consolidate path stakes its log dir SYNCHRONOUSLY
 
     // NOT awaited: everything up to the first `await` runs in this tick, which
     // is exactly the window the gate was blind in.
-    const pending = approveKbCleanup(root, projectsRoot, ['.kb-ckb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const pending = approveKbCleanup(root, logsRoot, ['_sessions', '.kb-ckb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     const job = deriveKbActiveJob(root, 'ckb');
     assert.ok(job, 'the just-dispatched consolidate must be visible to deriveKbActiveJob immediately');
     assert.equal(job.kind, 'consolidate');
@@ -521,7 +523,7 @@ test('approveKbCleanup — the consolidate path stakes its log dir SYNCHRONOUSLY
 // ---------------------------------------------------------------------------
 
 /** A draft session whose target theme is a REAL theme carrying a REAL edge. */
-function makeGraphDraftRoot(): { root: string; projectsRoot: string; sid: string; themeFile: string; partnerSlug: string } {
+function makeGraphDraftRoot(): { root: string; logsRoot: string; sid: string; themeFile: string; partnerSlug: string } {
   const root = mkdtempSync(join(tmpdir(), 'kb-draft-graph-'));
   const brainDir = join(root, 'brain', 'dkb');
   mkdirSync(join(brainDir, 'themes'), { recursive: true });
@@ -539,9 +541,9 @@ function makeGraphDraftRoot(): { root: string; projectsRoot: string; sid: string
   // the draft is legitimately parked.
   writeFileSync(themeFile, theme('x'));
 
-  const projectsRoot = join(root, 'projects');
+  const logsRoot = join(root, '_logs');
   const sid = '2026-08-28T10-00-00-w8f1graph';
-  const sessionDir = join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid);
+  const sessionDir = join(logsRoot, '_sessions', '.kb-dkb', '_kb-cleanup', sid);
   mkdirSync(join(sessionDir, 'drafts'), { recursive: true });
   mkdirSync(join(sessionDir, 'plan'), { recursive: true });
   // The parked proposal: the same theme with the prose condensed. It does not
@@ -553,24 +555,24 @@ function makeGraphDraftRoot(): { root: string; projectsRoot: string; sid: string
     draft_apply: [{ file: 'brain/dkb/themes/x.md', draft: 'drafts/0.md' }],
   }, null, 2));
   mkdirSync(join(root, '_logs'), { recursive: true });
-  return { root, projectsRoot, sid, themeFile, partnerSlug };
+  return { root, logsRoot, sid, themeFile, partnerSlug };
 }
 
 test('W8-F1 r2 (S1): approving a parked draft REFUSES when the theme gained a real edge since it was minted', async () => {
-  const { root, projectsRoot, sid, themeFile, partnerSlug } = makeGraphDraftRoot();
+  const { root, logsRoot, sid, themeFile, partnerSlug } = makeGraphDraftRoot();
   try {
     // Between mint and approve, the theme gains a resolvable related_themes
     // edge — a later drain round, a consolidate, the reflector, or a human.
     const withEdge = readFileSync(themeFile, 'utf8').replace('category: pattern', `category: pattern\nrelated_themes: [${partnerSlug}]`);
     writeFileSync(themeFile, withEdge);
 
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
 
     // THE ASSERTION IS THE ARTIFACT: the edge survives.
     const after = readFileSync(themeFile, 'utf8');
     assert.match(after, new RegExp(`related_themes: \\[${partnerSlug}\\]`), `approving the stale draft destroyed a real edge:\n${after}`);
     assert.equal(outcome.ok, false, `and the operator is told, not given ok:true — got ${JSON.stringify(outcome)}`);
-    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
+    const status = JSON.parse(readFileSync(join(logsRoot, '_sessions', '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
     assert.notEqual(status.phase, 'applied', 'a refused apply must not stamp the session applied');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -578,9 +580,9 @@ test('W8-F1 r2 (S1): approving a parked draft REFUSES when the theme gained a re
 });
 
 test('W8-F1 r2 CONTROL: a draft that is still sound at approve time applies exactly as before', async () => {
-  const { root, projectsRoot, sid, themeFile } = makeGraphDraftRoot();
+  const { root, logsRoot, sid, themeFile } = makeGraphDraftRoot();
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
+    const outcome = await approveKbCleanup(root, logsRoot, ['_sessions', '.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, true, `the re-audit must refuse stale drafts, not all drafts — got ${JSON.stringify(outcome)}`);
     assert.match(readFileSync(themeFile, 'utf8'), /Condensed\./);
   } finally {

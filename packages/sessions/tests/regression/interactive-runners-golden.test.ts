@@ -217,7 +217,7 @@ test('runArchitectTurn (interviewing): pins the exact {prompt, options} spawn ca
   const root = mkdtempSync(join(tmpdir(), 'golden-architect-'));
   try {
     const projectRoot = join(root, 'projects', 'project');
-    const sessionDir = join(projectRoot, '_architect', SESSION_ID);
+    const sessionDir = join(root, '_logs', '_sessions', 'testproj', '_architect', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     const skillPromptPath = join(root, 'architect-skill-fixture.md');
     writeFileSync(skillPromptPath, ARCHITECT_SKILL_FIXTURE);
@@ -268,6 +268,7 @@ test('runArchitectTurn (interviewing): pins the exact {prompt, options} spawn ca
 
     const result = await runArchitectTurn({
       sessionId: SESSION_ID,
+      project: 'testproj',
       projectRoot,
       queryFn,
       logsRoot,
@@ -303,7 +304,7 @@ test('runInstructionsTurn (drafting): pins the exact {prompt, options} spawn cal
     const projectRoot = join(root, 'project');
     const repoPath = join(root, 'repo');
     mkdirSync(repoPath, { recursive: true });
-    const sessionDir = instructionsSessionDir(projectRoot, SESSION_ID);
+    const sessionDir = instructionsSessionDir(join(root, '_logs'), 'testproj', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     const skillPromptPath = join(root, 'instructions-skill-fixture.md');
     writeFileSync(skillPromptPath, INSTRUCTIONS_SKILL_FIXTURE);
@@ -340,6 +341,7 @@ test('runInstructionsTurn (drafting): pins the exact {prompt, options} spawn cal
 
     const result = await runInstructionsTurn({
       sessionId: SESSION_ID,
+      project: 'testproj',
       projectRoot,
       queryFn,
       logsRoot,
@@ -385,7 +387,7 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
         ],
       }),
     );
-    const sessionDir = demoSessionDir(projectRoot, SESSION_ID);
+    const sessionDir = demoSessionDir(join(root, '_logs'), 'testproj', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     const skillPromptPath = join(root, 'demo-builder-skill-fixture.md');
     writeFileSync(skillPromptPath, DEMO_BUILDER_SKILL_FIXTURE);
@@ -427,6 +429,7 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
 
     const result = await runDemoBuilderTurn({
       sessionId: SESSION_ID,
+      project: 'testproj',
       projectRoot,
       forgeRoot: root,
       queryFn,
@@ -475,7 +478,7 @@ test('runProjectBrainTurn (analyzing): pins the exact {prompt, options} spawn ca
     const projectRoot = join(forgeRoot, 'projects', 'testproj');
     mkdirSync(projectRoot, { recursive: true });
     writeFileSync(join(projectRoot, 'README.md'), '# testproj\n');
-    const sessionDir = projectBrainSessionDir(projectRoot, SESSION_ID);
+    const sessionDir = projectBrainSessionDir(join(forgeRoot, '_logs'), 'testproj', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     const skillPromptPath = join(forgeRoot, 'project-brain-skill-fixture.md');
     writeFileSync(skillPromptPath, PROJECT_BRAIN_SKILL_FIXTURE);
@@ -511,6 +514,7 @@ test('runProjectBrainTurn (analyzing): pins the exact {prompt, options} spawn ca
 
     const result = await runProjectBrainTurn({
       sessionId: SESSION_ID,
+      project: 'testproj',
       projectRoot,
       forgeRoot,
       queryFn,

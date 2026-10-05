@@ -25,7 +25,7 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { resolveGuardedPath } from '@forge/kernel';
+import { resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 // `forge agent dispatch`'s command lives beside its parsing and guards; this
 // file keeps `forge agent run`. `writeSessionTerminalPhase` is shared by both
 // verbs and is exported from there — the dispatch module imports nothing from
@@ -39,7 +39,7 @@ import { runInteractiveTurn } from '@forge/sessions';
 import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions';
 import { SESSION_KIND_RUNNERS } from '@forge/sessions';
 
-type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
+type AgentTurnInput = { sessionId: string; project: string; projectRoot: string; logsRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
 
 export interface AgentRunnerEntry {
@@ -67,12 +67,12 @@ export interface AgentRunnerEntry {
    *  `cmd<X>Run` body verbatim). */
   printResult: (result: unknown) => void;
   /** bead forge-poc — the ONE on-disk containment segment this runner's own
-   *  session dir lives under (`<projectRoot>/<kindDir>/<sessionId>/status.json`),
+   *  session dir lives under (`<logsRoot>/_sessions/<project>/<kindDir>/<sessionId>/status.json`),
    *  mirroring `TurnSpec.kindDir` for the new-road turnSpec kinds
    *  (`runTurnSpecAgent` below). Read STRAIGHT off each runner's own
-   *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts` ('_architect', historical: since ported),
-   *  `packages/sessions/instructions-runner.ts` ('_instructions', historical: since ported),
-   *  `packages/sessions/kinds/project-brain.ts` ('_project-brain', now a
+   *  `*_KIND_DIR` constant — `packages/kernel/session-dir.ts` (architect),
+   *  `packages/sessions/kinds/instructions.ts`,
+   *  `packages/sessions/kinds/project-brain.ts` (now a
    *  `SESSION_KIND_RUNNERS` row) — with
    *  ONE deliberate trap: demo-builder's is `_demo`, NOT `_demo-builder` (see
    *  `packages/sessions/demo-builder-runner.ts`'s `DEMO_KIND_DIR` (historical: since ported) and
@@ -207,13 +207,6 @@ async function runTurnSpecAgent(
     process.exit(2);
     return;
   }
-  const projectRoot = projectGuard.realPath;
-  if (!existsSync(projectRoot)) {
-    console.error(`forge agent run ${agentId}: project root not found: ${projectRoot}`);
-    process.exit(2);
-    return;
-  }
-
   // bead forge-poc — `descriptor.turnSpec` is guaranteed present here: the
   // ONLY caller (`cmdAgentRun`'s ADR-043 §3 fork below) invokes this function
   // exclusively when `descriptor?.turnSpec` is truthy. Asserted rather than
@@ -233,13 +226,14 @@ async function runTurnSpecAgent(
   // UI polls status and shows silence, the only trace is stderr.log (R4-23
   // widened exactly this trigger set; ADR-043 2026-08-14 amendment §4).
   // The session dir mirrors `runInteractiveTurn`'s OWN SEC-04 containment
-  // preamble (`[turnSpec.kindDir, sessionId]` under `projectRoot`) — same
-  // two segments, same root, so the terminal write lands exactly where the
-  // turn itself would have written its next status.
-  const sessionDir = join(projectRoot, turnSpec.kindDir, sessionId);
+  // preamble (`sessionDirSegments(project, kindDir, sessionId)` under the logs
+  // root) — same segments, same root, so the terminal write lands exactly
+  // where the turn itself would have written its next status.
+  const logsRoot = resolve(forgeRoot, '_logs');
+  const sessionDir = join(logsRoot, ...sessionDirSegments(projectArg, turnSpec.kindDir, sessionId));
   let result: Awaited<ReturnType<typeof runInteractiveTurn>>;
   try {
-    result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, ...(deps?.sessionKind ?? {}) }); // same opaque spread as the legacy-runner branch below.
+    result = await runInteractiveTurn(descriptor, { sessionId, project: projectArg, forgeRoot, logsRoot, ...(deps?.sessionKind ?? {}) }); // same opaque spread as the legacy-runner branch below.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // writeSessionTerminalPhase is best-effort (its own try/catch swallows
@@ -325,6 +319,7 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: Agen
   }
 
   let projectRoot: string;
+  let project: string;
   if (projectArg) {
     // Parity with the interactive road (runTurnSpecAgent): guard the untrusted
     // --project value as a SEGMENT under the config-derived projects root,
@@ -337,19 +332,27 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: Agen
       return;
     }
     projectRoot = projectGuard.realPath;
+    project = projectArg;
   } else {
     // Only reachable when !requiresProject (architect today) — required-project
     // entries already returned above when --project was absent.
-    const found = findSessionProject(sessionId);
+    const found = findSessionProject(resolve(forgeRoot, '_logs'), sessionId);
     if (!found) {
       console.error(
-        `forge ${entry.verb}: no project found containing _architect/${sessionId}/. ` +
+        `forge ${entry.verb}: no project found containing session ${sessionId}. ` +
           `Pass --project <name> to disambiguate.`,
       );
       process.exit(2);
       return;
     }
-    projectRoot = found;
+    const foundGuard = resolveGuardedPath(resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot))), [found]);
+    if (!foundGuard.ok) {
+      console.error(`forge ${entry.verb}: discovered project "${found}" is not a valid project name — ${foundGuard.reason}`);
+      process.exit(2);
+      return;
+    }
+    projectRoot = foundGuard.realPath;
+    project = found;
   }
 
   if (!existsSync(projectRoot)) {
@@ -367,12 +370,15 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: Agen
   // `apps/forge/ui-bridge.ts`'s `spawnAgentTurn` uses. `entry.kindDir` is each
   // runner's own on-disk session-dir segment (see AgentRunnerEntry.kindDir's
   // doc for the demo-builder/`_demo` trap).
-  const sessionDir = join(projectRoot, entry.kindDir, sessionId);
+  const logsRoot = resolve(forgeRoot, '_logs');
+  const sessionDir = join(logsRoot, ...sessionDirSegments(project, entry.kindDir, sessionId));
   let result: unknown;
   try {
     result = await runTurn({
       sessionId,
+      project,
       projectRoot,
+      logsRoot,
       ...(entry.needsForgeRoot ? { forgeRoot } : {}),
       ...(deps?.sessionKind ?? {}),
     });

@@ -44,10 +44,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { sessionDirSegments } from '@forge/kernel';
+
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 import { describeReap } from './reap.mjs';
 
-type Ground = { root: string; logDir: string; projectsRoot: string; statusPath: string };
+type Ground = { root: string; logDir: string; logsRoot: string; statusPath: string };
 
 /** A run root holding one killed turn: its log dir (start event, no end) and
  *  the session dir the log's own metadata points at. */
@@ -75,13 +77,13 @@ function plantKilledTurn(
   rows.push({ event_id: 'ev-tool-1', event_type: 'tool_use', message: 'Read', metadata: {} });
   writeFileSync(join(logDir, 'events.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
 
-  const projectsRoot = join(root, 'projects');
-  const sessionDir = join(projectsRoot, project, `_${kind}`, sessionId);
+  const logsRoot = join(root, '_logs');
+  const sessionDir = join(logsRoot, ...sessionDirSegments(project, `_${kind}`, sessionId));
   mkdirSync(sessionDir, { recursive: true });
   const statusPath = join(sessionDir, 'status.json');
   writeFileSync(statusPath, JSON.stringify({ session_id: sessionId, phase, idea: 'weave the org' }, null, 2));
 
-  return { root, logDir, projectsRoot, statusPath };
+  return { root, logDir, logsRoot, statusPath };
 }
 
 const readStatus = (g: Ground) => JSON.parse(readFileSync(g.statusPath, 'utf8')) as Record<string, unknown>;
@@ -92,7 +94,7 @@ test('a REAPED turn is stamped with the reserved terminal phase, naming what fir
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 4242, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner S1: the run ended at beat 6 while this turn was still working' },
+    { logsRoot: g.logsRoot, reason: 'story runner S1: the run ended at beat 6 while this turn was still working' },
   );
 
   const status = readStatus(g);
@@ -115,7 +117,7 @@ test('NEGATIVE CONTROL: a SKIPPED pid’s session is never terminated — we did
 
   const outcomes = recordReapedCancellations(
     { reaped: [], skipped: [{ pid: 4242, dir: g.logDir, reason: 'cwd outside the run worktree' }] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner S1: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner S1: teardown' },
   );
 
   assert.equal(readStatus(g).phase, 'interviewing', 'the session is byte-untouched');
@@ -129,7 +131,7 @@ test('the session is read from the START EVENT’s metadata, never parsed out of
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGTERM', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner S3: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner S3: teardown' },
   );
 
   assert.equal(outcomes[0].kind, 'project-brain');
@@ -144,7 +146,7 @@ test('a log with NO start event is an outcome, not a guess — nothing is writte
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(readStatus(g).phase, 'interviewing');
@@ -167,7 +169,7 @@ test('row 33: an UNREADABLE events.jsonl is "could not confirm", never the confi
   try {
     const outcomes = recordReapedCancellations(
       { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-      { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+      { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
     );
     assert.equal(readStatus(g).phase, 'interviewing', 'a check that could not run must not write anything');
     assert.equal(outcomes[0].written, false);
@@ -190,7 +192,7 @@ test('an ALREADY-cancelled session is not re-stamped, and says so', (t) => {
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(readFileSync(g.statusPath, 'utf8'), before, 'byte-unchanged');
@@ -198,14 +200,14 @@ test('an ALREADY-cancelled session is not re-stamped, and says so', (t) => {
   assert.match(String(outcomes[0].reason), /already cancelled/i);
 });
 
-test('a session the projects root does not hold is refused BY NAME, not silently', (t) => {
+test('a session the logs root does not hold is refused BY NAME, not silently', (t) => {
   const g = plantKilledTurn();
   t.after(() => rmSync(g.root, { recursive: true, force: true }));
-  rmSync(join(g.projectsRoot, 'gitweave'), { recursive: true, force: true });
+  rmSync(join(g.logsRoot, '_sessions', 'gitweave'), { recursive: true, force: true });
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes[0].written, false);
@@ -224,7 +226,7 @@ test('two reaped pids sharing ONE log dir stamp the session exactly once', (t) =
       ],
       skipped: [],
     },
-    { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    { logsRoot: g.logsRoot, reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes.length, 1, 'one session, one outcome');
@@ -238,7 +240,7 @@ test('recordReapedCancellations never throws — it runs inside the run’s fina
 
   const outcomes = recordReapedCancellations(
     { reaped: [{ pid: 9, dir: join(root, 'does', 'not', 'exist'), signal: 'SIGKILL', via: 'record' }], skipped: [] },
-    { projectsRoot: join(root, 'projects'), reason: 'story runner: teardown' },
+    { logsRoot: join(root, '_logs'), reason: 'story runner: teardown' },
   );
 
   assert.equal(outcomes[0].written, false);
@@ -254,7 +256,7 @@ test('describeReap names every cancellation outcome, written or refused', (t) =>
     skipped: [],
   };
   report.cancelled = recordReapedCancellations(report as never, {
-    projectsRoot: g.projectsRoot,
+    logsRoot: g.logsRoot,
     reason: 'story runner S1: teardown',
   });
 

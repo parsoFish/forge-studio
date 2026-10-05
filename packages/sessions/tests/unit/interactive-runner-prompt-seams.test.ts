@@ -61,9 +61,9 @@ function stagingQueryFn(sessionDir: string): { queryFn: QueryFn; captured: () =>
 }
 
 test('ctx.turnId (mode:"edit") selects the loadSkillTurnPrompt "interview-edit" SECTION — the edit-only paragraph reaches the model', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T00-00-00';
-  const sessionDir = join(projectRoot, '_interactivetest-turnid', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-turnid', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<Status>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString(), mode: 'edit' });
 
@@ -71,7 +71,7 @@ test('ctx.turnId (mode:"edit") selects the loadSkillTurnPrompt "interview-edit" 
   const { queryFn, captured } = captureQueryFn();
 
   await runInteractiveTurn(descriptor, {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
     turnId: ({ status }) => ((status as Status).mode === 'edit' ? 'interview-edit' : 'interview'),
   });
 
@@ -86,9 +86,9 @@ test('ctx.turnId (mode:"edit") selects the loadSkillTurnPrompt "interview-edit" 
 });
 
 test('ctx.turnId (mode absent) selects the loadSkillTurnPrompt "interview" SECTION — the edit-only paragraph is ABSENT', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T00-00-01';
-  const sessionDir = join(projectRoot, '_interactivetest-turnid', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-turnid', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<Status>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -96,7 +96,7 @@ test('ctx.turnId (mode absent) selects the loadSkillTurnPrompt "interview" SECTI
   const { queryFn, captured } = captureQueryFn();
 
   await runInteractiveTurn(descriptor, {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
     turnId: ({ status }) => ((status as Status).mode === 'edit' ? 'interview-edit' : 'interview'),
   });
 
@@ -108,9 +108,9 @@ test('ctx.turnId (mode absent) selects the loadSkillTurnPrompt "interview" SECTI
 });
 
 test('ctx.turnId ABSENT keeps the unchanged whole-SKILL.md read (both turn sections\' text present)', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T00-00-02';
-  const sessionDir = join(projectRoot, '_interactivetest-turnid', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest-turnid', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<Status>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -118,7 +118,7 @@ test('ctx.turnId ABSENT keeps the unchanged whole-SKILL.md read (both turn secti
   const { queryFn, captured } = captureQueryFn();
 
   // No turnId callback supplied at all — the pre-existing behaviour.
-  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.ok(captured(), 'queryFn must have been invoked');
   assert.ok(captured()!.prompt.includes('You are UPDATING the existing AGENTS.md'), 'whole-file read must still include the edit section');
@@ -126,9 +126,9 @@ test('ctx.turnId ABSENT keeps the unchanged whole-SKILL.md read (both turn secti
 });
 
 test('ctx.promptContext lines (seed matching + provenance footer instruction) reach the prompt verbatim', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T00-00-03';
-  const sessionDir = join(projectRoot, '_interactivetest', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
@@ -138,7 +138,7 @@ test('ctx.promptContext lines (seed matching + provenance footer instruction) re
   const FOOTER_LINE = 'List every matched seed id you actually composed from, as a provenance footer.';
 
   await runInteractiveTurn(descriptor, {
-    sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
+    sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId),
     promptContext: () => [SEED_LINE, FOOTER_LINE],
   });
 
@@ -148,16 +148,16 @@ test('ctx.promptContext lines (seed matching + provenance footer instruction) re
 });
 
 test('ctx.promptContext ABSENT leaves the prompt unchanged (no stray blank section)', async () => {
-  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const { forgeRoot, logsRoot } = setup();
   const sessionId = '2026-09-25T00-00-04';
-  const sessionDir = join(projectRoot, '_interactivetest', sessionId);
+  const sessionDir = join(logsRoot, '_sessions', 'proj', '_interactivetest', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
 
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
   const { queryFn, captured } = stagingQueryFn(sessionDir);
 
-  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  await runInteractiveTurn(descriptor, { sessionId, project: 'proj', forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.ok(captured(), 'queryFn must have been invoked');
   assert.ok(!captured()!.prompt.includes('undefined'), 'an absent promptContext must never leak a stray "undefined" into the prompt');

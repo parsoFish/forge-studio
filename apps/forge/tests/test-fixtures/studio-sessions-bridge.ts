@@ -49,11 +49,11 @@ export const KB_SEEDING_MIXED_SESSION = '2026-08-19T09-12-00';
  * band-scoped grant) is the realistic non-project case that forces the
  * dot-anchor branch (`binding.kind !== 'project'` in the real handler).
  */
-function writeKbSeedingHandoffSession(projectsRoot: string, kbId: string, sessionId: string): void {
+function writeKbSeedingHandoffSession(projectsRoot: string, logsRoot: string, kbId: string, sessionId: string): void {
   const sessionProject = `.kb-${kbId}`;
   const written = guardedWriteSessionStatus<ProjectBrainStatus>(
-    projectsRoot,
-    [sessionProject, '_project-brain', sessionId],
+    logsRoot,
+    ['_sessions', sessionProject, '_project-brain', sessionId],
     {
       session_id: sessionId,
       project: sessionProject,
@@ -74,8 +74,8 @@ function writeKbSeedingHandoffSession(projectsRoot: string, kbId: string, sessio
 // interview) + a REAL project fixture with a well-formed `.forge/project.json`
 // so `deriveContractStages` (packages/projects/contract-stages.ts) has something real to
 // derive over when the route threads it in.
-function writeOnboardingSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+function writeOnboardingSession(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_onboarding', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Onboard this project.\n', 'utf8');
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'running' }), 'utf8');
@@ -128,8 +128,8 @@ function writeF6ShapeALogOnly(forgeRoot: string, sessionId: string): void {
 
 /** Shape B: a project-side `_architect/<sid>/` dir exists (no status.json)
  *  plus the companion log dir. */
-function writeF6ShapeBFixture(forgeRoot: string, projectsRoot: string, project: string, sessionId: string): void {
-  mkdirSync(join(projectsRoot, project, '_architect', sessionId), { recursive: true });
+function writeF6ShapeBFixture(forgeRoot: string, logsRoot: string, project: string, sessionId: string): void {
+  mkdirSync(join(logsRoot, '_sessions', project, '_architect', sessionId), { recursive: true });
   const dir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
@@ -182,45 +182,51 @@ before(async () => {
   writeSkillAgent(forgeRoot, 'onboarding-agent');
 
   const projectsRoot = join(forgeRoot, 'projects');
-  writeArchitectSession(projectsRoot, 'demoproj', REAL_ARCHITECT_SESSION);
-  writeInstructionsSession(projectsRoot, 'demoproj', REAL_INSTRUCTIONS_SESSION);
-  writeProjectBrainSession(projectsRoot, 'demoproj', REAL_PROJECT_BRAIN_SESSION);
-  writeArchitectSessionWithDeps(projectsRoot, 'depsproj', DEPS_SESSION);
-  writeInstructionsSessionWithModelTier(projectsRoot, 'demoproj', MODEL_TIER_SESSION, 'opus');
+  const logsRoot = join(forgeRoot, '_logs');
+  // Session dirs live under _logs/_sessions/<p>/ now, so a project only exists
+  // for the routes (which validate it) when its checkout dir does.
+  for (const p of ['demoproj', 'depsproj', 'gitpulse', 'badstageproj', 'victimproj', 'attackerproj', 'statusescapeproj', 'reaskproj', 'statusbucketproj', F6_SHAPE_B_PROJECT]) {
+    mkdirSync(join(projectsRoot, p), { recursive: true });
+  }
+  writeArchitectSession(logsRoot, 'demoproj', REAL_ARCHITECT_SESSION);
+  writeInstructionsSession(logsRoot, 'demoproj', REAL_INSTRUCTIONS_SESSION);
+  writeProjectBrainSession(logsRoot, 'demoproj', REAL_PROJECT_BRAIN_SESSION);
+  writeArchitectSessionWithDeps(logsRoot, 'depsproj', DEPS_SESSION);
+  writeInstructionsSessionWithModelTier(logsRoot, 'demoproj', MODEL_TIER_SESSION, 'opus');
 
   // R4-19 WI-2 — the ".kb-" seeding-anchor reachability fixture, plus a
   // normal (non-dot) project-brain session as the companion baseline.
-  writeKbSeedingHandoffSession(projectsRoot, KB_SEEDING_ID, KB_SEEDING_SESSION);
-  writeKbSeedingHandoffSession(projectsRoot, KB_SEEDING_MIXED_ID, KB_SEEDING_MIXED_SESSION);
-  writeProjectBrainSession(projectsRoot, 'gitpulse', GITPULSE_SESSION);
+  writeKbSeedingHandoffSession(projectsRoot, logsRoot, KB_SEEDING_ID, KB_SEEDING_SESSION);
+  writeKbSeedingHandoffSession(projectsRoot, logsRoot, KB_SEEDING_MIXED_ID, KB_SEEDING_MIXED_SESSION);
+  writeProjectBrainSession(logsRoot, 'gitpulse', GITPULSE_SESSION);
 
   // R4-17 — onboarding session fixtures: a well-formed project (contract
   // stages derive cleanly) and a malformed one (deriveContractStages
   // {ok:false} must surface as a non-200, never a 200 with an empty artifact).
-  writeOnboardingSession(projectsRoot, 'onboardedproj', ONBOARDING_SESSION);
+  writeOnboardingSession(logsRoot, 'onboardedproj', ONBOARDING_SESSION);
   writeOnboardedProjectFixture(projectsRoot, 'onboardedproj');
-  writeOnboardingSession(projectsRoot, 'malformedcontractproj', ONBOARDING_BAD_CONFIG_SESSION);
+  writeOnboardingSession(logsRoot, 'malformedcontractproj', ONBOARDING_BAD_CONFIG_SESSION);
   writeMalformedContractProjectFixture(projectsRoot, 'malformedcontractproj');
 
   // R4-19-F2 — the kb-cleanup read-branch's "kb_id no longer resolves" fixture.
   writeSkillAgent(forgeRoot, 'brain-maintenance');
-  writeCleanupSessionWithUnresolvableKb(projectsRoot, 'demoproj', KB_CLEANUP_UNRESOLVABLE_SESSION);
+  writeCleanupSessionWithUnresolvableKb(logsRoot, 'demoproj', KB_CLEANUP_UNRESOLVABLE_SESSION);
 
   // R4-19-F2 WI-4c BLOCKER fix — the companion RESOLVABLE-kb_id fixture (the
   // kbId-on-the-wire pin needs a 200, not the 409 the unresolvable fixture
   // above deliberately produces).
   writeResolvableKb(forgeRoot, KB_CLEANUP_RESOLVABLE_KB_ID);
-  writeCleanupSessionWithResolvableKb(projectsRoot, 'demoproj', KB_CLEANUP_RESOLVABLE_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
+  writeCleanupSessionWithResolvableKb(logsRoot, 'demoproj', KB_CLEANUP_RESOLVABLE_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
 
   // W6-B8 — the `terminal` wire-field pins (see the two fixture writers'
   // own doc comments above).
-  writeCleanupSessionApplied(projectsRoot, 'demoproj', KB_CLEANUP_APPLIED_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
-  writeOnboardingCompleteSession(projectsRoot, 'onboardedproj', ONBOARDING_COMPLETE_SESSION);
-  writeOnboardingFailedSession(projectsRoot, 'onboardedproj', ONBOARDING_FAILED_SESSION);
+  writeCleanupSessionApplied(logsRoot, 'demoproj', KB_CLEANUP_APPLIED_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
+  writeOnboardingCompleteSession(logsRoot, 'onboardedproj', ONBOARDING_COMPLETE_SESSION);
+  writeOnboardingFailedSession(logsRoot, 'onboardedproj', ONBOARDING_FAILED_SESSION);
 
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
-  const badStageDir = join(projectsRoot, 'badstageproj', '_architect', BADSTAGE_SESSION);
+  const badStageDir = join(logsRoot, '_sessions', 'badstageproj', '_architect', BADSTAGE_SESSION);
   mkdirSync(badStageDir, { recursive: true });
   writeFileSync(
     join(badStageDir, 'answers.json'),
@@ -234,11 +240,11 @@ before(async () => {
   // lexical path string) pointing at the victim's session dir. The
   // symlink's own on-disk path is safely inside the attacker's `_architect/`
   // — only realpathSync at the read choke point reveals it escapes.
-  const victimDir = join(projectsRoot, 'victimproj', '_architect', VICTIM_SESSION);
+  const victimDir = join(logsRoot, '_sessions', 'victimproj', '_architect', VICTIM_SESSION);
   mkdirSync(victimDir, { recursive: true });
   writeFileSync(join(victimDir, 'idea.md'), SECRET_MARKER + '\n', 'utf8');
   writeFileSync(join(victimDir, 'status.json'), JSON.stringify({ session_id: VICTIM_SESSION, project: 'victimproj', phase: 'awaiting-verdict' }), 'utf8');
-  const attackerArchitectDir = join(projectsRoot, 'attackerproj', '_architect');
+  const attackerArchitectDir = join(logsRoot, '_sessions', 'attackerproj', '_architect');
   mkdirSync(attackerArchitectDir, { recursive: true });
   symlinkSync(victimDir, join(attackerArchitectDir, 'evil-session'));
 
@@ -248,7 +254,7 @@ before(async () => {
   // "phase". The session dir itself is genuine (this is not the AT-47
   // whole-directory-symlink shape) — only the single `status.json` FILE
   // escapes, via `readSessionStatus`'s unguarded read path.
-  const statusEscapeDir = join(projectsRoot, 'statusescapeproj', '_architect', STATUS_ESCAPE_SESSION);
+  const statusEscapeDir = join(logsRoot, '_sessions', 'statusescapeproj', '_architect', STATUS_ESCAPE_SESSION);
   mkdirSync(statusEscapeDir, { recursive: true });
   writeFileSync(join(statusEscapeDir, 'idea.md'), 'A legitimate idea.\n', 'utf8');
   const statusOutsideDir = join(forgeRoot, '_status-escape-outside');
@@ -260,7 +266,7 @@ before(async () => {
   // AT-60 fixture (A2 route-level): a session genuinely `awaiting-answers`
   // whose questions.json re-asks round 1's question VERBATIM — the phase
   // must reach deriveSessionTranscript for the pending turn to appear.
-  const reaskDir = join(projectsRoot, 'reaskproj', '_architect', REASK_SESSION);
+  const reaskDir = join(logsRoot, '_sessions', 'reaskproj', '_architect', REASK_SESSION);
   mkdirSync(reaskDir, { recursive: true });
   writeFileSync(join(reaskDir, 'idea.md'), 'Build a re-ask fixture.\n', 'utf8');
   writeFileSync(
@@ -278,34 +284,34 @@ before(async () => {
   // AT-amendment-3, A3 — the five distinct status.json failure shapes, each
   // a real, otherwise-legitimate session dir (idea.md present) differing
   // only in status.json's shape.
-  const missingStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', MISSING_STATUS_SESSION);
+  const missingStatusDir = join(logsRoot, '_sessions', 'statusbucketproj', '_architect', MISSING_STATUS_SESSION);
   mkdirSync(missingStatusDir, { recursive: true });
   writeFileSync(join(missingStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
   // No status.json written at all.
 
-  const invalidJsonStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', INVALID_JSON_STATUS_SESSION);
+  const invalidJsonStatusDir = join(logsRoot, '_sessions', 'statusbucketproj', '_architect', INVALID_JSON_STATUS_SESSION);
   mkdirSync(invalidJsonStatusDir, { recursive: true });
   writeFileSync(join(invalidJsonStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
   writeFileSync(join(invalidJsonStatusDir, 'status.json'), 'not valid json {{{', 'utf8');
 
-  const nonObjectStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', NON_OBJECT_STATUS_SESSION);
+  const nonObjectStatusDir = join(logsRoot, '_sessions', 'statusbucketproj', '_architect', NON_OBJECT_STATUS_SESSION);
   mkdirSync(nonObjectStatusDir, { recursive: true });
   writeFileSync(join(nonObjectStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
   writeFileSync(join(nonObjectStatusDir, 'status.json'), JSON.stringify([1, 2, 3]), 'utf8'); // valid JSON, but an array, not an object
 
-  const noPhaseStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', NO_PHASE_STATUS_SESSION);
+  const noPhaseStatusDir = join(logsRoot, '_sessions', 'statusbucketproj', '_architect', NO_PHASE_STATUS_SESSION);
   mkdirSync(noPhaseStatusDir, { recursive: true });
   writeFileSync(join(noPhaseStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
   writeFileSync(join(noPhaseStatusDir, 'status.json'), JSON.stringify({ session_id: NO_PHASE_STATUS_SESSION, project: 'statusbucketproj' }), 'utf8'); // valid object, no "phase" key at all
 
-  const nonStringPhaseStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', NON_STRING_PHASE_STATUS_SESSION);
+  const nonStringPhaseStatusDir = join(logsRoot, '_sessions', 'statusbucketproj', '_architect', NON_STRING_PHASE_STATUS_SESSION);
   mkdirSync(nonStringPhaseStatusDir, { recursive: true });
   writeFileSync(join(nonStringPhaseStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
   writeFileSync(join(nonStringPhaseStatusDir, 'status.json'), JSON.stringify({ session_id: NON_STRING_PHASE_STATUS_SESSION, project: 'statusbucketproj', phase: 42 }), 'utf8'); // phase present but not a string
 
   // F6 (wave-8) — "a linked session must be readable" fixtures.
   writeF6ShapeALogOnly(forgeRoot, F6_SHAPE_A_SESSION);
-  writeF6ShapeBFixture(forgeRoot, projectsRoot, F6_SHAPE_B_PROJECT, F6_SHAPE_B_SESSION);
+  writeF6ShapeBFixture(forgeRoot, logsRoot, F6_SHAPE_B_PROJECT, F6_SHAPE_B_SESSION);
   writeF6LogDirWithNoEvents(forgeRoot, F6_NO_EVENTS_SESSION);
   writeF6SymlinkEscapeFixture(forgeRoot, F6_SYMLINK_ESCAPE_SESSION);
   // AT-F6-R8 — a queue manifest whose architect_session_id resolves NOWHERE

@@ -108,6 +108,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { sessionDirSegments } from '@forge/kernel';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
@@ -192,7 +193,7 @@ async function postRaw(url: string, rawBody: string): Promise<Response> {
 }
 
 let sessionCounter = 0;
-/** Seeds `<forgeRoot>/projects/<project>/_authoring/<sessionId>/status.json`
+/** Seeds `<forgeRoot>/_logs/_sessions/<project>/_authoring/<sessionId>/status.json`
  *  (+ optional staging/ files) DIRECTLY at an arbitrary location — the
  *  finalize route's own job starts at whatever phase is seeded; see file
  *  header design call #3. Returns a fresh, never-reused sessionId so tests
@@ -206,7 +207,7 @@ function seedAuthoringSession(opts: {
   const project = opts.project ?? PROJECT;
   sessionCounter += 1;
   const sessionId = `2026-08-11T00-00-${String(sessionCounter).padStart(2, '0')}-fx`;
-  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments(project, '_authoring', sessionId));
   writeSeededSession(sessionDir, opts);
   return { sessionId, sessionDir };
 }
@@ -781,16 +782,15 @@ test('WI2-5-containment: traversal-shaped sessionId is refused — nothing is wr
 
   // Variant 1: sessionId "../evil-sibling" — a naive join(authoringRoot,
   // '../evil-sibling', 'status.json') cancels the _authoring segment and
-  // lands at <projectRoot>/evil-sibling/status.json. Plant a REAL, valid,
-  // awaiting-review session there.
-  const projectRoot = join(forgeRoot, 'projects', PROJECT);
+  // lands at <logsRoot>/_sessions/<project>/evil-sibling/status.json. Plant a REAL session there.
+  const projectRoot = join(forgeRoot, '_logs', '_sessions', PROJECT);
   const evilSiblingDir = join(projectRoot, 'evil-sibling');
   writeSeededSession(evilSiblingDir, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });
   assert.equal(readStatusPhase(evilSiblingDir), 'awaiting-review', 'arrange: the naive-join-1 target must be a genuinely valid session');
 
   // Variant 2: sessionId ".." alone — a naive join(authoringRoot, '..',
   // 'status.json') cancels the _authoring segment and lands directly at
-  // <projectRoot>/status.json. Plant a REAL, valid, awaiting-review session
+  // <logsRoot>/_sessions/<project>/status.json. Plant a REAL, valid session
   // directly in projectRoot (alongside its existing _authoring/ subdir).
   writeSeededSession(projectRoot, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });
   assert.equal(readStatusPhase(projectRoot), 'awaiting-review', 'arrange: the naive-join-2 target must be a genuinely valid session');
@@ -853,7 +853,7 @@ test('WI2-6-containment: a "project" whose dir is a symlink escaping the project
   try {
     const validSkillMd = matter.stringify('\n# x\n', { name: 'x', description: 'd' });
     const sessionId = '2026-08-11T00-00-99-fx';
-    const sessionDir = join(outsideDir, '_authoring', sessionId);
+    const sessionDir = join(forgeRoot, '_logs', ...sessionDirSegments(escapeProject, '_authoring', sessionId));
     writeSeededSession(sessionDir, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });
     assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: the escape target must hold a genuinely valid session');
 

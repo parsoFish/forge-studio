@@ -11,9 +11,9 @@
  * docs/phases/<phase>.md.
  */
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { FORGE_ROOT, guardedReadFile } from '@forge/kernel';
+import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { FORGE_ROOT, guardedFile, guardedReadDir, guardedReadFile, sessionDirSegments, sessionKindSegments, ARCHITECT_KIND_DIR } from '@forge/kernel';
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import type { CeilingSource } from './flow-budgets.ts';
@@ -417,19 +417,19 @@ export async function snapshotCycleArtefacts(
   }
 
   // Architect PLAN.html (best-effort): resolve the session that produced this
-  // initiative by finding the `_architect/<sid>/` whose `manifests/` holds it,
-  // so the review screen's "view plan" link works too.
+  // initiative by finding the architect session (under the logs root, never in
+  // the ground - forge-8vfn.8.5.58) whose `manifests/` holds it, so the review
+  // screen's "view plan" link works too.
   try {
-    const archRoot = resolve(input.projectRepoPath, '_architect');
-    if (existsSync(archRoot)) {
-      for (const sid of readdirSync(archRoot)) {
-        const draftManifest = resolve(archRoot, sid, 'manifests', `${input.initiativeId}.md`);
-        const planHtml = resolve(archRoot, sid, 'PLAN.html');
-        if (existsSync(draftManifest) && existsSync(planHtml)) {
-          mkdirSync(artifactsDst, { recursive: true });
-          cpSync(planHtml, resolve(artifactsDst, 'PLAN.html'), { force: true });
-          break;
-        }
+    const project = input.project ?? basename(input.projectRepoPath);
+    for (const sid of guardedReadDir(logsRoot, sessionKindSegments(project, ARCHITECT_KIND_DIR)) ?? []) {
+      const sidSegs = sessionDirSegments(project, ARCHITECT_KIND_DIR, sid);
+      const draftManifest = guardedFile(logsRoot, [...sidSegs, 'manifests', `${input.initiativeId}.md`], 'read');
+      const planHtml = guardedFile(logsRoot, [...sidSegs, 'PLAN.html'], 'read');
+      if (draftManifest !== null && planHtml !== null) {
+        mkdirSync(artifactsDst, { recursive: true });
+        cpSync(planHtml, resolve(artifactsDst, 'PLAN.html'), { force: true });
+        break;
       }
     }
   } catch { /* best-effort — never block the cycle on plan mirroring */ }

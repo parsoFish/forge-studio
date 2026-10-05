@@ -24,10 +24,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { allowedOrigin, sanitizeError, sendJson, sendIfDispatchRefused, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
-import { guardedFile, guardedReadDir, guardedReadFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedFile, guardedReadDir, guardedReadFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-session-store.ts';
-import { GENERATIONS_DIRNAME } from './kinds/demo-session-store.ts';
+import { GENERATIONS_DIRNAME, DEMO_KIND_DIR } from './kinds/demo-session-store.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import { listDemoSessions } from './bridge-studio-session-index.ts';
@@ -71,7 +71,7 @@ export async function handleDemoRoutes(
   const origin = allowedOrigin(req);
   // GET /api/demo-builder/sessions — list every session with its current state.
   if (method === 'GET' && url === '/api/demo-builder/sessions') {
-    const statuses = listDemoSessions(ctx.projectsRoot);
+    const statuses = listDemoSessions(ctx.logsRoot);
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
@@ -147,7 +147,7 @@ export async function handleDemoRoutes(
     // only gate here. `resolveDemoSessionDir` validates `project`/`sessionId`
     // by charset (never reaching `join`) AND proves real realpath
     // containment inside THIS project's own resolved dir.
-    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
+    const dirOutcome = resolveDemoSessionDir(ctx.logsRoot, project, sessionId);
     if (!dirOutcome.ok) {
       sendJson(res, 400, { error: dirOutcome.reason }, origin);
       return true;
@@ -155,7 +155,7 @@ export async function handleDemoRoutes(
     // SEC-04 (bd forge-ebj) — the status.json READ goes through the guarded
     // leaf sibling (leaf included) so a symlinked status leaf inside the
     // resolved-contained session dir is refused, not followed.
-    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [project, '_demo', sessionId]);
+    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.logsRoot, sessionDirSegments(project, DEMO_KIND_DIR, sessionId));
     if (!status) {
       sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
       return true;
@@ -243,7 +243,7 @@ export async function handleDemoRoutes(
       sendJson(res, 400, { error: `invalid filename "${filename}"` }, origin);
       return true;
     }
-    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
+    const dirOutcome = resolveDemoSessionDir(ctx.logsRoot, project, sessionId);
     if (!dirOutcome.ok) {
       sendJson(res, 400, { error: dirOutcome.reason }, origin);
       return true;
@@ -364,7 +364,7 @@ export async function handleDemoRoutes(
       // contained (see its header) rather than false-rejecting a brand new
       // session.
       const sessionId = newArchitectSessionId();
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, sessionId);
+      const dirOutcome = resolveDemoSessionDir(ctx.logsRoot, body.project, sessionId);
       if (!dirOutcome.ok) {
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
@@ -397,7 +397,7 @@ export async function handleDemoRoutes(
         body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
       // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf
       // sibling (leaf included; mkdirs the parent, refuses a symlinked leaf).
-      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [body.project, '_demo', sessionId], {
+      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.logsRoot, sessionDirSegments(body.project, DEMO_KIND_DIR, sessionId), {
         session_id: sessionId,
         project: body.project,
         project_repo_path: repoPath,
@@ -452,7 +452,7 @@ export async function handleDemoRoutes(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      const dirOutcome = resolveDemoSessionDir(ctx.logsRoot, body.project, body.sessionId);
       if (!dirOutcome.ok) {
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
@@ -464,8 +464,8 @@ export async function handleDemoRoutes(
       }
       // SEC-04 (bd forge-ebj) — status.json read+write through the guarded leaf
       // siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
+      const dirSegs = sessionDirSegments(body.project, DEMO_KIND_DIR, body.sessionId);
+      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.logsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
@@ -495,7 +495,7 @@ export async function handleDemoRoutes(
       // capture is this exact route writing `phase: 'locking'` and then
       // finding the prior turn's exit window still live.
       ctx.claimAgentTurnSlot(ctx.forgeRoot, 'demo-builder', body.sessionId);
-      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
+      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.logsRoot, dirSegs, {
         ...status,
         phase: 'locking',
         ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),
@@ -529,7 +529,7 @@ const GENERATION_NUMBER_RE = /^[0-9]{1,6}$/;
 
 const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 
-function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId: string): DemoSessionDirOutcome {
+function resolveDemoSessionDir(logsRoot: string, project: string, sessionId: string): DemoSessionDirOutcome {
   const projectReason = invalidGenerationProjectReason(project);
   if (projectReason) return { ok: false, reason: projectReason };
   const sessionIdReason = invalidGenerationSessionIdReason(sessionId);
@@ -548,7 +548,7 @@ function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId:
   // `/start` create case), which it handles by walking to the deepest existing
   // ancestor and reassembling the literal tail. A missing dir and an escaping
   // symlink both collapse to a single generic reason (no oracle).
-  const guarded = resolveGuardedPath(projectsRoot, [project, '_demo', sessionId]);
+  const guarded = resolveGuardedPath(logsRoot, sessionDirSegments(project, DEMO_KIND_DIR, sessionId));
   if (!guarded.ok) {
     return { ok: false, reason: `sessionId "${sessionId}" for project "${project}" resolves outside the project directory` };
   }

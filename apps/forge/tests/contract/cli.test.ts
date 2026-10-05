@@ -173,7 +173,7 @@ test('agent run architect: --project omitted falls back to auto-discovery, match
   const generic = runForge(['agent', 'run', 'architect', '__r2-01-f3a-nonexistent-session__']);
   assert.equal(generic.status, legacy.status);
   assert.equal(generic.stderr, legacy.stderr);
-  assert.match(legacy.stderr, /no project found containing _architect\//);
+  assert.match(legacy.stderr, /no project found containing session __r2-01-f3a-nonexistent-session__/);
 });
 
 test('agent run: unknown agent-id → clear error + exit 2', () => {

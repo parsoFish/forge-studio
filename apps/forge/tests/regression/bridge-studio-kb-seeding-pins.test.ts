@@ -178,12 +178,13 @@ test('PIN MAJOR-1: project-bound KB create+seed commits to a single brain/<id> â
   assert.ok(existsSync(join(forgeRoot, 'brain', kbId, 'kb.yaml')), 'create scaffolded brain/<id>/kb.yaml');
 
   // Drive the hand-off session (project binding â†’ anchored under the real project) to commit.
-  const sessionDir = join(forgeRoot, 'projects', 'demo-project', '_project-brain', sessionId);
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', 'demo-project', '_project-brain', sessionId);
   assert.ok(existsSync(join(sessionDir, 'status.json')), 'hand-off session exists under the bound project');
   stageForCommit(sessionDir);
 
   const r = await runProjectBrainTurn({
     sessionId,
+    project: 'demo-project',
     projectRoot: join(forgeRoot, 'projects', 'demo-project'),
     forgeRoot,
     logsRoot: join(forgeRoot, '_logs'),
@@ -246,12 +247,13 @@ test('PIN MAJOR-2: flow-bound KB create leaves NO phantom project, and the runne
   // (c) The seeding session is still reachable: its status.json exists under the
   // dot-prefixed anchor, and the runner finds it + commits.
   const anchor = `.kb-${kbId}`;
-  const statusPath = join(forgeRoot, 'projects', anchor, '_project-brain', sessionId, 'status.json');
-  assert.ok(existsSync(statusPath), `seeding session status.json must exist under the dot-anchor projects/${anchor}/`);
+  const statusPath = join(forgeRoot, '_logs', '_sessions', anchor, '_project-brain', sessionId, 'status.json');
+  assert.ok(existsSync(statusPath), `seeding session status.json must exist under the dot-anchor _logs/_sessions/${anchor}/`);
   stageForCommit(dirname(statusPath));
 
   const r = await runProjectBrainTurn({
     sessionId,
+    project: anchor,
     projectRoot: join(forgeRoot, 'projects', anchor),
     forgeRoot,
     logsRoot: join(forgeRoot, '_logs'),

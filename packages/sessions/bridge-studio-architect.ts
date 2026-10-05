@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
 
 import { allowedOrigin, sendJson, sendIfDispatchRefused, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import {
   guardedReadStatus,
@@ -36,6 +36,7 @@ import {
   type ArchitectQuestion,
   type ArchitectStatus,
 } from './kinds/architect.ts';
+import { ARCHITECT_KIND_DIR } from './kinds/architect-plan.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import {
   deriveRowLifecycle,
@@ -94,7 +95,7 @@ export async function handleArchitectRoutes(
 
   // GET /api/architect/sessions — list every session with its current state.
   if (method === 'GET' && url === '/api/architect/sessions') {
-    const statuses = listArchitectSessions(ctx.projectsRoot);
+    const statuses = listArchitectSessions(ctx.logsRoot);
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
@@ -113,14 +114,14 @@ export async function handleArchitectRoutes(
       // `_architect`/session dir OR a symlinked `questions.json`/`PLAN.html`
       // leaf (git-plantable inside a project repo) was followed out of root.
       // Route each leaf through the guard, request ids as their OWN segments
-      // under the trusted projectsRoot.
-      const dirSegs = [s.project, '_architect', s.session_id];
+      // under the trusted logsRoot.
+      const dirSegs = sessionDirSegments(s.project, ARCHITECT_KIND_DIR, s.session_id);
       const questionsRaw =
         s.phase === 'awaiting-answers'
-          ? guardedReadFile(ctx.projectsRoot, [...dirSegs, 'questions.json'])
+          ? guardedReadFile(ctx.logsRoot, [...dirSegs, 'questions.json'])
           : null;
       const questions = questionsRaw !== null ? ctx.safeParseJson<ArchitectQuestion[]>(questionsRaw) : null;
-      const planUrl = guardedFile(ctx.projectsRoot, [...dirSegs, 'PLAN.html'], 'read') !== null
+      const planUrl = guardedFile(ctx.logsRoot, [...dirSegs, 'PLAN.html'], 'read') !== null
         ? `/api/architect/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/PLAN.html`
         : null;
       // W7-A3 (sessions-kinds-08/12, artifact-plan-22/23): the initiative ids
@@ -128,7 +129,7 @@ export async function handleArchitectRoutes(
       // (the same files finalize promotes to `_queue/pending`), never stored
       // on status.json. Same guard family as the leaves above: a symlinked
       // `manifests` dir yields [] rather than being followed out of root.
-      const initiativeIds = (guardedReadDir(ctx.projectsRoot, [...dirSegs, 'manifests']) ?? [])
+      const initiativeIds = (guardedReadDir(ctx.logsRoot, [...dirSegs, 'manifests']) ?? [])
         .filter((f) => f.endsWith('.md'))
         .map((f) => f.slice(0, -'.md'.length))
         .sort();
@@ -193,7 +194,7 @@ export async function handleArchitectRoutes(
     // Resolve the WHOLE path — project, `_architect`, sessionId AND the
     // filename segments — through the per-segment identity guard; `!ok` (any
     // escape) and `!exists` (contained but absent) both collapse to 404.
-    const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_architect', sessionId, ...filename.split('/')]);
+    const guarded = resolveGuardedPath(ctx.logsRoot, [...sessionDirSegments(project, ARCHITECT_KIND_DIR, sessionId), ...filename.split('/')]);
     if (!guarded.ok) {
       // A containment escape (traversed project/sessionId, or a `..`/absolute
       // filename) — rejected BEFORE any existence probe, so out-of-root
@@ -269,8 +270,8 @@ export async function handleArchitectRoutes(
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+write: a traversal
       // `project` must create NOTHING out of root (the old code wrote
       // idea.md=body.idea to `<outside>/_architect/<sid>/`).
-      const dirSegs = [body.project, '_architect', sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', sessionId);
+      const dirSegs = sessionDirSegments(body.project, ARCHITECT_KIND_DIR, sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, ARCHITECT_KIND_DIR, sessionId);
       if (!dir) {
         sendJson(res, 400, { error: 'invalid project' }, origin);
         return true;
@@ -309,8 +310,8 @@ export async function handleArchitectRoutes(
       // contained dir; guardedWriteFile/guardedWriteStatus mkdir the parent and
       // refuse a symlinked/hardlinked leaf (⇒ null ⇒ 400, nothing written).
       if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'idea.md'], body.idea) === null ||
-        guardedWriteStatus(ctx.projectsRoot, dirSegs, status) === null
+        guardedWriteFile(ctx.logsRoot, [...dirSegs, 'idea.md'], body.idea) === null ||
+        guardedWriteStatus(ctx.logsRoot, dirSegs, status) === null
       ) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
@@ -341,8 +342,8 @@ export async function handleArchitectRoutes(
       }
       // SEC-04 — guard BEFORE the lockfile.lock (which would otherwise create
       // a `.lock` at an out-of-root traversed path) and before any read/write.
-      const dirSegs = [body.project, '_architect', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', body.sessionId);
+      const dirSegs = sessionDirSegments(body.project, ARCHITECT_KIND_DIR, body.sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, ARCHITECT_KIND_DIR, body.sessionId);
       if (!dir) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
@@ -366,7 +367,7 @@ export async function handleArchitectRoutes(
         return true;
       }
       try {
-        const status = guardedReadStatus(ctx.projectsRoot, dirSegs);
+        const status = guardedReadStatus(ctx.logsRoot, dirSegs);
         if (!status) {
           sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
           return true;
@@ -375,7 +376,7 @@ export async function handleArchitectRoutes(
           sendJson(res, 409, { error: `session is not awaiting answers (phase: ${status.phase})` }, origin);
           return true;
         }
-        const priorRaw = guardedReadFile(ctx.projectsRoot, [...dirSegs, 'answers.json']);
+        const priorRaw = guardedReadFile(ctx.logsRoot, [...dirSegs, 'answers.json']);
         const prior = (priorRaw !== null ? ctx.safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
         round = prior.length + 1;
         // Row 206 part (a) — claim BEFORE this write: the m7-e-r206-fixgate-s1
@@ -384,8 +385,8 @@ export async function handleArchitectRoutes(
         // claim must leave answers.json/status.json untouched.
         ctx.claimAgentTurnSlot(ctx.forgeRoot, 'architect', body.sessionId);
         if (
-          guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
-          guardedWriteStatus(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
+          guardedWriteFile(ctx.logsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
+          guardedWriteStatus(ctx.logsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
         ) {
           sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
           return true;
@@ -434,8 +435,8 @@ export async function handleArchitectRoutes(
       // it: a traversal `project` must not resolve to an out-of-root session,
       // and the status.json READ goes through the guarded leaf sibling so a
       // symlinked status leaf inside a real dir is refused, not followed.
-      const dirSegs = [body.project, '_architect', body.sessionId];
-      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', body.sessionId);
+      const dirSegs = sessionDirSegments(body.project, ARCHITECT_KIND_DIR, body.sessionId);
+      const dir = guardedSessionDir(ctx.logsRoot, body.project, ARCHITECT_KIND_DIR, body.sessionId);
       if (!dir) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
@@ -446,7 +447,7 @@ export async function handleArchitectRoutes(
       // 404 here, BEFORE the lock attempt below: `proper-lockfile` requires
       // its target to exist and throws otherwise, which the lock's own catch
       // would otherwise misreport as "session is busy" rather than "not found".
-      if (!guardedReadStatus(ctx.projectsRoot, dirSegs)) {
+      if (!guardedReadStatus(ctx.logsRoot, dirSegs)) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
@@ -459,7 +460,7 @@ export async function handleArchitectRoutes(
         return true;
       }
       try {
-        const status = guardedReadStatus(ctx.projectsRoot, dirSegs);
+        const status = guardedReadStatus(ctx.logsRoot, dirSegs);
         if (!status) {
           sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
           return true;

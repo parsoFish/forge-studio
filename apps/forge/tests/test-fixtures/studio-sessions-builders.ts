@@ -286,13 +286,13 @@ export function writeSessionKindsYaml(root: string): void {
 }
 
 /** Plants a kb-cleanup session directly on disk (never through a route) at
- *  `<projectsRoot>/<project>/_kb-cleanup/<sessionId>/status.json`, carrying
+ *  `<logsRoot>/_sessions/<project>/_kb-cleanup/<sessionId>/status.json`, carrying
  *  a `kb_id` that resolves to NO real KB anywhere under `brain/` — the
  *  fixture for the bridge read-branch's "kb_id no longer resolves" fail-loud
  *  contract (task brief §4). Deliberately does NOT write a `brain/` dir at
  *  all — the whole point is that this kb_id is unresolvable. */
-export function writeCleanupSessionWithUnresolvableKb(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+export function writeCleanupSessionWithUnresolvableKb(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -333,8 +333,8 @@ export function writeResolvableKb(forgeRoot: string, id: string): void {
  *  transcript.ts:929-930) tolerates an absent plan file, returning
  *  `{plan: null, actions: [], openFindingCount: 0}`, so this fixture stays
  *  minimal: only what the kbId-on-the-wire pin below actually needs. */
-export function writeCleanupSessionWithResolvableKb(projectsRoot: string, project: string, sessionId: string, kbId: string): void {
-  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+export function writeCleanupSessionWithResolvableKb(logsRoot: string, project: string, sessionId: string, kbId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -358,8 +358,8 @@ export function writeCleanupSessionWithResolvableKb(projectsRoot: string, projec
  *  cleanup-plan branch always calls `computeAgentCleanupFindings` regardless
  *  of phase, so an unresolvable kb_id would 409 before the terminal-field
  *  assertion is ever reached. */
-export function writeCleanupSessionApplied(projectsRoot: string, project: string, sessionId: string, kbId: string): void {
-  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+export function writeCleanupSessionApplied(logsRoot: string, project: string, sessionId: string, kbId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'status.json'),
@@ -383,8 +383,8 @@ export function writeCleanupSessionApplied(projectsRoot: string, project: string
  *  table, not the LEGACY_SESSION_TERMINAL_PHASES table (which has no
  *  'onboarding' entry — see that function's doc comment on the gap this
  *  closes). */
-export function writeOnboardingCompleteSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+export function writeOnboardingCompleteSession(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_onboarding', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Onboard this project.\n', 'utf8');
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'complete' }), 'utf8');
@@ -393,15 +393,15 @@ export function writeOnboardingCompleteSession(projectsRoot: string, project: st
 /** LOW (reviewer finding on W6-B8) — the panel's OTHER terminal row
  *  ('failed', studio/session-kinds.yaml's onboarding panel), a sibling of
  *  writeOnboardingCompleteSession's 'complete' row above. */
-export function writeOnboardingFailedSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+export function writeOnboardingFailedSession(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_onboarding', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Onboard this project.\n', 'utf8');
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'failed' }), 'utf8');
 }
 
-export function writeArchitectSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_architect', sessionId);
+export function writeArchitectSession(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_architect', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'idea.md'), 'Build a fixture thing.\n', 'utf8');
   writeFileSync(join(dir, 'answers.json'), JSON.stringify([{ round: 1, answers: [{ question: 'Q?', answer: 'A.' }] }]), 'utf8');
@@ -440,8 +440,8 @@ export function realManifest(overrides: Partial<InitiativeManifest> = {}): Initi
 // serialized manifests" fixture the wire-level AT needs (a unit test that
 // constructs its own row object cannot observe a field dropped by the
 // route's serialization — standing rule from R2-09).
-export function writeArchitectSessionWithDeps(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_architect', sessionId);
+export function writeArchitectSessionWithDeps(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_architect', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'idea.md'), 'Build a deps fixture thing.\n', 'utf8');
   const manifestsDir = join(dir, 'manifests');
@@ -461,8 +461,8 @@ export function writeArchitectSessionWithDeps(projectsRoot: string, project: str
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-verdict' }), 'utf8');
 }
 
-export function writeInstructionsSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_instructions', sessionId);
+export function writeInstructionsSession(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_instructions', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Author AGENTS.md.\n', 'utf8');
   writeFileSync(join(dir, 'AGENTS.draft.md'), '# AGENTS.md\n\nDraft body.\n', 'utf8');
@@ -473,15 +473,15 @@ export function writeInstructionsSession(projectsRoot: string, project: string, 
 // key (the W6-B5 write side's own field name), so the read route's
 // `typeof statusParsed.modelTier === 'string' ? statusParsed.modelTier : null`
 // branch has a genuine non-null case to prove against.
-export function writeInstructionsSessionWithModelTier(projectsRoot: string, project: string, sessionId: string, modelTier: string): void {
-  const dir = join(projectsRoot, project, '_instructions', sessionId);
+export function writeInstructionsSessionWithModelTier(logsRoot: string, project: string, sessionId: string, modelTier: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_instructions', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Author AGENTS.md.\n', 'utf8');
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'drafting', modelTier }), 'utf8');
 }
 
-export function writeProjectBrainSession(projectsRoot: string, project: string, sessionId: string): void {
-  const dir = join(projectsRoot, project, '_project-brain', sessionId);
+export function writeProjectBrainSession(logsRoot: string, project: string, sessionId: string): void {
+  const dir = join(logsRoot, '_sessions', project, '_project-brain', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'prompt.md'), 'Seed the brain.\n', 'utf8');
   mkdirSync(join(dir, 'themes'), { recursive: true });

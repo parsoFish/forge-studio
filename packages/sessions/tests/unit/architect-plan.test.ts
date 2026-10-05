@@ -168,13 +168,14 @@ test('renderPlanDoc: no exploration/C27 fields in rendered output (ARCH-4 — de
 // 7. writePlanDoc — C12 location
 // ---------------------------------------------------------------------------
 
-test('writePlanDoc: writes to <projectRoot>/_architect/<session-id>/PLAN.md per C12', () => {
+test('writePlanDoc: writes to <logsRoot>/_sessions/<project>/_architect/<session-id>/PLAN.md per C12', () => {
   const dir = fxTempdir('w1');
-  const projectRoot = join(dir, 'project-x');
-  mkdirSync(projectRoot, { recursive: true });
+  const logsRoot = join(dir, '_logs');
+  mkdirSync(logsRoot, { recursive: true });
+  const home = { logsRoot, project: 'project-x' };
   const session = fxSession({ session_id: '2026-05-23T11-22-33', project: 'project-x' });
-  const path = writePlanDoc(session, projectRoot);
-  assert.equal(path, resolve(projectRoot, '_architect', '2026-05-23T11-22-33', 'PLAN.md'));
+  const path = writePlanDoc(session, home);
+  assert.equal(path, resolve(logsRoot, '_sessions', 'project-x', '_architect', '2026-05-23T11-22-33', 'PLAN.md'));
   assert.ok(existsSync(path), 'PLAN.md was written');
   const body = readFileSync(path, 'utf8');
   assert.match(body, /# Architect plan — 2026-05-23T11-22-33/);
@@ -204,10 +205,10 @@ test('renderPlanDoc: brain-context section lists every brain path + summary', ()
 
 test('writePlanDoc: the written PLAN.md preserves the manifest body verbatim', () => {
   const dir = fxTempdir('rt2');
-  const projectRoot = join(dir, 'proj');
-  mkdirSync(projectRoot, { recursive: true });
+  mkdirSync(join(dir, '_logs'), { recursive: true });
+  const home = { logsRoot: join(dir, '_logs'), project: 'proj' };
   const session = fxSession({ session_id: '2026-05-23T20-00-00' });
-  const planPath = writePlanDoc(session, projectRoot);
+  const planPath = writePlanDoc(session, home);
   const written = readFileSync(planPath, 'utf8');
   assert.match(written, /This is the manifest body\./);
 });
@@ -470,12 +471,12 @@ test('renderPlanHtml: HTML-escapes operator content so manifest body cannot brea
 
 test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md', () => {
   const dir = fxTempdir('w2');
-  const projectRoot = join(dir, 'project-y');
-  mkdirSync(projectRoot, { recursive: true });
+  const logsRoot = join(dir, '_logs');
+  mkdirSync(logsRoot, { recursive: true });
   const session = fxSession({ session_id: '2026-05-24T00-00-00', project: 'project-y' });
-  const planPath = writePlanDoc(session, projectRoot);
+  const planPath = writePlanDoc(session, { logsRoot, project: 'project-y' });
 
-  const sessionDir = resolve(projectRoot, '_architect', '2026-05-24T00-00-00');
+  const sessionDir = resolve(logsRoot, '_sessions', 'project-y', '_architect', '2026-05-24T00-00-00');
   assert.ok(existsSync(planPath), 'PLAN.md exists');
   assert.ok(existsSync(join(sessionDir, 'PLAN.html')), 'PLAN.html sibling exists');
 

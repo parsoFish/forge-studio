@@ -98,7 +98,8 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
     // load) so a kindDir drift in the real file surfaces as a containment
     // failure below rather than a silently-matching fixture path.
     const sessionId = '2026-08-11T00-00-00-r421p2';
-    const sessionDir = join(projectRoot, '_authoring', sessionId);
+    const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, '_authoring', sessionId);
+    mkdirSync(projectRoot, { recursive: true });
     mkdirSync(sessionDir, { recursive: true });
     // awaiting-review is the real authoring turnSpec's ONE noop-step phase
     // (ADR-043 §1) — SDK-free, mirroring this file's own established
@@ -189,7 +190,10 @@ function setupTurnspecFixtureWithProjectsDir(mode: ProjectsDirMode): TurnspecFix
   const projectArg = 'fixtureproj';
   const projectRoot = join(projectsDirAbs, projectArg);
   const sessionId = '2026-08-11T00-00-00-correctionb';
-  const sessionDir = join(projectRoot, KIND_DIR, sessionId);
+  // Session dirs live under the LOGS root (`<forgeRoot>/_logs/_sessions/…`),
+  // never inside the project, so a configured projects root does not move them.
+  const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, KIND_DIR, sessionId);
+  mkdirSync(projectRoot, { recursive: true });
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
 
@@ -201,11 +205,12 @@ test('R4-21 phase 2, correction B, AT-B1: cmdAgentRun resolves the projects root
   try {
     // Fixture preconditions — proven BEFORE reading any verdict, per this
     // file's own established idiom.
-    assert.ok(existsSync(fx.sessionDir), 'arrange: the session must exist under the CONFIGURED custom-projects/ dir');
+    assert.ok(existsSync(fx.sessionDir), 'arrange: the session must exist under the logs root');
+    assert.ok(existsSync(fx.projectRoot) && fx.projectRoot.includes('custom-projects'), 'arrange: the project must exist under the CONFIGURED custom-projects/ dir');
     assert.equal(
       existsSync(join(fx.forgeRoot, 'projects', fx.projectArg)),
       false,
-      'arrange: the session must NOT also exist under the default projects/ dir — a hardcoded resolve(\'projects\') coincidentally finding it would falsify this test',
+      'arrange: the project must NOT also exist under the default projects/ dir — a hardcoded resolve(\'projects\') coincidentally finding it would falsify this test',
     );
 
     const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', fx.projectArg], fx.forgeRoot));
@@ -233,11 +238,12 @@ test('R4-21 phase 2, correction B, AT-B2: cmdAgentRun resolves the projects root
   const prevEnv = process.env.FORGE_PROJECTS_DIR;
   process.env.FORGE_PROJECTS_DIR = externalProjectsDir;
   try {
-    assert.ok(existsSync(fx.sessionDir), 'arrange: the session must exist under the env-pointed external projects dir');
+    assert.ok(existsSync(fx.sessionDir), 'arrange: the session must exist under the logs root');
+    assert.ok(existsSync(fx.projectRoot) && fx.projectRoot.startsWith(externalProjectsDir), 'arrange: the project must exist under the env-pointed external projects dir');
     assert.equal(
       existsSync(join(fx.forgeRoot, 'projects', fx.projectArg)),
       false,
-      'arrange: the session must NOT also exist under the default projects/ dir',
+      'arrange: the project must NOT also exist under the default projects/ dir',
     );
 
     const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', fx.projectArg], fx.forgeRoot));
@@ -347,7 +353,8 @@ test('R4-22 F4, AT-a: cmdAgentRun(["authoring", sid, "--project", p]) writes its
     // hardcoded here (not re-derived from the descriptor we're about to
     // load), matching the established precedent set by the WI-1 test above.
     const sessionId = '2026-08-11T00-00-01-r422f4ata';
-    const sessionDir = join(projectRoot, '_authoring', sessionId);
+    const sessionDir = join(forgeRoot, '_logs', '_sessions', projectArg, '_authoring', sessionId);
+    mkdirSync(projectRoot, { recursive: true });
     mkdirSync(sessionDir, { recursive: true });
     // awaiting-review is the real authoring turnSpec's ONE noop-step phase
     // (ADR-043 §1) — SDK-free, mirroring the WI-1 test's own established

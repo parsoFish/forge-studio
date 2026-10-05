@@ -78,7 +78,7 @@
   "result": {
     "phase": "awaiting-answers",
     "wrote": [
-      "<TMP>/projects/project/_architect/2026-01-01T00-00-00/questions.json"
+      "<TMP>/_logs/_sessions/testproj/_architect/2026-01-01T00-00-00/questions.json"
     ],
     "questions": [
       {

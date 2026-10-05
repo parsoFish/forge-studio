@@ -17,8 +17,9 @@
  * unguarded read path that a symlinked status.json could leak through.
  */
 import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, MAX_SKILL_ID_LENGTH, resolveGuardedPath } from '@forge/kernel';
+import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, MAX_SKILL_ID_LENGTH, SESSIONS_DIRNAME, resolveSessionDir } from '@forge/kernel';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE } from './session-phases.ts';
@@ -136,15 +137,15 @@ export function invalidProjectReason(id: string): string | null {
 // Session-dir resolution — delegates to `resolveGuardedPath`
 // (packages/kernel/path-guard.ts), the repo's one shared per-segment IDENTITY
 // containment guard, scoped to the specific <project>/_<kind>/ parent (NOT
-// the whole projectsRoot tree — see header note on why that broader check
+// the whole sessions tree — see header note on why that broader check
 // would miss the AT-47 escape shape).
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves `<projectsRoot>/<project>/<kindDirName>/<sessionId>` with genuine
+ * Resolves `<logsRoot>/_sessions/<project>/<kindDirName>/<sessionId>` with genuine
  * per-segment IDENTITY containment (R6-06 round 6 — replaces a HAND-ROLLED
  * check that had its own root-folding defect: it called
- * `realpathSync(join(projectsRoot, project, kindDirName))` FIRST and used
+ * `realpathSync(join(root, project, kindDirName))` FIRST and used
  * THAT as its comparison baseline, so when `kindDirName` (the `_<kind>` dir)
  * itself was a symlink, the baseline was already the escaped location and
  * the "containment" check was tautological — proven by direct execution
@@ -155,15 +156,15 @@ export function invalidProjectReason(id: string): string | null {
  * `_<kind>` dir (this function's own prior defect) exactly as it catches a
  * symlinked `sessionId` (AT-47, always caught, even by the old code).
  *
- * `projectsRoot` is a fixed, config-derived constant — the caller's own
+ * `logsRoot` is a fixed, config-derived constant — the caller's own
  * `root` in `resolveGuardedPath`'s trust contract — never request-derived.
  *
  * A missing dir and an escaping symlink both return `null` — collapsed into
  * the same "not found" outcome, so an attacker can never distinguish "wrong
  * id" from "blocked escape" from the response.
  */
-function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirName: string, sessionId: string): string | null {
-  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId]);
+function resolveSafeSessionDir(logsRoot: string, project: string, kindDirName: string, sessionId: string): string | null {
+  const guarded = resolveSessionDir(logsRoot, project, kindDirName, sessionId);
   if (!guarded.ok || !guarded.exists) return null;
   return guarded.realPath;
 }
@@ -172,7 +173,7 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
  * W7-A2 (community-06, knowledge-18, sessions-kinds-20) — resolve the anchor
  * project of `<kindDirName>/<sessionId>` when the caller did not supply one
  * (a deep link with no `?project=`, or a cancel POST with no body.project).
- * Enumerates the REAL on-disk project names under the trusted `projectsRoot`
+ * Enumerates the REAL on-disk project names under the trusted `<logsRoot>/_sessions`
  * (server-enumerated — never a client string; dot-anchors such as
  * `.kb-<id>` / `.community-registry` are real session homes and are
  * INCLUDED), skips any name `invalidProjectReason` would refuse (so an
@@ -185,24 +186,24 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
  * oracle beyond what the aggregate index already lists).
  */
 export function findSessionProject(
-  projectsRoot: string,
+  logsRoot: string,
   kindDirName: string,
   sessionId: string,
 ): { ok: true; project: string } | { ok: false; reason: 'not-found' | 'ambiguous' } {
-  // `projectsRoot` is the config-derived trusted root (never request data);
+  // `logsRoot` is the config-derived trusted root (never request data);
   // enumerating it raw mirrors `collectStudioSessionIndexRows`
   // (apps/forge/ui-bridge.ts) exactly — the per-candidate check below is what is
   // guarded, and every candidate name is server-enumerated.
   let names: string[];
   try {
-    names = readdirSync(projectsRoot);
+    names = readdirSync(join(logsRoot, SESSIONS_DIRNAME));
   } catch {
     names = [];
   }
   const hits: string[] = [];
   for (const name of names) {
     if (invalidProjectReason(name) !== null) continue;
-    const guarded = resolveGuardedPath(projectsRoot, [name, kindDirName, sessionId]);
+    const guarded = resolveSessionDir(logsRoot, name, kindDirName, sessionId);
     if (guarded.ok && guarded.exists) hits.push(name);
   }
   if (hits.length === 1) return { ok: true, project: hits[0] };
@@ -221,7 +222,7 @@ export function findSessionProject(
  * Two on-disk homes, in priority order:
  *
  *   - `source: 'status'` — the session's own working dir,
- *     `<projectsRoot>/<project>/_<kind>/<sessionId>/`, with a readable
+ *     `<logsRoot>/_sessions/<project>/_<kind>/<sessionId>/`, with a readable
  *     `status.json` carrying a string `phase`. The full, live shape: transcript,
  *     artifact, affordances, everything. Unchanged from before W8-F6.
  *   - `source: 'legacy'` — only the runner's central log dir,
@@ -256,7 +257,6 @@ export type ReadableSession =
  * bit-for-bit what the route did before.
  */
 export function resolveReadableSession(args: {
-  projectsRoot: string;
   logsRoot: string;
   kind: string;
   sessionId: string;
@@ -265,7 +265,7 @@ export function resolveReadableSession(args: {
    *  "resolve it server-side". */
   project?: string | null;
 }): ReadableSession {
-  const { projectsRoot, logsRoot, kind, sessionId } = args;
+  const { logsRoot, kind, sessionId } = args;
   const kindDirName = `_${kind}`;
 
   let project: string | null = args.project ?? null;
@@ -278,7 +278,7 @@ export function resolveReadableSession(args: {
   // byte-identical 200s), but silent identity spoofing all the same.
   let projectConfirmed = false;
   if (project === null) {
-    const found = findSessionProject(projectsRoot, kindDirName, sessionId);
+    const found = findSessionProject(logsRoot, kindDirName, sessionId);
     if (found.ok) {
       project = found.project;
     } else if (found.reason === 'ambiguous') {
@@ -294,7 +294,7 @@ export function resolveReadableSession(args: {
   let statusFailure: 'status-missing' | 'status-no-phase' | null = null;
 
   if (project !== null) {
-    const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
+    const sessionDir = resolveSafeSessionDir(logsRoot, project, kindDirName, sessionId);
     if (sessionDir !== null) {
       // A real `_<kind>/<sessionId>` dir exists under this project — whether or
       // not it holds a usable status.json. THAT is what confirms ownership.
@@ -360,7 +360,6 @@ export function resolveReadableSession(args: {
  *  bridge can actually serve. Same resolution, same guards — never a second,
  *  cheaper "does the dir exist" probe that could disagree with the route. */
 export function sessionIsReadable(args: {
-  projectsRoot: string;
   logsRoot: string;
   kind: string;
   sessionId: string;

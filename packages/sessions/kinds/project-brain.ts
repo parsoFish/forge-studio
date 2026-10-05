@@ -23,6 +23,7 @@
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { sessionDirSegments } from '@forge/kernel';
 
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // architect-session.ts's own module doc — `kinds/registry.ts` needs
@@ -92,8 +93,9 @@ export type RunProjectBrainTurnResult = {
   themes?: string[];
 };
 
-export function projectBrainSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, PROJECT_BRAIN_KIND_DIR, sessionId);
+/** The session dir: `<logsRoot>/_sessions/<project>/_project-brain/<sessionId>`. */
+export function projectBrainSessionDir(logsRoot: string, project: string, sessionId: string): string {
+  return join(logsRoot, ...sessionDirSegments(project, PROJECT_BRAIN_KIND_DIR, sessionId));
 }
 
 function stagingThemesDir(sessionDir: string): string {
@@ -141,7 +143,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
         label: `project-brain-${input.sessionId}`,
       });
 
-      const themes = listStagedThemes(input.projectRoot, input.sessionId);
+      const themes = listStagedThemes(plumbing.logsRoot, input.project, input.sessionId);
       if (themes.length === 0) {
         throw new Error(
           'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
@@ -156,7 +158,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
       // The brain half is `@forge/knowledge`'s; the phase transition is this
       // kind's, because it is the half that may touch the session's status.
       const committed = commitProjectBrain({
-        projectRoot: input.projectRoot,
+        logsRoot: plumbing.logsRoot,
         sessionId: input.sessionId,
         forgeRoot: plumbing.forgeRoot,
         status,

@@ -25,7 +25,7 @@ function setup(
   const forgeRoot = mkdtempSync(join(tmpdir(), 'pbrain-'));
   const projectRoot = join(forgeRoot, 'projects', 'demoproj');
   const sessionId = '2026-06-27T10-00-00';
-  const sessionDir = projectBrainSessionDir(projectRoot, sessionId);
+  const sessionDir = projectBrainSessionDir(join(forgeRoot, '_logs'), 'demoproj', sessionId);
   mkdirSync(sessionDir, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
   writeFileSync(join(projectRoot, 'README.md'), '# demoproj\n');
@@ -57,6 +57,7 @@ test('analyzing → awaiting-review when the agent stages themes', async () => {
     const staging = join(sessionDir, 'themes');
     const r = await runProjectBrainTurn({
       sessionId,
+      project: 'demoproj',
       projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -88,9 +89,10 @@ test('status.modelTier equal to the fixed tier ("sonnet") is honored — reaches
   const { forgeRoot, sessionId, projectRoot } = setup('analyzing', { modelTier: 'sonnet' });
   let capturedModel: string | undefined;
   try {
-    const staging = projectBrainSessionDir(projectRoot, sessionId);
+    const staging = projectBrainSessionDir(join(forgeRoot, '_logs'), 'demoproj', sessionId);
     await runProjectBrainTurn({
       sessionId,
+      project: 'demoproj',
       projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -115,9 +117,10 @@ test('status.modelTier absent resolves to the unchanged default (sonnet) — byt
   const { forgeRoot, sessionId, projectRoot } = setup('analyzing');
   let capturedModel: string | undefined;
   try {
-    const staging = projectBrainSessionDir(projectRoot, sessionId);
+    const staging = projectBrainSessionDir(join(forgeRoot, '_logs'), 'demoproj', sessionId);
     await runProjectBrainTurn({
       sessionId,
+      project: 'demoproj',
       projectRoot,
       forgeRoot,
       logsRoot: join(forgeRoot, '_logs'),
@@ -143,7 +146,7 @@ test('status.modelTier mismatching the fixed tier throws naming the value and th
   try {
     await assert.rejects(
       () => runProjectBrainTurn({
-        sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn: makeQueryFn(),
+        sessionId, project: 'demoproj', projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn: makeQueryFn(),
       }),
       /requested model tier "opus".*allowed tier\(s\): sonnet/,
     );
@@ -180,7 +183,7 @@ test('W6-B1: analyzing turn forwards thinking + coalesced redacted_thinking to t
       return gen();
     };
 
-    await runProjectBrainTurn({ sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn });
+    await runProjectBrainTurn({ sessionId, project: 'demoproj', projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn });
 
     const events = readFileSync(join(forgeRoot, '_logs', `_project-brain-${sessionId}`, 'events.jsonl'), 'utf8')
       .trim()
@@ -203,7 +206,7 @@ test('analyzing with no staged themes → throws (retry)', async () => {
   const { forgeRoot, sessionId, projectRoot } = setup('analyzing');
   try {
     await assert.rejects(
-      () => runProjectBrainTurn({ sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn: makeQueryFn() }),
+      () => runProjectBrainTurn({ sessionId, project: 'demoproj', projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn: makeQueryFn() }),
       /produced no theme files/,
     );
   } finally {
@@ -219,7 +222,7 @@ test('committing copies staged themes into the central project brain + kb.yaml',
     writeFileSync(join(staging, 'structure.md'), '---\nname: structure\n---\n# Structure\n');
     writeFileSync(join(staging, 'profile.md'), '# demoproj profile\n');
 
-    const r = await runProjectBrainTurn({ sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs') });
+    const r = await runProjectBrainTurn({ sessionId, project: 'demoproj', projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs') });
     assert.equal(r.phase, 'committed');
     assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', 'demoproj', 'themes', 'structure.md')), 'theme committed to central brain');
     assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', 'demoproj', 'profile.md')), 'profile committed');
@@ -277,7 +280,7 @@ test('RED (R1-06 WI-2 group B): committing a KB-scoped hand-off session honors i
       }),
     );
 
-    const r = await runProjectBrainTurn({ sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs') });
+    const r = await runProjectBrainTurn({ sessionId, project: 'demoproj', projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs') });
     assert.equal(r.phase, 'committed');
 
     const kbYamlPath = join(forgeRoot, 'brain', 'review-insights', 'kb.yaml');
@@ -310,6 +313,7 @@ test("W7-C3 review (A-M9): every event row carries phase 'project-brain' — nev
     const logsRoot = join(forgeRoot, '_logs');
     await runProjectBrainTurn({
       sessionId,
+      project: 'demoproj',
       projectRoot,
       forgeRoot,
       logsRoot,

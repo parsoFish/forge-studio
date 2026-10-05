@@ -67,7 +67,7 @@ async function architectTurn(opts: {
   else process.env[BRIDGE_COST_CEILING_ENV] = opts.env;
   try {
     const projectRoot = join(root, 'projects', 'project');
-    const sessionDir = join(projectRoot, '_architect', SESSION_ID);
+    const sessionDir = join(root, '_logs', '_sessions', 'testproj', '_architect', SESSION_ID);
     mkdirSync(sessionDir, { recursive: true });
     const skillPromptPath = join(root, 'skill.md');
     writeFileSync(skillPromptPath, ARCHITECT_SKILL_FIXTURE);
@@ -93,7 +93,7 @@ async function architectTurn(opts: {
     };
     let error: unknown = null;
     try {
-      await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, queryFn, logsRoot, logger, skillPromptPath, brainCwd: root });
+      await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, project: 'testproj', queryFn, logsRoot, logger, skillPromptPath, brainCwd: root });
     } catch (err) {
       error = err;
     }

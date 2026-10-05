@@ -325,7 +325,7 @@ function seedSuppressedMaterialsOnlyRun(runId: string, agentSlug: string): void 
 function seedArchitectSession(project: string, sessionId: string, phase: string, costUsd: number | null): void {
   const projectDir = join(forgeRoot, 'projects', project);
   mkdirSync(projectDir, { recursive: true });
-  const sessDir = join(projectDir, '_architect', sessionId);
+  const sessDir = join(forgeRoot, '_logs', '_sessions', project, '_architect', sessionId);
   mkdirSync(sessDir, { recursive: true });
   writeFileSync(join(sessDir, 'status.json'), JSON.stringify({
     phase, session_id: sessionId, project, project_repo_path: projectDir,
