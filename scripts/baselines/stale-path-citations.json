@@ -1604,24 +1604,6 @@
   {
     "file": "docs/roadmaps/1.0.md",
     "kind": "path",
-    "cited": "docs/operator-journey.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0.md",
-    "kind": "path",
-    "cited": "docs/phases/developer-loop.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0.md",
-    "kind": "path",
-    "cited": "docs/phases/review-loop.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0.md",
-    "kind": "path",
     "cited": "orchestrator/phases/demo-agent.ts",
     "count": 1
   },
