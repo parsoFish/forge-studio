@@ -250,7 +250,7 @@ export type ContractBuildoutView =
   | { kind: 'contract-buildout'; mode: 'detail'; row: ContractStageRow | null };
 
 /**
- * Stage-aware, mirroring the mockup (recorded in docs/reference/studio-copy.md)
+ * Stage-aware, mirroring the mockup
  * exactly: the `contract` stage renders the
  * CHECKLIST of all five stage rows (the "which components are present"
  * overview, `:139-157`); every other stage renders THAT stage's own row

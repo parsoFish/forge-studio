@@ -24,7 +24,7 @@
  *    reversed-input case pins order-independence);
  *  - an UNBOUNDED walk that hangs on a dependency cycle or blows the column
  *    count on a pathological deep chain (the cap-guard: cap at 12, mirroring
- *    the mockup cap — see docs/reference/studio-copy.md).
+ *    the mockup cap).
  *
  * RED AT BASE: apps/studio/lib/roadmap-dag-layout.ts does NOT exist on this branch
  * yet — the `byDepth`/`columnFor` import below fails to resolve, so the whole

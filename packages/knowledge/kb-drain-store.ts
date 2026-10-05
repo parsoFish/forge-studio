@@ -43,9 +43,8 @@ import {
  *  .toString(36)}` `` (kbId already `KB_ID_RE`-gated at that same route
  *  strictly before this is ever called), or read back via `isSafeRunId` +
  *  an explicit `${kbId}-drain-` PREFIX check at the two GET routes below
- *  (never trusted on charset alone). Documented in
- *  docs/reference/request-path-sinks.md's "Extended in W6-B12" section;
- *  allowlisted in scripts/check-raw-fs-guarded.mjs. */
+ *  (never trusted on charset alone). Classified in
+ *  scripts/request-path-sinks.classes.json; allowlisted in scripts/check-raw-fs-guarded.mjs. */
 export function kbDrainLogDir(forgeRoot: string, runId: string): string {
   return join(forgeRoot, '_logs', `_kb-drain-${runId}`);
 }
