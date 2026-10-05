@@ -129,7 +129,7 @@ test('594(2): an untracked artifact is not resurrected, and nothing outside the 
  *
  * A scheduler left running is not cosmetic: `forge studio` ADOPTS a pid that
  * is already alive rather than spawning fresh
- * (`apps/forge/serve-supervisor.ts`, ADR 011), so the next run inherits this
+ * (`apps/forge/serve-supervisor.ts`), so the next run inherits this
  * one's queue state and env wholesale — `scheduler-preflight.mjs`'s own
  * refusal exists for exactly that reason, on the costed side.
  */

@@ -309,7 +309,7 @@ export default {
       //
       // NOTHING IS ENQUEUED HERE. Approving the plan (beat 5) is what writes
       // the initiative into `_queue/pending/`. `forge studio` starts and
-      // supervises `forge serve` from boot (ADR 011) and claims every
+      // supervises `forge serve` from boot (D-12) and claims every
       // eligible manifest in `_queue/pending/` as capacity allows, so by the
       // time the operator presses anything on this page the initiative is
       // already claimable — there is no separate control left to throw.
@@ -353,7 +353,7 @@ export default {
       // cycle that spent $3.99 and finished 116 s after the beat gave up
       // (§15.559). It is derived from the story's own funding now, not chosen.
       act: 'Watch the factory plan and build the initiative',
-      // NO PRESS. `forge studio` supervises `forge serve` from boot (ADR 011)
+      // NO PRESS. `forge studio` supervises `forge serve` from boot (D-12)
       // and claims every eligible manifest in `_queue/pending/` as capacity
       // allows — the finalize turn beat 5's approve started is what writes
       // this initiative's manifest there, so the claim follows that commit on

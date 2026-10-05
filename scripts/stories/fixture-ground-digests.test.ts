@@ -27,9 +27,9 @@ const GROUNDS = join(REPO, 'tests', 'stories', 'grounds');
 /** ground → { digest (method-C, first 16 hex), files } — the committed pin. */
 const PINNED: Record<string, { digest: string; files: number }> = {
   'node-library': { digest: '0aa6db84cd6a661b', files: 19 },
-  'node-cli-with-tests': { digest: 'b8bcac348a5aba3a', files: 100 },
-  'go-provider-old-contract': { digest: '811099b8c4e05f80', files: 127 },
-  'node-returning-no-contract': { digest: '836208005cd5ee08', files: 6 },
+  'node-cli-with-tests': { digest: '24aaa8843b6709cb', files: 100 },
+  'go-provider-old-contract': { digest: '8922068da3702105', files: 127 },
+  'node-returning-no-contract': { digest: '22ccb2f298e13344', files: 6 },
   'python-unonboarded': { digest: 'adebdb6399d7453d', files: 139 },
 };
 

@@ -1,6 +1,6 @@
 # Add --csv flag to all gitpulse analytics commands (RFC-4180 output)
 
-> _Derived from `demo.json` (ADR 021). Essence:_ All gitpulse analytics commands now support a --csv flag that emits RFC-4180 compliant CSV directly to stdout. Users can pipe output into spreadsheets or data pipelines without a JSON-to-CSV conversion step. --csv and --json are mutually exclusive with a clear error on conflict. Implemented via: csvEscape helper + 7 CSV renderers (src/format.ts), CLI wiring with mutual-exclusion guard (src/cli.ts), unit tests for all renderers and CLI behaviour, and acceptance fixture assertions against the deterministic temp-repo.
+> _Derived from `demo.json` (D-07). Essence:_ All gitpulse analytics commands now support a --csv flag that emits RFC-4180 compliant CSV directly to stdout. Users can pipe output into spreadsheets or data pipelines without a JSON-to-CSV conversion step. --csv and --json are mutually exclusive with a clear error on conflict. Implemented via: csvEscape helper + 7 CSV renderers (src/format.ts), CLI wiring with mutual-exclusion guard (src/cli.ts), unit tests for all renderers and CLI behaviour, and acceptance fixture assertions against the deterministic temp-repo.
 
 ## Intent & Outcome
 

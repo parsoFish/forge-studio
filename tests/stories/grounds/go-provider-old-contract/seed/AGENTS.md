@@ -88,7 +88,7 @@ backstop for killed runs.
 - Conventional commits: `feat(scope): …`, `fix(scope): …`, `refactor(scope): …`.
 - Commit your work; leave git history intact — **no resets**.
 - Each cycle's demo is committed under `forge/history/<initiative-id>/demo/` (forge writes the
-  in-PR demo there). The plan + verdict are forge-owned and central (ADR 035) — not in this repo.
+  in-PR demo there). The plan + verdict are forge-owned and central (SPEC §4) — not in this repo.
 
 ### Release process
 In-cycle: `make docs` (regenerate `docs/`; then `git checkout -- docs/guides/`
@@ -140,7 +140,7 @@ CHANGELOG.md                 Draft under ## Unreleased in-cycle; promoted by pos
 
 ## Where domain knowledge lives
 
-- The project **brain** (profile + decision themes) is forge-owned and central (ADR 035), at
+- The project **brain** (profile + decision themes) is forge-owned and central (SPEC §4), at
   `brain/projects/terraform-provider-betterado/` in the forge repo. Planners encode its knowledge
   into work items — dev-loop/reviewer agents work from the WIs, not from the brain directly.
 - `docs/` — per-resource gap matrices vs the ADO REST schema.

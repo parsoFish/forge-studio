@@ -86,7 +86,7 @@ export const CEILING = String(GROUND.budget_usd);
  * cycle that spent $3.99 — and that cycle reached `ready-for-review` with 0
  * errors recorded 116 seconds AFTER this beat gave up with `expected
  * "ready-for-review", got "in-flight"`. The product succeeded. The deadline did
- * not. Third distinct beat-8 blocker in three runs, after the ADR 037
+ * not. Third distinct beat-8 blocker in three runs, after the
  * quarantine and the unwired wait anchor — and the only one of the three that
  * was never a product defect at all.
  *

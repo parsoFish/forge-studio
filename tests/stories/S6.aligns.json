@@ -8,7 +8,7 @@
     {
       "path": "SPEC.md",
       "digest": "822f1517c85a4344",
-      "why": "SPEC §4: Beat3: flow-bound KB with band scoping (integrate-band/review-band) is the KB-scope structure this ADR defines"
+      "why": "SPEC §4: Beat3: flow-bound KB with band scoping (integrate-band/review-band) is the KB-scope structure this decision defines"
     },
     {
       "path": "SPEC.md",

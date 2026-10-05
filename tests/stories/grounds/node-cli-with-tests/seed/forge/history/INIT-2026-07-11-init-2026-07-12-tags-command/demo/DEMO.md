@@ -1,6 +1,6 @@
 # gitpulse tags — release-cadence analytics subcommand
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Adds `gitpulse tags` subcommand that reads git tags and emits a release-cadence table (commits since prev tag, unique authors, days since prev tag, median inter-tag gap). Supports --json, --csv, --since/--until, --exclude. Zero-tag repos print 'no tags found'. Backward-compatible with the existing `gitpulse <path>` call site.
+> _Derived from `demo.json` (D-07). Essence:_ Adds `gitpulse tags` subcommand that reads git tags and emits a release-cadence table (commits since prev tag, unique authors, days since prev tag, median inter-tag gap). Supports --json, --csv, --since/--until, --exclude. Zero-tag repos print 'no tags found'. Backward-compatible with the existing `gitpulse <path>` call site.
 
 ## Intent & Outcome
 

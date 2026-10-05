@@ -1,6 +1,6 @@
 # Add --no-merges flag: parse parentCount in git.ts and filter merge commits in the CLI
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Prior to this initiative, gitpulse hard-coded `--no-merges` in `LOG_ARGS`, silently excluding every merge commit from all analytics. Now merge commits are included by default (each `Commit` carries a `parentCount` field parsed from `%P`), and callers opt in to filtering via the new `--no-merges` CLI flag, which removes commits with `parentCount > 1`, annotates the text header with `(N merge commits excluded)`, and adds `mergesExcluded` to JSON output.
+> _Derived from `demo.json` (D-07). Essence:_ Prior to this initiative, gitpulse hard-coded `--no-merges` in `LOG_ARGS`, silently excluding every merge commit from all analytics. Now merge commits are included by default (each `Commit` carries a `parentCount` field parsed from `%P`), and callers opt in to filtering via the new `--no-merges` CLI flag, which removes commits with `parentCount > 1`, annotates the text header with `(N merge commits excluded)`, and adds `mergesExcluded` to JSON output.
 
 ## Summary
 

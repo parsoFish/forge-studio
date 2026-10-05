@@ -1,7 +1,7 @@
 # gitpulse — project brain (Brain 3 profile)
 
 > The project's knowledge base, read by planners and reflectors through the
-> `KbBackend` seam. Forge-owned + CENTRAL (ADR-035) at `brain/projects/gitpulse/`
+> `KbBackend` seam. Forge-owned + CENTRAL (SPEC §4) at `brain/projects/gitpulse/`
 > — NOT in the managed project's repo.
 
 ## What this project is

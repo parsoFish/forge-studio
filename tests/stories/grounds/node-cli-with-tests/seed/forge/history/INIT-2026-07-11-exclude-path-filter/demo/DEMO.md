@@ -1,6 +1,6 @@
 # Add --exclude glob filter flag to gitpulse CLI
 
-> _Derived from `demo.json` (ADR 021). Essence:_ A repeatable --exclude <glob> flag lets users suppress vendored/generated/lockfile paths from analytics output. Filtered paths are excluded before aggregation so churn, hotspot, ownership, and author totals all reflect only real source files. Filter count appears in the text header as '(N paths excluded)' and in JSON output as 'excluded: N'.
+> _Derived from `demo.json` (D-07). Essence:_ A repeatable --exclude <glob> flag lets users suppress vendored/generated/lockfile paths from analytics output. Filtered paths are excluded before aggregation so churn, hotspot, ownership, and author totals all reflect only real source files. Filter count appears in the text header as '(N paths excluded)' and in JSON output as 'excluded: N'.
 
 ## Intent & Outcome
 

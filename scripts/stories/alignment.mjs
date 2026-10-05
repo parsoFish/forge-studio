@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * alignment.mjs — forge-1rk5.2 (plan D7), redesigned under T1 ruling 1593:
- * does a story's claim on an ADR or brain theme still match what's on disk.
+ * does a story's claim on a brain theme still match what's on disk.
  *
  * THE SIDECAR, AND WHY. `aligns` first lived as a top-level key inside the
  * story file itself, but `artifact-staleness.mjs` hashes a story file's raw
@@ -14,7 +14,7 @@
  * path, one place this is validated.
  *
  * A sidecar is one of two shapes:
- *   { "aligns": [ { path, digest, why }, … ] }   — cites ADRs/themes
+ *   { "aligns": [ { path, digest, why }, … ] }   — cites themes
  *   { "aligns": "none", "reason": "<one line>" } — deliberately cites none
  *
  * ABSENT IS NEVER "UNALIGNED". A story with no sidecar at all is refused by
@@ -26,7 +26,7 @@
  *                                                        sidecar, 0 with a
  *                                                        summary otherwise
  *   node scripts/stories/alignment.mjs --intake <sha>   report-only: names
- *                                                        any ADR/theme added
+ *                                                        any theme added
  *                                                        since <sha> that no
  *                                                        sidecar cites yet,
  *                                                        plus the tracked
@@ -48,9 +48,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STORY_DIR_SEGMENTS = ['tests', 'stories'];
 const OUT_OF_SCOPE_README = join(...STORY_DIR_SEGMENTS, 'grounds', 'README.md');
 
-/** Repo-relative paths `--intake` scans: an ADR or a brain theme, top-level
- *  only (a nested dir under either would be a different kind of doc). */
-const INTAKE_RE = /^(docs\/decisions\/[^/]+\.md|brain\/forge-dev\/themes\/[^/]+\.md)$/;
+/** Repo-relative paths `--intake` scans: a brain theme, top-level only (a
+ *  nested dir under it would be a different kind of doc). */
+const INTAKE_RE = /^brain\/forge-dev\/themes\/[^/]+\.md$/;
 
 /** `aligns[].digest` — the first 16 hex chars of the cited file's sha256.
  *  Fixed length and case so a pinned digest is unambiguous to compare, never
@@ -239,8 +239,8 @@ export function checkAlignment(repoRoot) {
 /**
  * Every LIST-BULLET line (`- ` or `* `, after trim) under `heading` in
  * `text`, as `{ paths, text }` — `paths` is every backtick-quoted repo-
- * relative path on that line (a line may name more than one, e.g. an ADR
- * paired with the theme it derives), `text` the line itself, bullet marker
+ * relative path on that line (a line may name more than one, e.g. a theme
+ * paired with the doc it derives from), `text` the line itself, bullet marker
  * stripped, for display. Ends at the next `## ` heading or EOF. An absent
  * heading returns `[]`, never a throw: a fresh repo has not written the
  * section yet, which is "nothing here", not an error.
@@ -275,7 +275,7 @@ function readmeSections(repoRoot) {
 }
 
 /**
- * `--intake <sinceSha>` — report only, never a gate. Names every ADR or
+ * `--intake <sinceSha>` — report only, never a gate. Names every
  * brain theme `git diff --diff-filter=A` shows added between `sinceSha` and
  * HEAD that no sidecar cites and the README's out-of-scope list does not
  * name, plus the tracked authoring targets (the README's

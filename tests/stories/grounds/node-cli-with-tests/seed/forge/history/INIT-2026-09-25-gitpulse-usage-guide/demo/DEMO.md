@@ -1,6 +1,6 @@
 # Add docs/usage.md: comprehensive CLI flag reference with worked examples
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Add docs/usage.md: comprehensive CLI flag reference with worked examples — 2 work items delivered against 11 acceptance criteria, 1 merge-boundary gate run.
+> _Derived from `demo.json` (D-07). Essence:_ Add docs/usage.md: comprehensive CLI flag reference with worked examples — 2 work items delivered against 11 acceptance criteria, 1 merge-boundary gate run.
 
 ## Summary
 

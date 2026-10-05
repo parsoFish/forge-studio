@@ -1,6 +1,6 @@
 # Add --include glob filter flag to restrict analytics to specific file paths
 
-> _Derived from `demo.json` (ADR 021). Essence:_ Prior to this change, gitpulse had no way to focus analytics on a subset of file paths — all files in a repo's commit history were always counted. This initiative adds `--include <pattern>` (repeatable, OR-semantics) across all four CLI code paths (single-snapshot, --compare, tags, coupling): only files matching at least one pattern survive into aggregation, commits whose every file is dropped are removed from commit counts, and filter metadata is surfaced in all three output formats (text header annotation, JSON `includeFiltered` field, CSV comment line).
+> _Derived from `demo.json` (D-07). Essence:_ Prior to this change, gitpulse had no way to focus analytics on a subset of file paths — all files in a repo's commit history were always counted. This initiative adds `--include <pattern>` (repeatable, OR-semantics) across all four CLI code paths (single-snapshot, --compare, tags, coupling): only files matching at least one pattern survive into aggregation, commits whose every file is dropped are removed from commit counts, and filter metadata is surfaced in all three output formats (text header annotation, JSON `includeFiltered` field, CSV comment line).
 
 ## Summary
 

@@ -453,3 +453,5 @@ from what the story always declared — this session confirmed it rather than we
 
 **Stories served.** S3 (`tests/stories/S3.story.mjs`), all 12 beats re-pointed and file-scoped clean; no
 open caveats remain.
+
+- **Deviation (docs refactor W3):** de-referenced decision-record citations: the old citation → `(SPEC §4)` in `seed/.gitignore` and `seed/AGENTS.md`. Method-C digest of `seed/` is now **`8922068da3702105`** (127 files; was `811099b8c4e05f80`).

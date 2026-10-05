@@ -712,7 +712,7 @@ export function describeFence(fence, expectedStarters = []) {
     // sometimes hides a write stops reading the line an escape appears on.
     ...defer.map((p) =>
       `[stories] fence: HELD ${p} — EXPECTED: the story's own onboarding creates the ground's ` +
-      'Brain 3 sub-wiki (ADR 035) and preflight clause C4 requires it; kept until the verdict ' +
+      'Brain 3 sub-wiki (SPEC §4) and preflight clause C4 requires it; kept until the verdict ' +
       'is recorded, then removed by the trailing sweep',
     ),
     // Ruling 309(b) — a tree this run does not own. Never removed from here.

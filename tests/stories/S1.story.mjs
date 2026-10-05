@@ -203,7 +203,7 @@ export default {
       // happens inside the press, so `onboard-run-status` still reads `running`
       // and this beat's shape is unchanged. `POST /api/studio/onboarding/start`
       // no longer dispatches at all — the bespoke form became a CLIENT of the
-      // affordance, which is ADR 043's own direction.
+      // affordance, which is SPEC §5's own direction.
       //
       // TWO ADDITIONS, and each is a claim the product could previously not
       // have kept. `constraints` is the instruction beat 6's re-authoring had

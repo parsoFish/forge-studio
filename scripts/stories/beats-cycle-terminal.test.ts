@@ -13,7 +13,7 @@
  * quarter less than the work it was waiting on. 360000 was a literal chosen
  * when no S10 run had ever completed a cycle, so it was derived from nothing —
  * §15.559's reason, and the third distinct beat-8 blocker in three runs after
- * the ADR 037 quarantine and the unwired wait anchor.
+ * the quarantine and the unwired wait anchor.
  *
  * WHY THE EXISTING DOOR COULD NOT CATCH IT. `makeAgentChannelDoor` reads the
  * same terminal state, and correctly did not fire here: it asks only after
