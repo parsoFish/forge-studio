@@ -23,4 +23,4 @@ byte-identical, and 115 `legacy-to-package` rows closed because a legacy tree
 importing a package is debt while an assembly importing a package is the design.
 
 See [ARCHITECTURE.md](../../ARCHITECTURE.md) · the committed CLI reference at
-[docs/reference/cli.md](../../docs/reference/cli.md).
+[apps/docs/src/content/docs/reference/cli.md](../../apps/docs/src/content/docs/reference/cli.md).

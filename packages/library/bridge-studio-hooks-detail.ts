@@ -223,8 +223,8 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
       const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
       // forge-8vfn.5.16 (M7-C U2) — last-fire facts, BOUNDED via
-      // @forge/kernel's guarded-scan.ts (rationale: docs/reference/
-      // request-path-sinks.md's "M7-C U2" section). recentFireCount, not
+      // @forge/kernel's guarded-scan.ts (bounded scan so a
+      // huge fire log cannot stall the route). recentFireCount, not
       // fireCount: honestly a window count.
       const fireSummary = scanHookFireSummary(
         id,

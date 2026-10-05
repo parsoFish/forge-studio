@@ -188,7 +188,7 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
 // its kickoff row -> the launcher); this collapses that to one hop straight
 // from the parts bin (story S7's "fourth kind of part"). The
 // `data-action="kickoff-<kind>"` handle is the SAME one the Sessions index
-// kickoff row already uses (docs/reference/studio-dom-contract.md) — one
+// kickoff row already uses (dev/studio-dom-contract.md) — one
 // vocabulary for "start this kind of session" regardless of entry point.
 // ---------------------------------------------------------------------------
 

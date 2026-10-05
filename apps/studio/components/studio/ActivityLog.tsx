@@ -17,8 +17,7 @@ import {
 // off `ArchitectActivityLog.tsx` (deleted once every consumer below adopted
 // this) into the operator-locked shape from the round-3 session-surface
 // decision: a FULL-WIDTH COLLAPSIBLE BOTTOM DRAWER, not the mock's
-// (the retired `session-surface-v1/session-live.html` mockup;
-// docs/reference/studio-copy.md) bottom-left inline panel
+// (the retired `session-surface-v1/session-live.html` mockup) bottom-left inline panel
 // — the mock's row *content* design (thinking italic+clamp, tool rows full,
 // redacted literal, phase chip + cost ticker) is carried over verbatim; only
 // the placement changed.
