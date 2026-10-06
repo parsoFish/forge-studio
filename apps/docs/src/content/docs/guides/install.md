@@ -62,5 +62,6 @@ To open a second window onto a running Studio, run `forge studio --attach`. It j
 
 ## Related
 
+- [forge CLI](/reference/cli/)
 - [Getting started](/guides/getting-started/)
 - [How forge works](/how-forge-works/)
