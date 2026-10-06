@@ -28,9 +28,9 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadStory, assertNonEmptySelection } from './story-file.mjs';
+import { loadStory, assertNonEmptySelection, selectedStoryIds, selectStories } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
-import { spendGateVerdict, effectiveCeiling } from './spend.mjs';
+import { spendGateVerdict, batchBridgeCeiling } from './spend.mjs';
 import { spawnSync } from 'node:child_process';
 import {
   memoryVerdict,
@@ -84,9 +84,8 @@ const VIEWPORT = { width: 1600, height: 1000 };
 
 function parseArgs(argv) {
   const at = (f) => argv.indexOf(f);
-  const storyIdx = at('--story');
   return {
-    story: storyIdx === -1 ? null : argv[storyIdx + 1],
+    stories: selectedStoryIds(argv),
     approveSpend: argv.includes('--approve-spend'),
     // 7.6.52 (ruling 791): what the OPERATOR funded for this run, which is a
     // different fact from what the story declares. D's S7 run 4 declared $25
@@ -324,12 +323,7 @@ async function main() {
   for (const file of storyFiles()) {
     stories.push(await loadStory(pathToFileURL(file).href));
   }
-  if (args.story !== null) {
-    stories = stories.filter((s) => s.id === args.story);
-    if (stories.length === 0) {
-      throw new Error(`--story "${args.story}" matched nothing in ${STORY_DIR}`);
-    }
-  }
+  stories = selectStories(stories, args.stories);
   if (args.costlessOnly) {
     stories = stories.filter((s) => spendGateVerdict(s.ground, { approveSpend: false }).allowed);
   }
@@ -560,22 +554,16 @@ async function main() {
       }
     }
 
-    // 4b. `forge-8vfn.8.1.6` (T1 row 6) — the SAME combination rule
-    //     `runStory` applies per beat (`effectiveCeiling`), reused rather than
-    //     re-derived, so the bridge's own env agrees with the beat-boundary
-    //     check it backstops: a cycle the bridge starts can now halt INSIDE a
-    //     beat, not only when the runner notices between two of them.
-    //     `bootOwnBridge` boots ONE bridge process for the WHOLE batch below,
-    //     so a batch mixing several costed stories takes the STRICTEST of
-    //     their effective ceilings — one shared process must not let a laxer
-    //     sibling widen a stricter one's bound. `null` when nothing in this
-    //     batch spends: `effectiveCeiling` is never asked for a story that
-    //     never asked for money.
-    const costedCeilings = stories
-      .filter((s) => s.ground.realSpawn === true || (s.ground.budget_usd ?? 0) > 0)
-      .map((s) => effectiveCeiling(s.ground.budget_usd, args.ceilingUsd).usd)
-      .filter((usd) => Number.isFinite(usd));
-    const bridgeCeilingUsd = costedCeilings.length > 0 ? Math.min(...costedCeilings) : null;
+    // 4b. The bridge's cost cap. `bootOwnBridge` boots ONE bridge process for
+    //     the WHOLE batch and its cap is CUMULATIVE across every session it
+    //     serves, so it is the SUM of the costed stories' effective ceilings
+    //     (`batchBridgeCeiling`, built on the `effectiveCeiling` rule `runStory`
+    //     applies per beat). Per-story bounds are enforced per beat; the bridge
+    //     is the backstop and is never tighter than the batch total. `null`
+    //     when nothing in this batch spends.
+    const batchCeiling = batchBridgeCeiling(stories, args.ceilingUsd);
+    const bridgeCeilingUsd = batchCeiling.usd;
+    console.log(`[stories] batch bridge ceiling ${batchCeiling.reason}`);
 
     // 4c. `forge-8vfn.8.1.6` follow-up — the `forge studio` this run boots
     //     supervises `forge serve`, and a studio that finds a live serve pid

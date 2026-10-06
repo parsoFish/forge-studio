@@ -22,6 +22,10 @@ export type ArchitectManifestPorts = {
    *  injected rather than re-implemented: a mint that answers that question
    *  differently from the guard is how the two drift apart (7.6.17). */
   isCanonicalInitiativeId: (id: string) => boolean;
+  /** Every initiative id present in ANY queue state dir under `queueRoot`
+   *  (bead forge-8vfn.30.5): the mint must not re-use one. Bound at `apps/forge`
+   *  to the queue's own layout helper — no hand-typed state list here. */
+  takenInitiativeIds: (queueRoot: string) => ReadonlySet<string>;
   /** `opts` is `{ queueRoot }` alone — read off the real signature, not
    *  guessed; an invented wider shape is a lying declaration (§15.66/§15.73). */
   promoteManifests: (

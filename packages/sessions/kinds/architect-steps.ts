@@ -561,7 +561,9 @@ export async function runDraftStep(
   // .toLowerCase() — it falls to slugify's own 'initiative' fallback.
   const buildAll = (list: DraftInitiative[]): InitiativeManifest[] => {
     const knownSlugs = new Set(list.map((d) => slugify(d.slug || d.title || '')));
-    return list.map((d) => buildManifest(d, status, datePart, created_at, knownSlugs));
+    // Bead forge-8vfn.30.5: never re-mint an id already sitting in the queue.
+    const takenIds = requirePorts(input).takenInitiativeIds(input.queueRoot ?? resolve('_queue'));
+    return list.map((d) => buildManifest(d, status, datePart, created_at, knownSlugs, takenIds));
   };
   // Row 159 (bead forge-8vfn.8.1.47, ruling 1891) — S10 run 41: buildManifest
   // rejecting a draft (D-34's typed-criteria / class validation) used to

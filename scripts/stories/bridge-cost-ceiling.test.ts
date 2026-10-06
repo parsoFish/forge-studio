@@ -95,12 +95,12 @@ test('the boot note says which ceiling (or none) the bridge env carries, like th
   assert.match(without.ceilingNote, /no FORGE_COST_CEILING_USD/i);
 });
 
-test('(c) the SAME effectiveCeiling the beat loop enforces reaches bootOwnBridge, through the existing boot call site', () => {
+test('(c) the batch ceiling, built from the SAME effectiveCeiling the beat loop enforces, reaches bootOwnBridge through the existing boot call site', () => {
   const { source } = runnerSourceContaining('bridgeSpawnOptions(ROOT');
   assert.match(
     source,
-    /effectiveCeiling\(/,
-    'the batch ceiling handed to the bridge must reuse the SAME combination rule run-story applies per beat, not a second one',
+    /batchBridgeCeiling\(/,
+    'the batch ceiling handed to the bridge must come from batchBridgeCeiling (which reuses the per-beat effectiveCeiling rule), not a second derivation',
   );
   assert.match(
     source,

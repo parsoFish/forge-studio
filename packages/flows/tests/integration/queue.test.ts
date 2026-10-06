@@ -15,6 +15,7 @@ import {
   claim,
   counts,
   getPaths,
+  listAllInitiativeIds,
   listPending,
   moveTo,
   promoteMergedToDone,
@@ -193,6 +194,23 @@ test('queue: writeHeartbeat updates mtime', async () => {
     writeHeartbeat(filename, paths);
     const after = statSync(hbPath).mtimeMs;
     assert.ok(after >= before, 'mtime advanced or equal');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('listAllInitiativeIds: finds an id in every queue state dir, ignores non-manifests (forge-8vfn.30.5)', () => {
+  const { dir, paths } = mkQueue();
+  try {
+    const { root, ...states } = paths;
+    const want = new Set<string>();
+    Object.values(states).forEach((d, i) => {
+      writeFileSync(join(d, `INIT-2026-10-05-s${i}.md`), 'x');
+      want.add(`INIT-2026-10-05-s${i}`);
+    });
+    writeFileSync(join(paths.done, 'INIT-2026-10-05-x.stop'), 'x');
+    assert.deepEqual(listAllInitiativeIds(paths), want);
+    assert.equal(want.size, 6);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

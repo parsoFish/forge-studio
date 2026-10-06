@@ -697,3 +697,41 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, 
     : '';
   return Object.freeze({ halt: false, kind: null, headline: null, reason: `${v.reason}${bounded}`, note: '' });
 }
+
+/**
+ * The cost cap for the ONE bridge a batch boots (bead `forge-8vfn.30.7`).
+ *
+ * The bridge's cap is CUMULATIVE across every session it serves, so it is the
+ * SUM of each costed story's `effectiveCeiling` — the same per-story rule
+ * `runStory` enforces per beat. Anything tighter halts a multi-story batch
+ * before its last story finishes. `usd` is null when nothing in the batch
+ * spends. A costed story whose effective ceiling is not finite is left out of
+ * the figure and named in `reason`.
+ *
+ * @param {Array<{id: string, ground: {realSpawn?: boolean, budget_usd?: number}}>} stories
+ * @param {number|null|undefined} fundedUsd  `--ceiling`, or nullish when none
+ * @returns {Readonly<{usd: number|null, reason: string}>}
+ */
+export function batchBridgeCeiling(stories, fundedUsd) {
+  const costed = stories.filter((s) => s.ground.realSpawn === true || (s.ground.budget_usd ?? 0) > 0);
+  const priced = costed
+    .map((s) => ({ id: s.id, usd: effectiveCeiling(s.ground.budget_usd, fundedUsd ?? null).usd }));
+  const finite = priced.filter((p) => Number.isFinite(p.usd));
+  const dropped = priced.filter((p) => !Number.isFinite(p.usd)).map((p) => p.id);
+  if (finite.length === 0) {
+    return Object.freeze({
+      usd: null,
+      reason: dropped.length > 0
+        ? `none — no costed story has a finite ceiling (${dropped.join(', ')})`
+        : 'none — nothing in this batch spends',
+    });
+  }
+  const usd = finite.reduce((sum, p) => sum + p.usd, 0);
+  const terms = finite.map((p) => `${p.id} $${p.usd.toFixed(2)}`).join(' + ');
+  const noun = finite.length === 1 ? 'story' : 'stories';
+  return Object.freeze({
+    usd,
+    reason: `$${usd.toFixed(2)} — sum of ${finite.length} costed ${noun} (${terms})`
+      + (dropped.length > 0 ? `; no finite ceiling, left out: ${dropped.join(', ')}` : ''),
+  });
+}
