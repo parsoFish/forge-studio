@@ -1,0 +1,66 @@
+name: Docs site (GitHub Pages)
+
+# Builds the docs site (apps/docs) and, only when the repository variable
+# DOCS_PAGES_ENABLED is 'true', deploys it to GitHub Pages. Publishing is the
+# operator's decision: enabling Pages on the repository and setting that
+# variable are repository settings, never a change in this file. Until then
+# every run builds and uploads the site as an artifact, which is the preview.
+# Pull requests are not a trigger: CI's `docs` job already builds the site on
+# every PR, and a skipped deploy job would sit on every PR head as a check.
+on:
+  push:
+    branches: [main]
+    paths: [apps/docs/**, package-lock.json, .github/workflows/docs-pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push supersedes a queued one, never a running one.
+concurrency:
+  group: docs-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the docs site
+        run: npm run build --workspace=docs
+        env:
+          ASTRO_TELEMETRY_DISABLED: "1"
+
+      # The Pages artifact doubles as the preview: download it from the run.
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/docs/dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.DOCS_PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5
