@@ -18,7 +18,7 @@ walkthrough; in short:
    ln -s ~/path/to/repo projects/<name>
    ```
 2. Bring it up to the forge↔project contract (the `forge-onboard-project`
-   skill + [`docs/reference/project-contract.md`](../docs/reference/project-contract.md)),
+   skill + [`SPEC.md §6`](../SPEC.md#6-project)),
    then run `forge preflight <name>` until every hard clause is green. The UI
    onboarding form (Studio → Projects → New) scaffolds the same contract files.
 3. The first cycle on this project will:

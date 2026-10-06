@@ -2,7 +2,7 @@
   "aligns": [
     {
       "path": "brain/forge-dev/themes/forge-project-onboarding-contract.md",
-      "digest": "71118b744474e7bf",
+      "digest": "4ce0df89092d6b62",
       "why": "Beat9: \"every HARD clause (C1, C1b, C2, C4, SKILLS) passes\"; earlier comment names the C2/.gitignore and C4/roadmap.md+Brain-3-profile failures the fixture had to fix"
     },
     {

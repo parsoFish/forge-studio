@@ -43,7 +43,7 @@ into `projects/<id>`, go straight to step 2, and when preflight is green skip to
 step 4.
 
 Then make it satisfy the **forge↔project contract**
-([docs/reference/project-contract.md](../reference/project-contract.md)). Two ways:
+([SPEC.md §6](../../SPEC.md#6-project)). Two ways:
 
 - **Studio (UI):** Studio → Projects → New. The onboarding form scaffolds
   `.forge/project.json`, idempotent `roadmap.md` + `brain/profile.md` stubs, and
@@ -76,7 +76,7 @@ project's dependencies in `projects/<id>` (for a Node project, `npm ci`) before
 you kick off, or `forge serve` refuses the claim and the initiative stays
 pending until you fix the ground — forge serve re-checks it within five minutes,
 no restart needed
-([DEPS](../reference/project-contract.md#deps--the-declared-gate-is-runnable-in-the-ground-hard-at-claim-time-and-in-forge-preflight)). Advisory clauses (C5/C6/C8, DEMO,
+([DEPS](../../SPEC.md#6-project)). Advisory clauses (C5/C6/C8, DEMO,
 ARTIFACTS) only warn. Iterate until every hard clause is green. The same verdict
 renders live in the Studio project builder (the `ContractReadiness` panel).
 
@@ -187,7 +187,7 @@ cycle archive, so the next cycle is smarter.
 
 ## Where to go next
 
-- [The forge↔project contract](../reference/project-contract.md) — every invariant, in full.
+- [The forge↔project contract](../../SPEC.md#6-project) — every invariant, in full.
 - The `forge-onboard-project` skill — maps the contract onto any project form and files a roadmap-scale initiative.
 - [`studio/starters/project.json.example`](../../studio/starters/project.json.example) — the annotated contract template.
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — the four merge gates and per-seam extension recipes.

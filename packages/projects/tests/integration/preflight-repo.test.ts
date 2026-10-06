@@ -265,7 +265,7 @@ test('C2 (HARD, green-lock) a dir scratch path existing as a REAL directory stil
 });
 
 test('C2 (HARD): a .gitignore that blanket-ignores .forge/ fails C2, naming .forge/skills/ (operator ruling 92)', () => {
-  // The pre-ruling-92 shape (`docs/reference/project-contract.md` used to
+  // The pre-ruling-92 shape (the former contract page used to
   // call `.forge/project.json` "force-tracked inside the ignored `.forge/`
   // dir"): a project whose `.gitignore` ignores `.forge/` wholesale silently
   // drops `.forge/skills/` — every project-local skill — from git too. C2

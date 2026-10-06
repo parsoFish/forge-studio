@@ -39,7 +39,7 @@ private reporting is the only supported disclosure channel.
 - Prompt-injection or tool-use vectors that let a managed project's content
   (issue text, PR bodies, source) escalate into unattended agent actions
   outside the forge↔project contract
-  ([`docs/reference/project-contract.md`](./docs/reference/project-contract.md)).
+  ([`SPEC.md §6`](SPEC.md#6-project)).
 - Anything that lets an agent-authored change bypass the three structural
   human gates (architect, review, reflect — see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
 - Supply-chain issues in forge's own dependencies.

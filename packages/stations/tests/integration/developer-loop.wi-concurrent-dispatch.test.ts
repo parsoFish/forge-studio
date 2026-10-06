@@ -103,7 +103,7 @@ function setup(initiativeId: string): Fixture {
   sh(repo, ['config', 'user.email', 't@forge']);
   sh(repo, ['config', 'user.name', 'forge-test']);
   writeFileSync(join(repo, 'README.md'), 'base\n');
-  // Per the forge-project-contract (docs/reference/project-contract.md, C2),
+  // Per the forge-project-contract (SPEC.md §6, C2),
   // every onboarded project's `.gitignore` covers forge scratch (SCRATCH_PATHS
   // — never a blanket `.forge/`, which would also hide the tracked
   // .forge/project.json + .forge/skills/, operator ruling 92). Without

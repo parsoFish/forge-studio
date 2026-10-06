@@ -272,7 +272,7 @@ export function sdkStderrSink(callerOptions?: unknown): (chunk: string) => void 
  * Named to match the existing FORGE_* vocabulary this same seam already uses
  * (`FORGE_GATE_TIMEOUT_MS`, `FORGE_CLAUDE_CLI`): forge-provided, non-secret,
  * read by the PROJECT's own live-acceptance test and sweep code. The project
- * never invents its own prefix — see docs/reference/project-contract.md's C7
+ * never invents its own prefix — see SPEC.md §6's C7
  * section for the normative convention this env var backs.
  *
  * Consumed at `packages/agents/ralph/stop-conditions.ts`'s `runGateCapturing`

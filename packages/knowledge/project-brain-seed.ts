@@ -15,7 +15,7 @@
  *                         Shape copied verbatim from the existing per-project
  *                         convention (see brain/projects/{gitpulse,mdtoc}/kb.yaml).
  *   - `profile.md`     — the machine-readable architecture profile planners
- *                         query (docs/reference/project-contract.md clause C4),
+ *                         query (SPEC.md §6 clause C4),
  *                         including a documented (inert, HTML-escaped)
  *                         example of the D-17 `forge:constraint` block
  *                         convention so project authors learn it from day one.

@@ -27,9 +27,8 @@
  * the LITERAL, hardcoded path `<project>/.forge/skills/<id>/SKILL.md` — one
  * level deep — and `artifactRoot` never enters that function or its caller
  * (independently confirmed three ways in the spec). This module follows the
- * CODE, not `docs/reference/project-contract.md`'s stale `<artifactRoot>/skills/`
- * line (corrected in the same PR that lands this file — see that doc's
- * "Artifact layout" section).
+ * CODE, not an `<artifactRoot>/skills/` location (a stale claim of the former
+ * contract page).
  *
  * SECRETS (D3, load-bearing): this module NEVER opens a file named
  * `secrets.env`, in this project or anywhere else, under any code path. It
