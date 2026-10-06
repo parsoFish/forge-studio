@@ -187,10 +187,22 @@ export function ownSchedulerPid(root) {
  * THIS CALL is the first to ask to stop — it marks it, then sends the one
  * SIGTERM, exactly as the supervisor itself would.
  *
+ * FREEZE, RECORD, THEN KILL (forge-8vfn.30.16). The drain is not idle: a
+ * draining daemon keeps running its in-flight cycle and DISPATCHES THE NEXT
+ * PHASE AGENT, so a descendant snapshot read before the grace window cannot
+ * contain it, and the SIGKILL below would reparent it out of every ancestry
+ * walk (measured: S10's resumed reviewer wrote two minutes after RUN-END).
+ * Before the SIGKILL, the daemon is SIGSTOPped — a stopped process dispatches
+ * nothing — and `hooks.recordDescendants(pid)` is called to record what it
+ * spawned during the drain. If that record cannot be made (`ok: false`) the
+ * daemon is SIGCONTed and left alive, `unknown: true` — never killed blind.
+ *
  * @param {string} root the run's own worktree
+ * @param {number} [graceMs]
+ * @param {{recordDescendants?: (pid: number) => {ok: boolean, reason?: string}}} [hooks]
  * @returns {{stopped: number|null, how: string|null, drained: boolean, unknown: boolean, note: string|null}}
  */
-export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS) {
+export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS, hooks = {}) {
   const pidFile = join(root, DAEMON_PID_FILE);
   let pid;
   try {
@@ -264,6 +276,42 @@ export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS) {
         ? null
         : `exited ${alreadyMarked ? 'on its own stop signal' : 'on SIGTERM'} without printing ${JSON.stringify(DRAIN_DONE_LINE)} — it did not drain, so its claim may still be in _queue/in-flight/`,
     };
+  }
+
+  if (hooks.recordDescendants) {
+    // The grace window can be 30 s: re-prove the pid is still this tree's
+    // process before freezing it (a recycled pid is somebody else's).
+    let cwdNow;
+    try {
+      cwdNow = realpathSync(`/proc/${pid}/cwd`);
+    } catch (e) {
+      cwdNow = e.code === 'ENOENT' ? null : undefined;
+    }
+    if (cwdNow === null) return { stopped: pid, how, drained: drainedNow(), unknown: false, note: 'exited as the grace ended' };
+    if (cwdNow !== ownRoot) {
+      return { stopped: null, how: null, drained: false, unknown: true, note: `pid ${pid} no longer runs in this tree (${cwdNow ?? 'cwd unreadable'}) — not frozen, not killed; state UNKNOWN` };
+    }
+    let frozen = false;
+    try {
+      process.kill(pid, 'SIGSTOP');
+      frozen = true;
+    } catch (e) {
+      if (e.code !== 'ESRCH') {
+        return { stopped: null, how: null, drained: false, unknown: true, note: `SIGSTOP failed: ${e.message} — could not freeze the daemon to record what it dispatched while draining; state UNKNOWN, not killed` };
+      }
+    }
+    if (frozen) {
+      let rec;
+      try {
+        rec = hooks.recordDescendants(pid);
+      } catch (e) {
+        rec = { ok: false, reason: `recording the daemon's descendants threw: ${e.message}` };
+      }
+      if (!rec.ok) {
+        try { process.kill(pid, 'SIGCONT'); } catch { /* gone */ }
+        return { stopped: null, how: null, drained: false, unknown: true, note: `${rec.reason ?? 'descendant record failed'} — daemon left alive (SIGCONT), state UNKNOWN, not killed blind` };
+      }
+    }
   }
 
   try {
