@@ -107,3 +107,37 @@ describe('ci-terminal.sh classify — ordered by what can still change the answe
     assert.match((r.stdout ?? '').trim(), /^TERMINAL_SUCCESS 1\/1/);
   });
 });
+
+describe('ci-terminal.sh classify — a SKIPPED check (a gated optional job, T1 1976o)', () => {
+  const skipped = (name: string) => `${name}|COMPLETED|SKIPPED`;
+
+  test('SKIPPED beside completed SUCCESS is TERMINAL_SUCCESS, counting only the checks that ran', () => {
+    // kills: the pre-1976o classifier, which read SKIPPED as a failure and refused every PR
+    // carrying a workflow whose job is gated off (docs-drift until DOCS_DRIFT_ENABLED)
+    const r = classify(HEAD, HEAD, [ok('build-and-test'), ok('docs'), skipped('docs-drift')]);
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /^TERMINAL_SUCCESS 2\/2 b2d1c640/);
+  });
+
+  test('only SKIPPED checks is NO_CHECKS — never a green gate', () => {
+    // kills: treating "nothing failed" as success when nothing ran
+    const r = classify(HEAD, HEAD, [skipped('docs-drift'), skipped('gardening')]);
+    assert.equal(r.status, 2);
+    assert.match(r.out, /^NO_CHECKS b2d1c640/);
+  });
+
+  test('SKIPPED beside a FAILURE is TERMINAL_FAILURE naming the failure, not the skip', () => {
+    // kills: a skip that masks a sibling failure
+    const r = classify(HEAD, HEAD, [failed('build-and-test'), skipped('docs-drift'), ok('docs')]);
+    assert.equal(r.status, 1);
+    assert.match(r.out, /build-and-test:FAILURE/);
+    assert.doesNotMatch(r.out, /docs-drift/);
+  });
+
+  test('SKIPPED beside a check still running is PENDING, never terminal', () => {
+    // kills: counting a skip as the last completion
+    const r = classify(HEAD, HEAD, [running('build-and-test'), skipped('docs-drift')]);
+    assert.equal(r.status, 2);
+    assert.match(r.out, /^PENDING 0\/1 b2d1c640/);
+  });
+});
