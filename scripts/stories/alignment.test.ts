@@ -30,7 +30,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import {
-  digest16, validateAlignsSidecar, checkAlignment, intakeReport,
+  digest16, rowDigest, validateAlignsSidecar, checkAlignment, intakeReport,
 } from './alignment.mjs';
 
 const REAL_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -72,6 +72,7 @@ test('digest16 is the first 16 hex chars of the sha256 of the bytes', () => {
 
 const validEntry = {
   path: 'DECISIONS.md',
+  anchor: 'D-01',
   digest: '0123456789abcdef',
   why: 'S1 demonstrates the pattern this decision pins.',
 };
@@ -380,4 +381,61 @@ test('--intake against the real repo prints the tracked authoring targets, repor
   const allPaths = targets.flatMap((t) => t.paths);
   assert.ok(allPaths.includes('brain/forge-dev/themes/class-blind-gates.md'));
   assert.ok(allPaths.includes('brain/forge-dev/themes/agent-authored-gates-are-self-grading.md'));
+});
+
+// ── row anchors (docs-w7 7.9, T1 1976d residual) ───────────────────────────
+
+const LEDGER = '| ID | Decision |\n|---|---|\n| D-01 | first |\n| D-02 | second |\n';
+
+test('row anchor: a new row in the ledger does NOT drift an entry anchored on another row; editing that row does', () => {
+  // kills: anchoring on the whole file (every new DECISIONS row re-stamped 16 entries)
+  const dir = scratch('alignment-anchor-');
+  writeStorySkeleton(dir, 'S1');
+  writeDoc(dir, 'DECISIONS.md', LEDGER);
+  const digest = rowDigest(LEDGER, 'D-02');
+  assert.equal(digest, digest16(Buffer.from('| D-02 | second |')));
+  writeSidecar(dir, 'S1', { aligns: [{ path: 'DECISIONS.md', anchor: 'D-02', digest, why: 'D-02: x' }] });
+  assert.equal(checkAlignment(dir).ok, true);
+
+  writeDoc(dir, 'DECISIONS.md', `${LEDGER}| D-03 | a brand-new row |\n`);
+  const after = checkAlignment(dir);
+  assert.equal(after.ok, true, JSON.stringify(after.failures));
+  assert.equal(after.checked, 1);
+
+  writeDoc(dir, 'DECISIONS.md', LEDGER.replace('second', 'second, amended'));
+  const red = checkAlignment(dir);
+  assert.equal(red.ok, false);
+  assert.match(red.failures[0].message, /DECISIONS\.md#D-02/);
+  assert.match(red.failures[0].message, /re-stamp the digest/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('row anchor: a missing or duplicated row REDs, naming the anchor', () => {
+  // kills: a lookup that silently matches nothing and compares against an empty digest
+  const dir = scratch('alignment-anchor-missing-');
+  writeStorySkeleton(dir, 'S1');
+  writeDoc(dir, 'DECISIONS.md', LEDGER);
+  writeSidecar(dir, 'S1', { aligns: [{ path: 'DECISIONS.md', anchor: 'D-09', digest: '0123456789abcdef', why: 'D-09: x' }] });
+  const gone = checkAlignment(dir);
+  assert.equal(gone.ok, false);
+  assert.match(gone.failures[0].message, /D-09/);
+  assert.match(gone.failures[0].message, /no row/);
+  writeDoc(dir, 'DECISIONS.md', `${LEDGER}| D-01 | again |\n`);
+  writeSidecar(dir, 'S1', { aligns: [{ path: 'DECISIONS.md', anchor: 'D-01', digest: '0123456789abcdef', why: 'D-01: x' }] });
+  assert.match(checkAlignment(dir).failures[0].message, /2 rows/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('row anchor: DECISIONS.md cited without an anchor, or a malformed anchor, is refused at validation', () => {
+  // kills: letting a whole-file digest of the living ledger back in
+  assert.throws(() => validateAlignsSidecar({ aligns: [{ path: 'DECISIONS.md', digest: '0123456789abcdef', why: 'x' }] }, 'S1'), /anchor/);
+  assert.throws(() => validateAlignsSidecar({ aligns: [{ path: 'DECISIONS.md', anchor: 'd 9', digest: '0123456789abcdef', why: 'x' }] }, 'S1'), /anchor/);
+  const ok = validateAlignsSidecar({ aligns: [{ path: 'DECISIONS.md', anchor: 'R-05', digest: '0123456789abcdef', why: 'x' }] }, 'S1');
+  assert.equal(ok.entries[0].anchor, 'R-05');
+});
+
+test('the real tree: every DECISIONS.md citation is row-anchored', () => {
+  // kills: a sidecar edited back to the whole-file form
+  const res = checkAlignment(REAL_ROOT);
+  assert.equal(res.ok, true, JSON.stringify(res.failures));
 });

@@ -7,7 +7,8 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "D-09",
+      "digest": "6f5bd3e2d97bc10d",
       "why": "D-09: Skill/hook/template definitions as data: package_id, skill-trust states draft/ready, hook approval ledger"
     },
     {

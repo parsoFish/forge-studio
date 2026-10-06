@@ -7,7 +7,8 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "R-09",
+      "digest": "96d973736cf5cc5c",
       "why": "R-09: Beat4: drag-and-drop canvas, place-station-<ref>/connect-from-<ref>/connect-into-<ref> handles"
     },
     {
@@ -17,12 +18,14 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "D-09",
+      "digest": "6f5bd3e2d97bc10d",
       "why": "D-09: Beat6: flow saved as FlowDef data; roster seeding (seed-starter-agents) materialises agents-as-data"
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "R-05",
+      "digest": "61d5cf7b3e3b31d4",
       "why": "R-05: Beats 11-12: architect interview loop (round-increment, no ceiling) — same runner as S1/S2"
     },
     {
