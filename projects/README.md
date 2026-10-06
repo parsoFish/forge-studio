@@ -8,7 +8,7 @@
 
 ## Onboarding a project
 
-See [`docs/tutorials/getting-started.md`](../docs/tutorials/getting-started.md) for the full
+See [`apps/docs/src/content/docs/guides/getting-started.md`](../apps/docs/src/content/docs/guides/getting-started.md) for the full
 walkthrough; in short:
 
 1. Clone (or symlink) the project repo here:

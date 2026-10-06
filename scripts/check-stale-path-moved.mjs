@@ -9,10 +9,11 @@ const OWNER_PREFIXES = { stories: ['tests/stories/', 'scripts/stories/'] };
 /** Rows are added only by PR; --write never adds one. */
 export const MOVED_PATHS = [
   { old: 'docs/reference/studio-dom-contract.md', new: 'dev/studio-dom-contract.md', owner: 'stories', retire: "the story's next amendment or recorded run" },
+  { old: 'docs/product/user-stories.md', new: 'dev/user-stories.md', owner: 'stories', retire: "the story's next amendment or recorded run" },
 ];
 
 /** The MOVED count today; a count above it fails. Lower it as stories are amended. */
-export const MOVED_BASELINE = 19;
+export const MOVED_BASELINE = 20;
 
 /**
  * Splits `findings` into the ones a MOVED row forgives (owner's files citing

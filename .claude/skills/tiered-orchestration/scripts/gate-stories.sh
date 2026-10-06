@@ -39,7 +39,7 @@
 #
 #  3. THE TREE COMES BACK AS IT WAS FOUND (item 76 follow-up). The story
 #     runner regenerates `demos/stories/**` (story.json + frames) and the doc
-#     fragments under `docs/tutorials/`/`docs/how-to/` — real product output,
+#     fragments under `apps/docs/` — real product output,
 #     not noise, but THIS gate is a read of the tree as it stood when
 #     invoked, and leaving that output dirty makes gate.sh's OWN LATER pins
 #     check read it as this PR's undeclared change ("UNDECLARED:
