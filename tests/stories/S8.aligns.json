@@ -12,7 +12,8 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "D-09",
+      "digest": "6f5bd3e2d97bc10d",
       "why": "D-09: Community registry rows / hub declarations / install-state as data (registry.yaml)"
     },
     {

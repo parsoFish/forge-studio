@@ -1,0 +1,63 @@
+name: Docs gardening
+
+# Weekly: list the pages past their freshness window, the covers: globs and
+# cited paths that no longer exist, the broken external links, and the pages
+# near their word ceiling, then open ONE pull request proposing, per page:
+# verify (re-check against the code, bump last_verified), edit, or DELETE.
+# Deletion is a first-class outcome (R22).
+#
+# OFF until the operator enables it: the job runs only when the repository
+# variable DOCS_GARDENING is 'true' and the secret ANTHROPIC_API_KEY is set.
+# The ungated weekly external-link check stays in links.yml.
+on:
+  schedule:
+    - cron: "41 3 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: docs-gardening
+  cancel-in-progress: false
+
+jobs:
+  gardening:
+    if: vars.DOCS_GARDENING == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Candidates
+        run: node scripts/docs-gardening.mjs > gardening-report.md
+
+      - name: External links
+        uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          args: --no-progress --exclude-path apps/docs/dist "apps/docs/src/**/*.md" "apps/docs/src/**/*.astro"
+          output: lychee-report.md
+          fail: false
+
+      - name: Propose one PR
+        uses: anthropics/claude-code-action@86d88e619d8e6caf07b5c3944dd14f441c533718 # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Read gardening-report.md and lychee-report.md. For each page they name, read the page and the
+            code its covers: globs name, then choose ONE outcome: verify (the page is still true: set
+            last_verified to today), edit (fix the false or broken part with the docs-write skill), or delete
+            (the page no longer earns its place). Never hand-edit a page with generated_from: — list it for a
+            story or generator re-run instead. Never add words to fill a budget. Open ONE pull request titled
+            "docs: weekly gardening" listing every candidate with its outcome and one-line reason; if nothing
+            is stale, broken or orphaned, open no PR and say "nothing stale".
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh pr create:*),Bash(node scripts/docs-covers.mjs:*),Bash(node scripts/check-docs-budget.mjs:*),Bash(node scripts/docs-gardening.mjs:*)"
