@@ -136,7 +136,7 @@ export default {
       // Fully expressible — `view-all-sessions` is the strip's own link and is
       // unique. `/sessions` has no nav pillar of its own, so this is how an
       // operator reaches the spine.
-      act: 'Press "View all sessions"',
+      act: 'Press "all sessions" on Home',
       do: [{ press: 'view-all-sessions' }],
       expect: {
         route: '/sessions',
@@ -212,7 +212,7 @@ export default {
       // to assert for the two that are missing, and the handbook forbids
       // inventing one, so they are named here and in `_1.0/stories/S9.md`
       // as surfaces the sessions lane must build.
-      act: 'Set the SDK, the model and the effort this session will run on',
+      act: 'Pick the model tier this session will run on',
       do: [{ fill: 'kickoff-model-tier-option', with: CHOSEN_TIER }],
       expect: {
         route: '/sessions/authoring/new',
@@ -357,7 +357,7 @@ export default {
       // would make this beat a race. `needs-you: 'false'` is the honest state
       // for a merely-working agent — the bridge derives it and it is truthful
       // in both directions.
-      act: 'Press "View all sessions" and find it on the spine',
+      act: 'Press "all sessions" and find it on the spine',
       do: [{ press: 'view-all-sessions' }],
       expect: {
         route: '/sessions',
