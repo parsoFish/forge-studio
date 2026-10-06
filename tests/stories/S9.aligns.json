@@ -2,7 +2,8 @@
   "aligns": [
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "R-16",
+      "digest": "827bb5ef86f83326",
       "why": "R-16: Beats 8/13/14: live cost/tokens shown per-session and on the cross-run ledger"
     },
     {
