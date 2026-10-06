@@ -90,9 +90,9 @@ export function declaresATest(src) {
   return /(^|[^\w.])(test|it|describe|suite)\s*(\.\w+)?\s*\(/.test(src.replace(COMMENTS, '$1'));
 }
 
-/** The path arguments of the `npm test` command — every token that is not the binary or a flag. */
+/** The path arguments of the `npm test` command — every token that is not the binary, a flag, or a shell expansion (`${VAR:+--flag}`). */
 export function parseNodeGlobs(script) {
-  return script.trim().split(/\s+/).slice(1).filter((t) => !t.startsWith('-'));
+  return script.trim().split(/\s+/).slice(1).filter((t) => !t.startsWith('-') && !t.startsWith('$'));
 }
 
 /** The `include: [...]` array of a vitest config. Refuses a config that declares none. */
