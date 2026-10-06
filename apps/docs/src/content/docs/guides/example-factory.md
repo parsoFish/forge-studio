@@ -44,7 +44,7 @@ To override it for one run:
 - For an idea, fill **Cost ceiling (USD, optional)** in the new-idea form before **Start architect**.
 - For development, set **ceiling ($)** on the project's Roadmap tab before pressing **Start development**. The field applies to one card at a time, not to **Start eligible**.
 
-## Copy or replace it
+## Replace it
 
 Studio will not delete the shipped flows. To replace the example, build your own flow: press **+ New flow** in **Flows** and follow [Create a new flow](/guides/how-to/create-a-new-flow/). Nothing else in forge depends on the example.
 
