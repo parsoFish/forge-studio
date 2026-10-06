@@ -21,7 +21,7 @@ disallowed-tools: [Grep, Glob, MultiEdit, NotebookEdit, WebFetch, WebSearch, Tas
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (haiku-tier
   # ingest turns are cheap; $2 is generous headroom). Operator-overridable
-  # per kickoff. See docs/reference/agent-cost-ceilings.md.
+  # per kickoff.
   maxBudgetUsd: 2
 ---
 

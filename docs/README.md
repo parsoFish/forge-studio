@@ -50,10 +50,6 @@ not how to get there or why.
 
 | Page | What it covers |
 |---|---|
-| [Project contract](./reference/project-contract.md) | The forge↔project contract every managed project must satisfy: the Studio object fields, the C1–C10 operational clauses, the gate-script template (with the errexit-exempt trap it closes), and the enforcement table. |
-| [Extension seams](./reference/extension-seams.md) | The pluggable points forge exposes for adding capability — RuntimeAdapter, KbBackend and Flow, each a registry with its own conformance-test admission gate, plus the skill/agent registration point. |
-| [Agent cost ceilings](./reference/agent-cost-ceilings.md) | How a standalone agent spawn enforces a cost ceiling, the per-agent default `budgets.maxBudgetUsd` values and how they were derived, and the operator-ceiling precedence rule. |
-| [Serve supervision](./reference/serve-supervision.md) | Running `forge serve` under an OS process supervisor (systemd, pm2, runit) — what forge's own recovery model does and does not cover, and where the split falls. |
 
 ## Explanation — understanding the design
 
@@ -84,7 +80,7 @@ machine-readable contracts, not usage docs:
   [examples](./schemas/examples/project.mdtoc.json) for
   [two real projects](./schemas/examples/project.betterado.json). The prose
   contract these encode is
-  [`reference/project-contract.md`](./reference/project-contract.md).
+  the Project contract page of the docs site.
 - **[Product](./product/user-stories.md)** — the tiered catalogue of operator
   journeys forge supports, and its companion, the
   [Minimum Viable User Story](./product/minimum-viable-user-story.md) vision
