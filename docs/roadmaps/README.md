@@ -1,6 +1,6 @@
 # Roadmaps
 
-One roadmap drives forge: **[`1.0.md`](./1.0.md)**. The R1–R8 roadmaps that preceded it are retired; the tag `pre-docs-refactor` keeps them.
+The public roadmap — Now, Next, Later — is [`ROADMAP.md`](../../ROADMAP.md) at the repo root. One execution plan drives forge to 1.0: **[`1.0.md`](./1.0.md)**. The R1–R8 roadmaps that preceded it are retired; the tag `pre-docs-refactor` keeps them.
 
 ## The active plan
 
