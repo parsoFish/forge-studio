@@ -28,7 +28,7 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadStory, assertNonEmptySelection } from './story-file.mjs';
+import { loadStory, assertNonEmptySelection, selectedStoryIds, selectStories } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, batchBridgeCeiling } from './spend.mjs';
 import { spawnSync } from 'node:child_process';
@@ -84,9 +84,8 @@ const VIEWPORT = { width: 1600, height: 1000 };
 
 function parseArgs(argv) {
   const at = (f) => argv.indexOf(f);
-  const storyIdx = at('--story');
   return {
-    story: storyIdx === -1 ? null : argv[storyIdx + 1],
+    stories: selectedStoryIds(argv),
     approveSpend: argv.includes('--approve-spend'),
     // 7.6.52 (ruling 791): what the OPERATOR funded for this run, which is a
     // different fact from what the story declares. D's S7 run 4 declared $25
@@ -324,12 +323,7 @@ async function main() {
   for (const file of storyFiles()) {
     stories.push(await loadStory(pathToFileURL(file).href));
   }
-  if (args.story !== null) {
-    stories = stories.filter((s) => s.id === args.story);
-    if (stories.length === 0) {
-      throw new Error(`--story "${args.story}" matched nothing in ${STORY_DIR}`);
-    }
-  }
+  stories = selectStories(stories, args.stories);
   if (args.costlessOnly) {
     stories = stories.filter((s) => spendGateVerdict(s.ground, { approveSpend: false }).allowed);
   }

@@ -603,3 +603,39 @@ export function assertNonEmptySelection(stories, { costlessOnly = false } = {}) 
     : 'no story files were found in tests/stories/';
   throw new Error(`refusing to report success: ${why}. A run that executes no story is not a passing run.`);
 }
+
+/**
+ * Every `--story <id>` in `argv`, in order, or null when none was given (the
+ * whole suite). Bead forge-8vfn.30.7: reading only the first one dropped the
+ * rest silently. A `--story` with no id after it is refused, never read as
+ * "no selection".
+ * @param {string[]} argv
+ * @returns {readonly string[] | null}
+ */
+export function selectedStoryIds(argv) {
+  const ids = [];
+  argv.forEach((a, i) => {
+    if (a !== '--story') return;
+    const id = argv[i + 1];
+    if (id === undefined || id.startsWith('--')) throw new Error('--story needs a story id after it');
+    ids.push(id);
+  });
+  return ids.length === 0 ? null : Object.freeze(ids);
+}
+
+/**
+ * The suite narrowed to `ids` (null keeps it whole), in suite order. Refuses
+ * naming every id that matched no story.
+ * @template {{ id: string }} T
+ * @param {T[]} stories
+ * @param {readonly string[] | null} ids
+ * @returns {T[]}
+ */
+export function selectStories(stories, ids) {
+  if (ids === null) return stories;
+  const unmatched = ids.filter((id) => !stories.some((s) => s.id === id));
+  if (unmatched.length > 0) {
+    throw new Error(`--story ${unmatched.map((id) => JSON.stringify(id)).join(', ')} matched nothing`);
+  }
+  return stories.filter((s) => ids.includes(s.id));
+}
