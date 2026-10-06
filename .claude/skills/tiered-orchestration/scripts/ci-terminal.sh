@@ -41,6 +41,10 @@ classify() {
   rows="$(cat)"
   while IFS='|' read -r name status concl; do
     [ -n "$name" ] || continue
+    # A SKIPPED check is a job gated off by its own `if:` (T1 1976o): it ran nothing, so it is
+    # neither a failure nor a success, and it is not counted. Success still needs >=1 completed
+    # SUCCESS; a head whose only checks were skipped is NO_CHECKS below, never green.
+    [ "$status" = "COMPLETED" ] && [ "$concl" = "SKIPPED" ] && continue
     total=$((total + 1))
     if [ "$status" = "COMPLETED" ] && [ -n "$concl" ]; then
       done_=$((done_ + 1))
