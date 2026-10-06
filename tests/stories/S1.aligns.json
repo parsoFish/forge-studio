@@ -22,12 +22,14 @@
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "R-05",
+      "digest": "61d5cf7b3e3b31d4",
       "why": "R-05: Act3 (beats 10-11, S1.act3.mjs): interview -> draft -> critique -> plan-gate -> approve loop, session-checkpointed"
     },
     {
       "path": "DECISIONS.md",
-      "digest": "fd360ca5986248b7",
+      "anchor": "D-07",
+      "digest": "2e1a2b5c65be75d0",
       "why": "D-07: Beat8: demo-builder session (briefing->generating->awaiting-review->locking->locked), verdict-approve finalising a locked demo"
     },
     {

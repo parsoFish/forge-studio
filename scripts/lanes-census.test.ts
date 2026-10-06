@@ -160,7 +160,7 @@ function fakeClaude() {
  * construction, exactly the pid that becomes `comm=claude` — no fork, no
  * poll, no window for anything to diverge from what gets written.
  */
-function laneBin(name: string, opts: { lateSpawnS?: number; spawnAfterKill?: boolean } = {}) {
+function laneBin(name: string, opts: { spawnOnTmuxEnd?: boolean; spawnAfterKill?: boolean } = {}) {
   const detachedpid = join(dir, `${name}.detachedpid`);
   const spawn = `setsid nohup bash -c 'echo $$ > "$1"; exec "$2" "$3"' _ '${detachedpid}' '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &`;
   if (opts.spawnAfterKill) {
@@ -174,10 +174,24 @@ setsid nohup bash -c 'while [ -d "/proc/$1" ]; do sleep 0.05; done; echo $$ > "$
 sleep 120
 `);
   }
-  const late = opts.lateSpawnS ? `trap '' HUP\nsleep ${opts.lateSpawnS}\n` : '';
+  if (opts.spawnOnTmuxEnd) {
+    // The grandchild appears BECAUSE the tmux session ended, with no wall-clock sleep: a detached watcher (bash, not
+    // claude-named, so the before-kill census sees nothing) polls `tmux has-session` and execs the fake claude the moment
+    // die_launch's kill-session lands. The lane program itself ignores HUP and stays ALIVE, so — unlike `spawnAfterKill`,
+    // where it is already dead — die_launch's `launch_pid` is still running when the grandchild appears: the after-kill
+    // loop must look through a live launch_pid, not just past a dead one. (A HUP-trap version of this was tried twice and
+    // raced the pane teardown: red 1 run in 3 alone.)
+    return writeExec(name, `#!/usr/bin/env bash
+echo $$ > '${join(dir, `${name}.selfpid`)}'
+trap '' HUP
+S="$(tmux display -p '#{session_name}')"
+setsid nohup bash -c 'while tmux has-session -t "$1" 2>/dev/null; do sleep 0.05; done; echo $$ > "$2"; exec "$3" 300' _ "$S" '${detachedpid}' '${fakeClaude()}' </dev/null >/dev/null 2>&1 &
+sleep 120
+`);
+  }
   return writeExec(name, `#!/usr/bin/env bash
 echo $$ > '${join(dir, `${name}.selfpid`)}'
-${late}${spawn}
+${spawn}
 sleep 120
 `);
 }
@@ -480,13 +494,15 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
    * guess; still bounded overall by `LANES_RECENSUS_S`, unchanged.
    *
    * `LANES_CONFIRM_TIMEOUT_S` stays at its production default (4 s, no
-   * override) in both tests below — the 1.5 s spawn is still caught by the
-   * deterministic before-kill census (comfortably under 4 s), and the 6 s
-   * door deliberately lands PAST it, exercising the fixed after-kill loop
-   * for real, with no host load needed to prove it.
+   * override). Both doors below are EVENT-driven (2026-10-06, forge-8vfn.30.17:
+   * the old first door spawned after `sleep 1.5` and was red 3 gates in a
+   * row under load 8-10): the grandchild is spawned by a detached watcher
+   * BECAUSE the tmux session ended (lane program still alive) or BECAUSE the
+   * lane program died, so it lands in the after-kill loop by construction,
+   * at any host load, with no number to outrun.
    */
-  test('a lane program that spawns its grandchild 1.5 s after the kill is still retired, and stderr says what the census saw', () => {
-    const bin = laneBin('lane-late', { lateSpawnS: 1.5 });
+  test('a lane program that spawns its grandchild WHEN the tmux session ends (and stays alive) is still retired, and stderr says what the census saw', () => {
+    const bin = laneBin('lane-late', { spawnOnTmuxEnd: true });
     const { r } = launchUnconfirmed('late', bin);
     const self = pidFrom('lane-late.selfpid', 8000);
     const stray = pidFrom('lane-late.detachedpid', 12000);
@@ -527,7 +543,7 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     // Before this, the loop's `-lt` test errored on 'soon0' and the function fell out after
     // ONE census: exactly the one-shot shape it stopped having, silently. The late-spawn
     // fixture is the proof: with the loop gone, the stray survives.
-    const bin = laneBin('lane-late2', { lateSpawnS: 1.5 });
+    const bin = laneBin('lane-late2', { spawnOnTmuxEnd: true });
     const laneCwd = join(dir, 'cwd-late2');
     mkdirSync(laneCwd, { recursive: true });
     const prompt = join(dir, 'prompt-late2.md');

@@ -213,16 +213,11 @@ if [ -n "$LOCK_STATE_F" ]; then
 fi
 R="${1:?usage: gate.sh <worktree> [campaign-dir] | gate.sh --list <worktree>}"
 CAMP="${2:-}"
-# REFUSE what it does not understand (bead `forge-8vfn.6.9`). `--list` is read
-# only as `$1`, so `gate.sh <worktree> <camp> --list` put the flag in `$3`,
-# where it was ignored IN SILENCE and the full gate ran instead — a build,
-# `npm test` and `test:ui`. That is indistinguishable from a hang, and it is
-# exactly how it was reported: lane M6-C opened by filing "`--list` HANGS,
-# killed at 20 s and at 120 s", and built a parallel gate on the strength of it.
-# T1 reproduced the same shape from the main checkout. Nothing was broken; a
-# tool that answers an unrecognised argument with a ten-minute suite cannot be
-# told apart from one that is, and the operator's next move is to work around a
-# fault that was never there.
+# REFUSE what it does not understand (bead `forge-8vfn.6.9`). `--list` is read only as `$1`, so
+# `gate.sh <worktree> <camp> --list` put the flag in `$3`, where it was ignored IN SILENCE and the full
+# gate ran — indistinguishable from a hang: lane M6-C filed "`--list` HANGS" and built a parallel gate
+# on it. A tool that answers an unrecognised argument with a ten-minute suite cannot be told apart
+# from a broken one, and the next move is to work around a fault that was never there.
 # T1 693(ii) — a lane that KNOWS a pin will fail (its own amendment, or a sibling
 # re-pin it will reconcile) declares it; anything else fails the gate. Same shape
 # as the campaign's `pin-precheck.sh`, so one declaration serves both.
@@ -677,6 +672,8 @@ FAIL_CMD=""; FAIL_LOG=""
 # future GATE_* control var this file grows is scrubbed by construction
 # rather than by remembering to extend a second copy.
 GATE_CONTROL_VARS="GATE_RERUN_ALONE"
+TEST_CONCURRENCY="${GATE_TEST_CONCURRENCY:-$(( $(nproc) / 2 > 0 ? $(nproc) / 2 : 1 ))}"  # row 7.14: half the cores for npm test
+case "$TEST_CONCURRENCY" in ''|*[!0-9]*|0) die "GATE_TEST_CONCURRENCY must be a positive integer, got '$TEST_CONCURRENCY'" ;; esac
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
@@ -696,7 +693,8 @@ while IFS= read -r cmd; do
   # filesystem, so a reader either sees the previous complete log or this one,
   # never a half-written file — and a gate already executing this script keeps
   # its own inode rather than following a path that changed underneath it.
-  step="$cmd"; [ "$cmd" = "npm test" ] && step="\"\$HERE/gate-step-timeout.sh\" \"\${GATE_NPM_TEST_TIMEOUT_SECS:-1200}\" -- npm test" # gate-step-timeout.sh: hung step held a gate 64 min
+  # Row 7.14: npm test at node's default (cores-1) saturated the host (load 25-45); package.json maps the var to --test-concurrency.
+  step="$cmd"; [ "$cmd" = "npm test" ] && step="FORGE_TEST_CONCURRENCY=$TEST_CONCURRENCY \"\$HERE/gate-step-timeout.sh\" \"\${GATE_NPM_TEST_TIMEOUT_SECS:-1200}\" -- npm test" # gate-step-timeout.sh: hung step held a gate 64 min
   if ( unset $GATE_CONTROL_VARS; eval "$step" ) > "$log.part" 2>&1; then
     mv -f "$log.part" "$log"
     echo "PASS  $cmd  ($(secs "$t0"))"
