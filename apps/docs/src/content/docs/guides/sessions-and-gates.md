@@ -1,5 +1,5 @@
 ---
-title: Sessions and gates
+title: Sessions & gates
 description: Run an interactive agent conversation, answer its questions, and approve or send back a plan or verdict at a gate.
 type: guide
 owner: parsoFish
