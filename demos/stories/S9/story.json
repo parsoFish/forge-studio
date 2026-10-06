@@ -27,7 +27,7 @@
         }
       },
       {
-        "act": "Press \"View all sessions\"",
+        "act": "Press \"all sessions\" on Home",
         "say": "This is the spine, and it is S9’s whole subject: seven doors, one per session kind, and behind them the assistant-driven variant of most of the other eight stories. `fetch-status` is here on purpose — an empty list and an unreachable bridge are different facts and this page refuses to render them the same.",
         "do": [
           {
@@ -87,7 +87,7 @@
         }
       },
       {
-        "act": "Set the SDK, the model and the effort this session will run on",
+        "act": "Pick the model tier this session will run on",
         "say": "Three knobs is what §3 promises and one is what the page offers. Which model a turn runs on is the cheapest of the three to get right, and it is the only one an operator can touch — the SDK the session runs under and how hard it is allowed to think are decided somewhere the operator never sees.",
         "do": [
           {
@@ -174,7 +174,7 @@
         }
       },
       {
-        "act": "Press \"View all sessions\" and find it on the spine",
+        "act": "Press \"all sessions\" and find it on the spine",
         "say": "The spine lists what it started, and it is already asking for you: kind, project, phase, state, model tier, last update — six columns that tell the operator a decision is waiting, and not one of them is money.",
         "do": [
           {
@@ -338,7 +338,7 @@
       "frame": "frames/01-open-studio.png"
     },
     {
-      "act": "Press \"View all sessions\"",
+      "act": "Press \"all sessions\" on Home",
       "say": "This is the spine, and it is S9’s whole subject: seven doors, one per session kind, and behind them the assistant-driven variant of most of the other eight stories. `fetch-status` is here on purpose — an empty list and an unreachable bridge are different facts and this page refuses to render them the same.",
       "status": "green",
       "failures": [],
@@ -355,7 +355,7 @@
         "session-count": "0",
         "fetch-status": "ok"
       },
-      "frame": "frames/02-press-view-all-sessions.png"
+      "frame": "frames/02-press-all-sessions-on-home.png"
     },
     {
       "act": "Ask the assistant to do S7’s job — author a library component",
@@ -400,7 +400,7 @@
       "frame": "frames/04-point-it-at-a-project-and-tell-it-what-t.png"
     },
     {
-      "act": "Set the SDK, the model and the effort this session will run on",
+      "act": "Pick the model tier this session will run on",
       "say": "Three knobs is what §3 promises and one is what the page offers. Which model a turn runs on is the cheapest of the three to get right, and it is the only one an operator can touch — the SDK the session runs under and how hard it is allowed to think are decided somewhere the operator never sees.",
       "status": "green",
       "failures": [],
@@ -421,7 +421,7 @@
         "model-tier-picker": "range",
         "model-tier": "opus"
       },
-      "frame": "frames/05-set-the-sdk-the-model-and-the-effort-thi.png"
+      "frame": "frames/05-pick-the-model-tier-this-session-will-ru.png"
     },
     {
       "act": "Start it",
@@ -429,13 +429,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-10-05T15-51-54-c156213f"
+        "authoringSessionId": "2026-10-06T15-41-55-b4907144"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "authoring",
-        "minted-session-id": "2026-10-05T15-51-54-c156213f"
+        "minted-session-id": "2026-10-06T15-41-55-b4907144"
       },
       "expect": {
         "page": "session-kickoff",
@@ -475,13 +475,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.58"
+        "authoringCostUsd": "0.65"
       },
       "data": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "authoring",
-        "ledger-cost-usd": "0.58"
+        "ledger-cost-usd": "0.65"
       },
       "expect": {
         "page": "session",
@@ -513,7 +513,7 @@
       "frame": "frames/09-go-back-to-studio-s-front-page.png"
     },
     {
-      "act": "Press \"View all sessions\" and find it on the spine",
+      "act": "Press \"all sessions\" and find it on the spine",
       "say": "The spine lists what it started, and it is already asking for you: kind, project, phase, state, model tier, last update — six columns that tell the operator a decision is waiting, and not one of them is money.",
       "status": "green",
       "failures": [],
@@ -535,7 +535,7 @@
         "session-state": "awaiting-operator",
         "needs-you": "true"
       },
-      "frame": "frames/10-press-view-all-sessions-and-find-it-on-t.png"
+      "frame": "frames/10-press-all-sessions-and-find-it-on-the-sp.png"
     },
     {
       "act": "Ask the assistant to do S1’s job, and choose ITS model too",
@@ -565,13 +565,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardingSessionId": "2026-10-05T15-52-57-288e113a"
+        "onboardingSessionId": "2026-10-06T15-43-21-407623fb"
       },
       "data": {
         "page": "session-kickoff",
         "page-ready": "true",
         "kickoff-kind": "onboarding",
-        "minted-session-id": "2026-10-05T15-52-57-288e113a"
+        "minted-session-id": "2026-10-06T15-43-21-407623fb"
       },
       "expect": {
         "page": "session-kickoff",
@@ -651,14 +651,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringCostUsd": "0.58"
+        "authoringCostUsd": "0.65"
       },
       "data": {
         "page": "monitor",
         "page-ready": "true",
         "fetch-status": "ok",
         "ledger-agent": "creation-agent",
-        "ledger-cost-usd": "0.58"
+        "ledger-cost-usd": "0.65"
       },
       "expect": {
         "page": "monitor",
@@ -672,14 +672,14 @@
   "reap": {
     "reaped": [
       {
-        "pid": 1158464,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-05T15-52-57-831-v6h9",
+        "pid": 2211586,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-06T15-43-21-704-fbzo",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1158278,
-        "dir": "_logs/_agent-onboarding-agent-2026-10-05T15-52-57-831-v6h9",
+        "pid": 2208748,
+        "dir": "_logs/_agent-onboarding-agent-2026-10-06T15-43-21-704-fbzo",
         "signal": "SIGTERM",
         "via": "cwd",
         "terminatedBeforeFirstPricedEvent": 30000
@@ -687,14 +687,14 @@
     ],
     "skipped": [
       {
-        "pid": 1154271,
-        "dir": "_logs/_authoring-2026-10-05T15-51-54-c156213f",
-        "reason": "pid 1154271: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 1981694,
+        "dir": "_logs/_authoring-2026-10-06T15-41-55-b4907144",
+        "reason": "pid 1981694: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": [
       {
-        "dir": "_logs/_agent-onboarding-agent-2026-10-05T15-52-57-831-v6h9",
+        "dir": "_logs/_agent-onboarding-agent-2026-10-06T15-43-21-704-fbzo",
         "kind": null,
         "sessionId": null,
         "project": null,
@@ -749,15 +749,15 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 0.5761415,
+    "usd": 0.6474415,
     "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "7896bc61b48a8531ebcca977c73fceb3506e42bf",
+    "sha": "aac8ecf6dcaa620f81b5ce563069e7e29eab33e1",
     "dirty": false
   },
-  "storyDigest": "284fc3a6569816c8"
+  "storyDigest": "499a2b1d8009f783"
 }

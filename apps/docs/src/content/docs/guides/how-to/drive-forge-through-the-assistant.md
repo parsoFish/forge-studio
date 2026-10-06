@@ -3,7 +3,7 @@ title: "Drive forge through the assistant"
 description: "Drive forge through the assistant, step by step, as recorded by a run of forge's story suite."
 type: how-to
 owner: parsoFish
-last_verified: 2026-10-05
+last_verified: 2026-10-06
 covers: [tests/stories/S9.story.mjs]
 generated_from: tests/stories/S9.story.mjs
 ---
@@ -14,94 +14,94 @@ generated_from: tests/stories/S9.story.mjs
 
 Nothing is running.
 
-![Open Studio](/media/stories/S9/01-open-studio.png)
+![Open Studio](/forge-studio/media/stories/S9/01-open-studio.png)
 
-## 2. Press "View all sessions"
+## 2. Press "all sessions" on Home
 
 This is the spine, and it is S9’s whole subject: seven doors, one per session kind, and behind them the assistant-driven variant of most of the other eight stories.
 
-![Press "View all sessions"](/media/stories/S9/02-press-view-all-sessions.png)
+![Press "all sessions" on Home](/forge-studio/media/stories/S9/02-press-all-sessions-on-home.png)
 
 ## 3. Ask the assistant to do S7’s job — author a library component
 
 Same work as S7, different hands.
 
-![Ask the assistant to do S7’s job — author a library component](/media/stories/S9/03-ask-the-assistant-to-do-s7-s-job-author-.png)
+![Ask the assistant to do S7’s job — author a library component](/forge-studio/media/stories/S9/03-ask-the-assistant-to-do-s7-s-job-author-.png)
 
 ## 4. Point it at a project and tell it what to build
 
 The brief is the whole instruction — there is no second turn where the operator fills in what they meant.
 
-![Point it at a project and tell it what to build](/media/stories/S9/04-point-it-at-a-project-and-tell-it-what-t.png)
+![Point it at a project and tell it what to build](/forge-studio/media/stories/S9/04-point-it-at-a-project-and-tell-it-what-t.png)
 
-## 5. Set the SDK, the model and the effort this session will run on
+## 5. Pick the model tier this session will run on
 
 Three knobs is what §3 promises and one is what the page offers.
 
-![Set the SDK, the model and the effort this session will run on](/media/stories/S9/05-set-the-sdk-the-model-and-the-effort-thi.png)
+![Pick the model tier this session will run on](/forge-studio/media/stories/S9/05-pick-the-model-tier-this-session-will-ru.png)
 
 ## 6. Start it
 
 From here the assistant is doing S7’s work: reading the project, drafting the package, and stopping at the approval S7’s operator would have reached by typing.
 
-![Start it](/media/stories/S9/06-start-it.png)
+![Start it](/forge-studio/media/stories/S9/06-start-it.png)
 
 ## 7. Check the session is running on the model the operator chose
 
 This is the one part of the promise that already works end to end: a choice made on the kickoff form is a fact the running session states about itself, not a hope.
 
-![Check the session is running on the model the operator chose](/media/stories/S9/07-check-the-session-is-running-on-the-mode.png)
+![Check the session is running on the model the operator chose](/forge-studio/media/stories/S9/07-check-the-session-is-running-on-the-mode.png)
 
 ## 8. Read what the session has cost so far
 
 A session the operator is paying for by the token should be able to say what it has spent, while it is spending it.
 
-![Read what the session has cost so far](/media/stories/S9/08-read-what-the-session-has-cost-so-far.png)
+![Read what the session has cost so far](/forge-studio/media/stories/S9/08-read-what-the-session-has-cost-so-far.png)
 
 ## 9. Go back to Studio’s front page
 
 One assistant working, counted in the one place the operator looks first.
 
-![Go back to Studio’s front page](/media/stories/S9/09-go-back-to-studio-s-front-page.png)
+![Go back to Studio’s front page](/forge-studio/media/stories/S9/09-go-back-to-studio-s-front-page.png)
 
-## 10. Press "View all sessions" and find it on the spine
+## 10. Press "all sessions" and find it on the spine
 
 The spine lists what it started, and it is already asking for you: kind, project, phase, state, model tier, last update — six columns that tell the operator a decision is waiting, and not one of them is money.
 
-![Press "View all sessions" and find it on the spine](/media/stories/S9/10-press-view-all-sessions-and-find-it-on-t.png)
+![Press "all sessions" and find it on the spine](/forge-studio/media/stories/S9/10-press-all-sessions-and-find-it-on-the-sp.png)
 
 ## 11. Ask the assistant to do S1’s job, and choose ITS model too
 
 Second variant, and the promise comes apart on it.
 
-![Ask the assistant to do S1’s job, and choose ITS model too](/media/stories/S9/11-ask-the-assistant-to-do-s1-s-job-and-cho.png)
+![Ask the assistant to do S1’s job, and choose ITS model too](/forge-studio/media/stories/S9/11-ask-the-assistant-to-do-s1-s-job-and-cho.png)
 
 ## 12. Start it and let both of them run
 
 Two assistants now, on two different jobs, one of which the operator chose a model for and one of which chose for itself.
 
-![Start it and let both of them run](/media/stories/S9/12-start-it-and-let-both-of-them-run.png)
+![Start it and let both of them run](/forge-studio/media/stories/S9/12-start-it-and-let-both-of-them-run.png)
 
 ## 13. Tell the assistant what the project is for, and let it start
 
 A session the operator started from the spine has nobody to brief it but them.
 
-![Tell the assistant what the project is for, and let it start](/media/stories/S9/13-tell-the-assistant-what-the-project-is-f.png)
+![Tell the assistant what the project is for, and let it start](/forge-studio/media/stories/S9/13-tell-the-assistant-what-the-project-is-f.png)
 
 ## 14. Open the Monitor and read what the two of them cost
 
 The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row.
 
-![Open the Monitor and read what the two of them cost](/media/stories/S9/14-open-the-monitor-and-read-what-the-two-o.png)
+![Open the Monitor and read what the two of them cost](/forge-studio/media/stories/S9/14-open-the-monitor-and-read-what-the-two-o.png)
 
 ## 15. Read which agent the paid row belongs to
 
 A count is not an answer to "what did this cost me".
 
-![Read which agent the paid row belongs to](/media/stories/S9/15-read-which-agent-the-paid-row-belongs-to.png)
+![Read which agent the paid row belongs to](/forge-studio/media/stories/S9/15-read-which-agent-the-paid-row-belongs-to.png)
 
 ## 16. Read the authoring session’s own figure, against the ceiling it was given
 
 This is where S9 ends, on the one claim that makes the other eight stories affordable to run through an assistant at all: that the operator can see, per session, what they were charged for handing the work over.
 
-![Read the authoring session’s own figure, against the ceiling it was given](/media/stories/S9/16-read-the-authoring-session-s-own-figure-.png)
+![Read the authoring session’s own figure, against the ceiling it was given](/forge-studio/media/stories/S9/16-read-the-authoring-session-s-own-figure-.png)
