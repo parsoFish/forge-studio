@@ -2,7 +2,7 @@
   "aligns": [
     {
       "path": "brain/forge-dev/themes/forge-project-onboarding-contract.md",
-      "digest": "71118b744474e7bf",
+      "digest": "4ce0df89092d6b62",
       "why": "Beat5 names clauses directly: \"C6 resolved at creation (ruling 168)\", \"C1b declared by the starter (ruling 164, PR D)\", DEMO-SKILL/DEMO-ALIGN as the two resolution: 'agent' clauses"
     },
     {

@@ -1,8 +1,7 @@
 /**
  * One `forge serve` per forge root (M7-E row 205): every serve takes the
  * per-root lock and writes its own `_logs/daemon/forge.pid`, however it was
- * started — by `forge studio`, by hand, or under systemd/pm2 as
- * docs/reference/serve-supervision.md documents. So `forge studio` booting
+ * started — by `forge studio`, by hand, or under systemd/pm2. So `forge studio` booting
  * beside a hand-started serve adopts it and spawns nothing.
  *
  * REAL processes, in a REAL temp forge root — not fakes. A genuine `forge

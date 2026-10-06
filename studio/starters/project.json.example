@@ -8,7 +8,7 @@
 // command strings differ.
 //
 // Validate with:  forge preflight <project-id>
-// Full spec:      docs/reference/project-contract.md
+// Full spec:      SPEC.md §6
 {
   // ── Identity (Studio face) ────────────────────────────────────────────────
 

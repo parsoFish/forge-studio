@@ -1584,12 +1584,6 @@
     "count": 2
   },
   {
-    "file": "docs/reference/extension-seams.md",
-    "kind": "path",
-    "cited": "skills/my-agent/SKILL.md",
-    "count": 1
-  },
-  {
     "file": "docs/roadmaps/1.0-skills.md",
     "kind": "path",
     "cited": "scripts/e2e-journey.mjs",
