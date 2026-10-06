@@ -29,6 +29,8 @@ export function buildManifest(
   datePart: string,
   created_at: string,
   knownSlugs?: Set<string>,
+  /** Initiative ids already present in the queue (any state). Bead forge-8vfn.30.5. */
+  takenIds: ReadonlySet<string> = new Set(),
 ): InitiativeManifest {
   // W7-C3 deref guard — same rationale as the knownSlugs site above.
   const slug = slugify(d.slug || d.title || '');
@@ -39,7 +41,7 @@ export function buildManifest(
       (d.depends_on ?? [])
         .map((s) => slugify(s))
         .filter((dep) => dep && dep !== slug && (knownSlugs ? knownSlugs.has(dep) : true))
-        .map((dep) => mintInitiativeId(datePart, dep)),
+        .map((dep) => mintUniqueInitiativeId(datePart, dep, takenIds)),
     ),
   );
   // W7-FIX-A4 (W7A4-01): the human title the architect skill emits IS the
@@ -59,7 +61,7 @@ export function buildManifest(
   const changeClass = requireChangeClass(d, slug);
   const acceptance_criteria = requireDraftAcceptanceCriteria(d, slug);
   return {
-    initiative_id: mintInitiativeId(datePart, slug),
+    initiative_id: mintUniqueInitiativeId(datePart, slug, takenIds),
     ...(title ? { title } : {}),
     project: status.project,
     project_repo_path: status.project_repo_path,
@@ -143,6 +145,23 @@ function requireDraftAcceptanceCriteria(
  */
 export function mintInitiativeId(datePart: string, slug: string): string {
   return `INIT-${datePart}-${stripLeadingIdPrefixes(slug)}`;
+}
+
+/**
+ * Bead forge-8vfn.30.5 — `mintInitiativeId`, but never an id already in the
+ * queue: `-2`, `-3` … is appended until free. An id minted twice lets a stale
+ * `_queue/done/` manifest of the same id masquerade as the new run's outcome.
+ * Pure and deterministic in `taken`, so a sibling's `depends_on` ref and the
+ * sibling's own manifest resolve to the SAME id. Uniquifying rather than
+ * refusing keeps an unattended architect run alive.
+ */
+export function mintUniqueInitiativeId(datePart: string, slug: string, taken: ReadonlySet<string>): string {
+  const base = mintInitiativeId(datePart, slug);
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
 }
 
 const LEADING_INIT_TOKEN = /^init-/i;

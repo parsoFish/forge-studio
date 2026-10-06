@@ -45,7 +45,7 @@ export type { CommitOrchestratedCaptureArtifactsResult, SkippedCaptureMedia } fr
 export { compileWorkItemSpecs } from './phases/wi-spec-compile.ts';
 
 // ---- Queue state machine, manifests and initiatives ------------------------
-export { type QueuePaths, type QueueState, getPaths, listInFlight } from './queue.ts';
+export { type QueuePaths, type QueueState, getPaths, listAllInitiativeIds, listInFlight } from './queue.ts';
 export { DERIVED_CEILING_MARGIN_SHARE, initiativeTitle, mintAndPersistManifestCycleId, parseManifest, persistManifestCostCeiling, persistManifestSpecs, serializeManifest, CHANGE_CLASSES } from './manifest.ts';
 export { isContainedProjectRepoPath, isSafeProjectName, isSafeCycleId } from './manifest-path-guard.ts';
 export { promoteManifests } from './promote-manifests.ts';

@@ -85,6 +85,7 @@ import { sumRunCost } from './verify-cycle-cost.mjs';
 import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSelection } from './verify-cycle-flow.mjs';
 import { createStageTwo } from './verify-cycle-stage2.mjs';
 import { captureHandle, killGroupIfLive, runGuarded } from './verify-cycle-teardown.mjs';
+import { manifestLandedForRun } from './verify-cycle-merge-landed.mjs';
 import { getPaths } from '@forge/flows';
 import { runPreflight } from '@forge/projects';
 import { ARCHITECT_KIND_DIR, sessionDirSegments, sessionKindSegments } from '@forge/kernel';
@@ -459,8 +460,7 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, pr
   // Manifest in merged/ OR done/ is the AUTHORITATIVE merge signal (both R4-11-F1
   // confirmed-merge states, per @forge/flows' own getPaths — never a hand-typed string).
   const queuePaths = getPaths(join(FORGE_ROOT, '_queue'));
-  const manifestFilename = `${initiativeId}.md`;
-  const manifestLanded = existsSync(join(queuePaths.merged, manifestFilename)) || existsSync(join(queuePaths.done, manifestFilename));
+  const manifestLanded = manifestLandedForRun({ queuePaths, initiativeId, cycleId, runStartMs }); // this run's cycle, not a stale same-id manifest
   const reflectTheme = FLOW_REFLECTS ? reflectWroteBrainTheme(project, runStartMs) : undefined;
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
@@ -953,7 +953,7 @@ async function main() {
   // SPAWNED and never one it only REUSED (M7-A row 82; verify-cycle-teardown.mjs).
   let watch = null;
   await runGuarded(
-    { getWatch: () => watch, ports: STUDIO_PORTS, log, onIncomplete: () => { process.exitCode = 1; } },
+    { getWatch: () => watch, ports: STUDIO_PORTS, log, forgeRoot: FORGE_ROOT, notBeforeMs: runStartMs, onIncomplete: () => { process.exitCode = 1; } },
     async () => {
     watch = await startWatch();
     log(`watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);

@@ -18,7 +18,7 @@ import {
   mintAndPersistManifestCycleId,
 } from '@forge/flows';
 import { promoteManifests } from '@forge/flows';
-import { isCanonicalInitiativeId } from '@forge/flows';
+import { isCanonicalInitiativeId, getPaths, listAllInitiativeIds } from '@forge/flows';
 import { isContainedProjectRepoPath } from '@forge/flows';
 import type { ArchitectManifestPorts } from '@forge/sessions';
 import type { ParseManifestPort } from '@forge/sessions';
@@ -34,6 +34,7 @@ export const architectManifestPorts: ArchitectManifestPorts = {
   mintAndPersistManifestCycleId,
   promoteManifests,
   isCanonicalInitiativeId,
+  takenInitiativeIds: (queueRoot) => listAllInitiativeIds(getPaths(queueRoot)),
 };
 
 /** The single port the `roadmap-draft` artifact renderer needs. */

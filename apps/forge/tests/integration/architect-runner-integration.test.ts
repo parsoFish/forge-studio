@@ -48,12 +48,12 @@ import {
 import { createLogger } from '@forge/kernel';
 import { parseManifest, serializeManifest, mintAndPersistManifestCycleId } from '@forge/flows';
 import { promoteManifests } from '@forge/flows';
-import { isCanonicalInitiativeId } from '@forge/flows';
+import { isCanonicalInitiativeId, getPaths, listAllInitiativeIds } from '@forge/flows';
 import type { ArchitectManifestPorts } from '@forge/sessions';
 
 /** The REAL functions — this file asserts that what `promoteManifests` wrote
  *  parses back, and a stub would let it agree with a format the product never produces. */
-const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests, isCanonicalInitiativeId };
+const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests, isCanonicalInitiativeId, takenInitiativeIds: (q) => listAllInitiativeIds(getPaths(q)) };
 import { REDACTED_THINKING_MARKER } from '@forge/sessions';
 import { COMPLETENESS_CRITIC_MODEL, completenessCriticAgentSpec, CRITIC_MAX_TOTAL_PROMPT_CHARS } from '@forge/sessions/testing';
 
