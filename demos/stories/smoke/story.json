@@ -117,7 +117,23 @@
     "removed": [],
     "removedContents": [],
     "failed": [],
-    "escapes": [],
+    "escapes": [
+      {
+        "root": "driftwt",
+        "paths": [
+          "_logs/_skill-docs-drift"
+        ],
+        "live": {
+          "pid": 3012246,
+          "cwd": ".",
+          "via": "cwd",
+          "cwdKind": "relative-to-sibling-root"
+        },
+        "owner": "unattributable",
+        "reason": "no descendant of this run was seen in driftwt",
+        "rootKind": "sibling-basename"
+      }
+    ],
     "groundEscapes": [],
     "reappeared": []
   },
@@ -126,7 +142,7 @@
     "unmeasured": false
   },
   "git": {
-    "sha": "4a717a1774d9a3cb74929103781895472f143ee0",
+    "sha": "fbb36960b92b7d1a9a4a2083cdd0f50895696e11",
     "dirty": false
   },
   "storyDigest": "2169d167b954d96c"
