@@ -154,6 +154,7 @@ secrets.env
 !.claude/skills/security-review/
 !.claude/skills/docs-write/
 !.claude/skills/distil-decision/
+!.claude/skills/docs-drift/
 !.claude/agents/
 *.swp
 *.swo
