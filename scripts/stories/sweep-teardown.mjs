@@ -325,7 +325,20 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   const descendants = daemonPid !== null ? descendantsOf(daemonPid, preSignalTable) : [];
   const descendantIdentities = descendants.map((pid) => identifyPid(pid, { procRoot }));
 
-  const sched = stopOwnScheduler(root, graceMs);
+  // forge-8vfn.30.16 — a DRAINING daemon dispatches the next phase agent after
+  // the snapshot above; `stopOwnScheduler` freezes it just before its SIGKILL
+  // and calls this to record those late children while their ppid still leads
+  // to it. Identities are keyed by pid; the earlier record wins.
+  const lateIdentities = [];
+  const recordDescendants = (pid) => {
+    const table = procTable();
+    if (table === null) return { ok: false, reason: 'the process table could not be read at the freeze — what the draining daemon dispatched is UNKNOWN' };
+    for (const d of descendantsOf(pid, table)) {
+      if (!descendantIdentities.some((i) => i?.pid === d)) lateIdentities.push(identifyPid(d, { procRoot }));
+    }
+    return { ok: true };
+  };
+  const sched = stopOwnScheduler(root, graceMs, { recordDescendants });
   if (sched.unknown) {
     // ROW 102b/18-19 — same refusal shape as the pidfile/table UNKNOWN cases above.
     const reason = sched.note ?? 'scheduler state could not be determined';
@@ -360,11 +373,13 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   // process group) may have outlived it. TERM every pid the pre-signal
   // snapshot found — the daemon's own kill never reached them. Each signal is
   // re-verified against the identity recorded above (MUST 2).
-  for (const identity of descendantIdentities) {
+  const allDescendants = [...descendantIdentities, ...lateIdentities];
+  for (const identity of allDescendants) {
     const r = verifiedKill(identity, 'SIGTERM', { kill, procRoot });
-    if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
+    if (r.signalled) lines.push(`[stories] stopped pid ${identity.pid} (SIGTERM, recorded descendant of the daemon${lateIdentities.includes(identity) ? ', dispatched while it drained' : ''})`);
+    else lines.push(`[stories] census: ${r.reason}`);
   }
-  const roots = [daemonIdentity, ...descendantIdentities].filter((r) => r !== null);
+  const roots = [daemonIdentity, ...allDescendants].filter((r) => r !== null);
   const censusOf = () => waitForCensusEmpty(roots, { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot });
   let census = await censusOf();
   if (!census.empty && census.survivors !== null) {
@@ -374,7 +389,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
       // applies to every pid this module ever signals, not only the ones
       // recorded at the top.
       const r = verifiedKill(identifyPid(pid, { procRoot }), 'SIGKILL', { kill, procRoot });
-      if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
+      lines.push(r.signalled ? `[stories] stopped pid ${pid} (SIGKILL, survived SIGTERM)` : `[stories] census: ${r.reason}`);
     }
     census = await censusOf();
   }
