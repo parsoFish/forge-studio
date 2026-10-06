@@ -1,7 +1,7 @@
 // How long a page stays trusted after its `last_verified` date (R22).
-export const PAGE_TYPES = /** @type {const} */ (['guide', 'how-to', 'reference', 'explanation']);
+export const PAGE_TYPES = /** @type {const} */ (['guide', 'how-to', 'reference', 'explanation', 'landing']);
 
-const WINDOW_DAYS = Object.freeze({ guide: 120, 'how-to': 120, reference: 180, explanation: 180 });
+const WINDOW_DAYS = Object.freeze({ guide: 120, 'how-to': 120, reference: 180, explanation: 180, landing: 120 });
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function windowDays(type) {
