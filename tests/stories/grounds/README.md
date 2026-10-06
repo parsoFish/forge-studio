@@ -52,4 +52,4 @@ them up, at which point this list drops them.
 - D-34–D-36 (change class, `DECISIONS.md`) and `brain/forge-dev/themes/class-blind-gates.md` — S1–S3's readiness clauses assert no change-class gate.
 - D-05 (crash recovery, `DECISIONS.md`) — S10 beat 7's claim race is adjacent; no crash path is exercised.
 - `brain/forge-dev/themes/agent-authored-gates-are-self-grading.md` — S7/S8's scan-then-trust shape.
-- SPEC §1 (runtime adapters) — S9 beat 5's per-session SDK/effort control.
+- SPEC §1 (runtime adapters) — S9's kickoff beat: Studio offers a model tier only; the SDK and effort are not operator-set.
