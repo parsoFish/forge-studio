@@ -5,11 +5,11 @@ name: Docs site (GitHub Pages)
 # operator's decision: enabling Pages on the repository and setting that
 # variable are repository settings, never a change in this file. Until then
 # every run builds and uploads the site as an artifact, which is the preview.
+# Pull requests are not a trigger: CI's `docs` job already builds the site on
+# every PR, and a skipped deploy job would sit on every PR head as a check.
 on:
   push:
     branches: [main]
-    paths: [apps/docs/**, package-lock.json, .github/workflows/docs-pages.yml]
-  pull_request:
     paths: [apps/docs/**, package-lock.json, .github/workflows/docs-pages.yml]
   workflow_dispatch:
 
@@ -51,7 +51,7 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DOCS_PAGES_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.DOCS_PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
