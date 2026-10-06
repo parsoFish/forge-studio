@@ -82,7 +82,7 @@ Forge auto-discovers managed projects from disk — any directory under
 `projects/` (or `$FORGE_PROJECTS_DIR`) carrying a `.forge/project.json`
 contract file is a managed project. To get one ready:
 
-1. Read [**docs/tutorials/getting-started.md**](./docs/tutorials/getting-started.md) — the
+1. Read [**Getting started**](./apps/docs/src/content/docs/guides/getting-started.md) — the
    install-to-first-merge walkthrough (clone/symlink → `forge preflight <id>`
    until green → author or reuse a flow → `/architect/new` → approve → review →
    merge).
