@@ -12,11 +12,12 @@ import { isStale, windowDays } from '../apps/docs/src/freshness.mjs';
 
 const DAY = 24 * 60 * 60 * 1000;
 
-test('freshness windows: 120 days for guides and how-tos, 180 for reference and explanation', () => {
+test('freshness windows: 120 days for guides, how-tos and the landing page, 180 for reference and explanation', () => {
   assert.equal(windowDays('guide'), 120);
   assert.equal(windowDays('how-to'), 120);
   assert.equal(windowDays('reference'), 180);
   assert.equal(windowDays('explanation'), 180);
+  assert.equal(windowDays('landing'), 120);
   assert.throws(() => windowDays('tutorial'), /unknown page type/);
 });
 

@@ -1,0 +1,73 @@
+---
+title: forge
+description: Build software factories that take work on your codebase from an idea to a merged pull request.
+type: landing
+owner: parsoFish
+last_verified: 2026-10-06
+covers: [ROADMAP.md, apps/docs/public/media/stories/**]
+template: splash
+hero:
+  tagline: Build software factories that take work on your codebase from an idea to a merged pull request, and stop only where you ask them to.
+  actions:
+    - text: Get started
+      link: /guides/getting-started/
+      icon: right-arrow
+    - text: Watch it run
+      link: '#see-it-run'
+      variant: minimal
+---
+
+import { Card, CardGrid, Steps } from '@astrojs/starlight/components';
+
+## What you can do
+
+<CardGrid>
+  <Card title="Hand off whole features" icon="rocket">
+    Describe an idea. An agent interviews you and drafts a plan for your
+    approval. Then agents build it, review it and open a pull request while you
+    work on something else.
+  </Card>
+  <Card title="Build your own factory" icon="puzzle">
+    Arrange agents, skills and gates into a flow in Studio. A flow is data you
+    can read and change, so the pipeline fits your project.
+  </Card>
+  <Card title="Keep what it learns" icon="open-book">
+    After each merge, forge asks what went well and records it as knowledge.
+    Planning agents read that knowledge before they design the next change.
+  </Card>
+</CardGrid>
+
+## See it run
+
+![The plan an agent drafted for a newly connected project, waiting for approval](/media/stories/S1/11-open-the-session-read-the-plan-and-press.png)
+
+Onboard an existing project, and an agent drafts its first plan for you to approve.
+
+![A new flow in Studio, its stations laid out from architect to review](/media/stories/S4/08-check-the-flow-came-out-clean-and-can-be.png)
+
+Build a flow and point it at a project. Its stations show on the monitor as it runs.
+
+## How it works
+
+<Steps>
+
+1. **Connect a project.** forge checks it can test, demo and release your code.
+
+2. **Approve a plan.** Describe a change. An agent asks you questions, then writes the plan.
+
+3. **Review the result.** Agents build and review the change. You merge the pull request or send it back.
+
+</Steps>
+
+## Open source
+
+forge is free software under the AGPL-3.0-or-later licence. The source is on
+[GitHub](https://github.com/parsoFish/forge-studio).
+
+## What's next
+
+- Documentation that lets someone new go from install to a merged pull request
+- A real project built end to end through forge
+- Version 1.0
+
+The full plan is on the [roadmap](https://github.com/parsoFish/forge-studio/blob/main/ROADMAP.md).
