@@ -1242,12 +1242,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-10-04T18-25-38-e973a07d"
+        "architectSessionId": "2026-10-06T03-53-34-d7138e75"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-04T18-25-38-e973a07d"
+        "architect-session-id": "2026-10-06T03-53-34-d7138e75"
       },
       "expect": {
         "page": "architect-new",
@@ -1336,14 +1336,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runId": "INIT-2026-10-04-exclude-author-filter"
+        "runId": "INIT-2026-10-06-exclude-author-flag"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "initiative-status": "ready-for-review",
         "plan-state": "planned",
-        "initiative-id": "INIT-2026-10-04-exclude-author-filter"
+        "initiative-id": "INIT-2026-10-06-exclude-author-flag"
       },
       "expect": {
         "page": "projects",
@@ -1360,13 +1360,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
+        "cycleId": "2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "run-active": "true",
-        "run-cycle-id": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
+        "run-cycle-id": "2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag"
       },
       "expect": {
         "page": "projects",
@@ -1433,12 +1433,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
+        "cycleId": "2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter",
+        "run-id": "2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "status": "active"
@@ -1620,10 +1620,10 @@
         "region-comment-count": "1"
       },
       "anchor": {
-        "by": "text",
+        "by": "fallback",
         "attr": "demo-region",
         "text": "precedence",
-        "region": "ac-14"
+        "region": "ac-1"
       },
       "frame": "frames/22-anchor-one-blocking-comment-to-the-prece.png"
     },
@@ -1685,7 +1685,7 @@
         "by": "text",
         "attr": "demo-region",
         "text": "precedence",
-        "region": "ac-14"
+        "region": "ac-1"
       },
       "frame": "frames/25-read-the-fix-against-the-criterion-and-r.png"
     },
@@ -1778,12 +1778,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runCostUsd": "16.6719"
+        "runCostUsd": "14.1775"
       },
       "data": {
         "page": "flow-monitor",
         "page-ready": "true",
-        "run-cost-usd": "16.6719"
+        "run-cost-usd": "14.1775"
       },
       "expect": {
         "page": "flow-monitor",
@@ -1852,12 +1852,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId2": "2026-10-04T19-39-54-8f41b9bb"
+        "architectSessionId2": "2026-10-06T05-00-45-5216d737"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-10-04T19-39-54-8f41b9bb"
+        "architect-session-id": "2026-10-06T05-00-45-5216d737"
       },
       "expect": {
         "page": "architect-new",
@@ -1946,14 +1946,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "runId2": "INIT-2026-10-04-coupling-sort-flag"
+        "runId2": "INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "initiative-status": "ready-for-review",
         "plan-state": "planned",
-        "initiative-id": "INIT-2026-10-04-coupling-sort-flag"
+        "initiative-id": "INIT-2026-10-06-coupling-sort-flag"
       },
       "expect": {
         "page": "projects",
@@ -1970,13 +1970,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "cycleId2": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "projects",
         "project-id": "gitpulse",
         "run-active": "true",
-        "run-cycle-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "run-cycle-id": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "expect": {
         "page": "projects",
@@ -2043,12 +2043,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "cycleId2": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
+        "run-id": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-1",
@@ -2123,12 +2123,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "cycleId2": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
+        "run-id": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-1",
@@ -2151,12 +2151,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "cycleId2": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
+        "run-id": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-2",
@@ -2331,12 +2331,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "cycleId2": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
+        "run-id": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-1",
@@ -2359,12 +2359,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "cycleId2": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag"
+        "cycleId2": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag"
       },
       "data": {
         "page": "flow-monitor",
         "section": "run-controls",
-        "run-id": "2026-10-04T19-45-37_INIT-2026-10-04-coupling-sort-flag",
+        "run-id": "2026-10-06T05-08-59_INIT-2026-10-06-coupling-sort-flag",
         "hex-kind": "wi",
         "node-id": "dev",
         "wi-id": "WI-2",
@@ -2386,14 +2386,14 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 709859,
-        "dir": "_logs/_architect-2026-10-04T18-25-38-e973a07d",
-        "reason": "pid 709859: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2002601,
+        "dir": "_logs/_architect-2026-10-06T03-53-34-d7138e75",
+        "reason": "pid 2002601: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1213915,
-        "dir": "_logs/_architect-2026-10-04T19-39-54-8f41b9bb",
-        "reason": "pid 1213915: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2604907,
+        "dir": "_logs/_architect-2026-10-06T05-00-45-5216d737",
+        "reason": "pid 2604907: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
@@ -2405,19 +2405,19 @@
       "ok": true,
       "claimed": [
         {
-          "path": "_queue/done/INIT-2026-10-04-exclude-author-filter.md",
+          "path": "_queue/done/INIT-2026-10-06-exclude-author-flag.md",
           "state": "done",
-          "reason": "created_at 2026-10-04T18:32:29.016Z falls inside this run"
+          "reason": "created_at 2026-10-06T04:00:35.482Z falls inside this run"
         }
       ],
       "left": [
         {
-          "path": "_queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md",
+          "path": "_queue/in-flight/INIT-2026-10-06-coupling-sort-flag.md",
           "state": "in-flight",
           "reason": "this tree's own scheduler is alive — an in-flight manifest is never claimed while its heartbeat writer could still be running (row 166)"
         },
         {
-          "path": "_queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md.heartbeat",
+          "path": "_queue/in-flight/INIT-2026-10-06-coupling-sort-flag.md.heartbeat",
           "state": "in-flight",
           "reason": "not an INIT manifest — the story-id sweep owns this one"
         }
@@ -2425,46 +2425,46 @@
       "unattributable": [],
       "failed": [],
       "lines": [
-        "[stories] queue claim: done/ holds 1 — INIT-2026-10-04-exclude-author-filter.md",
-        "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-04-exclude-author-filter.md — created_at 2026-10-04T18:32:29.016Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
+        "[stories] queue claim: done/ holds 1 — INIT-2026-10-06-exclude-author-flag.md",
+        "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-06-exclude-author-flag.md — created_at 2026-10-06T04:00:35.482Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
         "[stories] queue claim: failed/ holds 0",
-        "[stories] queue claim: in-flight/ holds 2 — INIT-2026-10-04-coupling-sort-flag.md, INIT-2026-10-04-coupling-sort-flag.md.heartbeat",
-        "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md — the scheduler this run started is still alive, so an in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)",
-        "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md.heartbeat — not an INIT manifest (the story-id sweep owns it)",
+        "[stories] queue claim: in-flight/ holds 2 — INIT-2026-10-06-coupling-sort-flag.md, INIT-2026-10-06-coupling-sort-flag.md.heartbeat",
+        "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-06-coupling-sort-flag.md — the scheduler this run started is still alive, so an in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)",
+        "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-06-coupling-sort-flag.md.heartbeat — not an INIT manifest (the story-id sweep owns it)",
         "[stories] queue claim: merged/ holds 0",
         "[stories] queue claim: pending/ holds 0",
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
     "artefacts": {
-      "dest": "_logs/_story-run-artefacts-clear/S10/1791138319540",
+      "dest": "_logs/_story-run-artefacts-clear/S10/1791258794207",
       "captured": [
-        "_logs/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
+        "_logs/2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag"
       ],
       "cleared": [
-        "_logs/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter"
+        "_logs/2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag"
       ],
       "refused": [],
       "unremoved": []
     },
     "lines": [
-      "[stories] queue claim: done/ holds 1 — INIT-2026-10-04-exclude-author-filter.md",
-      "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-04-exclude-author-filter.md — created_at 2026-10-04T18:32:29.016Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
+      "[stories] queue claim: done/ holds 1 — INIT-2026-10-06-exclude-author-flag.md",
+      "[stories] queue claim: CLAIMED _queue/done/INIT-2026-10-06-exclude-author-flag.md — created_at 2026-10-06T04:00:35.482Z falls inside this run; captured to demos/stories/S10/queue-claim/done before removal",
       "[stories] queue claim: failed/ holds 0",
-      "[stories] queue claim: in-flight/ holds 2 — INIT-2026-10-04-coupling-sort-flag.md, INIT-2026-10-04-coupling-sort-flag.md.heartbeat",
-      "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md — the scheduler this run started is still alive, so an in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)",
-      "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-04-coupling-sort-flag.md.heartbeat — not an INIT manifest (the story-id sweep owns it)",
+      "[stories] queue claim: in-flight/ holds 2 — INIT-2026-10-06-coupling-sort-flag.md, INIT-2026-10-06-coupling-sort-flag.md.heartbeat",
+      "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-06-coupling-sort-flag.md — the scheduler this run started is still alive, so an in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)",
+      "[stories] queue claim: LEFT _queue/in-flight/INIT-2026-10-06-coupling-sort-flag.md.heartbeat — not an INIT manifest (the story-id sweep owns it)",
       "[stories] queue claim: merged/ holds 0",
       "[stories] queue claim: pending/ holds 0",
       "[stories] queue claim: ready-for-review/ holds 0",
-      "[stories] own artefacts: CAPTURED 1 path(s) to _logs/_story-run-artefacts-clear/S10/1791138319540",
-      "[stories] own artefacts: CLEARED _logs/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter — removed, re-read to confirm"
+      "[stories] own artefacts: CAPTURED 1 path(s) to _logs/_story-run-artefacts-clear/S10/1791258794207",
+      "[stories] own artefacts: CLEARED _logs/2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag — removed, re-read to confirm"
     ]
   },
   "fence": {
     "restored": [],
     "removed": [
-      "brain/cycles/_raw/2026-10-04T18-34-03_INIT-2026-10-04-exclude-author-filter.md"
+      "brain/cycles/_raw/2026-10-06T04-01-27_INIT-2026-10-06-exclude-author-flag.md"
     ],
     "removedContents": [],
     "failed": [],
@@ -2473,12 +2473,12 @@
     "reappeared": []
   },
   "spend": {
-    "usd": 34.4824282,
+    "usd": 29.7074986,
     "unmeasured": false
   },
   "git": {
-    "sha": "5e58de00cb02c71e83c63d77086457aece7d3fc2",
+    "sha": "f1c5c3dda68b5fafc71ec1e818e5f1cc5c84df2d",
     "dirty": true
   },
-  "storyDigest": "d4045991cec2548d"
+  "storyDigest": "0e8f980eca0873ec"
 }
