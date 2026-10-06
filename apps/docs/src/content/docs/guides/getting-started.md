@@ -51,4 +51,5 @@ It stops again at the verdict gate. Write a rationale, then press **approve and 
 ## Related
 
 - [Onboard an existing project](/guides/how-to/onboard-an-existing-project/)
-- [How forge works](/how-forge-works/)
+- [Projects](/guides/projects/)
+- [The example factory](/guides/example-factory/)

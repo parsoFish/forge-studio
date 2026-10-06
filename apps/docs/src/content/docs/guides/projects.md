@@ -53,6 +53,6 @@ When a project's generated mechanisms have drifted from the current template, pr
 
 ## Related
 
+- [project.json](/reference/project-json/)
 - [Onboard an existing project](/guides/how-to/onboard-an-existing-project/)
 - [Getting started](/guides/getting-started/)
-- [Flows](/guides/flows/)
