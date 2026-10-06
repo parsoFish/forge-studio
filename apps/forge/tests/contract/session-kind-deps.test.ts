@@ -70,7 +70,7 @@ test('the port object is fully populated — no member declared and left undefin
   const keys = Object.keys(architectManifestPorts).sort();
   assert.deepEqual(
     keys,
-    ['isCanonicalInitiativeId', 'mintAndPersistManifestCycleId', 'parseManifest', 'promoteManifests', 'serializeManifest'],
+    ['isCanonicalInitiativeId', 'mintAndPersistManifestCycleId', 'parseManifest', 'promoteManifests', 'serializeManifest', 'takenInitiativeIds'],
     'a port silently missing from the bound object would make the kind refuse at run time for a reason no test named',
   );
   for (const k of keys) {
