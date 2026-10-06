@@ -38,5 +38,6 @@ Home carries the same four tiles as a summary; each links to Monitor, which hold
 
 ## Related
 
-- [Sessions and gates](/guides/sessions-and-gates/)
+- [Drive forge through the assistant](/guides/how-to/drive-forge-through-the-assistant/)
+- [Sessions & gates](/guides/sessions-and-gates/)
 - [Flows](/guides/flows/)
