@@ -210,8 +210,8 @@ packages/flows/pr.ts writeFileSync 1
 packages/flows/promote-manifests.ts existsSync 1
 packages/flows/promote-manifests.ts readdirSync 1
 packages/flows/promote-manifests.ts readFileSync 1
-packages/flows/queue.ts existsSync 9
-packages/flows/queue.ts readdirSync 4
+packages/flows/queue.ts existsSync 10
+packages/flows/queue.ts readdirSync 5
 packages/flows/queue.ts readFileSync 1
 packages/flows/queue.ts renameSync 5
 packages/flows/queue.ts statSync 1
