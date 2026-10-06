@@ -54,7 +54,7 @@ import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { isCanonicalInitiativeId } from '@forge/flows';
+import { getPaths, isCanonicalInitiativeId, listAllInitiativeIds } from '@forge/flows';
 
 import { runArchitectTurn, type ArchitectStatus } from '@forge/sessions';
 import { stubArchitectManifestPorts } from '@forge/sessions/testing';
@@ -187,6 +187,31 @@ test('7.6.17: a SHRINKING re-draft leaves no orphan — round 1 initiative that 
       drafted(manifestsDir),
       [`INIT-${TODAY}-keep-this-one.md`],
       'the initiative the architect dropped must not still be queued — the drafts dir is THIS round, not every round',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('forge-8vfn.30.5: an id already in ANY queue state dir is not re-minted through the door', async () => {
+  const { root, projectRoot, manifestsDir } = plant();
+  const queueRoot = join(root, '_queue');
+  // Stale manifests from earlier runs of the same idea: one in done/, one in failed/.
+  for (const [state, slug] of [['done', 'stale-idea'], ['failed', 'other-stale']] as const) {
+    mkdirSync(join(queueRoot, state), { recursive: true });
+    writeFileSync(join(queueRoot, state, `INIT-${TODAY}-${slug}.md`), 'old\n', 'utf8');
+  }
+  const bound = { ...ports(), takenInitiativeIds: (q: string) => listAllInitiativeIds(getPaths(q)) };
+  try {
+    await runArchitectTurn({
+      manifestPorts: bound, sessionId: 'sess-1', project: 'p1', projectRoot, queueRoot,
+      logsRoot: join(root, '_logs'), brainCwd: root,
+      queryFn: scriptedQueryFn([DRAFT([['stale-idea', []], ['other-stale', []], ['fresh-idea', []]]), CLEAN]).queryFn as never,
+      logger: silentLogger(),
+    });
+    assert.deepEqual(
+      drafted(manifestsDir),
+      [`INIT-${TODAY}-fresh-idea.md`, `INIT-${TODAY}-other-stale-2.md`, `INIT-${TODAY}-stale-idea-2.md`],
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

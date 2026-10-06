@@ -93,6 +93,21 @@ export function listInFlight(paths = getPaths()): string[] {
   return readdirSync(paths.inFlight).filter((f) => f.endsWith('.md'));
 }
 
+/**
+ * Every initiative id present in ANY queue state dir (bead forge-8vfn.30.5).
+ * Walks the dirs `getPaths` declares — never a hand-typed list — so a state
+ * added to the queue layout is covered automatically.
+ */
+export function listAllInitiativeIds(paths = getPaths()): Set<string> {
+  const { root, ...stateDirs } = paths;
+  const ids = new Set<string>();
+  for (const dir of Object.values(stateDirs)) {
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) if (f.endsWith('.md')) ids.add(f.slice(0, -'.md'.length));
+  }
+  return ids;
+}
+
 export function counts(paths = getPaths()): Record<QueueState, number> {
   return {
     pending: safeCount(paths.pending),

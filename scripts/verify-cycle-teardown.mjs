@@ -41,6 +41,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { connect as netConnect } from 'node:net';
+import { snapshotServe, stopRecordedServe } from './verify-cycle-serve-stop.mjs';
 
 /** `/proc/<pid>/stat` field 22 (start time, in clock ticks since boot) — the
  *  one field stable for the lifetime of a pid and never reused until the pid
@@ -147,20 +148,30 @@ const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms);
 export async function teardownStudio({
   handle, spawned, ports, bridgeUrl, log = () => {}, sleep = defaultSleep,
   killGroupIfLive: kill = killGroupIfLive, verifyTornDown: verify = verifyTornDown,
-  termWaitMs = 1500,
+  termWaitMs = 1500, forgeRoot, notBeforeMs = 0,
+  snapshotServe: snapServe = snapshotServe, stopRecordedServe: stopServe = stopRecordedServe,
 }) {
   if (!spawned || !handle) {
     log('teardown: studio was reused by this run, not spawned — leaving it running');
     return { attempted: false, complete: true, incomplete: [] };
   }
+  // bead forge-8vfn.30.5: the serve Studio started is DETACHED (own process
+  // group) and survives the group kill below, so its recorded pid is read
+  // BEFORE the studio dies (a dying studio's serve may clear forge.pid) and
+  // the serve is stopped by that pid AFTER (so no supervisor respawns it).
+  const serveSnapshot = forgeRoot ? snapServe({ forgeRoot }) : { status: 'UNKNOWN', reason: 'no forgeRoot given to teardown — cannot locate forge.pid' };
   log(`teardown: studio was spawned by this run (pid ${handle.pid}) — SIGTERM to its process group`);
   const term = kill(handle, 'SIGTERM');
   if (!term.signalled) log(`teardown: SIGTERM not delivered (${term.reason})`);
   await sleep(termWaitMs);
   const esc = kill(handle, 'SIGKILL');
   if (esc.signalled) log('teardown: process group still present after SIGTERM — sent SIGKILL');
+  const serve = await stopServe(serveSnapshot, { notBeforeMs });
+  log(serve.status === 'STOPPED'
+    ? `teardown: forge serve pid ${serve.pid} stopped by its recorded pid`
+    : `teardown: forge serve ${serve.status} — ${serve.reason ?? ''}`);
   const result = await verify({ ports, bridgeUrl, log });
-  return { attempted: true, complete: result.complete, incomplete: result.incomplete };
+  return { attempted: true, complete: result.complete, incomplete: result.incomplete, serve };
 }
 
 /**
@@ -178,14 +189,14 @@ export async function teardownStudio({
  * replace `body`'s own error — the run's real failure is the one that
  * matters.
  */
-export async function runGuarded({ getWatch, ports, log = () => {}, onIncomplete = () => {} }, body, { teardownStudio: teardown = teardownStudio } = {}) {
+export async function runGuarded({ getWatch, ports, log = () => {}, onIncomplete = () => {}, forgeRoot, notBeforeMs }, body, { teardownStudio: teardown = teardownStudio } = {}) {
   try {
     return await body();
   } finally {
     const watch = getWatch();
     if (watch) {
       try {
-        const result = await teardown({ handle: watch.handle, spawned: watch.spawned, bridgeUrl: watch.bridgeUrl, ports, log });
+        const result = await teardown({ handle: watch.handle, spawned: watch.spawned, bridgeUrl: watch.bridgeUrl, ports, log, forgeRoot, notBeforeMs });
         if (!result.complete) onIncomplete(result);
       } catch (err) {
         log(`teardown itself threw — ${err.message} (not masking the run's own outcome)`);
