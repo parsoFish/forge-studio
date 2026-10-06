@@ -171,7 +171,15 @@ export async function teardownStudio({
     ? `teardown: forge serve pid ${serve.pid} stopped by its recorded pid`
     : `teardown: forge serve ${serve.status} — ${serve.reason ?? ''}`);
   const result = await verify({ ports, bridgeUrl, log });
-  return { attempted: true, complete: result.complete, incomplete: result.incomplete, serve };
+  // A serve that survived both signals is the orphan this teardown exists to
+  // prevent: it makes the teardown incomplete, never a quiet log line.
+  const serveLeft = serve.status === 'FAILED' ? [`forge serve pid ${serve.pid}: ${serve.reason}`] : [];
+  return {
+    attempted: true,
+    complete: result.complete && serveLeft.length === 0,
+    incomplete: [...result.incomplete, ...serveLeft],
+    serve,
+  };
 }
 
 /**

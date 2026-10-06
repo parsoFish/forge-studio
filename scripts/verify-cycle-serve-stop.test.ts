@@ -128,3 +128,15 @@ test('teardownStudio stops the recorded serve for a spawned studio, and leaves a
     }
   }
 });
+
+test('teardownStudio reports INCOMPLETE when the recorded serve survives both signals', async () => {
+  const res = await teardownStudio({
+    handle: { pid: 999999999, startTicks: null }, spawned: true, ports: [], bridgeUrl: undefined,
+    forgeRoot: '/nonexistent-forge-root', notBeforeMs: 0, sleep: async () => {},
+    verifyTornDown: async () => ({ complete: true, incomplete: [] }),
+    snapshotServe: () => ({ status: 'RECORDED', pid: 4242 }),
+    stopRecordedServe: async () => ({ status: 'FAILED', pid: 4242, reason: 'pid 4242 still present after SIGKILL' }),
+  });
+  assert.equal(res.complete, false, JSON.stringify(res));
+  assert.match(res.incomplete.join('\n'), /forge serve pid 4242/);
+});
