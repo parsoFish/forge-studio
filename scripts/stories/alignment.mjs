@@ -57,6 +57,14 @@ const INTAKE_RE = /^brain\/forge-dev\/themes\/[^/]+\.md$/;
  *  coerced. */
 const ALIGN_DIGEST_RE = /^[0-9a-f]{16}$/;
 
+/** `aligns[].anchor` — a ledger row id (`D-09`, `R-05`). An anchored entry
+ *  pins that ROW's digest, not the whole file's, so a new row elsewhere in a
+ *  living ledger drifts nothing (docs-w7 7.9; T1 1976d). */
+const ALIGN_ANCHOR_RE = /^[A-Z]+-\d+$/;
+
+/** Files that grow by rows: a citation of one must name its row. */
+const ROW_ANCHORED_PATHS = new Set(['DECISIONS.md']);
+
 /** The one-line procedure every drift finding ends on. */
 const REALIGN_PROCEDURE =
   "update the story/fixture to the changed learning, or record it as out of this story's scope, "
@@ -68,6 +76,17 @@ const REALIGN_PROCEDURE =
  */
 export function digest16(bytes) {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+}
+
+/**
+ * digest16 of the one table row whose first cell is `anchor` (the line,
+ * without its newline). Throws, naming the count, when there is no such row
+ * or more than one.
+ */
+export function rowDigest(text, anchor) {
+  const rows = String(text).split('\n').filter((l) => new RegExp(`^\\|\\s*${anchor}\\s*\\|`).test(l));
+  if (rows.length !== 1) throw new Error(`${rows.length === 0 ? 'no row' : `${rows.length} rows`} with id ${anchor}`);
+  return digest16(Buffer.from(rows[0].replace(/\r$/, '')));
 }
 
 function storyIds(repoRoot) {
@@ -148,7 +167,19 @@ export function validateAlignsSidecar(raw, storyId) {
       );
     }
     requireOneLine(entry.why, storyId, `${at}.why`);
-    return Object.freeze({ path: entry.path, digest: entry.digest, why: entry.why });
+    if (entry.anchor !== undefined && (typeof entry.anchor !== 'string' || !ALIGN_ANCHOR_RE.test(entry.anchor))) {
+      failSidecar(storyId, `${at}.anchor`, `expected a row id like D-09 or R-05, got ${JSON.stringify(entry.anchor)}`);
+    }
+    if (entry.anchor === undefined && ROW_ANCHORED_PATHS.has(entry.path)) {
+      failSidecar(
+        storyId,
+        `${at}.anchor`,
+        `${entry.path} grows by rows, so a citation of it must name its row (anchor: "D-xx") — a whole-file digest drifts on every new row`,
+      );
+    }
+    return Object.freeze(entry.anchor === undefined
+      ? { path: entry.path, digest: entry.digest, why: entry.why }
+      : { path: entry.path, anchor: entry.anchor, digest: entry.digest, why: entry.why });
   });
   return Object.freeze({ kind: 'entries', entries: Object.freeze(entries) });
 }
@@ -219,7 +250,22 @@ export function checkAlignment(repoRoot) {
         });
         continue;
       }
-      const current = digest16(readFileSync(target));
+      const cited = entry.anchor === undefined ? entry.path : `${entry.path}#${entry.anchor}`;
+      let current;
+      try {
+        current = entry.anchor === undefined
+          ? digest16(readFileSync(target))
+          : rowDigest(readFileSync(target, 'utf8'), entry.anchor);
+      } catch (err) {
+        failures.push({
+          storyId: id,
+          path: entry.path,
+          pinned: entry.digest,
+          current: null,
+          message: `${id} aligns to ${cited}: ${err.message}. ${REALIGN_PROCEDURE}.`,
+        });
+        continue;
+      }
       if (current !== entry.digest) {
         failures.push({
           storyId: id,
@@ -227,7 +273,7 @@ export function checkAlignment(repoRoot) {
           pinned: entry.digest,
           current,
           message:
-            `${id} aligns to ${entry.path}: pinned ${entry.digest}, now ${current}. `
+            `${id} aligns to ${cited}: pinned ${entry.digest}, now ${current}. `
             + `${REALIGN_PROCEDURE}.`,
         });
       }

@@ -9,7 +9,7 @@
  * a snapshot-at-the-end guess `liveProcessRoots`/`liveSessionOwners`
  * (`fence-attribution.mjs`'s OTHER two exports) cannot avoid).
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,6 +36,17 @@ function procTree(rows: Array<{ pid: string; ppid: string }>): string {
 function rm(...paths: string[]) {
   for (const p of paths) rmSync(p, { recursive: true, force: true });
 }
+
+// Tree roots for the attribution doors live under a fresh temp dir the test
+// user owns. They used to be literal `/home/parso/...` paths: on any other
+// user's clone `/home/parso` is not traversable, realpath fails EACCES, and the
+// module correctly fails closed to THIS-RUN, so four doors red for a reason
+// that has nothing to do with attribution (stranger attempt 1, bead
+// forge-8vfn.8.5.10).
+const HOST = mkdtempSync(join(tmpdir(), 'fence-attr-host-'));
+const MAIN = join(HOST, 'forge');
+mkdirSync(MAIN);
+after(() => rm(HOST));
 
 // ===================================================== attributeEscapes ===
 // Pure logic — no `/proc` involved. `touchedRoots` and `sampleErrors` are
@@ -66,16 +77,16 @@ test('attributeEscapes: an APPEARED tree with NO live process at all -> UNATTRIB
   // A's S10 run 24, reproduced at the decision layer: `live: null` used to
   // fall straight into `unownedEscapes` and RED the run. It no longer does —
   // absence of a live owner was never evidence this run wrote the tree.
-  const escapes = [{ root: '/home/parso/forge-m7-d-grp', paths: ['projects/x/README.md'], live: null }];
+  const escapes = [{ root: join(HOST, 'forge-m7-d-grp'), paths: ['projects/x/README.md'], live: null }];
   const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable', 'the defect this brief closes: no owner is not evidence of authorship');
 });
 
 test('attributeEscapes: main-checkout non-ignored growth, no descendant seen -> THIS-RUN (ruling 1226)', () => {
-  const escapes = [{ root: '/home/parso/forge', paths: ['brain/projects/gitweave/profile.md'] }];
+  const escapes = [{ root: MAIN, paths: ['brain/projects/gitweave/profile.md'] }];
   const [got] = attributeEscapes(escapes, {
     touchedRoots: new Map(),
-    mainRoot: '/home/parso/forge',
+    mainRoot: MAIN,
     isIgnored: () => false,
   });
   assert.equal(got.owner, 'this-run');
@@ -84,20 +95,20 @@ test('attributeEscapes: main-checkout non-ignored growth, no descendant seen -> 
 });
 
 test('attributeEscapes: main-checkout GITIGNORED growth -> UNATTRIBUTABLE', () => {
-  const escapes = [{ root: '/home/parso/forge', paths: ['projects/story-s2/README.md'] }];
+  const escapes = [{ root: MAIN, paths: ['projects/story-s2/README.md'] }];
   const [got] = attributeEscapes(escapes, {
     touchedRoots: new Map(), longestGapMs: 0,
-    mainRoot: '/home/parso/forge',
+    mainRoot: MAIN,
     isIgnored: () => true,
   });
   assert.equal(got.owner, 'unattributable', 'ignored growth in the main checkout gets no special-case red');
 });
 
 test('attributeEscapes: mixed main-checkout paths — only the non-ignored ones drive THIS-RUN, all are named', () => {
-  const escapes = [{ root: '/home/parso/forge', paths: ['projects/story-s2/x', 'apps/studio/lib/__probe__.ts'] }];
+  const escapes = [{ root: MAIN, paths: ['projects/story-s2/x', 'apps/studio/lib/__probe__.ts'] }];
   const [got] = attributeEscapes(escapes, {
     touchedRoots: new Map(),
-    mainRoot: '/home/parso/forge',
+    mainRoot: MAIN,
     isIgnored: (p) => p.startsWith('projects/'),
   });
   assert.equal(got.owner, 'this-run', 'one non-ignored path is enough to red the tree');

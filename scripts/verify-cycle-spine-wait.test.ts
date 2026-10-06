@@ -179,7 +179,7 @@ describe('waitForSendBackDrain', () => {
   test('a status that leaves but never returns times out as "timeout-after-leaving"', async () => {
     const cycleStatusFromBridge = scriptedStatus(['ready-for-review', 'in-flight']);
     const spine = createSpineWait({ forgeRoot: tmpForgeRoot(), page: {}, getPhaseStates: async () => ({}), captureFrame: async () => {}, cycleStatusFromBridge, sleep: fastSleep, log: () => {} });
-    const result = await spine.waitForSendBackDrain({ bridgeUrl: 'http://bridge' }, 'C-a', Date.now() + 10);
+    const result = await spine.waitForSendBackDrain({ bridgeUrl: 'http://bridge' }, 'C-a', Date.now() + 1000); // 10 ms let the deadline beat the second poll under load (gate #1144: actual 'timeout-never-left')
     assert.equal(result, 'timeout-after-leaving');
   });
 
