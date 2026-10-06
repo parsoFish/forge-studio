@@ -3,7 +3,7 @@ title: "Find a project from Home"
 description: "Find a project from Home, step by step, as recorded by a run of forge's story suite."
 type: how-to
 owner: parsoFish
-last_verified: 2026-10-05
+last_verified: 2026-10-06
 covers: [tests/stories/smoke.story.mjs]
 generated_from: tests/stories/smoke.story.mjs
 ---
@@ -14,10 +14,10 @@ generated_from: tests/stories/smoke.story.mjs
 
 Studio opens on Home — the operator pulse across every project, flow, agent and KB.
 
-![Open Studio on Home](/media/stories/smoke/01-open-studio-on-home.png)
+![Open Studio on Home](/forge-studio/media/stories/smoke/01-open-studio-on-home.png)
 
 ## 2. Click through to the Projects pillar
 
 The Projects pillar lists every project forge manages, with its health and activity.
 
-![Click through to the Projects pillar](/media/stories/smoke/02-click-through-to-the-projects-pillar.png)
+![Click through to the Projects pillar](/forge-studio/media/stories/smoke/02-click-through-to-the-projects-pillar.png)

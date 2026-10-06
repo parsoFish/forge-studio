@@ -14,154 +14,154 @@ generated_from: tests/stories/S7.story.mjs
 
 The Library is the parts bin: skills, hooks, connections, templates, and what the community has published.
 
-![Open the Library](/media/stories/S7/01-open-the-library.png)
+![Open the Library](/forge-studio/media/stories/S7/01-open-the-library.png)
 
 ## 2. Press "+ New skill"
 
 A skill is a reusable instruction packet — the unit an agent composes to know how to do something.
 
-![Press "+ New skill"](/media/stories/S7/02-press-new-skill.png)
+![Press "+ New skill"](/forge-studio/media/stories/S7/02-press-new-skill.png)
 
 ## 3. Describe the skill to the creation agent instead of writing the package by hand
 
 This is the fork in the road, and both branches are real: the operator can type the package into the form beside this one, or describe what they want and let the creation agent draft it.
 
-![Describe the skill to the creation agent instead of writing the package by hand](/media/stories/S7/03-describe-the-skill-to-the-creation-agent.png)
+![Describe the skill to the creation agent instead of writing the package by hand](/forge-studio/media/stories/S7/03-describe-the-skill-to-the-creation-agent.png)
 
 ## 4. Open the authoring session it just started
 
 Forge mints the session and says so on the page the operator is already standing on, rather than moving them somewhere they did not ask to go.
 
-![Open the authoring session it just started](/media/stories/S7/04-open-the-authoring-session-it-just-start.png)
+![Open the authoring session it just started](/forge-studio/media/stories/S7/04-open-the-authoring-session-it-just-start.png)
 
 ## 5. Read what it drafted, give the package its directory name, and approve it
 
 The agent drafts; the operator names and approves.
 
-![Read what it drafted, give the package its directory name, and approve it](/media/stories/S7/05-read-what-it-drafted-give-the-package-it.png)
+![Read what it drafted, give the package its directory name, and approve it](/forge-studio/media/stories/S7/05-read-what-it-drafted-give-the-package-it.png)
 
 ## 6. Trust it: approve the draft in the library
 
 Two approvals, because they answer different questions.
 
-![Trust it: approve the draft in the library](/media/stories/S7/06-trust-it-approve-the-draft-in-the-librar.png)
+![Trust it: approve the draft in the library](/forge-studio/media/stories/S7/06-trust-it-approve-the-draft-in-the-librar.png)
 
 ## 7. Go back to the Library
 
 The Library is where the operator returns between kinds.
 
-![Go back to the Library](/media/stories/S7/07-go-back-to-the-library.png)
+![Go back to the Library](/forge-studio/media/stories/S7/07-go-back-to-the-library.png)
 
 ## 8. Press "+ New hook"
 
 A hook is the other kind of part: not instructions but a script, run on an agent’s lifecycle event.
 
-![Press "+ New hook"](/media/stories/S7/08-press-new-hook.png)
+![Press "+ New hook"](/forge-studio/media/stories/S7/08-press-new-hook.png)
 
 ## 9. Write the hook by hand: what it runs on, what it does, and what it may touch
 
 The permissions fields are the operator declaring, up front, what this script is allowed to reach.
 
-![Write the hook by hand: what it runs on, what it does, and what it may touch](/media/stories/S7/09-write-the-hook-by-hand-what-it-runs-on-w.png)
+![Write the hook by hand: what it runs on, what it does, and what it may touch](/forge-studio/media/stories/S7/09-write-the-hook-by-hand-what-it-runs-on-w.png)
 
 ## 10. Read the security scan before trusting it
 
 This is the gate that exists because a hook runs with the operator’s own credentials.
 
-![Read the security scan before trusting it](/media/stories/S7/10-read-the-security-scan-before-trusting-i.png)
+![Read the security scan before trusting it](/forge-studio/media/stories/S7/10-read-the-security-scan-before-trusting-i.png)
 
 ## 11. Check what is actually in the package — every file, and the fingerprint over all of them
 
 Approving bytes you were never shown is not approving.
 
-![Check what is actually in the package — every file, and the fingerprint over all of them](/media/stories/S7/11-check-what-is-actually-in-the-package-ev.png)
+![Check what is actually in the package — every file, and the fingerprint over all of them](/forge-studio/media/stories/S7/11-check-what-is-actually-in-the-package-ev.png)
 
 ## 12. Approve the hook
 
 Trust and verdict are two different axes, and this is the trust one.
 
-![Approve the hook](/media/stories/S7/12-approve-the-hook.png)
+![Approve the hook](/forge-studio/media/stories/S7/12-approve-the-hook.png)
 
 ## 13. Test-fire the approved hook, before any agent carries it
 
 Approval is a promise about bytes; a test-fire is the bytes running.
 
-![Test-fire the approved hook, before any agent carries it](/media/stories/S7/13-test-fire-the-approved-hook-before-any-a.png)
+![Test-fire the approved hook, before any agent carries it](/forge-studio/media/stories/S7/13-test-fire-the-approved-hook-before-any-a.png)
 
 ## 14. Go back to the Library once more
 
 Third kind, same parts bin.
 
-![Go back to the Library once more](/media/stories/S7/14-go-back-to-the-library-once-more.png)
+![Go back to the Library once more](/forge-studio/media/stories/S7/14-go-back-to-the-library-once-more.png)
 
 ## 15. Press "+ New template" and write the template the hook’s output is filed into
 
 A template is one markdown definition file — the shape an artifact comes out in.
 
-![Press "+ New template" and write the template the hook’s output is filed into](/media/stories/S7/15-press-new-template-and-write-the-templat.png)
+![Press "+ New template" and write the template the hook’s output is filed into](/forge-studio/media/stories/S7/15-press-new-template-and-write-the-templat.png)
 
 ## 16. Back to the Library
 
 Instructions are the fourth kind of part, and their door now sits in the parts bin with the other three.
 
-![Back to the Library](/media/stories/S7/16-back-to-the-library.png)
+![Back to the Library](/forge-studio/media/stories/S7/16-back-to-the-library.png)
 
 ## 17. Open the instructions launcher straight from the Library
 
 One click from the parts bin to the launcher.
 
-![Open the instructions launcher straight from the Library](/media/stories/S7/17-open-the-instructions-launcher-straight-.png)
+![Open the instructions launcher straight from the Library](/forge-studio/media/stories/S7/17-open-the-instructions-launcher-straight-.png)
 
 ## 18. Draft the project’s own working instructions, so the parts have a house style to follow
 
 Instructions are the fourth kind of component and the only one that is about the project rather than about forge: the AGENTS.md every agent dispatched at this repo reads before it does anything.
 
-![Draft the project’s own working instructions, so the parts have a house style to follow](/media/stories/S7/18-draft-the-project-s-own-working-instruct.png)
+![Draft the project’s own working instructions, so the parts have a house style to follow](/forge-studio/media/stories/S7/18-draft-the-project-s-own-working-instruct.png)
 
 ## 19. Open the instructions session it just started
 
 Same shape as the skill: forge mints the session and says so where the operator already is, and reaching it is their own next act.
 
-![Open the instructions session it just started](/media/stories/S7/19-open-the-instructions-session-it-just-st.png)
+![Open the instructions session it just started](/forge-studio/media/stories/S7/19-open-the-instructions-session-it-just-st.png)
 
 ## 20. Head back to the Agents pillar
 
 The parts are all made now — a skill, a hook, a template, a house style.
 
-![Head back to the Agents pillar](/media/stories/S7/20-head-back-to-the-agents-pillar.png)
+![Head back to the Agents pillar](/forge-studio/media/stories/S7/20-head-back-to-the-agents-pillar.png)
 
 ## 21. Open brain-ingest from the roster
 
 The roster is a list of workers; binding happens on one worker’s own page.
 
-![Open brain-ingest from the roster](/media/stories/S7/21-open-brain-ingest-from-the-roster.png)
+![Open brain-ingest from the roster](/forge-studio/media/stories/S7/21-open-brain-ingest-from-the-roster.png)
 
 ## 22. Bind the hook to the agent, and save it
 
 A hook is inert until an agent carries it.
 
-![Bind the hook to the agent, and save it](/media/stories/S7/22-bind-the-hook-to-the-agent-and-save-it.png)
+![Bind the hook to the agent, and save it](/forge-studio/media/stories/S7/22-bind-the-hook-to-the-agent-and-save-it.png)
 
 ## 23. Run the agent
 
 The hook is bound, so this run is the first time anything other than the operator can set it off.
 
-![Run the agent](/media/stories/S7/23-run-the-agent.png)
+![Run the agent](/forge-studio/media/stories/S7/23-run-the-agent.png)
 
 ## 24. Wait for the run to end
 
 A session that ends is the event this hook was written for.
 
-![Wait for the run to end](/media/stories/S7/24-wait-for-the-run-to-end.png)
+![Wait for the run to end](/forge-studio/media/stories/S7/24-wait-for-the-run-to-end.png)
 
 ## 25. Back to the Library
 
 The record of what a hook did lives with the hook, not with whichever agent happened to trigger it.
 
-![Back to the Library](/media/stories/S7/25-back-to-the-library.png)
+![Back to the Library](/forge-studio/media/stories/S7/25-back-to-the-library.png)
 
 ## 26. Open the hook, and see the session ending fire it
 
 This is where S7 ends: the hook the operator wrote, scanned, approved and bound actually ran, and its own page says when and how it ended.
 
-![Open the hook, and see the session ending fire it](/media/stories/S7/26-open-the-hook-and-see-the-session-ending.png)
+![Open the hook, and see the session ending fire it](/forge-studio/media/stories/S7/26-open-the-hook-and-see-the-session-ending.png)

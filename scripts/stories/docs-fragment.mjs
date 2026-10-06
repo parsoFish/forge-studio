@@ -23,10 +23,11 @@ import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { assertSafeStoryId } from './sweep.mjs';
 import { CEILINGS, countWords } from '../check-docs-budget.mjs';
+import { SITE_BASE } from '../../apps/docs/src/site-base.mjs';
 
 /** The site directory every generated how-to lands in. */
 export const HOWTO_DIR = 'apps/docs/src/content/docs/guides/how-to';
-/** The site directory a story's frames are published under (served at /media/stories/). */
+/** The site directory a story's frames are published under (served at <base>/media/stories/). */
 export const MEDIA_DIR = 'apps/docs/public/media/stories';
 /** The owner the site footer names on every generated page. */
 export const GENERATED_OWNER = 'parsoFish';
@@ -49,9 +50,13 @@ export function mediaDirFor(story, root) {
   return join(root, MEDIA_DIR, story.id);
 }
 
-/** The site URL of a beat's captured frame (`frames/01-x.png` → `/media/stories/<id>/01-x.png`). */
+/**
+ * The site URL of a beat's captured frame (`frames/01-x.png` →
+ * `/forge-studio/media/stories/<id>/01-x.png`). It carries the site base, so the
+ * page's raw `.md` twin, which no rewrite reaches, links inside the site too.
+ */
 export function frameUrl(storyId, frame) {
-  return `/media/stories/${storyId}/${basename(frame)}`;
+  return `${SITE_BASE}/media/stories/${storyId}/${basename(frame)}`;
 }
 
 /** The first sentence of a beat's narration, on one line. */
