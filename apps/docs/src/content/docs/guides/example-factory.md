@@ -55,6 +55,6 @@ Studio will not delete the shipped flows. To replace the example, build your own
 
 ## Related
 
-- [Sessions and gates](/guides/sessions-and-gates/)
+- [Sessions & gates](/guides/sessions-and-gates/)
 - [Flows](/guides/flows/)
 - [How forge works](/how-forge-works/)
