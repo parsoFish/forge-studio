@@ -7,11 +7,12 @@ import starlightLinksValidator from 'starlight-links-validator';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import starlightPageActions from 'starlight-page-actions';
 import { baseLinks } from './src/base-links.mjs';
+import { SITE_BASE } from './src/site-base.mjs';
 
 export default defineConfig({
   // GitHub Pages project site (operator ruling R27).
   site: 'https://parsofish.github.io',
-  base: '/forge-studio',
+  base: SITE_BASE,
   // The monorepo root hoists an older `cookie` (express's); bundling it makes the
   // prerender chunk use astro's own copy instead of resolving the root one.
   vite: { resolve: { noExternal: ['cookie'] } },

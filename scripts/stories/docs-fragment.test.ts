@@ -13,6 +13,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { countWords, CEILINGS } from '../check-docs-budget.mjs';
 import { renderDocFragment, docPathFor, mediaDirFor, slugFor, firstSentence, frameUrl } from './docs-fragment.mjs';
+// @ts-ignore -- plain .mjs modules
+import { withBase } from '../../apps/docs/src/base-links.mjs';
+// @ts-ignore
+import { SITE_BASE } from '../../apps/docs/src/site-base.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -63,7 +67,7 @@ test('the page lands in the site how-to directory, named by the slug of its titl
 
 test('frames are published under the site media directory, per story', () => {
   assert.equal(mediaDirFor(result.story, '/r'), '/r/apps/docs/public/media/stories/smoke');
-  assert.equal(frameUrl('smoke', 'frames/01-home.png'), '/media/stories/smoke/01-home.png');
+  assert.equal(frameUrl('smoke', 'frames/01-home.png'), '/forge-studio/media/stories/smoke/01-home.png');
 });
 
 test('slugFor: lowercase words joined by hyphens; apostrophes dropped', () => {
@@ -123,10 +127,20 @@ test('firstSentence: up to the first terminal punctuation followed by a space or
   assert.equal(firstSentence('Line one\ncontinues. Next.'), 'Line one continues.');
 });
 
-test('each step embeds its frame from the site media path', () => {
+test('each step embeds its frame from the site media path, under the site base', () => {
   const md = renderDocFragment(result, { verifiedOn: ON });
-  assert.match(md, /!\[Open Studio on Home\]\(\/media\/stories\/smoke\/01-home\.png\)/);
-  assert.match(md, /\/media\/stories\/smoke\/02-projects\.png/);
+  assert.match(md, /!\[Open Studio on Home\]\(\/forge-studio\/media\/stories\/smoke\/01-home\.png\)/);
+  assert.match(md, /\/forge-studio\/media\/stories\/smoke\/02-projects\.png/);
+});
+
+test('every URL the emitter writes is already base-aware: the site rewrite plugin changes none of them', () => {
+  // kills: an emitter that writes root-absolute `/media/...` and leaves the
+  // raw .md twin (which the plugin never touches) pointing outside the site
+  const md = renderDocFragment(result, { verifiedOn: ON });
+  const urls = [...md.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+  assert.ok(urls.length >= 2, 'the page carries its frames');
+  assert.deepEqual(urls.filter((u) => withBase(u, SITE_BASE) !== u), []);
+  assert.equal(SITE_BASE, '/forge-studio');
 });
 
 test('no data-* attribute or asserted value reaches the page', () => {
