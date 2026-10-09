@@ -22,6 +22,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '@forge/sessions';
+import { beginStudioTransaction } from '@forge/projects';
 import {
   dispatchAgentRun, isSafeRunId, isStandaloneBandAgent, dispatchStandaloneBand,
   installDispatchSignalGuard, recordDispatchTerminal, type BandAgentDeps,
@@ -475,6 +476,9 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
       return;
     }
 
+    // forge-mfv5.1.12 — a project-bound run commits its edits to forge-studio on
+    // success; a failed run's stay dirty, where the Save refusal names them.
+    const studioTx = project ? beginStudioTransaction(project.repoPath) : undefined;
     const out = await dispatch({
       slug,
       skillsDir: skillRoots(forgeRoot),
@@ -491,6 +495,12 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
       ...(costCeilingUsd !== undefined ? { kickoffCeilingUsd: costCeilingUsd } : {}),
     });
     const { result } = out;
+    try {
+      studioTx?.commit(`chore(forge): ${out.slug} run ${out.runId}`);
+    } catch (err) {
+      // The run itself succeeded; its edits stay dirty, where the Save refusal names them.
+      console.error(`forge agent dispatch: committing ${out.slug}'s edits to forge-studio failed — they remain uncommitted: ${err instanceof Error ? err.message : String(err)}`);
+    }
     // R2-08-F2, M7-E boundary fix: on a real (non-suppressed) completion,
     // fire every declared `on: agent-complete` watcher for this slug — the
     // ONE production standalone-agent completion site (moved here from

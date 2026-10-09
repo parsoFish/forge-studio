@@ -82,7 +82,7 @@ import { runPreflight } from './preflight.ts';
 import { scaffoldGreenfieldProject } from './project-create.ts';
 import { validateProjectConfig, readAgentInstructionsFile } from './project-config.ts';
 import { ProjectConfigWriteError, writeProjectConfigPatch } from './project-config-write.ts';
-import { saveProjectRepo } from './project-repo-tx.ts';
+import { commitStudioChange, saveProjectRepo, StudioWritePathIgnoredError, uncommittedContractPaths } from './project-repo-tx.ts';
 import { checkContractArtifactContainment, scaffoldContractArtifacts, ScaffoldContainmentError } from './project-contract-scaffold.ts';
 
 /** Structural mirror of `@forge/knowledge`'s
@@ -526,6 +526,18 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       writeFileSync(tmpConfigPath, JSON.stringify(cfg, null, 2), 'utf8');
       renameSync(tmpConfigPath, forgeGuard.realPath);
 
+      // forge-mfv5.1.12 — onboarding lands on forge-studio like every forge-UI write:
+      // what this route wrote, plus contract files the operator left uncommitted.
+      // A refused commit is reported, not a 500: project.json already exists, so a retry could not recover.
+      let commitError: string | undefined;
+      try {
+        commitStudioChange(projectRoot, `chore(forge): onboard ${id} contract`, [
+          ...new Set([...scaffoldedLocal.filter((p) => p !== '.git/'), '.forge/project.json', ...uncommittedContractPaths(projectRoot)]),
+        ]);
+      } catch (err) {
+        commitError = err instanceof StudioWritePathIgnoredError ? `not committed — still ignored by .gitignore: ${err.paths.join(', ')}` : sanitizeError(err);
+      }
+
       const scaffolded = [
         ...scaffoldedLocal,
         ...brainSeed.files.filter((f) => f.action === 'created').map((f) => f.path),
@@ -552,7 +564,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       sendJson(
         res,
         200,
-        { ok: true, id, ready: report.ok, scaffolded, brainSeed: brainSeed.files, failingClauses: failing },
+        { ok: true, id, ready: report.ok, scaffolded, brainSeed: brainSeed.files, failingClauses: failing, ...(commitError !== undefined ? { committed: false, commitError } : {}) },
         origin,
       );
     } catch (err) {
