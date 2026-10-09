@@ -10,11 +10,10 @@ import {
   ensureStudioBranch,
   commitStudioChange,
   withStudioWrite,
-  saveProjectRepo,
-  hasPendingStudioChanges,
   defaultBranch,
   isGitRepo,
 } from '../../project-repo-tx.ts';
+import { saveProjectRepo, hasPendingStudioChanges } from '../../project-repo-save.ts';
 
 function g(dir: string, args: string[]): string {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();

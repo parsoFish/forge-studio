@@ -6,9 +6,9 @@
  * single persistent `forge-studio` branch rather than left uncommitted in the
  * working tree (which is why "apply decision" silently lost its edits). Changes
  * accumulate on that one branch across many forge-UI actions; a single "Save"
- * (`saveProjectRepo`) merges it into the default branch — no CI, since these are
- * forge-controlled, non-structural files — and pushes, so cycles branching from
- * origin/main (and GitHub) see the configuration.
+ * (`saveProjectRepo`, project-repo-save.ts) merges it into the default branch —
+ * or, when that branch is protected, opens a pull request — so cycles branching
+ * from origin/main (and GitHub) see the configuration.
  *
  * Pure git wrappers (execFileSync) — no orchestrator deps — so they unit-test
  * against a throwaway repo.
@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 
-import { gitIdentityConfigArgs, guardedFile, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 export const STUDIO_BRANCH = 'forge-studio';
 
@@ -37,7 +37,7 @@ export class StudioWritePathIgnoredError extends Error {
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
 const SCRATCH_EXCLUDES = ['_preflight-fix', '.forge/work-items'];
 
-function git(projectDir: string, args: string[], opts: { allowFail?: boolean; raw?: boolean } = {}): string { // raw: porcelain's leading status column survives (a trim eats it)
+export function git(projectDir: string, args: string[], opts: { allowFail?: boolean; raw?: boolean } = {}): string { // raw: porcelain's leading status column survives (a trim eats it)
   try {
     const out = execFileSync('git', ['-C', projectDir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     return opts.raw ? out : out.trim();
@@ -47,7 +47,7 @@ function git(projectDir: string, args: string[], opts: { allowFail?: boolean; ra
   }
 }
 
-function branchExists(projectDir: string, branch: string): boolean {
+export function branchExists(projectDir: string, branch: string): boolean {
   try {
     git(projectDir, ['rev-parse', '--verify', '--quiet', branch]);
     return true;
@@ -86,7 +86,7 @@ export function defaultBranch(projectDir: string): string {
   return 'main';
 }
 
-function currentBranch(projectDir: string): string {
+export function currentBranch(projectDir: string): string {
   return git(projectDir, ['rev-parse', '--abbrev-ref', 'HEAD'], { allowFail: true });
 }
 
@@ -206,82 +206,4 @@ export function beginStudioTransaction(projectDir: string): { commit: (message: 
   const dirtyFiles = () => porcelainPaths(git(projectDir, ['status', '--porcelain', '-z', '--untracked-files=all'], { raw: true }));
   const pre = new Set(dirtyFiles());
   return { commit: (message) => commitStudioChange(projectDir, message, dirtyFiles().filter((p) => !pre.has(p))) };
-}
-
-/** `refused` names the uncommitted contract files when the Save declined to run;
- *  `adopted` names the ones an adopting Save committed to forge-studio first. */
-export type SaveResult = { merged: boolean; pushed: boolean; detail: string; refused?: string[]; adopted?: string[] };
-
-/**
- * "Save" the accumulated forge-UI changes: merge `forge-studio` into the default
- * branch (no CI), push to origin if present, then delete `forge-studio` and rest
- * on the default branch so the next batch starts fresh. Idempotent when there is
- * nothing pending.
- */
-export function saveProjectRepo(projectDir: string, opts: { adopt?: readonly string[] } = {}): SaveResult {
-  if (!isGitRepo(projectDir)) return { merged: false, pushed: false, detail: 'not a git repo' };
-  // forge-mfv5.1.12 — fail closed before any checkout.
-  let uncommitted = uncommittedContractPaths(projectDir);
-  // Row 6 (ruling T1 1977a): the operator may adopt the files they were SHOWN —
-  // committed to forge-studio, re-read (anything else, or a deletion, still refuses), then saved.
-  const shown = opts.adopt ?? [];
-  const adoptable = uncommitted.filter((p) => shown.includes(p) && guardedFile(projectDir, p.split('/'), 'read') !== null);
-  const adopted = adoptable.length > 0 ? adoptable : undefined;
-  if (adopted) {
-    commitStudioChange(projectDir, 'chore(forge): adopt uncommitted contract files', adopted);
-    uncommitted = uncommittedContractPaths(projectDir);
-  }
-  if (uncommitted.length > 0) {
-    return {
-      merged: false,
-      pushed: false,
-      refused: uncommitted,
-      detail: `refused — uncommitted contract file(s) would be missing from ${defaultBranch(projectDir)}: ${uncommitted.join(', ')}. Commit them to ${STUDIO_BRANCH} (or discard them), then Save again.`,
-    };
-  }
-  if (!branchExists(projectDir, STUDIO_BRANCH)) {
-    return { merged: false, pushed: false, detail: 'no pending forge-studio changes' };
-  }
-  const base = defaultBranch(projectDir);
-  // Nothing to merge if forge-studio has no commits beyond base.
-  const ahead = git(projectDir, ['rev-list', '--count', `${base}..${STUDIO_BRANCH}`], { allowFail: true });
-  git(projectDir, ['checkout', base]);
-  if (ahead === '0' || ahead === '') {
-    git(projectDir, ['branch', '-D', STUDIO_BRANCH], { allowFail: true });
-    return { merged: false, pushed: false, detail: 'no pending forge-studio changes' };
-  }
-  git(projectDir, [
-    ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
-    'merge',
-    '--no-ff',
-    '--no-verify',
-    '-m',
-    'forge-studio: apply project configuration',
-    STUDIO_BRANCH,
-  ]);
-
-  let pushed = false;
-  let detail = `merged ${STUDIO_BRANCH} → ${base}`;
-  const remotes = git(projectDir, ['remote'], { allowFail: true }).split('\n').filter(Boolean);
-  if (remotes.includes('origin')) {
-    try {
-      git(projectDir, ['push', 'origin', base]);
-      pushed = true;
-      detail += ' + pushed to origin';
-    } catch (err) {
-      detail += ` (push failed: ${err instanceof Error ? err.message.slice(0, 160) : 'error'})`;
-    }
-  } else {
-    detail += ' (no origin remote — local only)';
-  }
-  // Delete the studio branch; recreated from the merged base on the next write.
-  git(projectDir, ['branch', '-D', STUDIO_BRANCH], { allowFail: true });
-  return { merged: true, pushed, detail, ...(adopted ? { adopted } : {}) };
-}
-
-/** Whether the project repo has uncommitted forge-studio changes pending a save. */
-export function hasPendingStudioChanges(projectDir: string): boolean {
-  if (!isGitRepo(projectDir) || !branchExists(projectDir, STUDIO_BRANCH)) return false;
-  const ahead = git(projectDir, ['rev-list', '--count', `${defaultBranch(projectDir)}..${STUDIO_BRANCH}`], { allowFail: true });
-  return ahead !== '' && ahead !== '0';
 }

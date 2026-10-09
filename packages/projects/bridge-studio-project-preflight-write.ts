@@ -66,7 +66,8 @@ import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/k
 
 import { classifyClause, type ClauseClassification } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
-import { ensureStudioBranch, commitStudioChange, saveProjectRepo } from './project-repo-tx.ts';
+import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
+import { saveProjectRepo } from './project-repo-save.ts';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 
 /** Resolve a managed-project id to its absolute root, or send an error + return null. */

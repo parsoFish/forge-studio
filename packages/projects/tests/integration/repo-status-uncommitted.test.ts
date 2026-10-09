@@ -82,3 +82,25 @@ test('a clean ground reports nothing to save', async () => {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// forge-mfv5.1.22: the gitweave strand — main ahead of origin/main, no forge-studio —
+// still reads pending, so Studio offers the Save that proposes the recovery. No
+// forge-studio on origin means no PR to look up: gh is never asked.
+test('a default branch stranded ahead of origin reads pending, with no PR to serve', async () => {
+  const { forgeRoot, dir } = ground();
+  try {
+    const origin = join(forgeRoot, 'origin.git');
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
+    g(dir, ['remote', 'add', 'origin', origin]);
+    g(dir, ['push', '-q', 'origin', 'main']);
+    g(dir, ['fetch', '-q', 'origin']);
+    writeFileSync(join(dir, 'AGENTS.md'), '# a\n');
+    g(dir, ['add', 'AGENTS.md']);
+    g(dir, ['commit', '-q', '-m', 'forge-studio: apply project configuration']);
+    const r = await repoStatus(forgeRoot, 'weave');
+    assert.equal(r.body.pending, true);
+    assert.equal(r.body.prUrl, undefined);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
