@@ -91,7 +91,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `commands` | array of string | no | - | Commands a CLI before/after checkpoint may run, as a bare argv with no shell metacharacters. |
+| `commands` | array of string | no | - | Commands a CLI before/after checkpoint may run. Each runs without a shell, so it may not contain shell operators such as `\|`, `;` or `$`. |
 | `routes` | array of string | no | - | In-app paths a screenshot checkpoint may open, starting `/` with no traversal. |
 | `api` | object | no | - | Means for an API before/after checkpoint, compared as JSON. |
 
@@ -99,9 +99,9 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `paths` | array of string | no | - | Paths forge GETs on each capture tree's own server. No scheme or host: reach an external API through `commands`. |
-| `commands` | array of string | no | - | Commands that print a JSON body on stdout, such as the project's own CLI reading a live service with its own credentials. |
-| `ignoreKeys` | array of string | no | - | Extra key names dropped at any depth before before/after JSON is compared, on top of the default volatile keys (`id`, `node_id`, timestamps, `url`, `*_url`, `etag`, `size`, `watchers*`). |
+| `paths` | array of string | no | - | Paths forge requests with GET on each capture tree's own server. No scheme or host: reach an external API through `commands`. |
+| `commands` | array of string | no | - | Commands that print a JSON body to standard output, such as the project's own CLI reading a live service with its own credentials. |
+| `ignoreKeys` | array of string | no | - | Extra key names dropped at any depth before before/after JSON is compared, on top of the default volatile keys (`id`, `node_id`, timestamps, `url`, `*_url`, `etag`, `size`, `watchers`, `watchers_count`). |
 
 ### `buildProcess`
 
