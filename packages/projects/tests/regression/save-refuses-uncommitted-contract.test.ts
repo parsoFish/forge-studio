@@ -109,3 +109,30 @@ test('uncommittedContractPaths expands an untracked .forge/ dir to the contract 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Row 6 (ruling T1 1977a): the refusal OFFERS adopt — Studio commits the named
+// contract files on forge-studio, then saves. Pinned shape: the gitweave ground
+// after the pre-fix onboarding (AGENTS.md committed, three contract files loose).
+test('Save with adopt commits the uncommitted contract files to forge-studio, then merges and pushes them', () => {
+  const { root, ground, origin } = groundWithOrigin();
+  try {
+    writeFileSync(join(ground, 'AGENTS.md'), '# Agents\n');
+    assert.equal(commitStudioChange(ground, 'docs(agents): author AGENTS.md', ['AGENTS.md']), true);
+    mkdirSync(join(ground, '.forge'));
+    writeFileSync(join(ground, '.forge', 'project.json'), '{}\n');
+    writeFileSync(join(ground, '.gitignore'), '.forge/work-items/\n');
+    writeFileSync(join(ground, 'roadmap.md'), '# Roadmap\n');
+
+    const r = saveProjectRepo(ground, { adopt: true });
+
+    assert.equal(r.refused, undefined);
+    assert.deepEqual(r.adopted, ['.forge/project.json', '.gitignore', 'roadmap.md']);
+    assert.equal(r.merged, true);
+    assert.equal(r.pushed, true);
+    assert.equal(g(ground, ['status', '--porcelain']), '', 'the ground is clean after an adopted Save');
+    const onOrigin = g(origin, ['ls-tree', '-r', '--name-only', 'main']).split('\n');
+    for (const f of ['.forge/project.json', '.gitignore', 'AGENTS.md', 'roadmap.md']) assert.ok(onOrigin.includes(f), `${f} on origin/main`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

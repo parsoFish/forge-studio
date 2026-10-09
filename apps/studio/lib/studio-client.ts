@@ -37,6 +37,7 @@ import { parseStandingTriggers, type StandingTrigger } from './standing-triggers
 // its parser (session-client.ts's exported `parseContractStageRow`), never a
 // third client-side mirror. The import is one-way (session-client never imports
 // back from here).
+import { readSaveRefusal } from './save-refusal';
 import { parseContractStageRow, type ContractStageRow } from './session-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
@@ -1214,14 +1215,11 @@ export async function deleteAgent(slug: string): Promise<{ ok: boolean; error?: 
 export async function saveProject(
   id: string,
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; error?: string; declarationChanged?: boolean }> {
+): Promise<{ ok: boolean; error?: string; declarationChanged?: boolean; refused?: string[] }> {
   const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
-  return {
-    ok: r.ok,
-    error: r.error,
-    // F5: set when demoProcess was saved — the demo-design skill should be run.
-    declarationChanged: r.data?.declarationChanged === true,
-  };
+  const refusal = r.ok ? readSaveRefusal(r.data?.save) : null; // a refused Save is never "saved"
+  if (refusal) return { ok: false, ...refusal };
+  return { ok: r.ok, error: r.error, declarationChanged: r.data?.declarationChanged === true }; // F5: demoProcess saved
 }
 
 /** Author a plain composable skill (P2): writes skills/<slug>/SKILL.md. */

@@ -667,7 +667,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // already safe on forge-studio, so a merge/push failure (e.g. protected
       // main) doesn't fail the save — it's surfaced in `save`.
       let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
-      try { save = saveProjectRepo(projectRoot); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
+      try { save = saveProjectRepo(projectRoot, { adopt: b['adoptUncommitted'] === true }); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
 
       // F5: when demoProcess CHANGED in this save, say so — the declaration IS
       // the cycle input (forge-mfv5.2.8), so nothing is generated from it; the
