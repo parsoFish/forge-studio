@@ -12,6 +12,7 @@ import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts'
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { classifyCrash, type ToolUseLiveDetail } from '@forge/agents';
 import { StreamDeadlineError } from '@forge/agents/stream-deadline.ts';
+import { TurnBudgetExhaustedError } from '../turn-budget.ts';
 import type { EventLogger } from '@forge/kernel';
 import { architectAgentSpec } from './architect-session.ts';
 
@@ -121,7 +122,13 @@ export async function runStructured<T>(args: {
         max_attempts: 2,
       },
     });
-    result = await runOnce();
+    try {
+      result = await runOnce();
+    } catch (retryErr) {
+      // T1 ruling (row-2 park): the STALL stays the named cause; exhaustion is its consequence.
+      if (!(retryErr instanceof TurnBudgetExhaustedError)) throw retryErr;
+      throw Object.assign(err, { message: `${err.message} — retry refused: ${retryErr.message}`, cause: retryErr });
+    }
   }
   const { output, reads, costUsd } = result;
   // bead forge-8vfn.18 — emit the turn's spend so the ceiling can bound stage 1.

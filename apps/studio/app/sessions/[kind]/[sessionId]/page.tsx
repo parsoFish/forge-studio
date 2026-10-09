@@ -10,7 +10,7 @@ import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorSta
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
-import { deriveSessionShellViewState, selectStage, backToProjectLink, shouldPollSessionSummary } from '@/lib/session-shell-view';
+import { deriveSessionShellViewState, selectStage, backToProjectLink, shouldPollSessionSummary, sessionCeilingLine } from '@/lib/session-shell-view';
 import type { GenerationSelection } from '@/lib/session-artifact-view';
 import {
   fetchArchitectSessions,
@@ -514,6 +514,14 @@ export default function SessionShellPage({
                 : `Last recorded phase: ${viewState.phase}.`}
             </div>
           )}
+          {/* forge-nk1y.5 — the spend ceiling this session started with, for
+              EVERY kind. Never omitted: a session that recorded none says so
+              ("not recorded") instead of leaving the operator to read a
+              missing line as "uncapped". The DOM contract is on the page root
+              (`data-session-ceiling-usd` / `-source`). */}
+          <div data-component="session-ceiling" style={{ marginBottom: 10, fontSize: 12.5, color: 'var(--dim)' }}>
+            {sessionCeilingLine(viewState.ceiling)}
+          </div>
           {/* W7-A2 — the lifecycle banner for EVERY kind (architect and
               project-brain included, and kinds with no generic panel):
               crashed → the runner's error verbatim; stalled → the silence;

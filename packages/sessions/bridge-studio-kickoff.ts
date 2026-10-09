@@ -42,6 +42,7 @@ import { skillPathRelative } from '@forge/library';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import type { SessionLifecycle } from './bridge-studio-lifecycle.ts';
+import { ceilingStatusFields, resolveStartCeilingFor, stampedCeilingUsd } from './session-start-ceiling.ts';
 
 import {
   deriveRowLifecycle,
@@ -163,6 +164,8 @@ export async function handleKickoffRoutes(
         return true;
       }
 
+      const ceiling = resolveStartCeilingFor(ctx, 'onboarding-agent'); // forge-nk1y.5: before any session dir
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
       const sessionId = newArchitectSessionId();
       const runId = `_agent-onboarding-agent-${ctx.newRunStamp()}`;
       // The session dir lives under the LOGS root (forge-8vfn.8.5.58), never in
@@ -184,7 +187,7 @@ export async function handleKickoffRoutes(
       // checks above — see writeOnboardingSession's own docstring
       // for the three closes (exclusive dir create, exclusive leaf writes,
       // sessionId entropy).
-      writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs, modelTier);
+      writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs, modelTier, ceilingStatusFields(ceiling));
 
       // W7-B5 (agents-20/31 + projects-31): the t0 `agent-run.dispatched`
       // marker this route used to emit moved WITH the dispatch to
@@ -352,6 +355,8 @@ export async function handleKickoffRoutes(
         return true;
       }
 
+      const ceiling = resolveStartCeilingFor(ctx, 'creation-agent'); // forge-nk1y.5: before any session dir
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
       const sessionId = newArchitectSessionId();
       const runId = `_agent-creation-agent-${ctx.newRunStamp()}`;
       // Same shape as onboarding's start route: the session dir lives under the
@@ -365,7 +370,7 @@ export async function handleKickoffRoutes(
       }
       const realAuthoringParent = authoringParentGuard.realPath;
       mkdirSync(realAuthoringParent, { recursive: true });
-      writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt, modelTierResult.tier);
+      writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt, modelTierResult.tier, ceilingStatusFields(ceiling));
 
       ctx.spawnAgentTurn(ctx.forgeRoot, 'authoring', project, sessionId);
       sendJson(
@@ -439,6 +444,9 @@ export async function handleKickoffRoutes(
         return true;
       }
 
+      const ceiling = resolveStartCeilingFor(ctx, 'brain-maintenance'); // forge-nk1y.5: before any session dir
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
+
       const sessionProject = kb.binding.kind === 'project' ? kb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
       const sessionId = newArchitectSessionId();
 
@@ -494,6 +502,7 @@ export async function handleKickoffRoutes(
           kb_binding: kb.binding,
           findings,
           ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+          ...ceilingStatusFields(ceiling),
         },
       );
       if (written === null) {
@@ -609,6 +618,7 @@ export function writeOnboardingSession(
   runId: string,
   inputs: Record<string, string>,
   /** The operator's chosen tier, when they chose one (M6-A row 1). */ modelTier?: string,
+  ceiling?: { costCeilingUsd: number; costCeilingSource: string }, // forge-nk1y.5; the brief dispatches under it
 ): { sessionDir: string } {
   if (!SAFE_ID_RE.test(sessionId)) {
     throw new Error(`invalid onboarding sessionId: ${JSON.stringify(sessionId)}`);
@@ -623,7 +633,7 @@ export function writeOnboardingSession(
       // `modelTier` only when chosen — absent means the skill's own default.
       // Ruling 441: `briefing`, not `running`. This route dispatches nothing;
       // the generic question-form write does, and it moves the phase then.
-      { phase: 'briefing', project, runId, ...(modelTier !== undefined ? { modelTier } : {}), startedAt: new Date().toISOString() },
+      { phase: 'briefing', project, runId, ...(modelTier !== undefined ? { modelTier } : {}), ...(ceiling ?? {}), startedAt: new Date().toISOString() },
       null, 2,
     ),
     { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
@@ -675,6 +685,7 @@ export function writeAuthoringSession(
    *  behavior — the key is omitted from status.json entirely, not written
    *  as `undefined`. */
   modelTier?: ModelTier,
+  ceiling?: { costCeilingUsd: number; costCeilingSource: string }, // forge-nk1y.5
 ): { sessionDir: string } {
   if (!SAFE_ID_RE.test(sessionId)) {
     throw new Error(`invalid authoring sessionId: ${JSON.stringify(sessionId)}`);
@@ -693,6 +704,7 @@ export function writeAuthoringSession(
         prompt,
         startedAt: new Date().toISOString(),
         ...(modelTier ? { modelTier } : {}),
+        ...(ceiling ?? {}),
       },
       null,
       2,
@@ -769,7 +781,7 @@ export async function handleOnboardingBrief(
   });
   ctx.spawnClaimedAgentDispatch(
     ctx.forgeRoot, 'onboarding-agent', runId, project, inputs,
-    join(logsRoot, ...dirSegs), undefined, ctx.logsRoot,
+    join(logsRoot, ...dirSegs), stampedCeilingUsd(status), ctx.logsRoot,
   );
   ctx.broadcastKindChanged('onboarding');
   sendJson(res, 200, { ok: true, phase: 'running', ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/sessions/onboarding/question-form', sessionId) }, origin);

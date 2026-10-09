@@ -18,6 +18,7 @@
         ],
         "maxTurns": 6,
         "abortController": "<AbortController>",
+        "maxBudgetUsd": 3,
         "permissionMode": "default",
         "allowedTools": [
           "Read",
@@ -48,6 +49,7 @@
         ],
         "maxTurns": 8,
         "abortController": "<AbortController>",
+        "maxBudgetUsd": 3,
         "permissionMode": "default",
         "allowedTools": [],
         "canUseTool": "<canUseTool>"
@@ -67,6 +69,7 @@
         ],
         "maxTurns": 16,
         "abortController": "<AbortController>",
+        "maxBudgetUsd": 3,
         "permissionMode": "default",
         "allowedTools": [
           "Read",

@@ -129,6 +129,8 @@ export type ArchitectStatus = {
    * ceiling (unchanged default).
    */
   costCeilingUsd?: number;
+  /** forge-nk1y.5 — where `costCeilingUsd` came from, stamped with it at start. */
+  costCeilingSource?: 'operator' | 'env' | 'agent-budget';
 };
 
 /** One operator-facing question — the reflector's `StructuredQuestion` shape so

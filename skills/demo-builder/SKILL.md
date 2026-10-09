@@ -23,7 +23,8 @@ brainAccess: none
 interactivity: Operator-driven; drafts the demo declaration, renders a sample by running it, and revises on direct feedback until the operator locks it.
 allowed-tools: [Read, Grep, Glob, Bash, Write, Edit]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
-budgets: {}
+budgets:
+  maxBudgetUsd: 3
 ---
 
 # Demo-Builder
