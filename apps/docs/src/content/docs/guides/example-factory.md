@@ -3,7 +3,7 @@ title: The example factory
 description: The develop factory forge ships as a working example, where it pauses for your decision, and how to set its spend ceilings.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [packages/factory/**, packages/stations/**, studio/flows/**]
 sidebar:
   order: 12
@@ -18,26 +18,26 @@ Two flows make up the factory.
 - `forge-architect`, the plan flow. You describe an idea; the architect interviews you and drafts a plan, which pauses at the plan gate. Once you approve, the project manager splits it into work items. Approving does not start building.
 - `forge-develop`, the develop flow. Developer agents build the work items, an integrate station assembles the pull request, and an adversarial reviewer critiques the diff. It pauses at the verdict gate.
 
-After the merge, the reflector runs and asks for your reflection.
+After the merge, the reflector runs. **Reflect on this cycle →** on the verdict page opens its reflection, with any questions it has for you.
 
 ## Where it pauses for you
 
 | Gate | You decide | Controls |
 |---|---|---|
 | Plan | Whether the plan is the work you want built | **Approve**, **Send back**, **Reject** |
-| Kickoff | When a planned initiative starts building; nothing is built or spent on it until you press this | **Start development** on the initiative's roadmap card |
+| Kickoff | When a planned initiative starts building; nothing is built until you press this | **Start development** on the initiative's roadmap card |
 | Verdict | Whether the reviewed change merges | **approve and merge**, or **add work items** |
 | Reflection | What the cycle taught | **Submit reflection** |
 
 At the plan gate, an optional note goes with your choice; add one when you send back. **Send back** gives the architect another turn.
 
-At the verdict gate, read the review findings first. **approve and merge** merges the pull request. **add work items** writes new acceptance criteria and runs them in the same cycle; no new cycle starts. Both need a rationale.
+At the verdict gate, read the review findings first. **approve and merge** merges the pull request. **add work items** writes new acceptance criteria and runs them in the same cycle; no new cycle starts. On the demo page, a **blocking** comment makes the verdict a send-back and no rationale is asked for; a run with no demo shows a plain form that needs one.
 
 The reflection gate lists questions; answer all of them to submit. The reflector folds your answers into Knowledge, which agents read before they act on later runs.
 
 ## Set spend ceilings
 
-Each flow carries a cost ceiling: 10 USD for the plan flow and 25 USD for the develop flow. A turn that would start past a ceiling refuses instead of overrunning.
+The plan flow stops at 10 USD. A develop run stops at its initiative's **cap** plus 50 %, unless `FORGE_COST_CEILING_USD` or the fields below override it ([Agent cost ceilings](/reference/agent-cost-ceilings/)). A run stops at a clean boundary and can be resumed.
 
 To override it for one run:
 
@@ -50,7 +50,7 @@ Studio will not delete the shipped flows. To replace the example, build your own
 
 ## Troubleshooting
 
-- *Verdict button disabled.* A rationale is required before a verdict can be submitted. Fill it in.
+- *Verdict button disabled.* On a run with no demo, the plain form needs a rationale. Fill it in.
 - *Reflection button disabled.* Answer every question; the counter shows how many remain.
 
 ## Related

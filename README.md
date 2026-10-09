@@ -10,7 +10,8 @@ and watch them from. It ships one example factory, the develop flow.
 - Linux or WSL2 (macOS and native Windows are not supported)
 - Node 22.12 or later, git, and the GitHub CLI logged in (`gh auth status`)
 - Claude Code, installed and logged in
-- To run the test suite: `npx playwright-core install chromium`
+- To run the test suite: `npx playwright-core install chromium`, then `npm test`
+  with `forge studio` stopped (a live run writes files the suite checks)
 
 ## Quickstart
 
