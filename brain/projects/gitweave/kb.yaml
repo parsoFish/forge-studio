@@ -1,0 +1,7 @@
+id: gitweave
+name: gitweave (project)
+binding:
+  kind: project
+  ref: gitweave
+desc: Per-project brain for gitweave — themes the reflector distils from each gitweave cycle (SPEC §4, central forge-owned).
+backend: filesystem
