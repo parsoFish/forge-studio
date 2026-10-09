@@ -118,3 +118,12 @@ test('the Instructions tile reads stub when the file does not name the declared 
     rmSync(named.forgeRoot, { recursive: true, force: true });
   }
 });
+
+test('a profile whose sections are empty or bulleted TODOs still reads as unfilled', () => {
+  const f = fixture('# weave\n\n## What this project is\n\n## Architecture\n\n- TODO: module map\n\n## Conventions\n\n_TODO_\n', {});
+  try {
+    assert.equal(clause(f.dir, f.forgeRoot, 'BRAIN').pass, false);
+  } finally {
+    rmSync(f.forgeRoot, { recursive: true, force: true });
+  }
+});

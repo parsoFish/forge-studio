@@ -331,13 +331,13 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   }, [id, router]);
 
   // Unified save feedback (X1). Row 6 (T1 1977a): a refused Save offers adopt-and-save.
-  const [refusedFiles, setRefusedFiles] = useState<string[]>([]);
-  const adoptNextSave = useRef(false);
+  const [refusedFiles, setRefusedFiles] = useState<string[]>([]); const adoptNextSave = useRef(false);
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
     if (!project) return { ok: false, error: 'project not loaded' };
     const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched });
-    const result = await saveProject(id, adoptNextSave.current ? { ...payload, adoptUncommitted: true } : payload);
-    adoptNextSave.current = false; setRefusedFiles(result.refused ?? []);
+    const adopt = adoptNextSave.current; adoptNextSave.current = false; // consumed whether or not the save throws
+    const result = await saveProject(id, adopt ? { ...payload, adoptUncommitted: refusedFiles } : payload);
+    setRefusedFiles(result.refused ?? []);
     if (result.ok) {
       setDirty(false);
       setKbTouched(false);

@@ -41,3 +41,19 @@ test('saveProject reports a refused Save as not ok, carrying the files — never
   expect(r.refused).toEqual(['roadmap.md']);
   expect(r.error).toContain('roadmap.md');
 });
+
+test('a Save that failed without a refusal (merged:false, a git error) is reported as not saved', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    ok: true, id: 'weave', save: { merged: false, pushed: false, detail: 'fatal: Unable to create index.lock' },
+  }), { status: 200, headers: { 'content-type': 'application/json' } })));
+  const r = await saveProject('weave', { name: 'weave' });
+  expect(r.ok).toBe(false);
+  expect(r.error).toContain('index.lock');
+});
+
+test('nothing pending to merge is still a successful save', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    ok: true, id: 'weave', save: { merged: false, pushed: false, detail: 'no pending forge-studio changes' },
+  }), { status: 200, headers: { 'content-type': 'application/json' } })));
+  expect((await saveProject('weave', { name: 'weave' })).ok).toBe(true);
+});

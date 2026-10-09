@@ -229,7 +229,8 @@ function checkBrainStaleness(
 function isUnfilledProfile(text: string | null): boolean {
   if (text === null) return false;
   const sections = text.split(/^## /m).slice(1).filter((sec) => !/^Constraint blocks/.test(sec));
-  return sections.length > 0 && sections.every((sec) => /^TODO\b/.test(sec.split('\n').slice(1).find((l) => l.trim() !== '')?.trim() ?? ''));
+  // An empty section, or one whose first line is a (bulleted / emphasised / commented) TODO, is unfilled.
+  return sections.length > 0 && sections.every((sec) => /^([-*_>]|<!--)?\s*_?TODO(?![A-Za-z0-9])|^$/i.test(sec.split('\n').slice(1).find((l) => l.trim() !== '')?.trim() ?? ''));
 }
 
 /**

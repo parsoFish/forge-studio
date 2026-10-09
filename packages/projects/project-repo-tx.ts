@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { gitIdentityConfigArgs, guardedFile, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 export const STUDIO_BRANCH = 'forge-studio';
 
@@ -218,13 +218,15 @@ export type SaveResult = { merged: boolean; pushed: boolean; detail: string; ref
  * on the default branch so the next batch starts fresh. Idempotent when there is
  * nothing pending.
  */
-export function saveProjectRepo(projectDir: string, opts: { adopt?: boolean } = {}): SaveResult {
+export function saveProjectRepo(projectDir: string, opts: { adopt?: readonly string[] } = {}): SaveResult {
   if (!isGitRepo(projectDir)) return { merged: false, pushed: false, detail: 'not a git repo' };
   // forge-mfv5.1.12 — fail closed before any checkout.
   let uncommitted = uncommittedContractPaths(projectDir);
-  // Row 6 (ruling T1 1977a): the operator may adopt them — committed to forge-studio,
-  // re-read (still loose → refuse), then saved.
-  const adopted = opts.adopt === true && uncommitted.length > 0 ? uncommitted : undefined;
+  // Row 6 (ruling T1 1977a): the operator may adopt the files they were SHOWN —
+  // committed to forge-studio, re-read (anything else, or a deletion, still refuses), then saved.
+  const shown = opts.adopt ?? [];
+  const adoptable = uncommitted.filter((p) => shown.includes(p) && guardedFile(projectDir, p.split('/'), 'read') !== null);
+  const adopted = adoptable.length > 0 ? adoptable : undefined;
   if (adopted) {
     commitStudioChange(projectDir, 'chore(forge): adopt uncommitted contract files', adopted);
     uncommitted = uncommittedContractPaths(projectDir);

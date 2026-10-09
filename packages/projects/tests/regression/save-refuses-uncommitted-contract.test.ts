@@ -123,7 +123,7 @@ test('Save with adopt commits the uncommitted contract files to forge-studio, th
     writeFileSync(join(ground, '.gitignore'), '.forge/work-items/\n');
     writeFileSync(join(ground, 'roadmap.md'), '# Roadmap\n');
 
-    const r = saveProjectRepo(ground, { adopt: true });
+    const r = saveProjectRepo(ground, { adopt: ['.forge/project.json', '.gitignore', 'roadmap.md'] });
 
     assert.equal(r.refused, undefined);
     assert.deepEqual(r.adopted, ['.forge/project.json', '.gitignore', 'roadmap.md']);
@@ -132,6 +132,38 @@ test('Save with adopt commits the uncommitted contract files to forge-studio, th
     assert.equal(g(ground, ['status', '--porcelain']), '', 'the ground is clean after an adopted Save');
     const onOrigin = g(origin, ['ls-tree', '-r', '--name-only', 'main']).split('\n');
     for (const f of ['.forge/project.json', '.gitignore', 'AGENTS.md', 'roadmap.md']) assert.ok(onOrigin.includes(f), `${f} on origin/main`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('adopt commits only the files the operator was shown — a contract file dirtied since still refuses', () => {
+  const { root, ground, origin } = groundWithOrigin();
+  try {
+    writeFileSync(join(ground, 'roadmap.md'), '# Roadmap\n');
+    writeFileSync(join(ground, 'AGENTS.md'), '# dirtied after the refusal\n');
+    const originBefore = g(origin, ['rev-parse', 'main']);
+    const r = saveProjectRepo(ground, { adopt: ['roadmap.md'] });
+    assert.equal(r.merged, false);
+    assert.deepEqual(r.refused, ['AGENTS.md']);
+    assert.equal(g(origin, ['rev-parse', 'main']), originBefore);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('adopt never stages a deletion — a deleted contract file stays refused, nothing is pushed', () => {
+  const { root, ground, origin } = groundWithOrigin();
+  try {
+    writeFileSync(join(ground, 'AGENTS.md'), '# a\n');
+    g(ground, ['add', 'AGENTS.md']);
+    g(ground, ['commit', '-q', '-m', 'agents']);
+    g(ground, ['push', '-q', 'origin', 'main']);
+    rmSync(join(ground, 'AGENTS.md'));
+    const r = saveProjectRepo(ground, { adopt: ['AGENTS.md'] });
+    assert.equal(r.merged, false);
+    assert.deepEqual(r.refused, ['AGENTS.md']);
+    assert.ok(g(origin, ['ls-tree', '--name-only', 'main']).split('\n').includes('AGENTS.md'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
