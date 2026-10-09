@@ -37,7 +37,7 @@ import { parseStandingTriggers, type StandingTrigger } from './standing-triggers
 // its parser (session-client.ts's exported `parseContractStageRow`), never a
 // third client-side mirror. The import is one-way (session-client never imports
 // back from here).
-import { readSaveRefusal } from './save-refusal';
+import { readPrUrl, readSaveRefusal, type SaveRecoveryProposal } from './save-refusal';
 import { parseContractStageRow, type ContractStageRow } from './session-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
@@ -1215,7 +1215,7 @@ export async function deleteAgent(slug: string): Promise<{ ok: boolean; error?: 
 export async function saveProject(
   id: string,
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; error?: string; declarationChanged?: boolean; refused?: string[] }> {
+): Promise<{ ok: boolean; error?: string; declarationChanged?: boolean; refused?: string[]; recovery?: SaveRecoveryProposal }> {
   const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
   const refusal = r.ok ? readSaveRefusal(r.data?.save) : null; // a refused Save is never "saved"
   if (refusal) return { ok: false, ...refusal };
@@ -1871,9 +1871,9 @@ export async function fetchContractStages(id: string): Promise<ContractStageRow[
 
 /** Whether the project repo has forge-UI changes accumulated on forge-studio,
  *  pending a merge to main. */
-export async function fetchRepoStatus(projectId: string): Promise<{ pending: boolean; branch: string; uncommitted: string[] }> {
-  const r = await studioRead<{ pending: boolean; branch: string; uncommitted?: unknown }>(`/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`);
-  return { ...r, uncommitted: Array.isArray(r.uncommitted) ? r.uncommitted.filter((f): f is string => typeof f === 'string') : [] };
+export async function fetchRepoStatus(projectId: string): Promise<{ pending: boolean; branch: string; uncommitted: string[]; prUrl?: string }> {
+  const r = await studioRead<{ pending: boolean; branch: string; uncommitted?: unknown; prUrl?: unknown }>(`/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`);
+  return { pending: r.pending, branch: r.branch, uncommitted: Array.isArray(r.uncommitted) ? r.uncommitted.filter((f): f is string => typeof f === 'string') : [], ...(readPrUrl(r.prUrl) ? { prUrl: readPrUrl(r.prUrl) } : {}) };
 }
 
 /** Merge the accumulated forge-studio changes into the project's default branch + push. */

@@ -27,6 +27,7 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveRefusal } from '@/components/studio/project-builder/SaveRefusal';
+import { SaveRepoState, type SaveRecoveryProposal } from '@/components/studio/project-builder/SaveRepoState';
 import { deriveSaveControl, useRepoStatus } from '@/lib/use-repo-status';
 import { NotFound } from '@/components/NotFound';
 import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
@@ -331,24 +332,22 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     router.push(resolveDemoEntryHref(sessions, id, initiativeId));
   }, [id, router]);
 
-  // Unified save feedback (X1). Save derives from the form AND repo-status (forge-mfv5.1.20); a refused Save offers adopt (1977a).
+  // Unified save feedback (X1). Save derives from the form AND repo-status (forge-mfv5.1.20); a refused Save offers adopt (1977a), a stranded base a recovery (mfv5.1.22).
   const [refusedFiles, setRefusedFiles] = useState<string[]>([]); const adoptNextSave = useRef(false);
+  const [recovery, setRecovery] = useState<SaveRecoveryProposal | null>(null); const recoverNextSave = useRef(false);
   const { repo, refresh: refreshRepo } = useRepoStatus(isNew ? null : id);
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
     if (!project) return { ok: false, error: 'project not loaded' };
     const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched });
     const adopt = adoptNextSave.current; adoptNextSave.current = false; // consumed whether or not the save throws
-    const result = await saveProject(id, adopt ? { ...payload, adoptUncommitted: saveControl.adoptFiles } : payload);
-    setRefusedFiles(result.refused ?? []); refreshRepo();
+    const recover = recoverNextSave.current && recovery ? { localHead: recovery.localHead, resetTo: recovery.resetTo } : null; recoverNextSave.current = false;
+    const result = await saveProject(id, { ...(adopt ? { ...payload, adoptUncommitted: saveControl.adoptFiles } : payload), ...(recover ? { recover } : {}) });
+    setRefusedFiles(result.refused ?? []); setRecovery(result.recovery ?? null); refreshRepo();
     if (result.ok) {
-      setDirty(false);
-      setKbTouched(false);
+      setDirty(false); setKbTouched(false);
       void loadPreflight({ cancelled: false });
-      // W7-B6 (projects-26): a successful save refreshes the page's OWN
-      // roster too — the header project switcher kept showing the old name
-      // until a manual reload (loadData leaves the operator's just-saved
-      // fields untouched: dirty is false, and it re-hydrates from the roster
-      // that now carries exactly what was saved).
+      // W7-B6 (projects-26): a successful save refreshes the page's OWN roster too — the header switcher kept the old
+      // name until a reload (loadData leaves just-saved fields untouched: dirty is false; the roster carries what was saved).
       void loadData({ cancelled: false });
       // F5: say so when this save changed the demo declaration.
       if (result.declarationChanged) setDeclarationChanged(true);
@@ -501,6 +500,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       </div>
 
       <SaveRefusal files={saveControl.adoptFiles} busy={saving} onAdopt={() => { adoptNextSave.current = true; void handleSave(); }} />
+      <SaveRepoState prUrl={repo?.prUrl} recovery={recovery} busy={saving} onRecover={() => { recoverNextSave.current = true; void handleSave(); }} />
       {/* Editor | Roadmap tab bar */}
       <ProjectTabs tab={tab} onSelect={setTab} />
 

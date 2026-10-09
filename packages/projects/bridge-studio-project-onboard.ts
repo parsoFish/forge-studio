@@ -84,7 +84,8 @@ import { scaffoldGreenfieldProject } from './project-create.ts';
 import { SCAFFOLD_DEMO_PROCESS } from './contract-stages.ts';
 import { validateProjectConfig, readAgentInstructionsFile } from './project-config.ts';
 import { ProjectConfigWriteError, writeProjectConfigPatch } from './project-config-write.ts';
-import { commitStudioChange, saveProjectRepo, StudioWritePathIgnoredError, uncommittedContractPaths } from './project-repo-tx.ts';
+import { commitStudioChange, StudioWritePathIgnoredError, uncommittedContractPaths } from './project-repo-tx.ts';
+import { parseRecoverConfirmation, saveProjectRepo, type SaveOptions, type SaveResult } from './project-repo-save.ts';
 import { checkContractArtifactContainment, scaffoldContractArtifacts, ScaffoldContainmentError } from './project-contract-scaffold.ts';
 
 /** Structural mirror of `@forge/knowledge`'s
@@ -664,13 +665,16 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
 
       // R1-2: a "Save project" is the ONE durable save — merge the accumulated
       // forge-studio changes (this config edit + any preflight/instructions/demo
-      // writes) into the default branch + push. Best-effort: the config is
-      // already safe on forge-studio, so a merge/push failure (e.g. protected
-      // main) doesn't fail the save — it's surfaced in `save`.
-      let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
+      // writes) into the default branch + push, or a PR when it is protected
+      // (forge-mfv5.1.22). The config is already safe on forge-studio, so a
+      // Save that did not land is surfaced in `save`, never a failed PUT.
+      let save: SaveResult | undefined;
       const adoptRaw = b['adoptUncommitted'];
       const adopt = Array.isArray(adoptRaw) && adoptRaw.every((f) => typeof f === 'string') ? (adoptRaw as string[]) : undefined;
-      try { save = saveProjectRepo(projectRoot, adopt ? { adopt } : {}); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
+      // A stranded-base recovery runs only on the operator's confirmation of the two shas it was shown.
+      const recover = parseRecoverConfirmation(b['recover']);
+      const saveOpts: SaveOptions = { ...(adopt ? { adopt } : {}), ...(recover ? { recover } : {}) };
+      try { save = saveProjectRepo(projectRoot, saveOpts); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
 
       // F5: when demoProcess CHANGED in this save, say so — the declaration IS
       // the cycle input (forge-mfv5.2.8), so nothing is generated from it; the
