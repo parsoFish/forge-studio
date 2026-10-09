@@ -58,9 +58,9 @@ operator-ratified new cap — never a silent raise.
 | `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 48 | 11,271 | **9,477** | ratified 9,477 — forge-mfv5.1.12: onboarding and project-bound agent runs commit to forge-studio; Save refuses an uncommitted contract by name; +54 measured, read for slack (dirtyPaths parse shared), lane-ratified (≤100, ruling 666). |
-| `knowledge` | 44 | 13,460 | **12,884** | ratified 12,884 — row 206 (forge-8vfn.8.5.56): brain-fix claims the run id through the dispatch seam, fix-agent checks the active-job derivation, a crashed fix reads failed; +52, lane-ratified (≤100, ruling 666). |
+| `knowledge` | 44 | 13,477 | **12,899** | ratified 12,899 — forge-mfv5.1.18: a project-brain commit files each theme in its category index through `ensureLinked`; +15 measured, read for slack (comment cut), lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 64 | 20,935 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 64 | 20,937 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 89 | 25,155 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
 | `factory` | 15 | 2,909 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,301 | **12,301** | ratified 12,301 — row 212 follow-up 3 (forge-8vfn.8.5.48), lane-ratified under ruling 666 (measured ceiling); see git history for prior raises. |
@@ -68,7 +68,7 @@ operator-ratified new cap — never a silent raise.
 | `apps/forge` | 35 | 8,554 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **494** | **132,792** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **494** | **132,811** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -124,7 +124,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/agent-run.ts | apps/forge | verbatim | 392 |
 | packages/sessions/kinds/architect-plan.ts | sessions | verbatim | 404 |
 | packages/sessions/kinds/architect-plan-html.ts | sessions | rewritten | 356 |
-| packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 270 |
+| packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 275 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
 | packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 305 |
 | packages/knowledge/brain-lint-checks-graph.ts | knowledge | verbatim | 247 |
@@ -407,7 +407,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 171 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 477 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
-| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 185 |
+| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 187 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/sessions/kinds/architect-ports.ts | sessions | rewritten | 52 |
 | packages/contracts/manifest-types.ts | contracts | rewritten | 243 |
@@ -415,7 +415,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/session-kind-deps.ts | apps/forge | rewritten | 61 |
 | apps/forge/brain-fix-turn.ts | apps/forge | rewritten | 99 |
 | apps/forge/manifest-fixtures.ts | apps/forge | rewritten | 46 |
-| packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
+| packages/knowledge/project-brain-build.ts | knowledge | rewritten | 231 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 395 |
 | packages/knowledge/testing.ts | knowledge | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `resolveKbProcesses` has no production consumer outside this package, only two `apps/forge` tests reach for it, so it stays off the main door and behind `@forge/knowledge/testing` instead.** |
 | packages/projects/project-config.ts | projects | verbatim | 322 |

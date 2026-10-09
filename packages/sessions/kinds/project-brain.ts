@@ -91,6 +91,8 @@ export type RunProjectBrainTurnResult = {
   wrote: string[];
   /** The staged (or committed) theme file names. */
   themes?: string[];
+  /** Committed themes the category-index writer could not file (and why). */
+  unindexed?: Array<{ theme: string; reason: string }>;
 };
 
 /** The session dir: `<logsRoot>/_sessions/<project>/_project-brain/<sessionId>`. */
@@ -164,7 +166,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
         status,
       });
       writeStatus({ ...status, phase: 'committed' });
-      return { phase: 'committed', wrote: committed.wrote, themes: committed.themes };
+      return { phase: 'committed', wrote: committed.wrote, themes: committed.themes, unindexed: committed.unindexed };
     },
 
     abandoned: async ({ status, writeStatus }) => {
@@ -175,7 +177,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
 
   otherwise: (status) => ({ phase: status.phase, wrote: [] }),
   startMetadata: (status) => ({ project: status.project }),
-  endMetadata: (result) => ({ theme_count: result.themes?.length ?? 0 }),
+  endMetadata: (result) => ({ theme_count: result.themes?.length ?? 0, unindexed_count: result.unindexed?.length ?? 0 }),
 };
 
 export async function runProjectBrainTurn(
