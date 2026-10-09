@@ -19,9 +19,9 @@
 
 import { Cron } from 'croner';
 import { bridgeFetch } from './bridge-client';
+import { readBridgeJsonWithin } from './bridge-read-deadline';
 import { finiteNumberOr, normalizePhaseMeta } from './run-cost-guards';
 import {
-  readBridgeJson,
   unwrapBridgeRead,
   unwrapBridgeReadOr404,
   BridgeReadError,
@@ -743,7 +743,7 @@ export type PhaseLogLine = {
  * `bridge-result`'s classification with `bridgeRead`.
  */
 async function studioGet<T>(path: string): Promise<BridgeReadResult<T>> {
-  return readBridgeJson<T>(() => bridgeFetch(path));
+  return readBridgeJsonWithin<T>((signal) => bridgeFetch(path, { signal })); // bounded (forge-nk1y.9)
 }
 
 /** GET as a value; THROWS `BridgeReadError` on any failure. */

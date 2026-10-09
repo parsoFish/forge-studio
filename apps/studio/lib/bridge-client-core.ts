@@ -22,6 +22,8 @@
  * for every live cycle.
  */
 import { DEFAULT_BRIDGE_PORT } from './bridge-port.ts';
+import { readBridgeJsonWithin } from './bridge-read-deadline.ts';
+export { BRIDGE_READ_TIMEOUT_MS } from './bridge-read-deadline.ts';
 import {
   bridgeErrorMessage,
   readBridgeJson,
@@ -280,7 +282,7 @@ export async function bridgeFetch(path: string, init?: RequestInit): Promise<Res
  * studio-client.ts).
  */
 export async function bridgeRead<T>(path: string): Promise<BridgeReadResult<T>> {
-  return readBridgeJson<T>(() => bridgeFetch(path));
+  return readBridgeJsonWithin<T>((signal) => bridgeFetch(path, { signal })); // bounded (forge-nk1y.9)
 }
 
 /** GET as a value; THROWS `BridgeReadError` on any failure — a caller with a

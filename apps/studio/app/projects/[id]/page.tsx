@@ -141,7 +141,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // recovery. `panelError` is the softer sibling for the preflight/roadmap
   // reads: the project itself loaded, one side panel's read did not — shown
   // inline (never an unhandled rejection, never a silently-absent panel).
-  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [loadError, setLoadError] = useState<{ error: string; status?: number; timedOut?: boolean } | null>(null);
   const [waitingOn, setWaitingOn] = useState<readonly string[]>([]); const [failedRead, setFailedRead] = useState<string | null>(null); // forge-nk1y.9: the load's reads, by name
   // One slot PER panel read (preflight / roadmap / cycles) — two failing
   // panels both stay visible; a panel's own success clears only its own slot.
@@ -434,7 +434,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         rootAttrs={{ 'data-project-id': id }}
         what={failedRead ? `${failedRead} for project "${id}"` : `project "${id}"`}
         error={loadError.error}
-        status={loadError.status}
+        status={loadError.status} timedOut={loadError.timedOut}
         onRetry={reload}
         backHref="/projects"
         backLabel="Projects"

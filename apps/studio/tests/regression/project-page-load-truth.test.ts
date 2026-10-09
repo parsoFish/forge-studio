@@ -174,3 +174,38 @@ test('a contract row that fails stays a "false" verdict while preflight is pendi
   expect(readiness.getAttribute('data-ready-count')).toBe('4');
   expect(readiness.getAttribute('data-flow-ready')).toBe('false');
 });
+
+test('the flows read STALLS past the bridge read deadline: the page-level error names the flows read as timed out, with Retry', async () => {
+  const { BRIDGE_READ_TIMEOUT_MS } = await import('@/lib/bridge-client-core');
+  // A real fetch honours its abort signal; the planted one never answers otherwise.
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    if (path === '/api/studio/flows') {
+      return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)));
+    }
+    const reply = routes[path] ?? json({ error: `no route ${path}` }, 404);
+    if (reply === 'hang') return new Promise<Response>(() => {});
+    return Promise.resolve(new Response(JSON.stringify(reply.body), { status: reply.status, headers: { 'content-type': 'application/json' } }));
+  }));
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      root.render(React.createElement(ProjectBuilderPage, { params: { id: 'gitweave' } }));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(q('[data-component="page-loading"]')?.textContent).toContain('the flows');
+    await act(async () => { await vi.advanceTimersByTimeAsync(BRIDGE_READ_TIMEOUT_MS); });
+    const main = q('main[data-page="projects"]')!;
+    expect(main.getAttribute('data-page-ready')).toBe('true');
+    expect(main.getAttribute('data-fetch-status')).toBe('error');
+    const error = q('[data-component="page-load-error"]')!;
+    expect(error.textContent).toContain('the flows');
+    expect(error.textContent).toContain(`timed out after ${BRIDGE_READ_TIMEOUT_MS / 1000} s`);
+    expect(error.querySelector('[data-fetch-timed-out="true"]')).not.toBeNull();
+    expect(error.textContent).not.toContain('Could not reach');
+    expect(error.querySelector('[data-action="retry-fetch"]')).not.toBeNull();
+    expectNoVerdicts();
+  } finally {
+    vi.useRealTimers();
+  }
+});
