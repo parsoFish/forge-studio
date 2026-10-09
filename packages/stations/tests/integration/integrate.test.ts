@@ -118,10 +118,10 @@ function messages(): string[] {
 }
 
 describe('integrate band — what it writes', () => {
-  it('kills "no PR body, no PR": both artifacts land, derived, with no agent spawned', () => {
+  it('kills "no PR body, no PR": both artifacts land, derived, with no agent spawned', async () => {
     writeProjectConfig([]);
     writeWorkItem('WI-1');
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
@@ -136,11 +136,11 @@ describe('integrate band — what it writes', () => {
     assert.ok(existsSync(join(root, 'demo', INITIATIVE_ID, 'DEMO.md')), 'DEMO.md is rendered from the derived model');
   });
 
-  it('kills "a stale body from the previous round ships": an existing PR body is replaced, not appended to', () => {
+  it('kills "a stale body from the previous round ships": an existing PR body is replaced, not appended to', async () => {
     writeProjectConfig([]);
     mkdirSync(join(root, '.forge'), { recursive: true });
     writeFileSync(join(root, PR_DESCRIPTION_REL), 'STALE ROUND N-1 BODY\n');
-    runIntegrateBand(
+    await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
@@ -149,9 +149,9 @@ describe('integrate band — what it writes', () => {
     assert.ok(!readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8').includes('STALE'));
   });
 
-  it('kills "the gate evidence never reached the reviewer": the gate rows are in the PR body and the demo model', () => {
+  it('kills "the gate evidence never reached the reviewer": the gate rows are in the PR body and the demo model', async () => {
     writeProjectConfig([]);
-    runIntegrateBand(
+    await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       [{ gate: 'ci', cmd: ['npm', 'run', 'ci'], ok: false, outputTail: 'red' }],
@@ -189,11 +189,11 @@ function writeFakeCaptureScript(dir: string, deltas: readonly string[]): string 
 }
 
 describe('integrate band — delta honesty (forge-mfv5.1.7): a successful capture re-derives from the real flags', () => {
-  it('kills "the pushed demo drifts from what really happened": every checkpoint unchanged rewrites BOTH demo.json\'s essence and the PR body', () => {
+  it('kills "the pushed demo drifts from what really happened": every checkpoint unchanged rewrites BOTH demo.json\'s essence and the PR body', async () => {
     writeProjectConfig([{ kind: 'capture', text: 'Run `true` to demo it.' }]);
     writeWorkItem('WI-1');
     const scriptPath = writeFakeCaptureScript(root, ['unchanged']);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       {
         initiativeId: INITIATIVE_ID,
         worktreePath: root,
@@ -212,11 +212,11 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
     assert.match(prBody, /No observable behaviour change was captured\./);
   });
 
-  it('kills "a real change reads as no change": a changed checkpoint\'s count reaches both artifacts', () => {
+  it('kills "a real change reads as no change": a changed checkpoint\'s count reaches both artifacts', async () => {
     writeProjectConfig([{ kind: 'capture', text: 'Run `true` to demo it.' }]);
     writeWorkItem('WI-1');
     const scriptPath = writeFakeCaptureScript(root, ['changed']);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       {
         initiativeId: INITIATIVE_ID,
         worktreePath: root,
@@ -235,7 +235,7 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
     assert.match(prBody, /1 of 1 captured checkpoints changed behaviour\./);
   });
 
-  it('kills "a corrupt demo.json after capture reads as success": the band FAILS CLOSED instead of leaving a stale pre-capture PR body', () => {
+  it('kills "a corrupt demo.json after capture reads as success": the band FAILS CLOSED instead of leaving a stale pre-capture PR body', async () => {
     writeProjectConfig([{ kind: 'capture', text: 'Run `true` to demo it.' }]);
     writeWorkItem('WI-1');
     // A fake capture that stamps a VALID nonce (so nonce verification passes)
@@ -252,7 +252,7 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
         "writeFileSync(demoJsonPath, JSON.stringify({ capture: { nonce: process.env.FORGE_CAPTURE_NONCE } }));",
       ].join('\n'),
     );
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       {
         initiativeId: INITIATIVE_ID,
         worktreePath: root,
@@ -270,9 +270,9 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
 });
 
 describe('integrate band — the class decides, and a class it cannot serve fails LOUD', () => {
-  it('kills "a code initiative silently ships an empty demo": capture=checkpoints with no capture step is a config error', () => {
+  it('kills "a code initiative silently ships an empty demo": capture=checkpoints with no capture step is a config error', async () => {
     writeProjectConfig([{ kind: 'verify', text: 'Read it back.' }]);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(), projectRepoPath: root },
       logger,
       GATES,
@@ -284,9 +284,9 @@ describe('integrate band — the class decides, and a class it cannot serve fail
     assert.ok(!existsSync(join(root, PR_DESCRIPTION_REL)), 'no PR body is written for a config error');
   });
 
-  it('kills "docs work runs a code demo": a docs initiative needs no demoProcess and still completes', () => {
+  it('kills "docs work runs a code demo": a docs initiative needs no demoProcess and still completes', async () => {
     writeProjectConfig([{ kind: 'verify', text: 'Read it back.' }]);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
@@ -295,9 +295,9 @@ describe('integrate band — the class decides, and a class it cannot serve fail
     assert.equal(result.status, 'complete');
   });
 
-  it('kills "the class was never consulted": the derived event records the class and its capture column', () => {
+  it('kills "the class was never consulted": the derived event records the class and its capture column', async () => {
     writeProjectConfig([]);
-    runIntegrateBand(
+    await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'config' })), projectRepoPath: root },
       logger,
       GATES,
@@ -308,9 +308,9 @@ describe('integrate band — the class decides, and a class it cannot serve fail
     assert.equal((derived as { metadata?: Record<string, unknown> }).metadata?.capture, 'none');
   });
 
-  it('kills "a shell string is spawned": a capture step whose command needs a shell is a config error', () => {
+  it('kills "a shell string is spawned": a capture step whose command needs a shell is a config error', async () => {
     writeProjectConfig([{ kind: 'capture', text: 'Run `npm run demo | tee out.txt`.' }]);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(), projectRepoPath: root },
       logger,
       GATES,
@@ -321,11 +321,11 @@ describe('integrate band — the class decides, and a class it cannot serve fail
 });
 
 describe('integrate band — a broken input is named, never guessed', () => {
-  it('kills "a demo for a branch that changed nothing": an empty diff against main fails derive', () => {
+  it('kills "a demo for a branch that changed nothing": an empty diff against main fails derive', async () => {
     writeProjectConfig([]);
     git(['checkout', '-q', 'main']);
     git(['checkout', '-q', '-b', 'forge/EMPTY']);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
@@ -335,9 +335,9 @@ describe('integrate band — a broken input is named, never guessed', () => {
     assert.ok(!existsSync(join(root, 'demo', INITIATIVE_ID)), 'nothing is written for a branch with no diff');
   });
 
-  it('kills "an unreadable manifest reads as a class": a missing manifest fails derive, before any write', () => {
+  it('kills "an unreadable manifest reads as a class": a missing manifest fails derive, before any write', async () => {
     writeProjectConfig([]);
-    const result = runIntegrateBand(
+    const result = await runIntegrateBand(
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: join(root, 'nope.md'), projectRepoPath: root },
       logger,
       GATES,

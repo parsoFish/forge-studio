@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 126 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 129 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -57,18 +57,18 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 7 | 1,627 | **1,627** | ratified 1,627 (+54, forge-8vfn.30.9, ruling 666): `resolveDeclaredBin`, the pure declared-bin containment rule shared by flows and factory. |
 | `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 49 | 11,330 | **9,536** | ratified 9,536 — forge-mfv5.1.19: `demoMeans`, the declared means a demo may drive (closed object, refusals by name); +59 measured (on main ebb0fac1), read for slack (none in project-config wiring), lane-ratified (≤100, ruling 666). |
+| `projects` | 50 | 11,430 | **9,636** | ratified 9,636 — forge-mfv5.1.19 PR 2: `validateDemoPlan`, the demo plan refused by row against declared means, agent prose bounded; +100 measured (on main 405bc586), read for slack (validator compressed 104→94), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,477 | **12,899** | ratified 12,899 — forge-mfv5.1.18: a project-brain commit files each theme in its category index through `ensureLinked`; +15 measured, read for slack (comment cut), lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,938 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 89 | 25,156 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
-| `factory` | 16 | 2,981 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 46 | 12,399 | **12,399** | ratified 12,399 — forge-mfv5.1.19: evidence form per checkpoint, narrative, JSON-normalised api control (`demo-form.ts`); +98 measured, read for slack (JSON control folded into one file), lane-ratified (≤100, ruling 666). |
+| `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 47 | 12,498 | **12,498** | ratified 12,498 — forge-mfv5.1.19 PR 2: the demo planner port + integrate wiring (`demo-planner-port.ts`); +99 measured, read for slack (port compressed 96→70, skill read moved to factory), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 35 | 8,552 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
+| `apps/forge` | 35 | 8,553 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **497** | **133,040** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **500** | **133,332** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -183,7 +183,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/cycle-recap.ts | stations | verbatim | 411 |
 | packages/factory/class-profiles.ts | factory | rewritten | 135 |
 | packages/stations/class-profile-port.ts | stations | rewritten | 133 |
-| packages/stations/index.ts | stations | rewritten | 33 |
+| packages/stations/index.ts | stations | rewritten | 34 |
 | packages/stations/gates/docs-gate.ts | stations | verbatim | 114 |
 | packages/stations/phases/pm-prompt-context.ts | stations | verbatim | 139 |
 | packages/stations/phases/pm-class-set-rules.ts | stations | verbatim | 46 |
@@ -225,7 +225,8 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/preflight.ts | projects | pruned | 291 |
 | packages/projects/preflight-build.ts | projects | verbatim | 138 |
 | packages/projects/preflight-demo.ts | projects | verbatim | 179 |
-| packages/projects/demo-means.ts | projects | rewritten | 73 |
+| packages/projects/demo-means.ts | projects | rewritten | 77 |
+| packages/projects/demo-plan.ts | projects | rewritten | 95 |
 | packages/projects/preflight-gate.ts | projects | verbatim | 281 |
 | packages/projects/preflight-instructions.ts | projects | verbatim | 135 |
 | packages/projects/preflight-release.ts | projects | verbatim | 71 |
@@ -370,18 +371,18 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/review-refusal.ts | stations | rewritten | 135 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 435 |
-| packages/stations/phases/executor-deps.ts | stations | verbatim | 333 |
+| packages/stations/phases/executor-deps.ts | stations | verbatim | 337 |
 | packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 139 |
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
 | packages/sessions/testing.ts | sessions | verbatim | 15 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `tests/architect-ports-stub.ts`'s `stubArchitectManifestPorts`, three `kinds/architect-critic.ts` symbols, and three `turn-cost-rows.ts` symbols have no production consumer outside this package, only `apps/forge`/`scripts/stories` tests reach for them.** |
 | packages/stations/phases/cycle-id.ts | stations | rewritten | 12 |
-| packages/stations/phases/executor-table.ts | stations | verbatim | 732 |
+| packages/stations/phases/executor-table.ts | stations | verbatim | 735 |
 | packages/stations/phases/agent-skill-text.ts | stations | rewritten | 30 |
 | packages/forge-docs/skills/docs-integrate/SKILL.md | forge-docs | rewritten | 70 |
 | packages/forge-docs/skills/docs-review/SKILL.md | forge-docs | rewritten | 173 |
 | packages/forge-docs/skills/docs-writer/SKILL.md | forge-docs | rewritten | 109 |
 | packages/flows/phase-wiring.ts | flows | verbatim | 54 |
-| apps/forge/factory-wiring.ts | apps/forge | verbatim | 180 |
+| apps/forge/factory-wiring.ts | apps/forge | verbatim | 181 |
 | apps/forge/example-hooks.ts | apps/forge | rewritten | 113 |
 | apps/forge/factory-cli-wiring.ts | apps/forge | verbatim | 65 |
 | packages/stations/phases/decompose-completeness.ts | stations | verbatim | 197 |
@@ -437,12 +438,13 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/release-finalize-invocation.ts | stations | verbatim | 165 |
 | packages/stations/release-process.ts | stations | verbatim | 66 |
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
-| packages/stations/phases/integrate.ts | stations | verbatim | 372 |
+| packages/stations/phases/integrate.ts | stations | verbatim | 383 |
 | packages/stations/phases/dev-loop-events.ts | stations | rewritten | 167 |
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
 | packages/stations/demo-delta.ts | stations | verbatim | 145 |
-| packages/stations/demo-form.ts | stations | rewritten | 75 |
-| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 287 |
+| packages/stations/demo-form.ts | stations | rewritten | 73 |
+| packages/stations/demo-planner-port.ts | stations | rewritten | 77 |
+| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 292 |
 | packages/stations/demo-model.ts | stations | verbatim | 794 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 305 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
@@ -539,7 +541,7 @@ operator-ratified new cap — never a silent raise.
 | skills/contract-check/SKILL.md | projects | verbatim | 89 |
 | skills/creation-agent/SKILL.md | library | verbatim | 117 |
 | skills/cruft-sweep/SKILL.md | kernel | verbatim | 91 |
-| skills/demo-agent/SKILL.md | factory | verbatim | 82 |
+| skills/demo-agent/SKILL.md | factory | verbatim | 91 |
 | skills/demo-builder/SKILL.md | projects | verbatim | 133 |
 | skills/demo-design/SKILL.md | projects | verbatim | 110 |
 | skills/demo/SKILL.md | factory | verbatim | 305 |
@@ -567,6 +569,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/index.ts | factory | verbatim | 8 |
 | packages/factory/demo.ts | factory | verbatim | 454 |
 | packages/factory/demo-api-capture.ts | factory | rewritten | 42 |
+| packages/factory/demo-planner.ts | factory | rewritten | 83 |
 | packages/flows/index.ts | flows | verbatim | 132 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 441 |
@@ -601,7 +604,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/dispatch-claim.ts | kernel | rewritten | 319 **New file, row 206 (forge-8vfn.8.5.56):** `claimDispatchSlot`/`releaseDispatchSlot` + `newRunStamp`/`randomRunSuffix`, the ONE on-disk dispatch claim `apps/forge/bridge-agent-dispatch.ts`, `apps/forge/bridge-studio-writes.ts` and `@forge/knowledge`'s `spawnBrainFix` all share, so no rank-1-or-above package copies it. `isAlive` is an injected parameter (kernel is rank 1; the real `isTurnAlive` is rank 4). |
 | packages/knowledge/index.ts | knowledge | verbatim | 112 |
 | packages/library/index.ts | library | verbatim | 115 |
-| packages/projects/index.ts | projects | verbatim | 107 |
+| packages/projects/index.ts | projects | verbatim | 108 |
 | packages/projects/project-roster.ts | projects | verbatim | 468 |
 | packages/projects/project-preflight-read.ts | projects | verbatim | 212 |
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |

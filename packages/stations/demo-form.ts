@@ -7,15 +7,13 @@
  * control never reads it.
  */
 
-import { isOwnServerPath } from '@forge/projects';
+import { DEMO_EVIDENCE_FORMS, NARRATIVE_MAX_WORDS, isOwnServerPath, type DemoEvidenceForm } from '@forge/projects';
 
 import type { DemoModelCheckpoint } from './demo-model.ts';
 
-export const DEMO_EVIDENCE_FORMS = ['cli-before-after', 'api-before-after', 'screenshot', 'test-evidence'] as const;
-export type DemoEvidenceForm = (typeof DEMO_EVIDENCE_FORMS)[number];
+export type { DemoEvidenceForm };
 
-/** A narrative longer than this is a second essay, not a paragraph. */
-export const NARRATIVE_MAX_WORDS = 120;
+export { NARRATIVE_MAX_WORDS };
 export const wordCount = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length;
 
 export function validateFormFields(cp: Record<string, unknown>, at: string): string[] {

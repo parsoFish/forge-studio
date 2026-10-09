@@ -22,11 +22,12 @@ package really has is the set of specifiers those two seams import**, and
 `contract.test.ts` measures it from the seam files rather than from a list, so
 this table cannot drift from what the product actually reaches for.
 
-### Reached by `apps/forge/factory-wiring.ts` — the BRIDGE seam (1)
+### Reached by `apps/forge/factory-wiring.ts` — the BRIDGE seam (2)
 
 | specifier | what the bridge resolves it for |
 |---|---|
 | `@forge/factory/class-profiles.ts` | the `class → gate-profile` table |
+| `@forge/factory/demo-planner.ts` | the integrate band's demo planner (D-45), injected as `createPhaseExecutor({ demoPlanner })` |
 
 **F3 (operator ruling, items 81/83): the executor, every band, and the demo
 model moved to `@forge/stations`.** The bridge seam's other seven specifiers —
@@ -34,7 +35,8 @@ the phase executors, the reflector, the review agent, release-finalize,
 feedback reconciliation and the reflector re-run — are `@forge/stations`
 imports now, not `@forge/factory` ones, so this table (which the contract test
 measures from the FACTORY-prefixed specifiers a seam actually imports) shrank
-to the one thing still the example's: the class table. `apps/forge` imports
+to what is still the example's: the class table, and (D-45) the demo planner
+the integrate band asks how to show a change. `apps/forge` imports
 `@forge/stations` for the rest **statically** — it is not part of the example
 and is never absent, so there is nothing there for the seam's "no example
 installed" degrade path to guard.
@@ -56,7 +58,7 @@ measured and rejected: it put **17 new (file, sink) pairs reachable from a bridg
 route** for surfaces no bridge route calls. One file would have meant widening a
 security ratchet to make a count look tidier.
 
-### `package.json` enumerates these two specifiers by name — nothing else
+### `package.json` enumerates these three specifiers by name — nothing else
 
 Bead `forge-8vfn.5.31` narrowed `exports` from a `"./*"` wildcard — which
 legalised every file in the package, not just the two the seams actually

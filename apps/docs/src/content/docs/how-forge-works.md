@@ -33,7 +33,7 @@ forge ships one working factory. It is two flows plus one agent that fires after
 **Develop flow.**
 
 1. **Build.** The developer agent works through the work items in dependency order, one loop per item, each in its own git worktree. A loop repeats until the checks pass or its iteration budget runs out.
-2. **Integrate.** The factory derives the review bundle from the acceptance criteria, the gate output and the diff, and opens the pull request. No model writes it.
+2. **Integrate.** A planner agent picks how to show the change; the factory checks the plan, captures the evidence, and opens the pull request.
 3. **Review.** A read-only agent critiques the diff against each acceptance criterion. It cannot change anything but its findings file.
 4. **Verdict gate.** You read the findings and approve, which merges, or send back, which re-runs the build.
 

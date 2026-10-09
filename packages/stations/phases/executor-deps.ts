@@ -22,6 +22,7 @@ import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forg
 import { WedgeDetector, WedgeKillError, OperatorStopError } from '@forge/flows';
 import { runProjectManager as realRunProjectManager } from './project-manager.ts';
 import { requireCycleId } from './cycle-id.ts';
+import type { DemoPlannerPort } from '../demo-planner-port.ts';
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from './developer-loop.ts';
 import { runIntegrateBand, type IntegrateResult } from './integrate.ts';
 import { runAdversarialReview as realRunAdversarialReview, type AdversarialReviewResult } from './adversarial-review.ts';
@@ -62,7 +63,8 @@ export type FlowRunnerDeps = {
     input: CycleInput,
     logger: EventLogger,
     gateEvidence: readonly MergeGateEvidence[],
-  ) => IntegrateResult;
+    def: AgentDefinition,
+  ) => IntegrateResult | Promise<IntegrateResult>;
 
   /**
    * R4-10-F1 review node: the R4-08 adversarial-review pipeline (assemble the
@@ -188,7 +190,7 @@ export const DEFAULT_LOGS_ROOT = join(FORGE_ROOT, '_logs');
  * per-process: two callers in the same process (a live bridge and a test) may
  * bind different tables, or none.
  */
-export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDeps {
+export function buildDefaultDeps(classProfiles?: ClassProfilePort, demoPlanner?: DemoPlannerPort): FlowRunnerDeps {
   return {
     // Thread the optional wedge-abort signal + the executing node's own
     // agent def (seam F4) into real phase functions.
@@ -196,13 +198,15 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
       realRunProjectManager(input, logger, { signal, classProfiles, agentDef: def }),
     runDeveloperLoop: (input, logger, def, signal?) =>
       realRunDeveloperLoop(input, logger, def, signal, classProfiles),
-    runIntegrate: (input, logger, gateEvidence) =>
+    runIntegrate: (input, logger, gateEvidence, def) =>
       runIntegrateBand(
         {
           initiativeId: input.initiativeId,
           worktreePath: input.worktreePath,
           manifestPath: input.manifestPath,
           projectRepoPath: input.projectRepoPath,
+          // cycleId is read only when the planner actually runs, so a class that captures no checkpoints never needs one.
+          ...(demoPlanner ? { planner: { port: demoPlanner, def, get cycleId() { return requireCycleId(input, 'runIntegrate'); } } } : {}),
         },
         logger,
         gateEvidence,

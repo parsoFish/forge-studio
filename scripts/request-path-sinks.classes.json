@@ -137,6 +137,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/factory/demo-planner.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "`def.path` \u2014 the executing agent def's own SKILL.md, resolved by the agent registry, as agent-skill-text.ts reads it"
+ },
  "packages/factory/class-profiles.ts": {
   "class": "not-request-derived",
   "guard": "isContainedProjectRepoPath",
@@ -904,6 +910,12 @@
   "guard": null,
   "verified": "read",
   "note": "`bundleDir` (`before`/`after` `.out` or `.filmstrip.png`)"
+ },
+ "packages/stations/demo-planner-port.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "`worktreeDemoDir(input.worktreePath, input.initiativeId)` \u2014 the same flow-input demo dir integrate.ts writes demo.json into; no request value reaches it"
  },
  "packages/stations/demo-model.ts": {
   "class": "other",
