@@ -71,7 +71,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, type StudioContext, type RouteContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, type StudioContext, type RouteContext, decodeUrlPart } from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel';
 import { catalogConnectionById, connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
@@ -106,7 +106,7 @@ function resolveConnectionOrRespond<T>(
 ): T | null {
   let id: string;
   try {
-    id = decodeURIComponent(rawIdSegment);
+    id = decodeUrlPart(rawIdSegment);
   } catch {
     sendJson(res, 400, { error: 'invalid connection id — malformed URL encoding' }, origin);
     return null;

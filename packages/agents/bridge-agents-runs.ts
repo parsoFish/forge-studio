@@ -19,7 +19,7 @@
  * The ordering is asserted by a test, not trusted to a comment.
  */
 
-import { allowedOrigin, createLogger, resolveGuardedPath, sanitizeError, sendJson } from '@forge/kernel';
+import { allowedOrigin, createLogger, resolveGuardedPath, sanitizeError, sendJson, decodeUrlPart } from '@forge/kernel';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { isSafeRunId } from './run-agent.ts';
@@ -105,7 +105,7 @@ export const handleAgentRunCancel = (deps: AgentRunsDeps): Handler => async (req
   // applies to its own decode.
   let runId: string;
   try {
-    runId = decodeURIComponent(url.slice('/api/agents/runs/'.length, url.length - '/cancel'.length));
+    runId = decodeUrlPart(url.slice('/api/agents/runs/'.length, url.length - '/cancel'.length));
   } catch {
     sendJson(res, 400, { error: 'invalid runId: malformed percent-encoding' }, origin);
     return true;
@@ -187,7 +187,7 @@ export const handleAgentRunCancel = (deps: AgentRunsDeps): Handler => async (req
 export const handleAgentRunDetail = (deps: AgentRunsDeps): Handler => async (req, res, ctx) => {
   const origin = allowedOrigin(req);
   const url = req.url ?? '';
-  const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length));
+  const runId = decodeUrlPart(url.slice('/api/agents/runs/'.length));
   if (!isSafeRunId(runId)) {
     sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
     return true;

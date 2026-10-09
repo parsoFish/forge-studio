@@ -11,7 +11,7 @@ Rank 0: it imports no other forge package, and it is the ONE package
 `apps/studio` may import — anything a browser-bundled component needs has to
 be reachable from here or it cannot reach the browser at all.
 
-## API (47 values)
+## API (48 values)
 
 | agent fanout isolation kinds | `FANOUT_ISOLATION_KINDS` |
 | flow trigger & kickoff vocabulary | `TRIGGER_MODES` · `FLOW_KICKOFF_KINDS` |
@@ -21,6 +21,7 @@ be reachable from here or it cannot reach the browser at all.
 | community registry vocabulary | `COMMUNITY_REGISTRY_KINDS` |
 | demo & release-process vocabulary | `DEMO_STEP_KINDS` · `RELEASE_STEP_KINDS` · `RELEASE_STEP_PHASES` |
 | the runnable-source rule — whether enqueueFlowRun may claim a manifest | `DEVELOP_FLOW_ID` · `isRunnableSource` |
+| the ONE project-readiness rule — Studio shows it, the claim gate enforces it (SPEC §6) | `projectReadiness` |
 | the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `resolveDeclaredBin` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
 | pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |
@@ -35,7 +36,7 @@ be reachable from here or it cannot reach the browser at all.
 | upload-materials vocabulary | `MATERIAL_KINDS` |
 | failure-signature prefixes failure-classifier.ts scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |
 
-### Types (80)
+### Types (85)
 
 `AgentBudgets` · `AgentComposition` · `AgentDefinition` · `AgentFanout` ·
 `AgentRuntime` · `ArtifactKind` · `ArtifactTemplate` · `ArtifactTemplateSchema` ·
@@ -54,7 +55,8 @@ be reachable from here or it cannot reach the browser at all.
 `KbBindingKind` · `KbDescriptor` · `KbProcessImpl` · `KbProcesses` ·
 `KbReadSurface` · `KbReaderRole` · `KbUsagePolicy` · `ManifestClass` ·
 `ManifestPhase` · `MaterialKind` · `ModelStrategy` · `PresentationOnlySkillId` ·
-`ProjectDefinition` · `ProjectRef` · `ReleaseConfig` · `ReleaseStep` ·
+`ProjectDefinition` · `ProjectReadiness` · `ProjectReadinessInput` · `ProjectRef` ·
+`ReadinessCheck` · `ReadinessCheckId` · `ReadinessClause` · `ReleaseConfig` · `ReleaseStep` ·
 `ReleaseStepKind` · `ReleaseStepPhase` · `RouteExtraction` · `Run` ·
 `RunPhaseMeta` · `RunPhaseStatus` · `RunStatus` · `SessionStage` ·
 `TriggerKindId` · `TriggerMode` · `TriggerTarget` · `WebhookTriggerConfig` ·
@@ -70,8 +72,8 @@ two hand-mirrored declarations had only coincidentally agreed on.
 
 ## Crash and recovery
 
-Contracts holds no state and performs no I/O. `grep` across all six source
-files (`index.ts`, `studio-types.ts`, `manifest-types.ts`,
+Contracts holds no state and performs no I/O. `grep` across all seven source
+files (`index.ts`, `studio-types.ts`, `manifest-types.ts`, `project-readiness.ts`,
 `runnable-source.ts`, `run-view-types.ts`, `demo-declaration.ts`) for
 `node:fs`, `node:path`, `node:child_process`, `node:net`, `node:http`,
 `node:https`, `node:os`, `node:crypto`, `node:stream`, or a bare `require(`

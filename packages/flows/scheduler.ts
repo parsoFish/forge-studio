@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setInterval, clearInterval } from 'node:timers';
 import {
   claim,
@@ -20,7 +20,7 @@ import { stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import { notify, type NotifyConfig } from './notify.ts';
-import { forgeQueueRoot, loadConfig } from '@forge/kernel';
+import { defaultConfigPath, forgeQueueRoot, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isNonTerminalRefused } from './claim-validator.ts';
 import { runOne, makeProgressTee } from './scheduler-run-one.ts';
 import {
@@ -88,7 +88,10 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
       userConfig.scheduler?.maxConcurrentInitiatives ??
       DEFAULTS.maxConcurrentInitiatives,
   };
-  ensureLayout(cfg);
+  // The projects root is `resolveProjectsDir` over the forge root `serve` runs in
+  // (the root the queue default is built from) — the resolver Studio's roster
+  // and the claim gate read, never a path derived from the queue root.
+  ensureLayout(cfg, resolveProjectsDir(process.cwd(), loadConfig(defaultConfigPath(process.cwd()))));
 
   // Recovery sweep at startup — deliberately NOT `runRecoverySweep`
   // (scheduler-sweeps.ts), which try/catch-wraps everything for the
@@ -336,17 +339,17 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
   });
 }
 
-function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }): void {
-  // SEC-02: `<forgeRoot>/projects` is a containment root for manifest
+function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }, projectsRoot: string): void {
+  // SEC-02: the projects root is a containment root for manifest
   // `project_repo_path` / in-place `worktree_path`, and a containment root
-  // that does not exist fails CLOSED. `forge init`'s `layoutDirs` now creates
-  // it, but the DAEMON has its own layout bootstrap and an install that
-  // predates this change never had it — so create it here too, derived the
-  // same way the guard derives it (the queue root's parent) so the directory
-  // created is provably the directory checked against. Direction matters: the
-  // gap is a FALSE-REJECTION risk (legitimate manifests refused), never a
-  // hole — a missing root can only ever reject.
-  const projectsRoot = join(dirname(resolve(cfg.queueRoot)), 'projects');
+  // that does not exist fails CLOSED. `forge init`'s `layoutDirs` creates the
+  // default one, but the DAEMON has its own layout bootstrap and an install that
+  // predates this change never had it — so create it here too. The caller
+  // passes the CONFIGURED root (`resolveProjectsDir`, the one Studio's roster
+  // and the guard read), so the directory created is provably the directory
+  // checked against. Direction matters: the gap is a FALSE-REJECTION risk
+  // (legitimate manifests refused), never a hole — a missing root can only
+  // ever reject.
   for (const p of [cfg.queueRoot, cfg.worktreesRoot, projectsRoot]) {
     if (!existsSync(resolve(p))) mkdirSync(resolve(p), { recursive: true });
   }

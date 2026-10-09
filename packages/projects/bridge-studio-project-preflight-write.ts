@@ -60,13 +60,15 @@ import {
   randomRunSuffix,
   type StudioContext,
   type RouteContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 // The dry-bridge guards live in @forge/kernel, which every package may import.
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 
 import { classifyClause, type ClauseClassification } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
-import { ensureStudioBranch, commitStudioChange, saveProjectRepo } from './project-repo-tx.ts';
+import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
+import { saveProjectRepo } from './project-repo-save.ts';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 
 /** Resolve a managed-project id to its absolute root, or send an error + return null. */
@@ -186,8 +188,9 @@ export function makePreflightWriteHandlers(deps: PreflightWriteDeps): {
       refuseDryBridge(res, origin, { route: '/api/studio/projects/:id/save-repo', method, action: 'git-remote', logsRoot: ctx.logsRoot });
       return true;
     }
+    const projectId = decodeUrlPart(saveRepoMatch[1]);
     try {
-      const projectRoot = resolveManagedProject(ctx, decodeURIComponent(saveRepoMatch[1]), res, origin);
+      const projectRoot = resolveManagedProject(ctx, projectId, res, origin);
       if (!projectRoot) return true;
       const result = saveProjectRepo(projectRoot);
       if (result.refused) {
@@ -214,8 +217,9 @@ export function makePreflightWriteHandlers(deps: PreflightWriteDeps): {
     const pfAutoMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-auto$/);
     if (!(pfAutoMatch && method === 'POST')) return false;
 
+    const projectId = decodeUrlPart(pfAutoMatch[1]);
     try {
-      const projectRoot = resolveManagedProject(ctx, decodeURIComponent(pfAutoMatch[1]), res, origin);
+      const projectRoot = resolveManagedProject(ctx, projectId, res, origin);
       if (!projectRoot) return true;
       const before = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
       try { ensureStudioBranch(projectRoot); } catch { /* non-git */ }
@@ -242,8 +246,8 @@ export function makePreflightWriteHandlers(deps: PreflightWriteDeps): {
     const pfAgentMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-agent$/);
     if (!(pfAgentMatch && method === 'POST')) return false;
 
+    const id = decodeUrlPart(pfAgentMatch[1]);
     try {
-      const id = decodeURIComponent(pfAgentMatch[1]);
       const projectRoot = resolveManagedProject(ctx, id, res, origin);
       if (!projectRoot) return true;
       let body: Record<string, unknown>;

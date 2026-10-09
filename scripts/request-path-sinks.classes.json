@@ -147,7 +147,7 @@
   "class": "not-request-derived",
   "guard": null,
   "verified": "read",
-  "note": "`def.path` \u2014 the executing agent def's own SKILL.md, resolved by the agent registry, as agent-skill-text.ts reads it"
+  "note": "`def.path` — the executing agent def's own SKILL.md, resolved by the agent registry, as agent-skill-text.ts reads it"
  },
  "packages/factory/class-profiles.ts": {
   "class": "not-request-derived",
@@ -166,6 +166,12 @@
   "guard": null,
   "verified": "read",
   "note": "`POST /api/plan-verdict` body `project`, `sessionId`"
+ },
+ "packages/flows/claim-validator.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "realpathSync only canonicalises the claimed manifest's project_repo_path (validated upstream by assertManifestPathFields) and the roster's own paths, to match the project against the roster Studio reads (forge-8vfn.30.4); no content is read through it"
  },
  "packages/flows/cost-by-class.ts": {
   "class": "not-request-derived",
@@ -921,7 +927,7 @@
   "class": "not-request-derived",
   "guard": null,
   "verified": "read",
-  "note": "`worktreeDemoDir(input.worktreePath, input.initiativeId)` \u2014 the same flow-input demo dir integrate.ts writes demo.json into; no request value reaches it"
+  "note": "`worktreeDemoDir(input.worktreePath, input.initiativeId)` — the same flow-input demo dir integrate.ts writes demo.json into; no request value reaches it"
  },
  "packages/stations/demo-model.ts": {
   "class": "other",
@@ -1018,5 +1024,11 @@
   "guard": null,
   "verified": "read",
   "note": "Not a route: the adversarial-review phase's findings harvest"
+ },
+ "packages/projects/project-repo-github.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "runs `gh` with a fixed argv: the slug is parsed from the project repo's own `remote.origin.url` (owner/repo charset-checked), the base from its own branches; cwd is the managed project root the route already resolved — no request field reaches it"
  }
 }

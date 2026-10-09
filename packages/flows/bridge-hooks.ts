@@ -25,7 +25,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, pathOnly } from '@forge/kernel';
+import { sendJson, allowedOrigin, pathOnly, decodeUrlPart } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts';
@@ -200,7 +200,7 @@ async function processHookReceipt(
   // a pre-auth crash vector — treat a malformed segment as an unknown hook.
   let rawHookId: string;
   try {
-    rawHookId = decodeURIComponent(rawSegment);
+    rawHookId = decodeUrlPart(rawSegment);
   } catch {
     console.warn('bridge-hooks: rejected hook id with malformed percent-encoding');
     sendJson(res, 404, { error: 'unknown hook' }, origin);

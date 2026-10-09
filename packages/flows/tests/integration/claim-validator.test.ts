@@ -35,6 +35,7 @@ import {
 } from '../../claim-validator.ts';
 import { readOnDiskFlowVersion, checkFlowVersionSeam } from '../../flow-runner.ts';
 import { SCRATCH_PATHS } from '@forge/projects';
+import { plantDefinition } from '../test-fixtures/claim-project.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -131,6 +132,9 @@ function setupContractReadyProject(dir: string): void {
   const centralBrain = join(dir, '..', '..', 'brain', 'projects', name);
   mkdirSync(centralBrain, { recursive: true });
   writeFileSync(join(centralBrain, 'profile.md'), '# Profile\n');
+  // Readiness (SPEC §6, forge-8vfn.30.4): "contract-ready" is now what Studio
+  // shows as ready — the five Face-A fields too, not preflight alone.
+  plantDefinition(dir);
 }
 
 /** Setup helpers. */
@@ -705,6 +709,8 @@ function setupDepsBlockedProject(dir: string): void {
   const centralBrain = join(dir, '..', '..', 'brain', 'projects', name);
   mkdirSync(centralBrain, { recursive: true });
   writeFileSync(join(centralBrain, 'profile.md'), '# Profile\n');
+  // Studio-ready definition: the claim must be refused for DEPS alone, and ok once node_modules appears.
+  plantDefinition(dir, { gateCmd: ['vitest', 'run'] });
 }
 
 test('MEDIUM-3: a DEPS-refused claim is re-evaluated on the next poll once node_modules appears — no restart', () => {

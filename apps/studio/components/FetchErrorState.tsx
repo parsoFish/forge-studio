@@ -32,14 +32,17 @@ export type FetchErrorProps = {
    *  not the numeric status (session-shell errorKinds) — defaults to
    *  `status !== undefined`. */
   reachable?: boolean;
+  /** The read hit its deadline (forge-nk1y.9) — framed as a timeout, never "could not reach". */
+  timedOut?: boolean;
   onRetry?: () => void;
   /** Inline one-liner (inside a panel) instead of the boxed page section. */
   compact?: boolean;
 };
 
 /** Build the `error`/`status` props from any caught error. */
-export function fetchErrorPropsFrom(err: unknown): { error: string; status?: number } {
+export function fetchErrorPropsFrom(err: unknown): { error: string; status?: number; timedOut?: boolean } {
   const d = describeBridgeError(err);
+  if (d.timedOut) return { error: d.message, timedOut: true };
   return d.status !== undefined ? { error: d.message, status: d.status } : { error: d.message };
 }
 
@@ -78,7 +81,7 @@ const RETRY_STYLE: CSSProperties = {
   cursor: 'pointer',
 };
 
-export function FetchErrorState({ what, error, status, reachable: reachableProp, onRetry, compact }: FetchErrorProps) {
+export function FetchErrorState({ what, error, status, reachable: reachableProp, timedOut, onRetry, compact }: FetchErrorProps) {
   const reachable = reachableProp ?? status !== undefined;
   return (
     <div
@@ -86,11 +89,14 @@ export function FetchErrorState({ what, error, status, reachable: reachableProp,
       data-component="fetch-error"
       data-fetch-status="error"
       data-fetch-reachable={reachable ? 'true' : 'false'}
+      data-fetch-timed-out={timedOut ? 'true' : 'false'}
       {...(status !== undefined ? { 'data-fetch-http-status': String(status) } : {})}
       style={compact ? COMPACT_STYLE : BOX_STYLE}
     >
       <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-        {reachable
+        {timedOut
+          ? <>Reading {what} <span data-fetch-error-text style={{ fontFamily: 'var(--font-mono, ui-monospace)' }}>{error}</span> — the forge bridge did not answer in time. This is NOT an empty result; retry.</>
+          : reachable
           ? <>The forge bridge refused to read {what}{status !== undefined ? ` (HTTP ${status})` : ''}: <span data-fetch-error-text style={{ fontFamily: 'var(--font-mono, ui-monospace)' }}>{error}</span></>
           : <>Could not reach the forge bridge — {what} unavailable (<span data-fetch-error-text style={{ fontFamily: 'var(--font-mono, ui-monospace)' }}>{error}</span>). This is NOT an empty result; it will refill when the bridge is back.</>}
       </span>

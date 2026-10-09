@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-244 files, 1412 sink calls; 170 classified (accidentally-safe 8, guarded 45, not-request-derived 26, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+245 files, 1414 sink calls; 172 classified (accidentally-safe 8, guarded 45, not-request-derived 28, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -43,7 +43,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/bridge-studio-runs-review.ts` | 8 | unclassified |  |  |  |
 | `packages/flows/bridge-studio-runs.ts` | 11 | unguarded |  | read | `POST /api/plan-verdict` body `project`, `sessionId` |
 | `packages/flows/ci-gate.ts` | 1 | unclassified |  |  |  |
-| `packages/flows/claim-validator.ts` | 1 | unclassified |  |  |  |
+| `packages/flows/claim-validator.ts` | 2 | not-request-derived |  | read | realpathSync only canonicalises the claimed manifest's project_repo_path (validated upstream by assertManifestPathFields) and the roster's own paths, to match the project against the roster Studio reads (forge-8vfn.30.4); no content is read through it |
 | `packages/flows/cost-by-class.ts` | 5 | not-request-derived |  |  | `forgeRoot` |
 | `packages/flows/cycle-context.ts` | 2 | unclassified |  |  |  |
 | `packages/flows/cycle-helpers.ts` | 22 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
@@ -191,6 +191,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/projects/project-create.ts` | 24 | guarded |  | read | `POST` body `name`, `appType` |
 | `packages/projects/project-migrate.ts` | 4 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/projects/project-preflight-read.ts` | 1 | unclassified |  |  |  |
+| `packages/projects/project-repo-github.ts` | 1 | not-request-derived |  | exec | runs `gh` with a fixed argv: the slug is parsed from the project repo's own `remote.origin.url` (owner/repo charset-checked), the base from its own branches; cwd is the managed project root the route already resolved — no request field reaches it |
 | `packages/projects/project-repo-tx.ts` | 4 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/projects/reset.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/sessions/bash-fence.ts` | 1 | guarded |  | exec | the resolved candidate of a `Bash` tool call's OWN command text |

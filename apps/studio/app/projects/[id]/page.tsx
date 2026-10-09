@@ -27,10 +27,13 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveRefusal } from '@/components/studio/project-builder/SaveRefusal';
+import { SaveRepoState, type SaveRecoveryProposal } from '@/components/studio/project-builder/SaveRepoState';
 import { deriveSaveControl, useRepoStatus } from '@/lib/use-repo-status';
 import { NotFound } from '@/components/NotFound';
 import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
 import { PageLoadError } from '@/components/PageLoadError';
+import { PageLoading } from '@/components/PageLoading';
+import { allNamedReads } from '@/lib/named-reads';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { useRoadmapLiveRefresh } from '@/lib/use-roadmap-live-refresh';
@@ -139,7 +142,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // recovery. `panelError` is the softer sibling for the preflight/roadmap
   // reads: the project itself loaded, one side panel's read did not — shown
   // inline (never an unhandled rejection, never a silently-absent panel).
-  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [loadError, setLoadError] = useState<{ error: string; status?: number; timedOut?: boolean } | null>(null);
+  const [waitingOn, setWaitingOn] = useState<readonly string[]>([]); const [failedRead, setFailedRead] = useState<string | null>(null); // forge-nk1y.9: the load's reads, by name
   // One slot PER panel read (preflight / roadmap / cycles) — two failing
   // panels both stay visible; a panel's own success clears only its own slot.
   const [panelErrors, setPanelErrors] = useState<Record<string, { what: string; error: string; status?: number }>>({});
@@ -183,9 +187,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   const loadData = useCallback(async (signal: { cancelled: boolean }) => {
     try {
-      const [ps, ks, fs, cat] = await Promise.all([
-        fetchStudioProjects(), fetchStudioKbs(), fetchStudioFlows(), fetchStudioCatalog(),
-      ]);
+      const [ps, ks, fs, cat] = await allNamedReads([
+        ['the project roster', fetchStudioProjects()], ['the knowledge bases', fetchStudioKbs()], ['the flows', fetchStudioFlows()], ['the catalog', fetchStudioCatalog()],
+      ] as const, { onPending: (names) => { if (!signal.cancelled) setWaitingOn(names); }, onFailed: (read) => { if (!signal.cancelled) setFailedRead(read); } });
       if (signal.cancelled) return;
       setProjects(ps);
       setKbs(ks);
@@ -207,7 +211,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         setKb(p.kb ?? null);
         setKbTouched(false);
       }
-      setLoadError(null);
+      setLoadError(null); setFailedRead(null);
     } catch (err) {
       // W7-FIX-A1 (A1-02): the roster/kbs/flows/catalog read threw — an
       // ERROR state; `project` stays whatever it was, so NotFound (gated on
@@ -331,24 +335,22 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     router.push(resolveDemoEntryHref(sessions, id, initiativeId));
   }, [id, router]);
 
-  // Unified save feedback (X1). Save derives from the form AND repo-status (forge-mfv5.1.20); a refused Save offers adopt (1977a).
+  // Unified save feedback (X1). Save derives from the form AND repo-status (forge-mfv5.1.20); a refused Save offers adopt (1977a), a stranded base a recovery (mfv5.1.22).
   const [refusedFiles, setRefusedFiles] = useState<string[]>([]); const adoptNextSave = useRef(false);
+  const [recovery, setRecovery] = useState<SaveRecoveryProposal | null>(null); const recoverNextSave = useRef(false);
   const { repo, refresh: refreshRepo } = useRepoStatus(isNew ? null : id);
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
     if (!project) return { ok: false, error: 'project not loaded' };
     const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched });
     const adopt = adoptNextSave.current; adoptNextSave.current = false; // consumed whether or not the save throws
-    const result = await saveProject(id, adopt ? { ...payload, adoptUncommitted: saveControl.adoptFiles } : payload);
-    setRefusedFiles(result.refused ?? []); refreshRepo();
+    const recover = recoverNextSave.current && recovery ? { localHead: recovery.localHead, resetTo: recovery.resetTo } : null; recoverNextSave.current = false;
+    const result = await saveProject(id, { ...(adopt ? { ...payload, adoptUncommitted: saveControl.adoptFiles } : payload), ...(recover ? { recover } : {}) });
+    setRefusedFiles(result.refused ?? []); setRecovery(result.recovery ?? null); refreshRepo();
     if (result.ok) {
-      setDirty(false);
-      setKbTouched(false);
+      setDirty(false); setKbTouched(false);
       void loadPreflight({ cancelled: false });
-      // W7-B6 (projects-26): a successful save refreshes the page's OWN
-      // roster too — the header project switcher kept showing the old name
-      // until a manual reload (loadData leaves the operator's just-saved
-      // fields untouched: dirty is false, and it re-hydrates from the roster
-      // that now carries exactly what was saved).
+      // W7-B6 (projects-26): a successful save refreshes the page's OWN roster too — the header switcher kept the old
+      // name until a reload (loadData leaves just-saved fields untouched: dirty is false; the roster carries what was saved).
       void loadData({ cancelled: false });
       // F5: say so when this save changed the demo declaration.
       if (result.declarationChanged) setDeclarationChanged(true);
@@ -421,14 +423,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // (crosscut-27): that state is the ONE shared NotFound.
   // W7-FIX-A1 (A1-02): the read FAILED — the project may well exist. The
   // shared page-level error with Retry, never NotFound.
+  // forge-nk1y.9: before the load settles the page knows nothing about the project —
+  // say so, never render the editor's useState defaults as its truth.
+  if (!ready) return <PageLoading page="projects" rootAttrs={{ 'data-project-id': id, 'data-demo-declaration-state': 'idle' }} what={`project "${id}"`} waitingOn={waitingOn} />;
   if (ready && loadError) {
     return (
       <PageLoadError
         page="projects"
         rootAttrs={{ 'data-project-id': id }}
-        what={`project "${id}"`}
+        what={failedRead ? `${failedRead} for project "${id}"` : `project "${id}"`}
         error={loadError.error}
-        status={loadError.status}
+        status={loadError.status} timedOut={loadError.timedOut}
         onRetry={reload}
         backHref="/projects"
         backLabel="Projects"
@@ -501,6 +506,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       </div>
 
       <SaveRefusal files={saveControl.adoptFiles} busy={saving} onAdopt={() => { adoptNextSave.current = true; void handleSave(); }} />
+      <SaveRepoState prUrl={repo?.prUrl} recovery={recovery} busy={saving} onRecover={() => { recoverNextSave.current = true; void handleSave(); }} />
       {/* Editor | Roadmap tab bar */}
       <ProjectTabs tab={tab} onSelect={setTab} />
 
@@ -508,12 +514,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           the fold on BOTH tabs — Plan · Start development · Run a flow ·
           Architect. Real controls (queue writes / flow-run POST), never an
           inert select. */}
-      <StartWorkActions
-        projectId={id}
-        roadmap={roadmap}
-        flows={flows}
-        onChanged={refreshRoadmap}
-      />
+      <StartWorkActions projectId={id} roadmap={roadmap} flows={flows} onChanged={refreshRoadmap} />
 
       {/* W7-FIX-A1 (A1-02): a side-panel read (preflight / roadmap) failed while
           the project itself loaded — shown inline, never silently absent. */}
@@ -620,14 +621,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
             <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); setKbTouched(true); markDirty(); }} />
 
-            <ContractReadiness
-              northStar={northStar}
-              instructions={instructions}
-              demoSteps={demoSteps}
-              skills={skills}
-              kb={kb}
-              preflight={preflight}
-            />
+            <ContractReadiness northStar={northStar} instructions={instructions} demoSteps={demoSteps} skills={skills} kb={kb} preflight={preflight} />
 
             {preflight && (
               <ContractResolutionPanel

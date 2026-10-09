@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { acDerivedCheckpointCommands, demoCheckpointPreflightRefusal } from '../../demo-checkpoint-preflight.ts';
 import { writeWorkItem, type WorkItem } from '../../work-item.ts';
+import { plantDefinition } from '../test-fixtures/claim-project.ts';
 import { validateClaimable, clearAllPendingRefusalLogs, type ClaimValidationResult } from '../../claim-validator.ts';
 import { SCRATCH_PATHS } from '@forge/projects';
 
@@ -246,6 +247,8 @@ function setupContractReadyProject(dir: string): void {
   const centralBrain = join(dir, '..', '..', 'brain', 'projects', name);
   mkdirSync(centralBrain, { recursive: true });
   writeFileSync(join(centralBrain, 'profile.md'), '# Profile\n');
+  // Studio-ready definition too (SPEC §6, forge-8vfn.30.4): the claim gate refuses what Studio shows unready.
+  plantDefinition(dir);
 }
 
 function setupForgeRoot(dir: string, flowYaml: string): { forgeRoot: string; flowPath: string } {

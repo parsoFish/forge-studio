@@ -47,12 +47,14 @@ export type PageLoadErrorProps = {
   error: string;
   /** HTTP status iff the bridge answered. */
   status?: number;
+  /** The read hit the bridge read deadline (forge-nk1y.9). */
+  timedOut?: boolean;
   onRetry: () => void;
   backHref: string;
   backLabel: string;
 };
 
-export function PageLoadError({ page, rootAttrs, what, error, status, onRetry, backHref, backLabel }: PageLoadErrorProps) {
+export function PageLoadError({ page, rootAttrs, what, error, status, timedOut, onRetry, backHref, backLabel }: PageLoadErrorProps) {
   return (
     <main
       id={MAIN_CONTENT_ID}
@@ -69,7 +71,7 @@ export function PageLoadError({ page, rootAttrs, what, error, status, onRetry, b
         style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '48px 24px' }}
       >
         <div style={{ width: '100%', maxWidth: 720 }}>
-          <FetchErrorState what={what} error={error} status={status} onRetry={onRetry} />
+          <FetchErrorState what={what} error={error} status={status} timedOut={timedOut} onRetry={onRetry} />
         </div>
         <Link
           href={backHref}

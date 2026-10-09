@@ -19,7 +19,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, decodeUrlPart } from '@forge/kernel';
 import { MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import { getPaths } from '@forge/flows';
@@ -175,7 +175,7 @@ export async function handleRunTriggerRoutes(
   // No in-request spawn — the scheduler claims it later and runs
   // execPm -> runProjectManager.
   if (method === 'POST' && url.startsWith('/api/initiatives/') && url.endsWith('/plan')) {
-    const initiativeId = decodeURIComponent(url.slice('/api/initiatives/'.length, url.length - '/plan'.length));
+    const initiativeId = decodeUrlPart(url.slice('/api/initiatives/'.length, url.length - '/plan'.length));
     if (!initiativeId) {
       sendJson(res, 400, { error: 'initiativeId required' }, origin);
       return true;
@@ -212,7 +212,7 @@ export async function handleRunTriggerRoutes(
   // flow id as an initiativeId to /api/runs (always 400, silently). Same
   // status→HTTP mapping as the plan route above; the scheduler claims it later.
   if (method === 'POST' && url.startsWith('/api/flows/') && url.endsWith('/run')) {
-    const flowId = decodeURIComponent(url.slice('/api/flows/'.length, url.length - '/run'.length));
+    const flowId = decodeUrlPart(url.slice('/api/flows/'.length, url.length - '/run'.length));
     if (!/^[a-z0-9][a-z0-9-]*$/.test(flowId)) {
       sendJson(res, 400, { error: 'invalid flow id' }, origin);
       return true;

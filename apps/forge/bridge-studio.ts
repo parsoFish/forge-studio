@@ -39,7 +39,7 @@ import { loadFlowDefinition, listFlowIds } from '@forge/flows';
 import { flowPathForId } from '@forge/flows';
 import { listDemoElements } from '@forge/library';
 import { listFlowBandIds } from '@forge/flows';
-import { resolveGuardedPath } from '@forge/kernel';
+import { resolveGuardedPath, decodeUrlPart } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
@@ -460,8 +460,8 @@ export async function handleStudioRoutes(
   // ---- /api/runs/<id>/phases/<node>/log  (must be matched before /api/runs/<id>) ----
   const phaseLogMatch = url.match(/^\/api\/runs\/([^/]+)\/phases\/([^/]+)\/log$/);
   if (phaseLogMatch) {
-    const runId = decodeURIComponent(phaseLogMatch[1]);
-    const nodeId = decodeURIComponent(phaseLogMatch[2]);
+    const runId = decodeUrlPart(phaseLogMatch[1]);
+    const nodeId = decodeUrlPart(phaseLogMatch[2]);
 
     if (!runId || !nodeId) {
       sendJson(res, 400, { error: 'expected /api/runs/<id>/phases/<node>/log' }, origin);
@@ -596,7 +596,7 @@ export async function handleStudioRoutes(
   // ---- /api/runs/<id> (single run) ----------------------------------------
   const runIdMatch = url.match(/^\/api\/runs\/([^/]+)$/);
   if (runIdMatch) {
-    const runId = decodeURIComponent(runIdMatch[1]);
+    const runId = decodeUrlPart(runIdMatch[1]);
     if (!runId) {
       sendJson(res, 400, { error: 'expected /api/runs/<id>' }, origin);
       return true;
@@ -675,8 +675,8 @@ export async function handleStudioRoutes(
   // ---- /api/studio/flows/:id (single flow) --------------------------------
   const flowGetMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
   if (flowGetMatch) {
+    const id = decodeUrlPart(flowGetMatch[1]);
     try {
-      const id = decodeURIComponent(flowGetMatch[1]);
 
       // Slug-guard blocks path traversal before any fs path construction
       if (!SLUG_RE.test(id)) {
@@ -773,8 +773,8 @@ export async function handleStudioRoutes(
   // `package-layer-order` violation.
   const roadmapMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/roadmap$/);
   if (roadmapMatch) {
+    const id = decodeUrlPart(roadmapMatch[1]);
     try {
-      const id = decodeURIComponent(roadmapMatch[1]);
       if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;

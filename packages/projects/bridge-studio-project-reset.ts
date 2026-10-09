@@ -68,6 +68,7 @@ import {
   resolveGuardedPath,
   PROJECT_ID_RE,
   type RouteContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 
 import { computeContractDrift, applyContractReset, type DriftReport } from './reset.ts';
@@ -154,7 +155,7 @@ export async function handleProjectContractResetDryRun(
   const match = url.match(DRY_RUN_RE);
   if (!(match && method === 'POST')) return false;
 
-  const id = decodeURIComponent(match[1]!);
+  const id = decodeUrlPart(match[1]!);
   const projectRoot = resolveProjectRootForReset(ctx, id, res, origin);
   if (!projectRoot) return true;
 
@@ -196,7 +197,7 @@ export async function handleProjectContractResetApply(
   const match = url.match(APPLY_RE);
   if (!(match && method === 'POST')) return false;
 
-  const id = decodeURIComponent(match[1]!);
+  const id = decodeUrlPart(match[1]!);
   const projectRoot = resolveProjectRootForReset(ctx, id, res, origin);
   if (!projectRoot) return true;
 

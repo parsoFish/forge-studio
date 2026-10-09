@@ -32,7 +32,7 @@ import { join } from 'node:path';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { sendJson, pathOnly, allowedOrigin, sanitizeError } from '@forge/kernel';
+import { sendJson, pathOnly, allowedOrigin, sanitizeError, decodeUrlPart } from '@forge/kernel';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
 import {
@@ -295,7 +295,7 @@ export async function handleRecoveryRoutes(
   // GET /api/recovery/:id — inspect (read-only)
   const inspectMatch = url.match(/^\/api\/recovery\/([^/]+)$/);
   if (method === 'GET' && inspectMatch) {
-    const id = decodeURIComponent(inspectMatch[1]);
+    const id = decodeUrlPart(inspectMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try { sendJson(res, 200, recoveryInspect(id, ctx), origin); }
     catch (err) { sendJson(res, 500, { error: sanitizeError(err) }, origin); }
@@ -309,7 +309,7 @@ export async function handleRecoveryRoutes(
       refuseDryBridge(res, origin, { route: '/api/recovery/:id/abandon', method, action: 'git-remote', logsRoot: ctx.logsRoot });
       return true;
     }
-    const id = decodeURIComponent(abandonMatch[1]);
+    const id = decodeUrlPart(abandonMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
       const result = recoveryAbandon(id, ctx);
@@ -324,7 +324,7 @@ export async function handleRecoveryRoutes(
   // HAND_ROUTE_CLASSIFICATION row for this route states the same).
   const stopMatch = url.match(/^\/api\/recovery\/([^/]+)\/stop$/);
   if (method === 'POST' && stopMatch) {
-    const id = decodeURIComponent(stopMatch[1]);
+    const id = decodeUrlPart(stopMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
       const result = recoveryStop(id, ctx);
@@ -344,7 +344,7 @@ export async function handleRecoveryRoutes(
       refuseDryBridge(res, origin, { route: '/api/recovery/:id/requeue', method, action: 'git-remote', logsRoot: ctx.logsRoot });
       return true;
     }
-    const id = decodeURIComponent(requeueMatch[1]);
+    const id = decodeUrlPart(requeueMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
       const body = (await ctx.readBody().catch(() => ({}))) as Record<string, unknown>;

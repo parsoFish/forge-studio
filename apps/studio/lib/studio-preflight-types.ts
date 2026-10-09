@@ -21,8 +21,8 @@ export type PreflightClause = {
 
 export type PreflightResult = {
   clauses: PreflightClause[];
-  /** The BIRTH verdict: hard clauses with DEPS off. */
+  /** Every hard clause passes, DEPS included — the claim gate's clause set (SPEC §6). */
   ready: boolean;
-  /** Row 174: the claim's DEPS verdict — false means the scheduler would refuse the claim. */
+  /** The DEPS clause projected for the "not claimable" notice — false means the scheduler would refuse the claim. */
   runnableGate: { pass: boolean; detail: string };
 };

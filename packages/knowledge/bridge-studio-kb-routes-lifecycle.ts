@@ -23,6 +23,7 @@ import {
   resolveProjectsDir,
   type PathGuardResult,
   discoverProjects,
+  decodeUrlPart,
 } from '@forge/kernel';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
@@ -342,8 +343,8 @@ export async function handleKbDelete(
   // ---- DELETE /api/studio/kbs/:id (R1-5) — remove a knowledge base --------
   const kbDeleteMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)$/);
   if (kbDeleteMatch && method === 'DELETE') {
+    const id = decodeUrlPart(kbDeleteMatch[1]);
     try {
-      const id = decodeURIComponent(kbDeleteMatch[1]);
       if (!KB_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
@@ -441,8 +442,8 @@ export async function handleKbGuidance(
   // ---- POST /api/studio/kbs/:id/guidance (M5-3) -------------------------
   const guidanceMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/guidance$/);
   if (guidanceMatch && method === 'POST') {
+    const kbId = decodeUrlPart(guidanceMatch[1]);
     try {
-      const kbId = decodeURIComponent(guidanceMatch[1]);
 
       // 1. Slug-guard kbId before any fs operation (blocks path traversal)
       if (!requireValidKbId(kbId, res, origin)) return true;
