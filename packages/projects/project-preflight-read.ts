@@ -24,7 +24,7 @@ import { runPreflight } from './preflight.ts';
 import { checkDeps } from './preflight-deps.ts';
 import { loadProjectConfig, type ProjectConfig } from './project-config.ts';
 import { classifyClause } from './preflight-resolve.ts';
-import { hasPendingStudioChanges, STUDIO_BRANCH } from './project-repo-tx.ts';
+import { hasPendingStudioChanges, STUDIO_BRANCH, uncommittedContractPaths } from './project-repo-tx.ts';
 import {
   discoverProjects,
   defaultConfigPath,
@@ -178,7 +178,8 @@ export async function handleProjectRepoStatus(
         sendJson(res, 404, { error: 'unknown project' }, origin);
         return true;
       }
-      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH }, origin);
+      // forge-mfv5.1.20: the uncommitted contract files are what a Save would refuse on / adopt.
+      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
