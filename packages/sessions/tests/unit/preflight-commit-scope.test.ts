@@ -6,7 +6,7 @@
  *
  *   c911c93  forge-studio: preflight-fix C1b      10 files, 225 insertions
  *     .forge/contract-compliance-report.json · .forge/project.json · .gitignore
- *     CLAUDE.md · CONSTRAINTS.md · _onboarding/<id>/* · brain/profile.md · roadmap.md
+ *     CLAUDE.md · CONSTRAINTS.md · _onboarding/<id>/* · roadmap.md
  *
  * Not one of those is a C1b fix. Every one is the ONBOARDING agent's output,
  * left uncommitted in the ground and swept up by a `commitStudioChange` call

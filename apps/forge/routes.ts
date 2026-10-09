@@ -47,7 +47,6 @@ import {
   checkProjectBrainSeedContainment,
   isUntouchedBrainSeedStub,
 } from '@forge/knowledge';
-import { readArtifactRoot } from '@forge/knowledge';
 import { projectKbBindings } from '@forge/knowledge';
 import { isContainedProjectRepoPath } from '@forge/flows';
 import { agentCapabilityDescriptor } from '@forge/agents';
@@ -182,7 +181,6 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       seedBrain: seedProjectBrain,
       checkBrainSeedContainment: checkProjectBrainSeedContainment,
       isUntouchedBrainSeedStub,
-      readArtifactRoot,
       isContainedProjectRepoPath,
       spawnPreflightFix,
       projectKbBindings,

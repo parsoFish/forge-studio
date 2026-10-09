@@ -26,6 +26,7 @@ import { resolveDemoEntryHref } from '@/lib/demo-entry-view';
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
+import { SaveRefusal } from '@/components/studio/project-builder/SaveRefusal';
 import { NotFound } from '@/components/NotFound';
 import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
 import { PageLoadError } from '@/components/PageLoadError';
@@ -329,18 +330,14 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     router.push(resolveDemoEntryHref(sessions, id, initiativeId));
   }, [id, router]);
 
-  // Unified save feedback (X1). The hook owns saving/saved/error state.
+  // Unified save feedback (X1). Row 6 (T1 1977a): a refused Save offers adopt-and-save.
+  const [refusedFiles, setRefusedFiles] = useState<string[]>([]); const adoptNextSave = useRef(false);
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
     if (!project) return { ok: false, error: 'project not loaded' };
-    const result = await saveProject(id, buildProjectSavePayload({
-      name,
-      northStar,
-      instructions,
-      demoProcess: demoSteps,
-      skills,
-      kb,
-      kbTouched,
-    }));
+    const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched });
+    const adopt = adoptNextSave.current; adoptNextSave.current = false; // consumed whether or not the save throws
+    const result = await saveProject(id, adopt ? { ...payload, adoptUncommitted: refusedFiles } : payload);
+    setRefusedFiles(result.refused ?? []);
     if (result.ok) {
       setDirty(false);
       setKbTouched(false);
@@ -505,6 +502,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         </button>
       </div>
 
+      <SaveRefusal files={refusedFiles} busy={saving} onAdopt={() => { adoptNextSave.current = true; void handleSave(); }} />
       {/* Editor | Roadmap tab bar */}
       <ProjectTabs tab={tab} onSelect={setTab} />
 

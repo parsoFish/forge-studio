@@ -26,6 +26,12 @@ function noopSelectGeneration(): void {}
 export type MarkdownDraftContext = {
   targetPath: string;
   current: string | null;
+  /** forge-mfv5.1.13 — whether approving overwrites the file at `targetPath`.
+   *  Absent: inferred from `current` (an edit replaces). False when `current`
+   *  came from a different file (CLAUDE.md) and `targetPath` is new. */
+  replaces?: boolean;
+  /** An instruction file approving leaves untouched beside the target (CLAUDE.md). */
+  leftInPlace?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -341,7 +347,12 @@ function MarkdownDraftBody({
         {terminalPhase === null ? (
           <>
             Approving writes <code>{draftContext.targetPath}</code>
-            {draftContext.current === null ? ' (new file)' : ' (replaces the current file)'}
+            {(draftContext.replaces ?? draftContext.current !== null) ? ' (replaces the current file)' : ' (new file)'}
+            {draftContext.leftInPlace ? (
+              <span data-draft-leaves={draftContext.leftInPlace}>
+                . <code>{draftContext.leftInPlace}</code> is left as it is — agents that load it still read it.
+              </span>
+            ) : null}
           </>
         ) : terminalPhase === 'committed' ? (
           <>

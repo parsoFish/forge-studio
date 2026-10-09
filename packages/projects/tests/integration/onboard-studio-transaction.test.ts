@@ -36,7 +36,6 @@ function deps(): OnboardDeps {
       return { projectId, brainDir, files: [{ path: `brain/projects/${projectId}/kb.yaml`, action: 'created' }] };
     },
     checkBrainSeedContainment: () => {},
-    readArtifactRoot: () => '.',
     isContainedProjectRepoPath: (p, opts) => {
       const root = resolve(opts.projectsRoot ?? join(opts.forgeRoot, 'projects'));
       return resolve(p).startsWith(root + sep);
