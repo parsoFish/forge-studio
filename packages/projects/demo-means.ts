@@ -13,6 +13,10 @@
 
 import { SHELL_METACHARACTERS, isSafeDemoRoute } from '@forge/contracts';
 
+/** The closed set of evidence forms a demo checkpoint may take; the planner picks one per checkpoint. */
+export const DEMO_EVIDENCE_FORMS = ['cli-before-after', 'api-before-after', 'screenshot', 'test-evidence'] as const;
+export type DemoEvidenceForm = (typeof DEMO_EVIDENCE_FORMS)[number];
+
 export type DemoMeans = {
   commands?: string[];
   routes?: string[];

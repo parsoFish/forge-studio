@@ -98,6 +98,7 @@ export async function resolveInstalledFactory(): Promise<InstalledFactory | null
   if (resolved !== undefined) return resolved;
   try {
     const classProfiles = await import('@forge/factory/class-profiles.ts');
+    const { createDemoPlanner } = await import('@forge/factory/demo-planner.ts');
     // The port (operator ruling, items 81/83): the four functions the
     // installed table exports, bound into the shape `@forge/stations`'
     // bands take by injection — moved verbatim, so this is a re-binding, not
@@ -110,7 +111,7 @@ export async function resolveInstalledFactory(): Promise<InstalledFactory | null
     };
     resolved = {
       phaseWiring: {
-        executor: createPhaseExecutor({ classProfiles: classProfilePort }),
+        executor: createPhaseExecutor({ classProfiles: classProfilePort, demoPlanner: createDemoPlanner() }),
         projectGate: createProjectGate(),
         runClosure: defaultRunClosure,
         // Seam F4: thread the caller's resolved def (finalize-merged.ts's

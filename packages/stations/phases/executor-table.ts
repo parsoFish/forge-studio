@@ -17,6 +17,7 @@ import type { AgentDefinition } from '@forge/contracts';
 import { BAND_GUARD_IDS, type BandGuardId } from '@forge/contracts';
 import { createBandRegistry, FORGE_ROOT, endStartOnThrow, type PhaseExecutor } from '@forge/kernel';
 import { type FlowRunnerDeps, buildDefaultDeps, raceWithWedge } from './executor-deps.ts';
+import type { DemoPlannerPort } from '../demo-planner-port.ts';
 import { requireCycleId } from './cycle-id.ts';
 import type { ClassProfilePort } from '../class-profile-port.ts';
 
@@ -294,7 +295,7 @@ const execIntegrate: NodeExecutor = async (ctx) => {
     // Gate green → derive the bundle. The gate's own evidence rows are an INPUT
     // here: the demo says which suites proved the branch because the orchestrator
     // that ran them said so, not because anything downstream described them.
-    const result = deps.runIntegrate(input, nodeLogger, gate.evidence);
+    const result = await deps.runIntegrate(input, nodeLogger, gate.evidence, def);
 
     // Delivery gate — the band must have produced a bundle. There is no partial
     // outcome any more: a derivation either produced the artifacts or named the
@@ -712,8 +713,10 @@ export function createPhaseExecutor(opts: {
   deps?: Partial<FlowRunnerDeps>;
   overrides?: Partial<Record<NodeKind, NodeExecutor>>;
   classProfiles?: ClassProfilePort;
+  /** The integrate band's demo planner (D-45); absent ⇒ derived checkpoints. */
+  demoPlanner?: DemoPlannerPort;
 } = {}): PhaseExecutor<NodeExecContext> {
-  const deps: FlowRunnerDeps = { ...buildDefaultDeps(opts.classProfiles), ...opts.deps };
+  const deps: FlowRunnerDeps = { ...buildDefaultDeps(opts.classProfiles, opts.demoPlanner), ...opts.deps };
   const executors: Record<NodeKind, NodeExecutor> = { ...DEFAULT_NODE_EXECUTORS, ...(opts.overrides ?? {}) };
   return {
     async run(_nodeId, ctx) {

@@ -41,11 +41,13 @@ import {
   runOrchestratorCommand,
 } from '@forge/flows';
 import { loadProjectConfig } from '@forge/projects';
+import type { AgentDefinition } from '@forge/contracts';
 
 import { renderDemoBundle, stripScratchFromDiffStat, type DemoModel } from '../demo-model.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { judgeCaptureNonce, readStampedNonce } from './capture-nonce.ts';
 import { deriveDeltaSummary, deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
+import { planDemo, type DemoPlannerPort } from '../demo-planner-port.ts';
 import { derivePrBody, PR_BODY_SECTIONS } from './derive-pr-body.ts';
 
 export const PR_DESCRIPTION_REL = '.forge/pr-description.md';
@@ -59,6 +61,8 @@ export type IntegrateBandInput = {
   manifestPath: string;
   projectRepoPath: string;
   orchestratedCapture?: { argv?: string[]; timeoutMs?: number };
+  /** The factory's demo planner (D-45), with the executing node's def; absent ⇒ derived checkpoints. */
+  planner?: { port: DemoPlannerPort; def: AgentDefinition; cycleId: string; signal?: AbortSignal };
 };
 
 export type IntegrateResult =
@@ -73,7 +77,7 @@ export type IntegrateResult =
         | 'capture-failed'
         | 'capture-not-stamped'
         | 'nonce-mismatch'
-        | 'delta-revise-failed';
+        | 'delta-revise-failed' | 'plan-failed' | 'plan-invalid';
       detail: string;
     };
 
@@ -102,10 +106,10 @@ function readDelivered(
     // surface loudly (the bundle still derives from the parseable set).
     emit('demo.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
   }
-  const mutableItems = workItems as { id: string; title: string; status: string }[];
+  const mutableItems = workItems as { id: string; title: string; status: string; story: string }[];
   const mutableAcs = acceptanceCriteria as { workItemId: string; given: string; when: string; then: string }[];
   for (const wi of items) {
-    mutableItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
+    mutableItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status, story: wi.body });
     for (const ac of wi.acceptance_criteria) {
       // Carried TYPED — rendering to the `(WI) GIVEN … WHEN … THEN …` line
       // moved into derive-demo-model.ts (renderAcceptanceCriterion), so the demo
@@ -171,25 +175,26 @@ export function reviseAfterCapture(
   return { ok: true };
 }
 
-/** Run the integrate band. Synchronous by construction: nothing here waits on a model. */
-export function runIntegrateBand(
+/** Run the integrate band. Only the planner (when a factory wires one) waits on a model. */
+export async function runIntegrateBand(
   input: IntegrateBandInput,
   logger: EventLogger,
   gateEvidence: readonly MergeGateEvidence[],
   // The one port (operator ruling, items 81/83): optional; refuses by name
   // below the moment the `capture` column is actually read.
   classProfiles?: ClassProfilePort,
-): IntegrateResult {
+): Promise<IntegrateResult> {
   const emit = (
     message: string,
     metadata: Record<string, unknown> = {},
-    extra: { event_type?: 'log' | 'error' } = {},
+    extra: { event_type?: 'log' | 'error'; cost_usd?: number } = {},
   ): void => {
     logger.emit({
       initiative_id: input.initiativeId,
       phase: 'orchestrator',
       skill: INTEGRATE_SLUG,
       event_type: extra.event_type ?? 'log',
+      ...(extra.cost_usd !== undefined ? { cost_usd: extra.cost_usd } : {}),
       input_refs: [],
       output_refs: [],
       message,
@@ -262,7 +267,9 @@ export function runIntegrateBand(
     gates: gateEvidence.length,
   });
 
-  const derived = deriveDemoModel(derivedInput);
+  // A wired planner picks the checkpoints, so the declaration's capture steps are not required here.
+  const planned = profile.capture === 'checkpoints' && input.planner !== undefined;
+  const derived = deriveDemoModel(planned ? { ...derivedInput, capture: 'none' } : derivedInput);
   if (!derived.ok) {
     // A class that asks for evidence the project contract cannot produce is a
     // CONFIG error, in the same sense the merge gate's is: no agent can fix it
@@ -272,15 +279,19 @@ export function runIntegrateBand(
     return { status: 'failed', reason: 'config-error', detail };
   }
 
+  const p = planned && input.planner ? await planDemo(input.planner, { input, derivedInput, cfg, model: derived.model, logger }, emit) : null;
+  if (p && !p.ok) return { status: 'failed', reason: p.reason, detail: p.detail };
+  const model = p ? p.model : derived.model;
+
   // ── write what was derived ───────────────────────────────────────────────
   const demoDirRel = worktreeDemoRelDir(input.worktreePath, input.initiativeId);
   const demoDirAbs = worktreeDemoDir(input.worktreePath, input.initiativeId);
   const demoJsonAbs = join(demoDirAbs, DEMO_JSON_BASENAME);
   const prDescriptionAbs = join(input.worktreePath, PR_DESCRIPTION_REL);
   mkdirSync(demoDirAbs, { recursive: true });
-  writeFileSync(demoJsonAbs, `${JSON.stringify(derived.model, null, 2)}\n`);
+  writeFileSync(demoJsonAbs, `${JSON.stringify(model, null, 2)}\n`);
 
-  const prBody = derivePrBody(derived.model, derivedInput);
+  const prBody = derivePrBody(model, derivedInput);
   const missingSections = PR_BODY_SECTIONS.filter((s) => !prBody.includes(s));
   if (missingSections.length > 0) {
     // Structural backstop, not a validation of someone else's authoring: the
@@ -353,7 +364,7 @@ export function runIntegrateBand(
     emit('demo.capture', { capture_ok: true, nonce_match: false, nonce_verdict: verdict.reason, capture_nonce: nonce }, { event_type: 'error' });
     return { status: 'failed', reason: verdict.reason, detail: verdict.detail };
   }
-  const revised = reviseAfterCapture(demoJsonAbs, demoDirAbs, prDescriptionAbs, input.worktreePath, derivedInput, derived.model.essence, emit);
+  const revised = reviseAfterCapture(demoJsonAbs, demoDirAbs, prDescriptionAbs, input.worktreePath, derivedInput, model.essence, emit);
   if (!revised.ok) {
     return { status: 'failed', reason: revised.reason, detail: revised.detail };
   }

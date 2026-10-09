@@ -51,7 +51,8 @@
 // --- config: `.forge/project.json`, the agent-instruction file ------------
 export { loadProjectConfig, readAgentInstructionsFile, resolveProjectIdForRepo, PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 export type { ProjectConfig, AcceptanceGateConfig } from './project-config.ts';
-export { parseDemoMeans, isOwnServerPath, type DemoMeans } from './demo-means.ts';
+export { parseDemoMeans, isOwnServerPath, DEMO_EVIDENCE_FORMS, type DemoMeans, type DemoEvidenceForm } from './demo-means.ts';
+export { allowedDemoMeans, validateDemoPlan, NARRATIVE_MAX_WORDS, type AllowedDemoMeans, type DemoPlan, type DemoPlanCheckpoint, type DemoPlanResult } from './demo-plan.ts';
 export { writeProjectConfigPatch } from './project-config-write.ts';
 export { WI_GATE_PACKAGE_PLACEHOLDER } from './project-config-validate.ts';
 export { validateDemoDeclaration } from './preflight-demo.ts';
