@@ -567,6 +567,7 @@ packages/projects/project-migrate.ts existsSync 2
 packages/projects/project-migrate.ts readFileSync 1
 packages/projects/project-migrate.ts writeFileSync 1
 packages/projects/project-preflight-read.ts readFileSync 1
+packages/projects/project-repo-github.ts execFileSync 1
 packages/projects/project-repo-tx.ts execFileSync 1
 packages/projects/project-repo-tx.ts existsSync 1
 packages/projects/project-repo-tx.ts realpathSync 2

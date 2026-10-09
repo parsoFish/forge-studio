@@ -124,6 +124,11 @@ test('AT-6.11.17-1 a silent SDK stream on the ARCHITECT path throws StreamDeadli
     const err = settled.rejected as Error;
     assert.equal(err.name, 'StreamDeadlineError', `expected StreamDeadlineError, got ${err.name}: ${err.message}`);
     assert.match(err.message, /stream-deadline/, err.message);
+    // T1 ruling (row-2 park, forge-nk1y.5): every session is capped now, so the
+    // stalled attempt's unpriced charge can leave no budget for the retry — the
+    // STALL stays the named cause and the exhaustion is recorded as its consequence.
+    assert.match(err.message, /retry refused: session turn budget exhausted/, err.message);
+    assert.equal((err as Error & { cause?: Error }).cause?.name, 'TurnBudgetExhaustedError');
   } finally {
     t.mock.timers.reset();
     rmSync(root, { recursive: true, force: true });

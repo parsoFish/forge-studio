@@ -73,7 +73,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, refuseDryBridge, type StudioContext, type RouteContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, refuseDryBridge, type StudioContext, type RouteContext, decodeUrlPart } from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel';
 import {
   hubCountsFrom,
@@ -151,7 +151,7 @@ function communityIndexMeta(forgeRoot: string): { lastRefresh: string | null; re
 export function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
   let id: string;
   try {
-    id = decodeURIComponent(rawIdSegment);
+    id = decodeUrlPart(rawIdSegment);
   } catch {
     sendJson(res, 400, { error: 'invalid community item id — malformed URL encoding' }, origin);
     return null;

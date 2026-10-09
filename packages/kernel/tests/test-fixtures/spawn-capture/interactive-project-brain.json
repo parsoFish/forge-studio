@@ -15,6 +15,7 @@
       ],
       "maxTurns": 30,
       "abortController": "<AbortController>",
+      "maxBudgetUsd": 3,
       "permissionMode": "default",
       "allowedTools": [
         "Read",

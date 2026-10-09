@@ -87,6 +87,7 @@ export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflight
   cycleIdPrefix: '_preflight-fix',
   eventPhase: 'orchestrator',
   eventSkill: 'preflight-fix',
+  agentSlug: 'preflight-fix',
   skillName: 'preflight-fix',
   fallbackPrompt: 'You are the forge preflight-fix agent.',
   inputRefs: (input) => [input.projectDir],

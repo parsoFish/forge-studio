@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
-import { allowedOrigin, sendJson, sendIfDispatchRefused, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
+import { allowedOrigin, decodeUrlPart, sendJson, sendIfDispatchRefused, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import {
@@ -38,6 +38,7 @@ import {
 } from './kinds/architect.ts';
 import { ARCHITECT_KIND_DIR } from './kinds/architect-plan.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
+import { ceilingStatusFields, resolveStartCeilingFor } from './session-start-ceiling.ts';
 import {
   deriveRowLifecycle,
   findSessionKindDescriptorSafe,
@@ -180,7 +181,7 @@ export async function handleArchitectRoutes(
   // GET /api/architect/file/<project>/<sid>/<filename> — serve a session-dir
   // file (PLAN.html etc.) with a path-escape guard + content-type sniff.
   if (method === 'GET' && url.startsWith('/api/architect/file/')) {
-    const rest = url.slice('/api/architect/file/'.length).split('/').map(decodeURIComponent);
+    const rest = url.slice('/api/architect/file/'.length).split('/').map(decodeUrlPart);
     const [project, sessionId, ...fileParts] = rest;
     const filename = fileParts.join('/');
     if (!project || !sessionId || !filename) {
@@ -266,6 +267,8 @@ export async function handleArchitectRoutes(
         }
         costCeilingUsd = v;
       }
+      const ceiling = resolveStartCeilingFor(ctx, 'architect', costCeilingUsd); // forge-nk1y.5: operator's figure wins
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
       const sessionId = newArchitectSessionId();
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+write: a traversal
       // `project` must create NOTHING out of root (the old code wrote
@@ -303,7 +306,7 @@ export async function handleArchitectRoutes(
         idea: body.idea,
         updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
-        ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
+        ...ceilingStatusFields(ceiling),
       };
       // SEC-04 (bd forge-ebj) — route both leaf writes (`idea.md`, `status.json`)
       // through the guard (leaf included) rather than raw-appending onto the

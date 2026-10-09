@@ -71,6 +71,7 @@ import {
 } from './bridge-agent-dispatch.ts';
 import { handleReflect, safeParseJson } from './bridge-reflect.ts';
 import { readJson } from './bridge-http.ts';
+import { safeDispatch } from './bridge-safe-dispatch.ts';
 import {
   type Cycle,
   type LivenessReport,
@@ -92,8 +93,6 @@ import { createLogger, bridgeCycleId, installForgeRefGuardHook, ARCHITECT_KIND_D
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
-
-
 
 const TAIL_POLL_MS = 200;
 
@@ -153,6 +152,8 @@ export type BridgeOptions = {
   /** M7-E row 205 — read-only getter for the live serve supervisor's status,
    *  folded into `GET /api/health` as `serve`. Defaults to unsupervised. */
   getServeStatus?: () => ServeSupervisorStatus;
+  /** Test injection only (forge-nk1y.5): the agent-budget read at session start. */
+  agentBudgetUsd?: (agentSlug: string) => number | undefined;
 };
 
 type TailState = {
@@ -418,19 +419,15 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
     broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
     spawnAgentDispatch, claimAgentDispatchSlot, spawnClaimedAgentDispatch,
-    newRunStamp,
-    safeInputKeyRe: SAFE_INPUT_KEY_RE,
+    newRunStamp, safeInputKeyRe: SAFE_INPUT_KEY_RE, projectsRoot, agentBudgetUsd: opts.agentBudgetUsd,
     broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
-    projectsRoot,
     // The spawn/serve surface the carved session routes still need from here.
     // These stay host-owned deliberately: `safeParseJson` is still called by
     // `handleReflect` and `servedFileHeaders` by `handleHttp`, so moving them
     // into the package would mint boundary rows in the wrong direction.
     spawnAgentTurn, claimAgentTurnSlot, spawnClaimedAgentTurn,
     spawnAgentSpecs: SPAWN_AGENT_SPECS,
-    safeParseJson,
-    servedFileHeaders,
-    dryBridgeAgentTurnMarker,
+    safeParseJson, servedFileHeaders, dryBridgeAgentTurnMarker,
     // M4 agents carve: the SAME tail closures `handleHttp`'s ctx already
     // carries — one registry, injected twice, never duplicated.
     ensureAgentRunTail: ensureTailFor,
@@ -438,7 +435,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   });
 
   const http = createServer((req, res) => {
-    void handleHttp(req, res, {
+    void safeDispatch(req, res, () => handleHttp(req, res, {
       routeTable,
       broadcastKindChanged,
       identity,
@@ -471,7 +468,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       runReleaseFinalize: runReleaseFinalizeFn,
       rerunReflector: rerunReflectorFn,
       getServeStatus,
-    });
+    })).catch((err) => console.error('[bridge] safeDispatch backstop:', err));
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 

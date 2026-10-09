@@ -19,7 +19,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { STUDIO_BRANCH, commitStudioChange, saveProjectRepo, uncommittedContractPaths } from '../../project-repo-tx.ts';
+import { STUDIO_BRANCH, commitStudioChange, uncommittedContractPaths } from '../../project-repo-tx.ts';
+import { saveProjectRepo } from '../../project-repo-save.ts';
 
 function g(dir: string, args: string[]): string {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();

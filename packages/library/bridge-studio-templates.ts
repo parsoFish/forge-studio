@@ -60,6 +60,7 @@ import {
   pathOnly,
   type StudioContext,
   type RouteContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { SLUG_RE } from '@forge/kernel';
@@ -79,7 +80,7 @@ const MAX_TEMPLATE_ID_LENGTH = MAX_SKILL_ID_LENGTH;
  *  still-encoded id) on malformed percent-encoding — mirrors
  *  bridge-studio-skills.ts's `decodeIdSegment`. */
 function decodeIdSegment(raw: string): string {
-  return decodeURIComponent(raw);
+  return decodeUrlPart(raw);
 }
 
 /** Returns an error message when `id` is not a bare lowercase-kebab slug (no

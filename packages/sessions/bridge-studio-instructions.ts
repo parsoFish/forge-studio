@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 
 
 
-import { allowedOrigin, sendJson } from '@forge/kernel';
+import { allowedOrigin, decodeUrlPart, sendJson } from '@forge/kernel';
 import { guardedFile, guardedReadFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import { readAgentInstructionsFile } from '@forge/projects';
@@ -28,6 +28,7 @@ import { DRAFT_FILENAME, INSTRUCTIONS_KIND_DIR, type InstructionsStatus } from '
 import { listInstructionsSessions } from './bridge-studio-session-index.ts';
 import { guardedWriteSessionStatus, type InterviewQuestion } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
+import { ceilingStatusFields, resolveStartCeilingFor } from './session-start-ceiling.ts';
 import {
   deriveRowLifecycle,
   findSessionKindDescriptorSafe,
@@ -122,7 +123,7 @@ export async function handleInstructionsRoutes(
   // GET /api/instructions/file/<project>/<sid>/<filename> — serve a session-dir
   // file (AGENTS.draft.md etc.) with a path-escape guard + content-type sniff.
   if (method === 'GET' && url.startsWith('/api/instructions/file/')) {
-    const rest = url.slice('/api/instructions/file/'.length).split('/').map(decodeURIComponent);
+    const rest = url.slice('/api/instructions/file/'.length).split('/').map(decodeUrlPart);
     const [project, sessionId, ...fileParts] = rest;
     const filename = fileParts.join('/');
     if (!project || !sessionId || !filename) {
@@ -187,6 +188,8 @@ export async function handleInstructionsRoutes(
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
+      const ceiling = resolveStartCeilingFor(ctx, 'instructions-creator'); // forge-nk1y.5: before any read or write
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
       // forge-osz — the `projectRepoPath || join(projectsRoot, project)` fallback
       // reaches readAgentInstructionsFile with a repoPath folded from the untrusted
       // `body.project`; guardedSessionDir below only guards the WRITE, and runs
@@ -228,6 +231,7 @@ export async function handleInstructionsRoutes(
         prompt: '',
         updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        ...ceilingStatusFields(ceiling),
       }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;

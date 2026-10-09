@@ -10,6 +10,7 @@
  * only thing this module needs back from it is two TYPES, taken as
  * `import type` so nothing is imported at run time in that direction.
  */
+import { COST_CEILING_ENV, resolveRunCeiling } from '@forge/kernel';
 import type { ArchitectSession, ProposedInitiative } from './architect-plan.ts';
 
 // ---------------------------------------------------------------------------
@@ -48,7 +49,25 @@ function esc(s: string): string {
  *  6. Aggregate footprint — stacked bar (C19 informational)
  *  7. Operator brief + interview table
  */
-export function renderPlanHtml(session: ArchitectSession): string {
+/** Two decimals, no trailing zeros: 3.75, 1.5, 30. */
+const usd = (n: number): string => String(Number(n.toFixed(2)));
+
+/**
+ * forge-nk1y.4: the chip shows the RUN CEILING the scheduler enforces — the one
+ * derivation `resolveRunCeiling` (kernel) the run and its stop read — labelled
+ * as a ceiling, with the estimate (`cost_budget_usd`) shown separately. It used
+ * to show the estimate as "cap", which an operator read as the ceiling.
+ */
+function costChips(init: ProposedInitiative, env: NodeJS.ProcessEnv): string {
+  if (typeof init.cost_budget_usd !== 'number') return '';
+  const c = resolveRunCeiling({ envRaw: env[COST_CEILING_ENV], costBudgetUsd: init.cost_budget_usd });
+  const ceiling = c.ceilingUsd !== undefined
+    ? `<span class="chip" data-run-ceiling-usd="${usd(c.ceilingUsd)}" data-run-ceiling-source="${c.source}" title="${c.source === 'env' ? `${COST_CEILING_ENV} on this Studio` : 'cost_budget_usd plus 50%'}; planning spend counts against it">ceiling <strong>$${usd(c.ceilingUsd)}</strong></span>`
+    : '';
+  return `${ceiling}<span class="chip" data-cost-estimate-usd="${usd(init.cost_budget_usd)}">estimate <strong>$${usd(init.cost_budget_usd)}</strong></span>`;
+}
+
+export function renderPlanHtml(session: ArchitectSession, env: NodeJS.ProcessEnv = process.env): string {
   const rounds = session.interview ?? [];
   const totalIterations = session.initiatives.reduce((s, i) => s + i.iteration_budget, 0);
   const knownCost = session.initiatives.filter((i) => typeof i.estimated_cost_usd === 'number');
@@ -80,7 +99,7 @@ export function renderPlanHtml(session: ArchitectSession): string {
     </div>
     <div class="init-chips">
       <span class="chip">budget <strong>${init.iteration_budget}</strong></span>
-      ${typeof init.cost_budget_usd === 'number' ? `<span class="chip">cap <strong>$${init.cost_budget_usd}</strong></span>` : ''}
+      ${costChips(init, env)}
       ${dep !== '—' ? `<span class="chip dep-chip">after ${esc(dep)}</span>` : ''}
     </div>
   </div>
@@ -331,7 +350,7 @@ ${session.initiatives.map((i, idx) => {
       return `      <div class="seg" style="flex: ${i.iteration_budget}; background: hsl(${hue}, 55%, 50%);" title="${esc(i.initiative_id)} — ${i.iteration_budget} iterations">${pct >= 8 ? esc(i.initiative_id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '')) : ''}</div>`;
     }).join('\n')}
     </div>
-    <div class="info">Informational only: forge sets no limit on this total, and the operator decides whether it is acceptable. Each initiative's develop run stops dispatching work when its spend reaches its own ceiling: its <code>cost_ceiling_usd</code>, else <code>cost_budget_usd</code> plus 50%, unless an operator sets one at Start development.</div>
+    <div class="info">Informational only: forge sets no limit on this total, and the operator decides whether it is acceptable. Each initiative's develop run stops dispatching work when its spend reaches its own ceiling — the <strong>ceiling</strong> chip: <code>FORGE_COST_CEILING_USD</code> when set, else its <code>cost_ceiling_usd</code>, else <code>cost_budget_usd</code> plus 50%. Planning spend counts against it. A ceiling set at Start development (<code>cost_ceiling_usd</code>) replaces the chip's figure. The <strong>estimate</strong> chip is <code>cost_budget_usd</code>.</div>
   </div>
 
   <!-- ── 5. OPERATOR BRIEF + INTERVIEW ── -->

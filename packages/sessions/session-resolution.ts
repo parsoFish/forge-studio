@@ -19,7 +19,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, MAX_SKILL_ID_LENGTH, SESSIONS_DIRNAME, resolveSessionDir } from '@forge/kernel';
+import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, MAX_SKILL_ID_LENGTH, SESSIONS_DIRNAME, resolveSessionDir, decodeUrlPart } from '@forge/kernel';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE } from './session-phases.ts';
@@ -53,7 +53,7 @@ const MAX_PROJECT_ID_LENGTH = MAX_EXACT_ID_LENGTH;
  *  still-encoded value — throws on malformed percent-encoding (mirrors
  *  bridge-studio-templates.ts's `decodeIdSegment`). */
 export function decodeSegment(raw: string): string {
-  return decodeURIComponent(raw);
+  return decodeUrlPart(raw);
 }
 
 // Exported (cli-side, uncapped — D-31) so apps/forge/ui-bridge.ts's kb-cleanup

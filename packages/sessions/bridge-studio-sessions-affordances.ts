@@ -30,7 +30,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, sendIfDispatchRefused } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, sendIfDispatchRefused, decodeUrlPart } from '@forge/kernel';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile, sessionDirSegments } from '@forge/kernel';
 import {
   loadSessionKinds,
@@ -68,7 +68,7 @@ export type { AffordanceRouteContext };
 const AFFORDANCE_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
 function decodeSegment(raw: string): string {
-  return decodeURIComponent(raw);
+  return decodeUrlPart(raw);
 }
 
 // ---------------------------------------------------------------------------
