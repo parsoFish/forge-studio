@@ -169,6 +169,10 @@ function checkBrainStaleness(
     title: 'Brain freshness (themes cite live source paths)',
     hard: false,
   };
+  // forge-mfv5.1.11 (ruling 1977a) — a profile still all-TODO is a stub, not context.
+  if (isUnfilledProfile(readFileOr(join(projectBrainDir(forgeRoot, projectName), 'profile.md')))) {
+    return { ...base, pass: false, detail: `brain/projects/${projectName}/profile.md is still the scaffold stub — every section is TODO, so forge's planners read no architecture facts. Author it (the onboarding agent does).` };
+  }
   // Brain 3 is forge-owned + CENTRAL (SPEC §4): brain/projects/<name>/themes/.
   const themesDir = projectThemesDir(forgeRoot, projectName);
   if (!existsSync(themesDir)) {
@@ -217,6 +221,18 @@ function checkBrainStaleness(
       `will mislead the planner (PM/architect read the brain first). Reconcile against the code ` +
       `(or run a reflection pass). Sample: ${sample}`,
   };
+}
+
+function readFileOr(path: string): string | null {
+  try { return readFileSync(path, 'utf8'); } catch { return null; }
+}
+
+/** True when every authored `## ` section's first line is TODO (the constraint-block
+ *  reference section is documentation, never filled in). */
+function isUnfilledProfile(text: string | null): boolean {
+  if (text === null) return false;
+  const sections = text.split(/^## /m).slice(1).filter((sec) => !/^Constraint blocks/.test(sec));
+  return sections.length > 0 && sections.every((sec) => /^TODO\b/.test(sec.split('\n').slice(1).find((l) => l.trim() !== '')?.trim() ?? ''));
 }
 
 /**

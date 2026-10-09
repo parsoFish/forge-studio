@@ -66,7 +66,7 @@ report green, not to claim it did.
    suite, e.g. permanently-red TDD stubs), do not declare it: propose the
    command CI itself actually runs (read `.github/workflows/*`) if that
    measures green, or a package/test-file scope that does. If no scope
-   measures green, stop and report — same as an unfixable hard clause (Step 8)
+   measures green, stop and report — same as an unfixable hard clause (Step 9)
    — rather than declaring a gate that can never pass. Write the verified
    command to `.forge/project.json` `testProcess.local.cmd` (create the file
    if absent). **This must precede any AGENTS.md authoring** — the
@@ -90,7 +90,17 @@ report green, not to claim it did.
    agent injects these into every matching work item). It validates the blocks
    at write time; if it errors on a malformed block, fix the source and re-run.
 
-5. **Converge the mechanical clauses.** Run:
+5. **Author the central profile.** `brain/projects/<name>/profile.md` in the
+   forge repo is a scaffold stub until you fill it: replace every `TODO` section
+   (what the project is, its architecture / module map, its load-bearing
+   conventions) with facts you read from THIS repo — the README, the package
+   layout, the test and CI config. Leave the constraint-block reference section
+   as it is. Planners read this file before designing work; preflight's BRAIN
+   clause warns while every section is still `TODO`. If you cannot write it (no
+   access, nothing to read), say so in your Step 9 report — never leave it
+   silently.
+
+6. **Converge the mechanical clauses.** Run:
    `forge preflight converge --project <name> [--accept <clause>=<rationale>]…`
    This auto-fixes the deterministic clauses (C2 scratch hygiene, ARTIFACTS
    build-output gitignore, C4 architecture context) and re-checks until
@@ -98,21 +108,22 @@ report green, not to claim it did.
    `<project>/.forge/contract-compliance-report.json` and exits 0 iff every
    **hard** clause passes.
 
-6. **Fix remaining hard clauses by hand.** If the converge report's `stopReason`
+7. **Fix remaining hard clauses by hand.** If the converge report's `stopReason`
    is `unfixable-hard-clause` or `no-progress`, read the failing hard clauses in
    the report, make the minimal real edit (e.g. a mis-declared gate, tracked
    scratch that `.gitignore` alone can't fix → `git rm --cached`), and re-run
    `forge preflight converge`. Never fabricate a pass.
 
-7. **Dispose of advisory clauses explicitly.** For each advisory clause still
+8. **Dispose of advisory clauses explicitly.** For each advisory clause still
    failing, either fix it or **accept it with a genuine rationale** via
    `--accept <clause>=<why-it's-fine-for-this-project>`. Never silently leave an
    advisory gap unaddressed — the report must name every clause's disposition.
 
-8. **Verify + report.** Run `forge preflight --project <name>` and confirm it
+9. **Verify + report.** Run `forge preflight --project <name>` and confirm it
    exits 0 (hard-green). Summarise the final
    `.forge/contract-compliance-report.json`: what was fixed, what was accepted
-   (with rationale), and anything that still needs an operator. If a hard clause
+   (with rationale), whether you authored the central profile, and anything
+   that still needs an operator. If a hard clause
    is genuinely unsatisfiable unattended (e.g. C6 needs a real GitHub remote, or
    external credentials), stop and say so plainly — that is a truthful outcome,
    not a failure to hide.
@@ -124,4 +135,4 @@ report green, not to claim it did.
   if it can't converge, report the `stopReason` — do not loop by hand forever.
 - **Idempotent edits only:** every fix must be safe to re-apply (the auto-fixers
   already are); never clobber an operator-authored file.
-- **Write the project's central `profile.md` in the forge repo (Step 4) — never run `git` there.** No `commit`, `branch`, `checkout`, `update-ref`, `merge`, or any other ref-mutating command against the forge repo; the forge repo's own git hook refuses it regardless (ruling 211, forge-8vfn.8.5.47). `git add`/`git commit` are for THIS project's own repo only (Step 1 onward).
+- **Write the project's central `profile.md` in the forge repo (Steps 4–5) — never run `git` there.** No `commit`, `branch`, `checkout`, `update-ref`, `merge`, or any other ref-mutating command against the forge repo; the forge repo's own git hook refuses it regardless (ruling 211, forge-8vfn.8.5.47). `git add`/`git commit` are for THIS project's own repo only (Step 1 onward).

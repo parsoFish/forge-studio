@@ -103,7 +103,7 @@ export type SessionStage = (typeof SESSION_STAGES)[number];
 /** Presence, never a verdict (D11) — `forge preflight`'s exit code is the
  *  only authoritative contract-green signal; a row says "this artifact is
  *  present/absent, here is its source", never "this clause passes". */
-export type ContractStageStatus = 'present' | 'absent';
+export type ContractStageStatus = 'present' | 'stub' | 'absent';
 
 /** The five onboarding stages — `SESSION_STAGES` minus 'brain' (project-brain
  *  owns that stage; D2). */

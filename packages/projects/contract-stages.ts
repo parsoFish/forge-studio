@@ -60,6 +60,7 @@ import { SESSION_STAGES, type ContractStage, type ContractStageRow, type Contrac
 
 import { safeReadFileInSession } from '@forge/kernel';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from './project-config.ts';
+import { mentionsCommand } from './preflight-instructions.ts';
 import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, guardedFile } from '@forge/kernel';
 
 export type { ContractStageRow, ContractStageStatus } from '@forge/contracts';
@@ -140,15 +141,17 @@ function deriveContractRow(projectDir: string, config: ProjectConfig | null): Co
  *  (the contract's named legacy alias, SPEC.md §6 C8)
  *  accepted. `bytes` is the real length of whichever file is actually
  *  found, read off disk (never estimated). */
-function deriveInstructionsRow(projectDir: string): ContractStageRow {
+function deriveInstructionsRow(projectDir: string, config: ProjectConfig | null): ContractStageRow {
   for (const filename of AGENT_INSTRUCTION_FILES) {
     const body = safeReadFileInSession(projectDir, filename);
     if (body !== null) {
+      // forge-mfv5.1.11 — a file that never names the declared gate is a stub, not done (C8's coverage fact).
+      const stale = config !== null && !mentionsCommand(body, config.testProcess.local.cmd.join(' '));
       return {
         stage: 'instructions',
-        status: 'present',
+        status: stale ? 'stub' : 'present',
         source: filename,
-        detail: [`source file: ${filename}`],
+        detail: stale ? [`source file: ${filename}`, INSTRUCTIONS_STUB_DETAIL] : [`source file: ${filename}`],
         bytes: Buffer.byteLength(body, 'utf8'),
       };
     }
@@ -177,6 +180,15 @@ function deriveSecretsRow(config: ProjectConfig | null): ContractStageRow {
 /** Builds the `demo` stage row — present iff EITHER `demoProcess[]` is
  *  declared OR `.forge/demo/demo.lock.json` exists (declared-only, before
  *  the demo is ever built, is legitimately present — it names an intent). */
+/** The two placeholder steps onboarding declares (forge-mfv5.1.11): a Demo tile
+ *  showing exactly these, with no locked demo, reads `stub`. */
+export const SCAFFOLD_DEMO_PROCESS: readonly { kind: 'capture' | 'verify'; text: string }[] = [
+  { kind: 'capture', text: 'Capture the before state of the change.' },
+  { kind: 'verify', text: 'Run the quality gate to verify the change.' },
+];
+const INSTRUCTIONS_STUB_DETAIL = 'the file does not name the declared gate command';
+const DEMO_STUB_DETAIL = 'only the onboarding placeholder steps are declared';
+
 function deriveDemoRow(projectDir: string, config: ProjectConfig | null): ContractStageRow {
   const demoSteps = config?.demoProcess ?? [];
   // Wording ("step: <kind>") is pinned to the ALLOWED_DETAIL_PATTERNS
@@ -203,6 +215,9 @@ function deriveDemoRow(projectDir: string, config: ProjectConfig | null): Contra
       // Unparseable lock — its mere presence still counts (the lock exists);
       // never fabricate a detail line for it, never crash.
     }
+  }
+  if (lockRaw === null && JSON.stringify(demoSteps.map((s) => ({ kind: s.kind, text: s.text }))) === JSON.stringify(SCAFFOLD_DEMO_PROCESS)) {
+    return { stage: 'demo', status: 'stub', source: '.forge/project.json + .forge/demo/demo.lock.json', detail: [...detail, DEMO_STUB_DETAIL], bytes: null };
   }
   return { stage: 'demo', status, source: '.forge/project.json + .forge/demo/demo.lock.json', detail, bytes: null };
 }
@@ -314,7 +329,7 @@ export function deriveContractStages(input: {
 
   const rows: ContractStageRow[] = [
     deriveContractRow(projectDir, config),
-    deriveInstructionsRow(projectDir),
+    deriveInstructionsRow(projectDir, config),
     deriveSecretsRow(config),
     deriveDemoRow(projectDir, config),
     deriveRoadmapRow(projectDir, forgeRoot, projectId),
