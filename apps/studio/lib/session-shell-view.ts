@@ -49,10 +49,10 @@ import type {
   SessionLifecycle,
   SessionShellErrorKind,
   SessionShellFetchResult,
-  SessionCeiling,
   SessionShellPayload,
   SessionTurn,
 } from './session-client';
+import type { SessionCeiling } from './session-ceiling';
 import { isPseudoProjectAnchor, COMMUNITY_REFRESH_PROJECT_ANCHOR as COMMUNITY_REGISTRY_ANCHOR } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,24 @@ export type StartCeiling =
   | { ok: true; costCeilingUsd: number; costCeilingSource: SessionCeilingSource }
   | { ok: false; error: string };
 
+/** The route-context slice the start routes read (see `SessionRootsContext`). */
+export type StartCeilingContext = { readonly agentBudgetUsd?: (agentSlug: string) => number | undefined };
+
+/** What a start route stamps on its first status: both fields, or nothing. */
+export function ceilingStatusFields(c: Extract<StartCeiling, { ok: true }>): { costCeilingUsd: number; costCeilingSource: SessionCeilingSource } {
+  return { costCeilingUsd: c.costCeilingUsd, costCeilingSource: c.costCeilingSource };
+}
+
+/** `resolveStartCeiling` for a route: honours the context's budget-lookup seam
+ *  (test injection only; the real roster read is the default). */
+export function resolveStartCeilingFor(ctx: StartCeilingContext, agentSlug: string, operatorUsd?: number): StartCeiling {
+  const lookup = ctx.agentBudgetUsd;
+  return resolveStartCeiling(agentSlug, {
+    ...(operatorUsd !== undefined ? { operatorUsd } : {}),
+    ...(lookup ? { agentBudgetUsd: () => lookup(agentSlug) } : {}),
+  });
+}
+
 export function resolveStartCeiling(
   agentSlug: string,
   opts: {
@@ -45,4 +63,12 @@ export function resolveStartCeiling(
   return c.ok
     ? { ok: true, costCeilingUsd: c.ceilingUsd, costCeilingSource: c.source }
     : { ok: false, error: c.reason };
+}
+
+/** The ceiling a start stamped on a session's status, or undefined for one
+ *  minted before forge-nk1y.5. The onboarding brief dispatches its run under it
+ *  (`--cost-ceiling-usd`), so FORGE_COST_CEILING_USD binds that run too. */
+export function stampedCeilingUsd(status: Record<string, unknown>): number | undefined {
+  const v = status.costCeilingUsd;
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
 }
