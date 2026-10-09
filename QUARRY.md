@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 7 | 1,627 | **1,627** | ratified 1,627 (+54, forge-8vfn.30.9, ruling 666): `resolveDeclaredBin`, the pure declared-bin containment rule shared by flows and factory. |
 | `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 48 | 11,215 | **9,423** | ratified 9,423 — row 206 (forge-8vfn.8.5.56): collision-free preflight-fix run ids, a crashed fix reads failed; +11, lane-ratified (≤100, ruling 666). |
+| `projects` | 48 | 11,262 | **9,468** | ratified 9,468 — forge-mfv5.1.12: onboarding and project-bound agent runs commit to forge-studio; Save refuses an uncommitted contract by name; +45 measured, read for slack (dirtyPaths parse shared), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,460 | **12,884** | ratified 12,884 — row 206 (forge-8vfn.8.5.56): brain-fix claims the run id through the dispatch seam, fix-agent checks the active-job derivation, a crashed fix reads failed; +52, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,935 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
@@ -65,10 +65,10 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 15 | 2,909 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,301 | **12,301** | ratified 12,301 — row 212 follow-up 3 (forge-8vfn.8.5.48), lane-ratified under ruling 666 (measured ceiling); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 35 | 8,544 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
+| `apps/forge` | 35 | 8,549 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **494** | **132,726** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **494** | **132,778** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -291,7 +291,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/bridge-agents-runs.ts | agents | rewritten | 240 |
 | packages/agents/bridge-agents-slug.ts | agents | rewritten | 566 |
 | packages/agents/bridge-agents-studio.ts | agents | rewritten | 639 |
-| apps/forge/agent-dispatch-cmd.ts | apps/forge | rewritten | 544 |
+| apps/forge/agent-dispatch-cmd.ts | apps/forge | rewritten | 549 |
 | packages/agents/find-session-project.ts | agents | verbatim | 35 |
 | packages/agents/agents-md-compose.ts | agents | verbatim | 116 |
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 63 |
@@ -424,7 +424,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-types.ts | projects | verbatim | 205 |
 | packages/projects/project-config-validate.ts | projects | verbatim | 464 |
 | packages/projects/project-create.ts | projects | verbatim | 594 |
-| packages/projects/project-repo-tx.ts | projects | verbatim | 237 |
+| packages/projects/project-repo-tx.ts | projects | verbatim | 274 |
 | packages/projects/reset.ts | projects | verbatim | 711 |
 | packages/projects/reset-cli.ts | projects | verbatim | 160 |
 | packages/projects/reset-command-resolve.ts | projects | verbatim | 74 |
@@ -602,8 +602,8 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-roster.ts | projects | verbatim | 468 |
 | packages/projects/project-preflight-read.ts | projects | verbatim | 211 |
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |
-| packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 682 |
-| packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 299 |
+| packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 688 |
+| packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 303 |
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 556 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 229 |
 | packages/projects/routes.ts | projects | verbatim | 389 |

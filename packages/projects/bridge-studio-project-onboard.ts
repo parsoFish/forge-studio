@@ -82,7 +82,7 @@ import { runPreflight } from './preflight.ts';
 import { scaffoldGreenfieldProject } from './project-create.ts';
 import { validateProjectConfig, readAgentInstructionsFile } from './project-config.ts';
 import { ProjectConfigWriteError, writeProjectConfigPatch } from './project-config-write.ts';
-import { saveProjectRepo } from './project-repo-tx.ts';
+import { commitStudioChange, saveProjectRepo, uncommittedContractPaths } from './project-repo-tx.ts';
 import { checkContractArtifactContainment, scaffoldContractArtifacts, ScaffoldContainmentError } from './project-contract-scaffold.ts';
 
 /** Structural mirror of `@forge/knowledge`'s
@@ -525,6 +525,12 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       const tmpConfigPath = join(forgeDirPath, `.project.json.tmp-${randomBytes(6).toString('hex')}`);
       writeFileSync(tmpConfigPath, JSON.stringify(cfg, null, 2), 'utf8');
       renameSync(tmpConfigPath, forgeGuard.realPath);
+
+      // forge-mfv5.1.12 — onboarding lands on forge-studio like every forge-UI write:
+      // what this route wrote, plus contract files the operator left uncommitted.
+      commitStudioChange(projectRoot, `chore(forge): onboard ${id} contract`, [
+        ...new Set([...scaffoldedLocal.filter((p) => p !== '.git/'), '.forge/project.json', ...uncommittedContractPaths(projectRoot)]),
+      ]);
 
       const scaffolded = [
         ...scaffoldedLocal,

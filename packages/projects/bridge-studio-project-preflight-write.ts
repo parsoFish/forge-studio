@@ -190,6 +190,10 @@ export function makePreflightWriteHandlers(deps: PreflightWriteDeps): {
       const projectRoot = resolveManagedProject(ctx, decodeURIComponent(saveRepoMatch[1]), res, origin);
       if (!projectRoot) return true;
       const result = saveProjectRepo(projectRoot);
+      if (result.refused) {
+        sendJson(res, 409, { error: result.detail, uncommitted: result.refused }, origin);
+        return true;
+      }
       sendJson(res, 200, { ok: true, ...result }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
