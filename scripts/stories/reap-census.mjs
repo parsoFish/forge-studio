@@ -79,7 +79,8 @@ function readPpid(pid, procRoot) {
   try {
     raw = readFileSync(`${procRoot}/${pid}/status`, 'utf8');
   } catch (err) {
-    if (err?.code === 'ENOENT') return { gone: true }; // genuinely exited — a normal, expected chain end
+    // forge-nk1y.6 — ESRCH too: a pid racing out of /proc mid-read (row 168's shape).
+    if (err?.code === 'ENOENT' || err?.code === 'ESRCH') return { gone: true }; // genuinely exited — a normal, expected chain end
     return { unknown: true, error: err }; // EACCES, or anything else: NOT the same fact as gone
   }
   const m = /^PPid:\s+(\d+)/m.exec(raw);
@@ -152,7 +153,7 @@ function processStartTimeResult(pid, { procRoot = '/proc' } = {}) {
   try {
     raw = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
   } catch (err) {
-    if (err?.code === 'ENOENT') return { time: null }; // genuinely gone — an ordinary, expected read
+    if (err?.code === 'ENOENT' || err?.code === 'ESRCH') return { time: null }; // genuinely gone (ESRCH: forge-nk1y.6, row 168's race)
     return { time: null, unknown: true, error: err }; // EACCES, EIO, etc. — NOT the same fact as gone
   }
   const close = raw.lastIndexOf(')');
