@@ -44,7 +44,7 @@ import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serialize
 import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows';
 import { flowPathForId } from '@forge/flows';
 import { deriveFlowKickoff } from '@forge/flows';
-import { discoverProjects } from '@forge/kernel';
+import { discoverProjects, decodeUrlPart } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedWriteFile, claimDispatchSlot, releaseDispatchSlot } from '@forge/kernel';
@@ -333,8 +333,8 @@ export async function handleStudioWriteRoutes(
   // ---- PUT /api/studio/flows/:id -------------------------------------------
   const flowMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
   if (flowMatch) {
+    const id = decodeUrlPart(flowMatch[1]);
     try {
-      const id = decodeURIComponent(flowMatch[1]);
 
       // 1. Slug-guard before any fs path construction (blocks path traversal)
       if (!SLUG_RE.test(id)) {

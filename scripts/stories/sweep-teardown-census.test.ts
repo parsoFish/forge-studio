@@ -33,7 +33,9 @@ import {
  *    assertion lives in a test, the kill in `after()`).
  * What the doors assert about `reapCensusAndSweep` is unchanged.
  */
-const HANG_BOUND_MS = 60_000;
+const HANG_BOUND_MS = 55_000;
+/** forge-nk1y.6 — node:test cancels a test past this, so a hang reds instead of stalling the suite. */
+const NODE_TEST_TIMEOUT_MS = 60_000;
 const TEARDOWN_WAIT_MS = 2_000;
 const recordedPids = new Set<number>();
 const record = (pid: number | undefined) => { if (pid) recordedPids.add(pid); };
@@ -41,7 +43,7 @@ const isAlive = (pid: number) => { try { process.kill(pid, 0); return true; } ca
 const recordRalph = async (file: string) => record((await waitForRalphPid(file, { timeoutMs: 1000 })) ?? undefined);
 
 function test(name: string, fn: (t: TestContext) => Promise<void>) {
-  nodeTest(name, async (t) => {
+  nodeTest(name, { timeout: NODE_TEST_TIMEOUT_MS }, async (t) => {
     let timer: NodeJS.Timeout | undefined;
     const hang = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(

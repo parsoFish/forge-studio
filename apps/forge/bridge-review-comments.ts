@@ -24,7 +24,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import lockfile from 'proper-lockfile';
 
-import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, decodeUrlPart } from '@forge/kernel';
 import {
   REVIEW_COMMENTS_MAX,
   reviewCommentsPath,
@@ -97,7 +97,7 @@ export async function handleReviewCommentRoutes(
   // The store is platform code (`@forge/flows/review-comments.ts`), so these
   // routes answer with or without the example — this stopped being its surface.
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/review-comments/'.length));
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return true; }
     const sidecar = readReviewComments(ctx.logsRoot, cycleId);
     sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
@@ -108,7 +108,7 @@ export async function handleReviewCommentRoutes(
   // to clear it; edit fixes a typo'd concern without losing its anchor id.
   // Same lock + derive-on-every-mutate shape as append/resolve.
   if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/edit')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/edit'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/review-comments/'.length, url.length - '/edit'.length));
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
@@ -127,7 +127,7 @@ export async function handleReviewCommentRoutes(
     return true;
   }
   if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/delete')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/delete'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/review-comments/'.length, url.length - '/delete'.length));
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
@@ -140,7 +140,7 @@ export async function handleReviewCommentRoutes(
     return true;
   }
   if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
@@ -153,7 +153,7 @@ export async function handleReviewCommentRoutes(
     return true;
   }
   if (method === 'POST' && url.startsWith('/api/review-comments/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/review-comments/'.length));
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const region = typeof body['region'] === 'string' ? body['region'].trim() : '';

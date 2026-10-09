@@ -29,7 +29,7 @@ import type { AgentFacts } from './agent-facts.ts';
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
-import { assertSkillSlug, FORGE_ROOT } from '@forge/kernel';
+import { assertSkillSlug, FORGE_ROOT, decodeUrlPart } from '@forge/kernel';
 import { PLATFORM_GUARD_IDS } from '@forge/contracts';
 import { reqString, optString, optBool, stringArray, oneOf, loadYaml } from '@forge/kernel';
 import type { Finding } from '@forge/kernel';
@@ -302,7 +302,7 @@ export function resolveHookScriptPath(hookDirPath: string, scriptRel: string): s
   // resolve() on the still-encoded string would never see the "..".
   let decoded = scriptRel;
   try {
-    decoded = decodeURIComponent(scriptRel);
+    decoded = decodeUrlPart(scriptRel);
   } catch {
     /* malformed percent-escape ⇒ leave as literal text, the raw check below still applies */
   }

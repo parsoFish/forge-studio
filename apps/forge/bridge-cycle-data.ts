@@ -24,7 +24,7 @@
 import type { IncomingMessage, ServerResponse, OutgoingHttpHeaders } from 'node:http';
 import { basename } from 'node:path';
 
-import { sendJson, allowedOrigin, resolveGuardedPath, guardedReadFile, isSafeSubPath } from '@forge/kernel';
+import { sendJson, allowedOrigin, resolveGuardedPath, guardedReadFile, isSafeSubPath, decodeUrlPart } from '@forge/kernel';
 import type { EventLogEntry } from '@forge/kernel';
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows';
 
@@ -153,7 +153,7 @@ export async function handleCycleDataRoutes(
   const origin = allowedOrigin(req);
 
   if (method === 'GET' && url.startsWith('/api/events/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/events/'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/events/'.length));
     // SEC-04 (bd forge-ebj) — cycleId is request-derived and, until now,
     // folded raw into `join(logsRoot, cycleId, 'events.jsonl')` with no
     // per-segment guard: a `%2F`-smuggled `../..` cycleId escaped `_logs`
@@ -191,7 +191,7 @@ export async function handleCycleDataRoutes(
   }
   if (method === 'GET' && url.startsWith('/api/cost/')) {
     // U1: cost summary per cycle (total + per-phase + per-skill).
-    const cycleId = decodeURIComponent(url.slice('/api/cost/'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/cost/'.length));
     // SEC-04 (bd forge-ebj) — `summariseCycle` folds `cycleId` into
     // `join(logsRoot, cycleId, 'events.jsonl')` internally; gate the
     // request-derived cycleId (as its OWN segment under the trusted logsRoot)
@@ -219,7 +219,7 @@ export async function handleCycleDataRoutes(
     return true;
   }
   if (method === 'GET' && url.startsWith('/api/graph/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/graph/'.length));
+    const cycleId = decodeUrlPart(url.slice('/api/graph/'.length));
     // Prefer the immutable cycle snapshot; fall back to the live worktree graph
     // while the cycle is still in-flight (the snapshot is only mirrored at cycle
     // end). Without this fallback a RESUMED cycle — whose PM phase is skipped, so
@@ -253,7 +253,7 @@ export async function handleCycleDataRoutes(
   // while the cycle is still in-flight (the snapshot is only mirrored at cycle
   // end). The cycleId encodes the initiativeId as `<timestamp>_<INIT-...>`.
   if (method === 'GET' && url.startsWith('/api/work-item/')) {
-    const rest = decodeURIComponent(url.slice('/api/work-item/'.length));
+    const rest = decodeUrlPart(url.slice('/api/work-item/'.length));
     const slash = rest.indexOf('/');
     if (slash < 0) {
       sendJson(res, 400, { error: 'expected /api/work-item/<cycleId>/<wiId>' }, origin);
@@ -300,7 +300,7 @@ export async function handleCycleDataRoutes(
   // Path normalisation + a startsWith(logsRoot) check defeat
   // ../-escape attempts.
   if (method === 'GET' && url.startsWith('/api/artifact/')) {
-    const rest = decodeURIComponent(url.slice('/api/artifact/'.length));
+    const rest = decodeUrlPart(url.slice('/api/artifact/'.length));
     const slash = rest.indexOf('/');
     if (slash < 0) {
       sendJson(res, 400, { error: 'expected /api/artifact/<cycleId>/<filename>' }, origin);

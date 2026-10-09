@@ -49,6 +49,7 @@ import {
   allowedOrigin, sanitizeError, sendJson, resolveGuardedPath,
   SLUG_RE, isReservedId, AGENT_PROVENANCE, resolveDefaultKickoffCeilingUsd,
   loadConfig, defaultConfigPath, type RouteContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
@@ -202,8 +203,8 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
   const origin = allowedOrigin(req);
   const agentMatch = /^\/api\/studio\/agents\/([^/]+)$/.exec(url.split('?')[0] ?? '');
   if (!agentMatch) return false;
+  const slug = decodeUrlPart(agentMatch[1]);
   try {
-    const slug = decodeURIComponent(agentMatch[1]);
 
     // 1. Validate slug before any fs operation (blocks path traversal)
     if (!SLUG_RE.test(slug)) {

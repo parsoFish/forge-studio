@@ -4,7 +4,7 @@
  * "No unsaved changes" while forge-studio held unsaved commits and contract files
  * sat uncommitted, so neither the Save nor its adopt list could be reached.
  */
-export type RepoStatus = { pending: boolean; branch: string; uncommitted: string[] };
+export type RepoStatus = { pending: boolean; branch: string; uncommitted: string[]; prUrl?: string };
 
 export type SaveControl = { disabledReason: string | null; label: string; adoptFiles: string[] };
 

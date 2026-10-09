@@ -24,7 +24,8 @@ import { runPreflight } from './preflight.ts';
 import { checkDeps } from './preflight-deps.ts';
 import { loadProjectConfig, type ProjectConfig } from './project-config.ts';
 import { classifyClause } from './preflight-resolve.ts';
-import { hasPendingStudioChanges, STUDIO_BRANCH, uncommittedContractPaths } from './project-repo-tx.ts';
+import { STUDIO_BRANCH, uncommittedContractPaths } from './project-repo-tx.ts';
+import { hasPendingStudioChanges, studioPullRequestUrl } from './project-repo-save.ts';
 import {
   discoverProjects,
   defaultConfigPath,
@@ -38,6 +39,7 @@ import {
   PROJECT_ID_RE,
   SAFE_ID_RE,
   type StudioContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 
 /**
@@ -107,8 +109,8 @@ export async function handleProjectPreflight(
   const origin = allowedOrigin(req);
   const preflightMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight$/);
   if (preflightMatch && method === 'GET') {
+    const id = decodeUrlPart(preflightMatch[1]);
     try {
-      const id = decodeURIComponent(preflightMatch[1]);
       if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
@@ -166,8 +168,8 @@ export async function handleProjectRepoStatus(
   const origin = allowedOrigin(req);
   const repoStatusMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/repo-status$/);
   if (repoStatusMatch && method === 'GET') {
+    const id = decodeUrlPart(repoStatusMatch[1]);
     try {
-      const id = decodeURIComponent(repoStatusMatch[1]);
       if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
@@ -179,7 +181,9 @@ export async function handleProjectRepoStatus(
         return true;
       }
       // forge-mfv5.1.20: the uncommitted contract files are what a Save would refuse on / adopt.
-      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath) }, origin);
+      // forge-mfv5.1.22: an open forge-studio PR (protected default branch) is served beside `pending`.
+      const prUrl = studioPullRequestUrl(projectRef.absPath) ?? null; // null under the dry bridge too
+      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath), prUrl }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -200,7 +204,7 @@ export async function handleProjectPreflightFixAgentStatus(
   const origin = allowedOrigin(req);
   const pfStatusMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-agent\/([^/]+)$/);
   if (pfStatusMatch && method === 'GET') {
-    const runId = decodeURIComponent(pfStatusMatch[2]);
+    const runId = decodeUrlPart(pfStatusMatch[2]);
     if (!SAFE_ID_RE.test(runId)) {
       sendJson(res, 400, { error: 'invalid run id' }, origin);
       return true;
