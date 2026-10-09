@@ -59,7 +59,8 @@
       "metadata": {
         "error": "pinned stream failure",
         "priced": false,
-        "unpriced_reason": "died"
+        "unpriced_reason": "died",
+        "upper_bound_usd": 3
       },
       "output_refs": [],
       "parent_event_id": "<parent_event_id>",
@@ -85,6 +86,7 @@
         "unsound": [],
         "priced": false,
         "unpriced_reason": "died",
+        "upper_bound_usd": 3,
         "status": "failed",
         "error": "Error: pinned stream failure"
       },

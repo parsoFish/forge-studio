@@ -60,16 +60,13 @@ export function resolveStartCeiling(
     : { ok: false, error: c.reason };
 }
 
-/** The ceiling a start stamped on a session's status, or undefined for one
- *  minted before forge-nk1y.5. The onboarding brief dispatches its run under it
- *  (`--cost-ceiling-usd`), so FORGE_COST_CEILING_USD binds that run too. */
+/** The ceiling stamped on a status (undefined before forge-nk1y.5); onboarding dispatches under it. */
 export function stampedCeilingUsd(status: Record<string, unknown>): number | undefined {
   const v = status.costCeilingUsd;
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
 }
 
-/** forge-nk1y.5 — an agent's own `budgets.maxBudgetUsd`, the turn-time arm for
- *  a session that recorded no ceiling. An unreadable definition throws. */
+/** An agent's own `budgets.maxBudgetUsd` (turn-time arm); an unreadable definition throws. */
 export function agentBudgetUsdFor(agentSlug: string): number | undefined {
   return loadAgentDefinition(skillPath(agentSlug)).budgets.maxBudgetUsd;
 }

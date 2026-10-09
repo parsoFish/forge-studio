@@ -246,7 +246,7 @@ export async function runInteractiveTurn(
           declaredCeilingUsd: (st as { costCeilingUsd?: unknown }).costCeilingUsd, env: process.env,
           agentBudgetUsd: agentBudgetUsdFor(descriptor.agent),
           logsRoot,
-          spentUsd: () => sessionSpentUsd(logsRoot, cycleId), logger,
+          spentUsd: () => sessionSpentUsd(logsRoot, cycleId), sessionLogDir: cycleId, logger,
           identity: { initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, sessionId: ctx.sessionId },
         }),
         onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, { // forge-8vfn.22 — the tier/model the turn actually ran on.

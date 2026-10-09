@@ -318,11 +318,8 @@ function finalizedObjectExists(
   }
 }
 
-/** forge-nk1y.5 — the spend ceiling a session recorded at start, as
- *  `{usd, source}`. Both fields must be present and well-formed (a positive
- *  finite number and a known source); anything else — absent (a pre-change
- *  session), non-positive, non-numeric, an unknown source — is `null`, never a
- *  fabricated figure and never an unlabelled one. */
+/** forge-nk1y.5 — the ceiling recorded at start as `{usd, source}`; anything
+ *  absent or malformed is `null`, never a fabricated or unlabelled figure. */
 const CEILING_SOURCES: readonly SessionCeilingSource[] = ['operator', 'env', 'agent-budget'];
 function deriveCeiling(statusParsed: Record<string, unknown> | null): { usd: number; source: SessionCeilingSource } | null {
   if (statusParsed === null) return null;
@@ -620,11 +617,8 @@ export async function handleStudioSessionsRoutes(
         // kernel rule, never summed here. ALWAYS present like `modelTier`;
         // `null` is honest-absent (no priced row) and renders "not recorded".
         costUsd: readSessionCostUsd({ logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId }),
-        // forge-nk1y.5 — the spend ceiling this session recorded at start, read
-        // off the already-parsed `statusParsed` (no second status read). ALWAYS
-        // present like `costUsd`: `null` = none recorded (legacy / pre-change,
-        // or an invalid stored value), which the shell renders "not recorded" —
-        // never as "uncapped".
+        // forge-nk1y.5 — off `statusParsed`; ALWAYS present like `costUsd`
+        // (`null` = none recorded, rendered "not recorded", never "uncapped").
         ceiling: deriveCeiling(statusParsed),
         // Stated, not chosen (418): read live off the agent's SKILL.md, never stored.
         sdk: deriveAgentSpec(skillPathRelative(descriptor.agent)).sdk,

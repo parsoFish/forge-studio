@@ -399,6 +399,7 @@ export async function runKindTurn<
       env: process.env,
       logsRoot,
       spentUsd: () => sessionSpentUsd(logsRoot, cycleId),
+      sessionLogDir: cycleId,
       logger,
       identity: { initiativeId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.sessionId },
     }),

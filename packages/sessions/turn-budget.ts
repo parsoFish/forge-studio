@@ -51,7 +51,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { deriveSessionCostUsd, parseCeilingEnv, type EventLogger } from '@forge/kernel';
+import { deriveSessionCostUsd, lastUnpricedCharge, parseCeilingEnv, type EventLogger, type UnpricedCharge } from '@forge/kernel';
 
 import { parseGuardedEventsJsonl } from './session-readability.ts';
 
@@ -70,11 +70,14 @@ export const BRIDGE_STARTED_AT_ENV = 'FORGE_BRIDGE_STARTED_AT';
 export type TurnBudgetSource = 'session' | 'bridge' | 'agent-budget';
 
 export class TurnBudgetExhaustedError extends Error {
-  constructor(ceilingUsd: number, spentUsd: number, source: TurnBudgetSource) {
+  constructor(ceilingUsd: number, spentUsd: number, source: TurnBudgetSource, unpriced: UnpricedCharge | null = null) {
     super(
       `session turn budget exhausted: $${spentUsd.toFixed(4)} spent (priced + bounded) >= $${ceilingUsd.toFixed(2)} ` +
       `${source === 'session' ? 'session ceiling (stamped at start)' : source === 'agent-budget' ? "agent budget (the agent's budgets.maxBudgetUsd)" : `bridge ceiling (${BRIDGE_COST_CEILING_ENV})`} — ` +
-      'refusing to start the turn rather than run it under a cap of $0 or less',
+      'refusing to start the turn rather than run it under a cap of $0 or less' +
+      // T1 ruling (row-2 park): name the unpriced call and the resume act, never bare.
+      (unpriced ? `; the last call (${unpriced.message}) ended ${unpriced.reason} and was charged its $${unpriced.chargedUsd.toFixed(2)} cap` : '') +
+      `. To continue: start a new session with a higher ceiling (the kickoff figure, or ${BRIDGE_COST_CEILING_ENV} before forge studio starts)`,
     );
     this.name = 'TurnBudgetExhaustedError';
   }
@@ -157,8 +160,7 @@ type BudgetArm = { ceilingUsd: number; spentUsd: number; source: TurnBudgetSourc
  */
 export function turnBudgetUsd(args: {
   declaredCeilingUsd: unknown;
-  /** forge-nk1y.5 — the agent's own `budgets.maxBudgetUsd`: the session arm when
-   *  no ceiling was declared (a session minted before starts stamped one). */
+  /** forge-nk1y.5 — the agent's own budget: the session arm when none was declared. */
   agentBudgetUsd: number | undefined;
   env: NodeJS.ProcessEnv;
   /** Row 209 — `_logs/`, the root `bridgeSpentUsd` walks (every caller already resolves this). */
@@ -166,6 +168,8 @@ export function turnBudgetUsd(args: {
   spentUsd: () => number;
   logger: EventLogger;
   identity: { initiativeId: string; phase: Parameters<EventLogger['emit']>[0]['phase']; skill: string; sessionId: string };
+  /** The session's own log dir — a refusal names its last unpriced call. */
+  sessionLogDir?: string;
 }): number {
   const declared = positiveUsd(args.declaredCeilingUsd);
   const agentBudget = positiveUsd(args.agentBudgetUsd);
@@ -179,12 +183,9 @@ export function turnBudgetUsd(args: {
 
   if (sessionArm === undefined && bridgeArm === undefined) {
     // forge-nk1y.5 — never an uncapped turn: refused by name.
-    const err = new Error(`no spend ceiling for this session turn: set ${BRIDGE_COST_CEILING_ENV} or budgets.maxBudgetUsd on agent "${args.identity.skill}"`);
-    err.name = 'NoSpendCeilingError';
-    args.logger.emit({
-      initiative_id: args.identity.initiativeId, phase: args.identity.phase, skill: args.identity.skill,
-      event_type: 'error', input_refs: [], output_refs: [], message: err.message, metadata: { session_id: args.identity.sessionId },
-    });
+    const err = Object.assign(new Error(`no spend ceiling for this session turn: set ${BRIDGE_COST_CEILING_ENV} or budgets.maxBudgetUsd on agent "${args.identity.skill}"`), { name: 'NoSpendCeilingError' });
+    args.logger.emit({ initiative_id: args.identity.initiativeId, phase: args.identity.phase, skill: args.identity.skill,
+      event_type: 'error', input_refs: [], output_refs: [], message: err.message, metadata: { session_id: args.identity.sessionId } });
     throw err;
   }
 
@@ -196,11 +197,12 @@ export function turnBudgetUsd(args: {
 
   const remaining = remainingOf(binding);
   if (remaining > 0) return remaining;
-  const err = new TurnBudgetExhaustedError(binding.ceilingUsd, binding.spentUsd, binding.source);
+  const unpriced = args.sessionLogDir === undefined ? null : lastUnpricedCharge(parseGuardedEventsJsonl(args.logsRoot, args.sessionLogDir) ?? []);
+  const err = new TurnBudgetExhaustedError(binding.ceilingUsd, binding.spentUsd, binding.source, unpriced);
   args.logger.emit({
     initiative_id: args.identity.initiativeId, phase: args.identity.phase, skill: args.identity.skill,
     event_type: 'error', input_refs: [], output_refs: [], message: err.message,
-    metadata: { session_id: args.identity.sessionId, cost_usd_spent: binding.spentUsd, cost_ceiling_usd: binding.ceilingUsd, ceiling_source: binding.source },
+    metadata: { session_id: args.identity.sessionId, cost_usd_spent: binding.spentUsd, cost_ceiling_usd: binding.ceilingUsd, ceiling_source: binding.source, ...(unpriced ? { unpriced_call: unpriced } : {}) },
   });
   throw err;
 }
