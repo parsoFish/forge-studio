@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 131 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 133 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -63,12 +63,12 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 65 | 21,131 | **21,093** | ratified 21,093 — forge-nk1y.4/.5: a ceiling stamped (or a named refusal) on all seven session starts and at every turn, the plan card's ceiling chip, project-brain cost rows; +98 measured, read for slack, lane-ratified (≤100, ruling 666). |
 | `flows` | 89 | 25,137 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 47 | 12,498 | **12,498** | ratified 12,498 — forge-mfv5.1.19 PR 2: the demo planner port + integrate wiring (`demo-planner-port.ts`); +99 measured, read for slack (port compressed 96→70, skill read moved to factory), lane-ratified (≤100, ruling 666). |
+| `stations` | 48 | 12,575 | **12,575** | ratified 12,575 — forge-nk1y.3: the named zero-ask reflection (`reflector.unasked`) and its derivation result in `reflector-questions.ts` (question parse moved verbatim from `reflector.ts`); +77 measured, read for slack, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 35 | 8,552 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
+| `apps/forge` | 36 | 8,724 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **502** | **133,584** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **504** | **133,833** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -268,7 +268,8 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
 | apps/forge/bridge-review-comments.ts | apps/forge | rewritten | 203 |
 | apps/forge/bridge-agent-dispatch.ts | apps/forge | rewritten | 522 |
-| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 237 |
+| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 317 |
+| apps/forge/reflection-pending.ts | apps/forge | rewritten | 92 |
 | apps/forge/bridge-cycle-scan.ts | apps/forge | rewritten | 259 |
 | apps/forge/bridge-http.ts | apps/forge | rewritten | 60 |
 | apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 92 |
@@ -399,7 +400,8 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/pm-acceptance-gate.ts | stations | rewritten | 257 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
-| packages/stations/phases/reflector.ts | stations | verbatim | 742 |
+| packages/stations/phases/reflector.ts | stations | verbatim | 623 |
+| packages/stations/phases/reflector-questions.ts | stations | rewritten | 196 |
 | packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 397 |
 | packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |

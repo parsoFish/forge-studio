@@ -34,6 +34,8 @@ apps/forge/forge-watch.ts rmSync 1
 apps/forge/forge-watch.ts spawn 4
 apps/forge/forge-watch.ts statSync 1
 apps/forge/forge-watch.ts writeFileSync 2
+apps/forge/reflection-pending.ts existsSync 1
+apps/forge/reflection-pending.ts readdirSync 1
 apps/forge/ui-bridge.ts existsSync 1
 apps/forge/ui-bridge.ts openSync 1
 apps/forge/ui-bridge.ts statSync 1
@@ -711,10 +713,13 @@ packages/stations/phases/reflector-brain-writes.ts existsSync 2
 packages/stations/phases/reflector-brain-writes.ts readdirSync 1
 packages/stations/phases/reflector-brain-writes.ts readFileSync 2
 packages/stations/phases/reflector-brain-writes.ts statSync 1
+packages/stations/phases/reflector-questions.ts existsSync 1
+packages/stations/phases/reflector-questions.ts readFileSync 1
+packages/stations/phases/reflector-questions.ts writeFileSync 1
 packages/stations/phases/reflector.ts existsSync 6
 packages/stations/phases/reflector.ts mkdirSync 7
-packages/stations/phases/reflector.ts readFileSync 3
-packages/stations/phases/reflector.ts writeFileSync 8
+packages/stations/phases/reflector.ts readFileSync 2
+packages/stations/phases/reflector.ts writeFileSync 5
 packages/stations/phases/release-finalize.ts execFileSync 1
 packages/stations/phases/release-finalize.ts existsSync 1
 packages/stations/phases/release-finalize.ts readFileSync 1
