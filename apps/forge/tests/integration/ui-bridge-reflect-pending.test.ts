@@ -129,3 +129,10 @@ test('close on a zero-question reflection: 200, feedback records the close, NO r
   assert.equal(rerunCalls, 0, 'closing an empty reflection must not spend an agent turn');
   assert.ok(!(await pending()).some((p) => p.cycleId === UNASKED));
 });
+
+test('GET /api/reflect/<id> says whether the questions were filed: a still-running reflector is not "asked nothing"', async () => {
+  const running = (await (await fetch(`${url}/api/reflect/${RUNNING}`)).json()) as { questions: unknown[]; filed: boolean };
+  assert.deepEqual([running.questions.length, running.filed], [0, false]);
+  const filed = (await (await fetch(`${url}/api/reflect/${AWAITING}`)).json()) as { questions: unknown[]; filed: boolean };
+  assert.deepEqual([filed.questions.length, filed.filed], [4, true]);
+});

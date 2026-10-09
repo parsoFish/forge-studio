@@ -18,7 +18,7 @@ Two flows make up the factory.
 - `forge-architect`, the plan flow. You describe an idea; the architect interviews you and drafts a plan, which pauses at the plan gate. Once you approve, the project manager splits it into work items. Approving does not start building.
 - `forge-develop`, the develop flow. Developer agents build the work items, an integrate station assembles the pull request, and an adversarial reviewer critiques the diff. It pauses at the verdict gate.
 
-After the merge, the reflector runs. **Reflect on this cycle →** on the verdict page opens its reflection, with any questions it has for you.
+After the merge, the reflector runs. Its reflection appears under **Waiting on you** on Monitor, and **Reflect on this cycle →** on the verdict page opens it too. If the reflector asked nothing, press **Close reflection**.
 
 ## Where it pauses for you
 

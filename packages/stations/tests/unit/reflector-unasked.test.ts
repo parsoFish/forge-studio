@@ -34,7 +34,7 @@ import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const STRANGER_QUESTIONS_MD = readFileSync(
-  resolve(import.meta.dirname, '..', 'test-fixtures', 'reflector-stranger-a2', 'user-questions.md'),
+  resolve(import.meta.dirname, '..', 'test-fixtures', 'reflector-stranger-a2', 'user-questions.fixture.txt'),
   'utf8',
 );
 

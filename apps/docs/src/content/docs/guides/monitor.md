@@ -3,7 +3,7 @@ title: Monitor
 description: Monitor lists everything running in Studio and everything waiting on you, with the controls to stop it.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [apps/studio/app/monitor/**, apps/studio/lib/monitor-view.ts]
 sidebar:
   order: 3
@@ -17,7 +17,7 @@ From the top of the page:
 
 - **What is running** has four tiles: Live, Needs you, Failed and Queued. Live counts in-flight runs plus open interactive sessions. Needs you adds gated runs, sessions that need you and attention items. Failed counts flow and standalone agent runs that failed or were stopped by their cost ceiling; find them in **Recent activity** by filtering on status. Queued counts runs waiting for the scheduler.
 - A notice appears only when `forge serve` is not running normally. Queued work waits until it is back.
-- **Waiting on you** lists project gates, Knowledge edits parked for review and Knowledge lint findings. Each row links to the thing to act on.
+- **Waiting on you** lists project gates, reflections waiting for your answers, Knowledge edits parked for review and Knowledge lint findings. Each row links to the thing to act on.
 - **Active sessions** lists every open interactive session, needs-you first.
 - **Flow runs** groups runs as NEEDS YOU, ACTIVE, FAILED, QUEUED and COMPLETE.
 - **Recent activity** merges flow runs and standalone agent runs, newest first, with a status filter and **Show more** paging.

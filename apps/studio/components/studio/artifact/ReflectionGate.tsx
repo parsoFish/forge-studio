@@ -14,6 +14,11 @@
  *   data-option-label · data-option-selected · data-question-freeform ·
  *   data-field="freeform" · data-action="submit-reflection" ·
  *   data-section="reflect-done"
+ * forge-nk1y.3: an interactive reflector that filed an EMPTY question list
+ * (`filed: true`, no questions, not answered) gets one close act instead of
+ * the "not filed yet" note —
+ *   data-section="reflect-unasked" · data-action="close-reflection" ·
+ *   data-reflect-closed="true" (on reflect-done after the close)
  * R4-09-F3 (automated mode): when every question was reflector-inferred the gate
  * renders a read-only view instead of the form —
  *   data-reflect-automated="true" (on the reflect-questions section) ·
@@ -28,6 +33,7 @@ import { useState } from 'react';
 
 import {
   postReflectionAnswers,
+  postReflectionClose,
   type ReflectionData,
 } from '@/lib/bridge-client';
 import { reflectionAllAnswered, reflectionAnsweredCount, buildReflectionAnswers, hasInferredAnswers } from '@/lib/reflection-form';
@@ -45,6 +51,7 @@ export function ReflectionGate({
   const [freeform, setFreeform] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const questions = data?.questions ?? [];
@@ -72,6 +79,24 @@ export function ReflectionGate({
         setError(res.error ?? 'submit failed');
         return;
       }
+      setSubmitted(true);
+      onSubmitted?.();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function closeUnasked(): Promise<void> {
+    if (submitting) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await postReflectionClose(cycleId);
+      if (!res.ok) {
+        setError(res.error ?? 'close failed');
+        return;
+      }
+      setClosed(true);
       setSubmitted(true);
       onSubmitted?.();
     } finally {
@@ -163,6 +188,7 @@ export function ReflectionGate({
     return (
       <div
         data-section="reflect-done"
+        data-reflect-closed={closed ? 'true' : undefined}
         style={{
           border: '1px solid rgba(74,222,128,.4)',
           borderRadius: 'var(--radius-sm)',
@@ -172,7 +198,43 @@ export function ReflectionGate({
           color: 'var(--green)',
         }}
       >
-        Reflection captured — the reflector will fold it into the brain.
+        {closed
+          ? 'Reflection closed — the reflector asked nothing this cycle.'
+          : 'Reflection captured — the reflector will fold it into the brain.'}
+      </div>
+    );
+  }
+
+  if (questions.length === 0 && data?.filed === true) {
+    return (
+      <div
+        data-section="reflect-unasked"
+        style={{
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '14px 18px',
+          background: 'var(--panel)',
+          fontSize: 13,
+          color: 'var(--dim)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span>The reflector asked no questions this cycle. Close the reflection to clear it from Waiting on you.</span>
+        <button
+          type="button"
+          className="btn"
+          data-action="close-reflection"
+          disabled={submitting}
+          data-disabled-reason={submitting ? 'closing the reflection' : undefined}
+          title={submitting ? 'closing the reflection' : undefined}
+          onClick={() => void closeUnasked()}
+        >
+          Close reflection
+        </button>
+        {error ? <span role="alert" style={{ color: 'var(--red)' }}>{error}</span> : null}
       </div>
     );
   }

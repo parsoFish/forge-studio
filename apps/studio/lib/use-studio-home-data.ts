@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from './bridge-client';
+import { subscribe, fetchProjectAttention, fetchPendingReflections, type PendingReflection, type ProjectAttentionItem } from './bridge-client';
 import { FULL_LOAD_SCOPE, afterRefreshFailure, afterRefreshSuccess, scopedFetchError, type ScopedFetchError } from './fetch-error-scope';
 import { useBridgeRecovery } from './use-bridge-status';
 import {
@@ -86,6 +86,8 @@ export type StudioHomeData = {
   kbs: Kb[];
   runs: Run[];
   attention: ProjectAttentionItem[];
+  /** forge-nk1y.3: merged cycles' reflections waiting on the operator. */
+  reflections: PendingReflection[];
   sessions: SessionIndexRow[];
   /** True once the first `loadAll` Promise.all has settled (success OR failure). */
   ready: boolean;
@@ -121,6 +123,7 @@ export function useStudioHomeData(): StudioHomeData {
   const [kbs, setKbs] = useState<Kb[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [attention, setAttention] = useState<ProjectAttentionItem[]>([]);
+  const [reflections, setReflections] = useState<PendingReflection[]>([]);
   const [sessions, setSessions] = useState<SessionIndexRow[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<StudioHomeFetchError | null>(null);
@@ -136,7 +139,7 @@ export function useStudioHomeData(): StudioHomeData {
 
     async function loadAll(): Promise<void> {
       try {
-        const [a, f, p, k, r, at, s] = await Promise.all([
+        const [a, f, p, k, r, at, s, rf] = await Promise.all([
           fetchStudioAgents(),
           fetchStudioFlows(),
           fetchStudioProjects(),
@@ -144,6 +147,7 @@ export function useStudioHomeData(): StudioHomeData {
           fetchRuns(),
           fetchProjectAttention(),
           fetchStudioSessions(),
+          fetchPendingReflections(),
         ]);
         if (signal.cancelled) return;
         setAgents(a);
@@ -153,6 +157,7 @@ export function useStudioHomeData(): StudioHomeData {
         setRuns(r);
         setAttention(at);
         setSessions(s);
+        setReflections(rf);
         setError(null);
       } catch (err) {
         // W7-A1: a failed read is a FAILURE, not an empty fleet — every
@@ -182,10 +187,13 @@ export function useStudioHomeData(): StudioHomeData {
     const REFRESH_SCOPE = 'runs+sessions';
     async function refreshRunsAndSessions(): Promise<void> {
       try {
-        const [r, s] = await Promise.all([fetchRuns(), fetchStudioSessions()]);
+        // forge-nk1y.3: a cycle that just finished reflecting changes the
+        // pending-reflection set on the same signal.
+        const [r, s, rf] = await Promise.all([fetchRuns(), fetchStudioSessions(), fetchPendingReflections()]);
         if (signal.cancelled) return;
         setRuns(r);
         setSessions(s);
+        setReflections(rf);
         setError((prev) => afterRefreshSuccess(prev, REFRESH_SCOPE));
       } catch (err) {
         if (signal.cancelled) return;
@@ -236,5 +244,5 @@ export function useStudioHomeData(): StudioHomeData {
     }
   }, []);
 
-  return { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions };
+  return { agents, flows, projects, kbs, runs, attention, reflections, sessions, ready, error, reload, refreshSessions };
 }

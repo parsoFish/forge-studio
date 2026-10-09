@@ -12,7 +12,7 @@
  * command into an in-UI page, consistent with the in-UI architect + review
  * moments.
  *
- *   GET  /api/reflect/<cycleId>         → { questions, answered, mode? }
+ *   GET  /api/reflect/<cycleId>         → { questions, answered, filed, mode? }
  *   POST /api/reflect/<cycleId>/answer  → write user-feedback.md, fire the
  *                                          reflector rerun (detached)
  *        body { close: true }            → forge-nk1y.3: close a reflection
@@ -162,7 +162,11 @@ export async function handleReflect(
     // one — the same convention `/api/runs/<id>/phases/.../log`'s 404 uses
     // (bridge-studio.ts) — so a caller comparing against its own request sees
     // no surprise substitution.
-    sendJson(res, 200, { cycleId: requestedCycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
+    // forge-nk1y.3: `filed` separates "the reflector has not filed its
+    // questions yet" (still running) from "it filed none" (asked nothing —
+    // the gate offers the one close act).
+    const filed = questionsRaw !== null;
+    sendJson(res, 200, { cycleId: requestedCycleId, questions, answered, filed, ...(mode ? { mode } : {}) }, origin);
     return true;
   }
 
