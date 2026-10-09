@@ -877,6 +877,14 @@ export type SessionShellPayload = {
    */
   finalized: { kind: string; id: string; exists: boolean } | null;
   /**
+   * forge-nk1y.5 — the spend ceiling the session recorded at start and where
+   * it came from (`operator` kickoff, the `env` var, or the `agent-budget`).
+   * REQUIRED like `finalized`: `null` IS the honest value for a session that
+   * recorded none (pre-change), never an omitted key — an absent ceiling must
+   * not read as "uncapped".
+   */
+  ceiling: SessionCeiling | null;
+  /**
    * W7-C2 T1 review (P0-3) — the transcript derivation's own fail-closed
    * error, SCOPED to the transcript pane. `null` when the derivation
    * succeeded; a verbatim message (naming the offending file/value) when a
@@ -885,6 +893,26 @@ export type SessionShellPayload = {
    */
   transcriptError: string | null;
 };
+
+/** forge-nk1y.5 — mirrors `SessionCeilingSource` (packages/sessions); the
+ *  client cannot import it, so the closed vocabulary is restated and parsed. */
+export const SESSION_CEILING_SOURCES = ['operator', 'env', 'agent-budget'] as const;
+export type SessionCeiling = { usd: number; source: (typeof SESSION_CEILING_SOURCES)[number] };
+
+function parseSessionCeiling(raw: Record<string, unknown>): SessionCeiling | null {
+  if (!('ceiling' in raw)) {
+    throw new Error('missing "ceiling" — expected {usd, source} or null, never an omitted key');
+  }
+  const c = raw['ceiling'];
+  if (c === null) return null;
+  const source = isPlainObject(c) ? SESSION_CEILING_SOURCES.find((s) => s === c['source']) : undefined;
+  if (!isPlainObject(c) || typeof c['usd'] !== 'number' || !Number.isFinite(c['usd']) || c['usd'] <= 0 || source === undefined) {
+    throw new Error(
+      `missing or invalid "ceiling": expected {usd: positive number, source: ${SESSION_CEILING_SOURCES.join('|')}} or null, got ${JSON.stringify(c)}`,
+    );
+  }
+  return { usd: c['usd'], source };
+}
 
 /** Every field is required and structurally checked; nothing is coerced to a
  *  permissive default. `defaultStage` and every turn's `stage`
@@ -986,6 +1014,10 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     finalized = { kind: finalizedRaw['kind'], id: finalizedRaw['id'], exists: finalizedRaw['exists'] };
   }
 
+  // forge-nk1y.5 — REQUIRED like "finalized": null is the honest "recorded no
+  // ceiling" value; a missing key or a wrong shape throws.
+  const ceiling = parseSessionCeiling(raw);
+
   // W7-C2 T1 review (P0-3) — REQUIRED like "finalized": null is the honest
   // "the transcript derived cleanly" value; a string is the verbatim
   // fail-closed reason. Never absence-tolerant — an omitted key would let a
@@ -1006,6 +1038,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     transcriptSources,
     lifecycle,
     finalized,
+    ceiling,
     transcriptError,
   };
 }

@@ -139,6 +139,7 @@ import {
   resolveReadableSession,
 } from './session-resolution.ts';
 import { fixedTierForSessionKind } from './session-model-tier.ts';
+import type { SessionCeilingSource } from './session-start-ceiling.ts';
 
 
 const SESSION_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
@@ -315,6 +316,21 @@ function finalizedObjectExists(
     case 'kb': return tryGetKbBackend(opts.forgeRoot, id) !== null;
     default: return false;
   }
+}
+
+/** forge-nk1y.5 — the spend ceiling a session recorded at start, as
+ *  `{usd, source}`. Both fields must be present and well-formed (a positive
+ *  finite number and a known source); anything else — absent (a pre-change
+ *  session), non-positive, non-numeric, an unknown source — is `null`, never a
+ *  fabricated figure and never an unlabelled one. */
+const CEILING_SOURCES: readonly SessionCeilingSource[] = ['operator', 'env', 'agent-budget'];
+function deriveCeiling(statusParsed: Record<string, unknown> | null): { usd: number; source: SessionCeilingSource } | null {
+  if (statusParsed === null) return null;
+  const usd = statusParsed.costCeilingUsd;
+  const source = statusParsed.costCeilingSource;
+  if (typeof usd !== 'number' || !Number.isFinite(usd) || usd <= 0) return null;
+  const known = CEILING_SOURCES.find((s) => s === source);
+  return known === undefined ? null : { usd, source: known };
 }
 
 /** Anything but the exact {kind: string, id: string} shape collapses to null
@@ -604,6 +620,12 @@ export async function handleStudioSessionsRoutes(
         // kernel rule, never summed here. ALWAYS present like `modelTier`;
         // `null` is honest-absent (no priced row) and renders "not recorded".
         costUsd: readSessionCostUsd({ logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId }),
+        // forge-nk1y.5 — the spend ceiling this session recorded at start, read
+        // off the already-parsed `statusParsed` (no second status read). ALWAYS
+        // present like `costUsd`: `null` = none recorded (legacy / pre-change,
+        // or an invalid stored value), which the shell renders "not recorded" —
+        // never as "uncapped".
+        ceiling: deriveCeiling(statusParsed),
         // Stated, not chosen (418): read live off the agent's SKILL.md, never stored.
         sdk: deriveAgentSpec(skillPathRelative(descriptor.agent)).sdk,
         // W6-B8 — the SAME `isTerminalPhase` derivation this route already
