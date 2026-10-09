@@ -435,7 +435,7 @@
     "file": "apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts",
     "kind": "path",
     "cited": "brain/profile.md",
-    "count": 5
+    "count": 4
   },
   {
     "file": "apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts",
@@ -940,12 +940,6 @@
     "kind": "stem",
     "cited": "wi-status",
     "count": 2
-  },
-  {
-    "file": "apps/studio/lib/studio-client.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
-    "count": 1
   },
   {
     "file": "apps/studio/lib/studio-client.ts",
@@ -2070,12 +2064,6 @@
     "count": 1
   },
   {
-    "file": "packages/flows/tests/integration/claim-validator.test.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
-    "count": 3
-  },
-  {
     "file": "packages/flows/tests/integration/flow-trigger-projects.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/types.ts",
@@ -2283,12 +2271,6 @@
     "file": "packages/kernel/tests/unit/path-guard.test.ts",
     "kind": "path",
     "cited": "orchestrator/skill-path.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/kernel/tests/unit/project-layout-root-manages.test.ts",
-    "kind": "path",
-    "cited": "brain/projects/gitweave/profile.md",
     "count": 1
   },
   {
@@ -3024,12 +3006,6 @@
     "count": 1
   },
   {
-    "file": "packages/projects/bridge-studio-project-onboard.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
-    "count": 2
-  },
-  {
     "file": "packages/projects/bridge-studio-project-reset.ts",
     "kind": "path",
     "cited": "cli/dry-bridge.ts",
@@ -3084,12 +3060,6 @@
     "count": 1
   },
   {
-    "file": "packages/projects/project-contract-scaffold.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
-    "count": 3
-  },
-  {
     "file": "packages/projects/project-preflight-read.ts",
     "kind": "stem",
     "cited": "studio-path-guard",
@@ -3135,12 +3105,6 @@
     "file": "packages/projects/studio/validate-project.ts",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/projects/tests/integration/bridge-studio-project-onboard.test.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
     "count": 1
   },
   {
@@ -3798,12 +3762,6 @@
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/unit/demo-commit-scope.test.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
-    "count": 1
-  },
-  {
     "file": "packages/sessions/tests/unit/demo-lock-ground-emission.test.ts",
     "kind": "stem",
     "cited": "demo-builder-runner",
@@ -3831,12 +3789,6 @@
     "file": "packages/sessions/tests/unit/interactive-runner-kb-cleanup.test.ts",
     "kind": "stem",
     "cited": "session-kinds.test",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/unit/preflight-commit-scope.test.ts",
-    "kind": "path",
-    "cited": "brain/profile.md",
     "count": 1
   },
   {
@@ -4116,12 +4068,6 @@
     "count": 1
   },
   {
-    "file": "scripts/stories/fence-containment.test.ts",
-    "kind": "path",
-    "cited": "brain/projects/gitweave/profile.md",
-    "count": 1
-  },
-  {
     "file": "scripts/stories/ground-attribution.test.ts",
     "kind": "path",
     "cited": "brain/profile.md",
@@ -4143,12 +4089,6 @@
     "file": "skills/brain-maintenance/brain-maintenance.test.ts",
     "kind": "path",
     "cited": "orchestrator/skill-path.ts",
-    "count": 1
-  },
-  {
-    "file": "skills/brain-query/SKILL.md",
-    "kind": "path",
-    "cited": "brain/profile.md",
     "count": 1
   },
   {

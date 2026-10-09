@@ -517,7 +517,7 @@ function runFinalizeStep(args: {
   // main on Save). Non-git project → the write simply stays in the tree.
   withStudioWrite(
     status.project_repo_path,
-    'forge-studio: author AGENTS.md',
+    'docs(agents): author AGENTS.md',
     () => writeFileSync(agentsPath, content.endsWith('\n') ? content : `${content}\n`),
     ['AGENTS.md'],
   );

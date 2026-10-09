@@ -51,6 +51,7 @@
 // --- config: `.forge/project.json`, the agent-instruction file ------------
 export { loadProjectConfig, readAgentInstructionsFile, resolveProjectIdForRepo, PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 export type { ProjectConfig, AcceptanceGateConfig } from './project-config.ts';
+export { parseDemoMeans, isOwnServerPath, type DemoMeans } from './demo-means.ts';
 export { writeProjectConfigPatch } from './project-config-write.ts';
 export { WI_GATE_PACKAGE_PLACEHOLDER } from './project-config-validate.ts';
 export { validateDemoDeclaration } from './preflight-demo.ts';
@@ -78,7 +79,7 @@ export { scaffoldGreenfieldProject, listProjectStarters, projectStartersDir } fr
 export type { ScaffoldResult } from './project-create.ts';
 
 // --- repo transactions: the `forge-studio` branch write path --------------
-export { ensureStudioBranch, commitStudioChange, withStudioWrite, dirtyPaths, isGitRepo } from './project-repo-tx.ts';
+export { ensureStudioBranch, commitStudioChange, withStudioWrite, dirtyPaths, isGitRepo, beginStudioTransaction } from './project-repo-tx.ts';
 
 // --- the reset: `forge project reset` / studio "Rebuild contract" ---------
 export { computeContractDrift, applyContractReset } from './reset.ts';

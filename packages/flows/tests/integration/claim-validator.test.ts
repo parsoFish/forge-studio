@@ -180,7 +180,7 @@ test('validateClaimable: missing roadmap.md (C4 fail) → refused, non-terminal'
     const { forgeRoot, flowPath } = setupForgeRoot(root, VALID_FLOW_YAML);
     const projectDir = join(root, 'projects', 'broken-project');
     mkdirSync(projectDir, { recursive: true });
-    // Setup C1 + C2 but NOT C4 (no roadmap.md or brain/profile.md)
+    // Setup C1 + C2 but NOT C4 (no roadmap.md, no central brain/projects/<name>/profile.md)
     writeFileSync(
       join(projectDir, 'package.json'),
       JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
@@ -214,8 +214,6 @@ test('validateClaimable: missing quality gate (C1 fail) → refused, non-termina
     );
     writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
     writeFileSync(join(projectDir, 'roadmap.md'), '# Roadmap\n');
-    mkdirSync(join(projectDir, 'brain'), { recursive: true });
-    writeFileSync(join(projectDir, 'brain', 'profile.md'), '# Profile\n');
 
     const result = validateClaimable('INIT-c1-fail', projectDir, forgeRoot, 'code', flowPath);
 
@@ -577,7 +575,7 @@ test('FORGE_SKIP_CONTRACT_CHECK=1: non-contract-ready project is NOT refused on 
     process.env.FORGE_SKIP_CONTRACT_CHECK = '1';
 
     const { forgeRoot, flowPath } = setupForgeRoot(root, VALID_FLOW_YAML);
-    // Deliberately non-contract-ready: no roadmap.md or brain/profile.md (C4 fail),
+    // Deliberately non-contract-ready: no roadmap.md or central profile (C4 fail),
     // AND exists on disk so preflight WOULD fire without the opt-out.
     const projectDir = join(root, 'projects', 'c4-fail-skipped');
     mkdirSync(projectDir, { recursive: true });
@@ -586,7 +584,7 @@ test('FORGE_SKIP_CONTRACT_CHECK=1: non-contract-ready project is NOT refused on 
       JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
     );
     writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
-    // roadmap.md + brain/profile.md intentionally absent (C4 fail)
+    // roadmap.md + central profile intentionally absent (C4 fail)
 
     const result = validateClaimable('INIT-skip-contract', projectDir, forgeRoot, 'code', flowPath);
 

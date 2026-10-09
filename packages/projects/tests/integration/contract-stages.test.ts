@@ -101,6 +101,9 @@ const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
   // own header. Anchored end to end with NO wildcard of any kind, so nothing
   // can ride along inside it; AT-10 additionally asserts it by byte-equality.
   /^no environment variables are required — the acceptance tier declares none$/,
+  // forge-mfv5.1.11 — the two fixed `stub` sentences (instructions, demo).
+  /^the file does not name the declared gate command$/,
+  /^only the onboarding placeholder steps are declared$/,
   /^step: (capture|verify|present)$/, // deriveDemoRow — a declared demoProcess step kind (contract-stages.ts:168)
   // deriveRoadmapRow — the C4 brain-profile divergence fact (pin 2, item 3;
   // landed round-1 fix, contract-stages.ts's deriveRoadmapRow). The id
@@ -548,7 +551,8 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
   it('AT-23 (REPLACED — allow-list template check, retightened pin 4 item 3 to BYTE-EQUALITY on the two previously-wildcard shapes): every detail line, across all five stages, for a project whose every stage is present, either matches one of the explicitly enumerated ALLOWED_DETAIL_PATTERNS shapes, or — for "gate command:"/"locked declaration:" — equals BYTE-FOR-BYTE the string derivable from the fixture\'s own planted config', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'allgreenproj');
-    writeFileSync(join(dir, 'AGENTS.md'), '# instructions\n', 'utf8');
+    // forge-mfv5.1.11: an instruction file that never names its gate reads `stub`.
+    writeFileSync(join(dir, 'AGENTS.md'), '# instructions\n\nGate: `npm test`.\n', 'utf8');
     writeFileSync(join(dir, 'roadmap.md'), '# roadmap\n', 'utf8');
     // Named so the byte-equality assertions below derive their expected
     // strings from the SAME values planted here, never a second guess at

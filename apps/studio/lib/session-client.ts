@@ -259,7 +259,7 @@ export type GenerationGalleryArtifact = {
 // type). D11: a row reports PRESENCE only ("present"/"absent"), never a
 // clause verdict — this client never invents a third status value.
 
-const CONTRACT_STAGE_STATUSES = ['present', 'absent'] as const;
+const CONTRACT_STAGE_STATUSES = ['present', 'stub', 'absent'] as const;
 export type ContractStageStatus = (typeof CONTRACT_STAGE_STATUSES)[number];
 
 export type ContractStageRow = {
@@ -477,7 +477,7 @@ function parseGenerationGalleryArtifact(r: Record<string, unknown>): GenerationG
 }
 
 function parseContractStageStatus(raw: unknown): ContractStageStatus {
-  if (raw === 'present' || raw === 'absent') return raw;
+  if ((CONTRACT_STAGE_STATUSES as readonly unknown[]).includes(raw)) return raw as ContractStageStatus;
   throw new Error(`unrecognised contract-buildout stage status ${JSON.stringify(raw)} — must be one of: ${CONTRACT_STAGE_STATUSES.join(', ')}`);
 }
 

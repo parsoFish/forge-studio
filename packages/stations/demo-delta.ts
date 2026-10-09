@@ -20,6 +20,7 @@ import { join } from 'node:path';
 
 import { checkpointArtifactStem } from './demo-types.ts';
 import type { DemoModel, DemoModelCheckpoint } from './demo-model.ts';
+import { normaliseJsonBody } from './demo-form.ts';
 
 /** Cap on a checkpoint's `deltaExcerpt`: the PR reader needs the first
  *  differing lines, not a second copy of the whole captured output. */
@@ -97,9 +98,10 @@ type CheckpointDeltaResult = {
  * A `changed` command checkpoint also carries a bounded `deltaExcerpt` of the
  * first normalised lines that actually differ.
  */
-function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): CheckpointDeltaResult {
+function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string, ignoreKeys: readonly string[]): CheckpointDeltaResult {
   const stem = checkpointArtifactStem(cp.label);
-  const [beforeFile, afterFile] = cp.command
+  const textual = Boolean(cp.command || cp.apiPath);
+  const [beforeFile, afterFile] = textual
     ? [join(bundleDir, 'before', `${stem}.out`), join(bundleDir, 'after', `${stem}.out`)]
     : [join(bundleDir, 'before', `${stem}.filmstrip.png`), join(bundleDir, 'after', `${stem}.filmstrip.png`)];
   let before: Buffer;
@@ -110,9 +112,15 @@ function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): Checkpoint
   } catch {
     return { delta: 'unknown' };
   }
-  if (cp.command) {
-    const beforeText = normaliseCapturedOutput(before.toString('utf8'));
-    const afterText = normaliseCapturedOutput(after.toString('utf8'));
+  if (textual) {
+    // An api checkpoint whose sides both parse is compared as JSON (then the
+    // text rules, for timestamps in values); a non-JSON side falls to text.
+    const [beforeJson, afterJson] = cp.form === 'api-before-after'
+      ? [normaliseJsonBody(before.toString('utf8'), ignoreKeys), normaliseJsonBody(after.toString('utf8'), ignoreKeys)]
+      : [null, null];
+    const json = beforeJson !== null && afterJson !== null;
+    const beforeText = normaliseCapturedOutput(json ? beforeJson : before.toString('utf8'));
+    const afterText = normaliseCapturedOutput(json ? afterJson : after.toString('utf8'));
     if (beforeText === afterText) return { delta: 'unchanged' };
     return { delta: 'changed', deltaExcerpt: deltaExcerptOf(beforeText, afterText) };
   }
@@ -123,12 +131,13 @@ function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): Checkpoint
 
 /** Annotate every checkpoint in `model` with its computed `delta` (and, for a
  *  changed command checkpoint, its `deltaExcerpt`), reading the capture bundle
- *  at `bundleDir` (`<demoDir>/.capture`). Pure + immutable. */
-export function computeCheckpointDeltas(model: DemoModel, bundleDir: string): DemoModel {
+ *  at `bundleDir` (`<demoDir>/.capture`). `ignoreKeys` are the project's
+ *  declared `demoMeans.api.ignoreKeys`, never read from demo.json. Pure + immutable. */
+export function computeCheckpointDeltas(model: DemoModel, bundleDir: string, ignoreKeys: readonly string[] = []): DemoModel {
   return {
     ...model,
     checkpoints: model.checkpoints.map((cp) => {
-      const { delta, deltaExcerpt } = checkpointDelta(cp, bundleDir);
+      const { delta, deltaExcerpt } = checkpointDelta(cp, bundleDir, ignoreKeys);
       const { deltaExcerpt: _prev, ...rest } = cp;
       return deltaExcerpt !== undefined ? { ...rest, delta, deltaExcerpt } : { ...rest, delta };
     }),

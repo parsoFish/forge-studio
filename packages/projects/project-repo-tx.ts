@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { gitIdentityConfigArgs, guardedFile, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 export const STUDIO_BRANCH = 'forge-studio';
 
@@ -135,7 +135,11 @@ export function ensureStudioBranch(projectDir: string): void {
  *  every one of which means "nothing this caller may claim it wrote". */
 export function dirtyPaths(projectDir: string): string[] {
   if (!isGitRepo(projectDir)) return [];
-  const entries = git(projectDir, ['status', '--porcelain', '-z'], { allowFail: true, raw: true }).split('\0');
+  return porcelainPaths(git(projectDir, ['status', '--porcelain', '-z'], { allowFail: true, raw: true }));
+}
+
+function porcelainPaths(out: string): string[] {
+  const entries = out.split('\0');
   const paths: string[] = [];
   for (let i = 0; i < entries.length; i++) if (entries[i]) { paths.push(entries[i]!.slice(3)); if (/^[RC]/.test(entries[i]!)) i++; } // R/C: next -z field is the source
   return paths;
@@ -179,7 +183,34 @@ export function withStudioWrite<T>(projectDir: string, message: string, applyFn:
   return result;
 }
 
-export type SaveResult = { merged: boolean; pushed: boolean; detail: string };
+/** The contract files a cycle branching from origin/main must see — config (C1),
+ *  scratch ignores (C2), instructions (C8), roadmap (C4). A Save refuses while any
+ *  is uncommitted (forge-mfv5.1.12). */
+export const CONTRACT_PATHS: readonly string[] = ['.forge/project.json', '.gitignore', 'AGENTS.md', 'roadmap.md'];
+
+/** Uncommitted contract files, sorted, untracked dirs expanded. Throws when git
+ *  cannot answer — an unreadable tree is never read as clean (§6.15). */
+export function uncommittedContractPaths(projectDir: string): string[] {
+  if (!isGitRepo(projectDir)) return [];
+  return porcelainPaths(git(projectDir, ['status', '--porcelain', '-z', '--untracked-files=all', '--', ...CONTRACT_PATHS], { raw: true })).sort();
+}
+
+/** A forge-studio transaction around a write whose paths are unknown in advance (an
+ *  agent run): on forge-studio first; `commit` stages only what became dirty since
+ *  — what was dirty before is not this write's (forge-npp3). No-op for a non-git dir. */
+export function beginStudioTransaction(projectDir: string): { commit: (message: string) => boolean } {
+  if (!isGitRepo(projectDir)) return { commit: () => false };
+  ensureStudioBranch(projectDir);
+  // Files, not collapsed dirs: a new dir holding an ignored file must not trip
+  // StudioWritePathIgnoredError, and a pre-dirty dir must not mask new files in it.
+  const dirtyFiles = () => porcelainPaths(git(projectDir, ['status', '--porcelain', '-z', '--untracked-files=all'], { raw: true }));
+  const pre = new Set(dirtyFiles());
+  return { commit: (message) => commitStudioChange(projectDir, message, dirtyFiles().filter((p) => !pre.has(p))) };
+}
+
+/** `refused` names the uncommitted contract files when the Save declined to run;
+ *  `adopted` names the ones an adopting Save committed to forge-studio first. */
+export type SaveResult = { merged: boolean; pushed: boolean; detail: string; refused?: string[]; adopted?: string[] };
 
 /**
  * "Save" the accumulated forge-UI changes: merge `forge-studio` into the default
@@ -187,8 +218,27 @@ export type SaveResult = { merged: boolean; pushed: boolean; detail: string };
  * on the default branch so the next batch starts fresh. Idempotent when there is
  * nothing pending.
  */
-export function saveProjectRepo(projectDir: string): SaveResult {
+export function saveProjectRepo(projectDir: string, opts: { adopt?: readonly string[] } = {}): SaveResult {
   if (!isGitRepo(projectDir)) return { merged: false, pushed: false, detail: 'not a git repo' };
+  // forge-mfv5.1.12 — fail closed before any checkout.
+  let uncommitted = uncommittedContractPaths(projectDir);
+  // Row 6 (ruling T1 1977a): the operator may adopt the files they were SHOWN —
+  // committed to forge-studio, re-read (anything else, or a deletion, still refuses), then saved.
+  const shown = opts.adopt ?? [];
+  const adoptable = uncommitted.filter((p) => shown.includes(p) && guardedFile(projectDir, p.split('/'), 'read') !== null);
+  const adopted = adoptable.length > 0 ? adoptable : undefined;
+  if (adopted) {
+    commitStudioChange(projectDir, 'chore(forge): adopt uncommitted contract files', adopted);
+    uncommitted = uncommittedContractPaths(projectDir);
+  }
+  if (uncommitted.length > 0) {
+    return {
+      merged: false,
+      pushed: false,
+      refused: uncommitted,
+      detail: `refused — uncommitted contract file(s) would be missing from ${defaultBranch(projectDir)}: ${uncommitted.join(', ')}. Commit them to ${STUDIO_BRANCH} (or discard them), then Save again.`,
+    };
+  }
   if (!branchExists(projectDir, STUDIO_BRANCH)) {
     return { merged: false, pushed: false, detail: 'no pending forge-studio changes' };
   }
@@ -226,7 +276,7 @@ export function saveProjectRepo(projectDir: string): SaveResult {
   }
   // Delete the studio branch; recreated from the merged base on the next write.
   git(projectDir, ['branch', '-D', STUDIO_BRANCH], { allowFail: true });
-  return { merged: true, pushed, detail };
+  return { merged: true, pushed, detail, ...(adopted ? { adopted } : {}) };
 }
 
 /** Whether the project repo has uncommitted forge-studio changes pending a save. */

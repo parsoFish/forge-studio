@@ -72,7 +72,7 @@ For each `gap: true` answer, append to `_logs/<cycle-id>/brain-gaps.jsonl`.
 1. Read the relevant category index for the scope:
    - Brain 1 (forge-dev): `brain/forge-dev/decisions.md` or `brain/forge-dev/reference.md`
    - Brain 2 (cycles): `brain/cycles/patterns.md`, `antipatterns.md`, `operations.md`, or `decisions.md`
-   - Brain 3 (project): `brain/profile.md` + `brain/themes/` listing
+   - Brain 3 (project): `brain/projects/<name>/profile.md` + `brain/projects/<name>/themes/` listing
 2. Read 2–5 theme files whose slugs or one-liners match the question keywords.
 3. **Synthesise + cite.** Write a one-paragraph answer preserving exact terminology from the cited themes. Cite by file path. Score confidence:
    - **High:** ≥ 2 corroborating themes, all on-topic.

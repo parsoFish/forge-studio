@@ -150,8 +150,13 @@ function createCategoryIndex(indexPath: string, category: string): void {
   );
 }
 
-/** Insert the theme's link line into its category index exactly once (idempotent). */
-function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; detail: string } {
+/**
+ * Insert the theme's link line into its category index exactly once
+ * (idempotent), creating the index when the KB has none. Exported so the
+ * project-brain commit (`project-brain-build.ts`) files the themes it copies
+ * through this one writer instead of a second copy of the convention.
+ */
+export function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; detail: string } {
   const parsed = parseTheme(themeFile);
   if (!parsed) return { ok: false, detail: 'theme unparseable' };
   const category = String(parsed.data.category ?? '');

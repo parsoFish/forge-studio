@@ -39,6 +39,7 @@ import {
 } from '@forge/stations/demo-types.ts';
 import { isSafeDemoRoute } from '@forge/contracts';
 import { resolveCheckpointHead } from '@forge/kernel';
+import { loadProjectConfig } from '@forge/projects';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
   collectCapturedMedia,
@@ -171,6 +172,8 @@ export type CaptureCheckpointsInput = {
    *  captures stdout to before/<label>.out + after/<label>.out (the real terminal
    *  output the demo shows side-by-side, instead of a hand-written prose note). */
   checkpointCommands?: Array<{ label: string; command: string }>;
+  /** api-before-after path checkpoints: GET `apiPath` on each tree's own server → `<label>.out` (forge-mfv5.1.19). */
+  checkpointApiPaths?: Array<{ label: string; apiPath: string }>;
   /** Build before serving (slower) vs dev-server only. */
   build?: boolean;
 };
@@ -253,6 +256,8 @@ export async function captureCheckpoints(
 ): Promise<CaptureCheckpointsResult> {
   const { buildTree, startServer, sweepStaleServer } = await import('./demo-runtime.ts');
   const { recordTerminal, recordBrowser } = await import('./demo-capture.ts');
+  const { captureApiGet } = await import('./demo-api-capture.ts');
+  const apiPaths = input.checkpointApiPaths ?? [];
 
   const bundleDir = resolve(input.bundleDir);
   // forge-8vfn.8.5.6: BEFORE anything else — a hard crash on a prior run may
@@ -321,10 +326,20 @@ export async function captureCheckpoints(
       }
 
       // Screenshot checkpoints (browser) DO need a working build + a live server.
-      if (status.ok && input.checkpointLabels.length > 0) {
+      if (status.ok && (input.checkpointLabels.length > 0 || apiPaths.length > 0)) {
         const server = await startServer(wt.path, bundleDir);
         if (!server) continue;
         try {
+          for (const { label, apiPath } of apiPaths) {
+            // A failed GET writes no `.out`: that side is missing, so the control says `unknown`.
+            const got = await captureApiGet(server.url, apiPath);
+            if (!got.ok) {
+              process.stderr.write(`[demo] api checkpoint ${side}/${label}: ${got.reason}\n`);
+              continue;
+            }
+            writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), tokeniseWorktreePath(got.out, wt.path));
+            captured.push(label);
+          }
           for (const { label, route } of input.checkpointLabels) {
             // Point-of-use guard (forge-mfv5.1.7): demo.json's `route` is never
             // re-validated before it reaches here, so it is resolved and origin-
@@ -365,6 +380,16 @@ export async function captureCheckpoints(
   return { capturedBefore, capturedAfter };
 }
 
+/** The api-path checkpoints capture may fetch: only paths the project declares (forge-mfv5.1.19). */
+export function declaredApiCheckpoints(
+  cps: ReadonlyArray<{ label?: string; command?: string; apiPath?: string }>,
+  declared: readonly string[],
+): Array<{ label: string; apiPath: string }> {
+  return cps
+    .filter((c) => c.label && !c.command && typeof c.apiPath === 'string' && declared.includes(c.apiPath))
+    .map((c) => ({ label: c.label as string, apiPath: c.apiPath as string }));
+}
+
 export type CaptureDemoBundleInput = {
   /** The unifier-authored demo.json this run captures evidence for. */
   jsonPath: string;
@@ -394,14 +419,19 @@ export type CaptureDemoBundleResult = {
  */
 export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<CaptureDemoBundleResult> {
   const demoJson = JSON.parse(readFileSync(input.jsonPath, 'utf8'));
-  const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string }>;
+  const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string; apiPath?: string }>;
   // A checkpoint with a `command` captures real CLI stdout (before/after); one
   // without is a browser screenshot checkpoint (an AC-derived one may carry `route`).
   const checkpointCommands = cps
     .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
     .map((c) => ({ label: c.label as string, command: c.command as string }));
+  // Means are the project's, read here, never from demo.json: only a declared
+  // api path is fetched (an undeclared one stays uncaptured → `unknown`), and
+  // the control drops only the project's declared ignoreKeys.
+  const means = loadProjectConfig(input.projectRepoPath)?.demoMeans?.api;
+  const checkpointApiPaths = declaredApiCheckpoints(cps, means?.paths ?? []);
   const checkpointLabels = cps
-    .filter((c) => c.label && !c.command)
+    .filter((c) => c.label && !c.command && c.apiPath === undefined)
     .map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
   await captureCheckpoints({
     projectRepoPath: input.projectRepoPath,
@@ -412,11 +442,12 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
     initiativeId: input.initiativeId,
     checkpointLabels,
     checkpointCommands,
+    checkpointApiPaths,
     build: true,
   });
   const captured = collectCapturedMedia(input.bundleDir);
   const merged = mergeCapturedMedia(JSON.parse(readFileSync(input.jsonPath, 'utf8')), captured);
-  return { model: computeCheckpointDeltas(merged, input.bundleDir), capturedCount: captured.length };
+  return { model: computeCheckpointDeltas(merged, input.bundleDir, means?.ignoreKeys ?? []), capturedCount: captured.length };
 }
 
 // Re-export the shared demo types so callers depend on one module surface.

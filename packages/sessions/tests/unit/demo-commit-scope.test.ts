@@ -11,7 +11,7 @@
  * ground afterwards, and the product's own error says so:
  * "the agent turn ended without producing .forge/demo/DEMO.html". What the
  * commits DO contain is the ONBOARDING agent's output — `.forge/project.json`,
- * `.gitignore`, `CLAUDE.md`, `_onboarding/<id>/*`, `brain/profile.md`,
+ * `.gitignore`, `CLAUDE.md`, `_onboarding/<id>/*`,
  * `roadmap.md` — left uncommitted in the ground and swept up by
  * `withStudioRepo`'s `finally`, which called `commitStudioChange` with no
  * `paths`, i.e. `git add -A -- .`.

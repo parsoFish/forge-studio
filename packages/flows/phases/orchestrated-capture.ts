@@ -192,12 +192,13 @@ export function demoJsonWantsCapture(demoJsonPath: string): boolean {
   if (!existsSync(demoJsonPath)) return false;
   try {
     const parsed = JSON.parse(readFileSync(demoJsonPath, 'utf8')) as {
-      checkpoints?: Array<{ command?: unknown; kind?: unknown }>;
+      checkpoints?: Array<{ command?: unknown; kind?: unknown; apiPath?: unknown }>;
     };
     const cps = Array.isArray(parsed?.checkpoints) ? parsed.checkpoints : [];
     return cps.some(
       (c) =>
         (typeof c?.command === 'string' && c.command.trim().length > 0) ||
+        typeof c?.apiPath === 'string' ||
         c?.kind === 'screenshot' ||
         c?.kind === 'video',
     );

@@ -18,11 +18,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { trackedPorcelainLines, newTrackedChanges } from './test-preload/git-residue-guard-core.mjs';
+import { trackedPorcelainLines, newTrackedChanges, residueReport } from './test-preload/git-residue-guard-core.mjs';
 
 function withTmpRepo(body: (repo: string) => void): void {
   const repo = mkdtempSync(join(tmpdir(), 'git-residue-guard-'));
@@ -113,6 +113,83 @@ describe('end to end against a real throwaway repo (the guard\'s own before/afte
       writeFileSync(join(repo, 'scratch.txt'), 'untracked, irrelevant\n');
       const after = trackedPorcelainLines(repo);
       assert.deepEqual(newTrackedChanges(before, after), []);
+    });
+  });
+});
+
+// The live-run verdict: a real forge run (`forge studio` -> `forge serve`) writes TRACKED
+// files under brain/ while `npm test` runs; the guard must name that writer, not the test.
+// The daemon's pid file is `<root>/_logs/daemon/forge.pid` (`daemonPaths`, packages/flows/daemon.ts).
+describe('residueReport — live forge run attribution', () => {
+  const alive = (pid: number): boolean => pid === process.pid;
+  function writePidFile(repo: string, content: string): string {
+    mkdirSync(join(repo, '_logs', 'daemon'), { recursive: true });
+    const file = join(repo, '_logs', 'daemon', 'forge.pid');
+    writeFileSync(file, content);
+    return file;
+  }
+  function report(repo: string, isPidAlive: (pid: number) => boolean = alive): string | null {
+    const before = trackedPorcelainLines(repo);
+    writeFileSync(join(repo, 'tracked.txt'), 'a concurrent writer was here\n');
+    return residueReport({ root: repo, before, after: trackedPorcelainLines(repo), isPidAlive });
+  }
+
+  test('a live daemon pid -> names the live run as the writer, never tells the test to restore', () => {
+    withTmpRepo((repo) => {
+      writePidFile(repo, `${process.pid}\n`);
+      const msg = report(repo)!;
+      assert.ok(
+        msg.includes('git-residue-guard: a live forge run is writing  M tracked.txt; stop forge studio before npm test'),
+        msg,
+      );
+      assert.ok(!msg.includes('must restore'), msg);
+    });
+  });
+
+  test("a dead daemon pid -> today's plain residue message", () => {
+    withTmpRepo((repo) => {
+      writePidFile(repo, '999999\n');
+      const msg = report(repo)!;
+      assert.match(msg, /this test run left 1 tracked file\(s\) dirty/);
+      assert.match(msg, /must restore it/);
+      assert.ok(!msg.includes('live forge run'), msg);
+    });
+  });
+
+  test('an unparseable pid file -> UNKNOWN (inconclusive probe naming the pid file), not "no live run"', () => {
+    withTmpRepo((repo) => {
+      const file = writePidFile(repo, 'not-a-pid\n');
+      const msg = report(repo)!;
+      assert.match(msg, /live-run probe was inconclusive/);
+      assert.ok(msg.includes(file), msg);
+      assert.ok(!msg.includes('must restore'), msg);
+    });
+  });
+
+  test('a liveness probe that throws -> UNKNOWN too, never swallowed into "no live run"', () => {
+    withTmpRepo((repo) => {
+      const file = writePidFile(repo, `${process.pid}\n`);
+      const msg = report(repo, () => {
+        throw new Error('EPERM');
+      })!;
+      assert.match(msg, /live-run probe was inconclusive/);
+      assert.ok(msg.includes(file), msg);
+    });
+  });
+
+  test("no pid file -> today's plain residue message, unchanged", () => {
+    withTmpRepo((repo) => {
+      const msg = report(repo)!;
+      assert.match(msg, /this test run left 1 tracked file\(s\) dirty in the REPO ROOT/);
+      assert.match(msg, /must restore it/);
+    });
+  });
+
+  test('no new changes -> no report, whatever the pid file says', () => {
+    withTmpRepo((repo) => {
+      writePidFile(repo, `${process.pid}\n`);
+      const snap = trackedPorcelainLines(repo);
+      assert.equal(residueReport({ root: repo, before: snap, after: snap, isPidAlive: alive }), null);
     });
   });
 });

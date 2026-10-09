@@ -32,6 +32,14 @@
  *    so it can never collide with a real cycle, and the whole `tmp` dir
  *    (manifest + `_logs/`) is removed in `finally` regardless of outcome.
  *
+ * Brain masked (the live repo brain is NOT part of the pin): the reflector's
+ * forge root is `import.meta.dirname`-derived (no injectable root), so the
+ * system prompt's "Brain navigation index" embeds every `brain/**` index of the
+ * checkout — bytes any real forge run rewrites. That block is masked to
+ * `<BRAIN-CONTEXT>` between the prompt's own markers (the intro's last sentence
+ * and the `# reflector skill contract` heading); the framing, the block's
+ * presence and its position stay pinned. The user prompt embeds no brain text.
+ *
  * Fixture-move note (SPEC §1 R3-03 amendment, `composition.hooks` →
  * `composition.guards`, 2026-08-04): `reflector.json` moved by exactly one
  * byte — `hook` → `guard` at a single site — because `renderReflectorUserPrompt`
@@ -59,7 +67,7 @@ import type { CycleInput } from '@forge/flows';
 import type { RunBrainLintResult } from '@forge/knowledge';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot, maskBetween } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'reflector.json');
@@ -149,7 +157,20 @@ test('runReflector: pins the exact {prompt, options} spawn call (characterizatio
       { value: FORGE_ROOT, placeholder: '<REPO_ROOT>' },
       { value: tmp, placeholder: '<TMP>' },
     ]);
-    assertMatchesJsonSnapshot(FIXTURE_PATH, normalized);
+    const shaped = normalized as { options: { systemPrompt: string } };
+    assertMatchesJsonSnapshot(FIXTURE_PATH, {
+      ...shaped,
+      options: {
+        ...shaped.options,
+        systemPrompt: maskBetween(
+          shaped.options.systemPrompt,
+          // Last sentence of the navigation-index intro (reflector-binding.ts buildReflectorSystemPrompt).
+          'you should rarely need grep.',
+          '\n\n---\n\n# reflector skill contract',
+          '\n\n<BRAIN-CONTEXT>',
+        ),
+      },
+    });
   } finally {
     // runReflector's own cycleLogDir lives inside tmp (both rooted at the
     // same mkdtemp logsRoot above), so this one rmSync is the whole cleanup.

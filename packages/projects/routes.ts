@@ -157,8 +157,6 @@ export type ProjectsRouteDeps = {
   seedBrain: (forgeRoot: string, projectId: string, name: string) => ProjectBrainSeedResult;
   /** `@forge/knowledge`'s `checkProjectBrainSeedContainment`. */
   checkBrainSeedContainment: (forgeRoot: string, projectId: string) => void;
-  /** `@forge/knowledge`'s `readArtifactRoot`. */
-  readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
   /** `@forge/knowledge`'s `isUntouchedBrainSeedStub` (G3, forge-8vfn.8.5.3) —
@@ -234,7 +232,6 @@ export function projectsRoutes(deps: ProjectsRouteDeps): RouteTable<RouteContext
   const { handleProjectsCreate, handleProjectsOnboard, handleProjectPut } = makeOnboardHandlers({
     seedBrain: deps.seedBrain,
     checkBrainSeedContainment: deps.checkBrainSeedContainment,
-    readArtifactRoot: deps.readArtifactRoot,
     isContainedProjectRepoPath: deps.isContainedProjectRepoPath,
     isUntouchedBrainSeedStub: deps.isUntouchedBrainSeedStub,
   });

@@ -55,6 +55,7 @@ import {
   projectBrainDir,
   projectThemesDir,
   FORGE_ROOT,
+  guardedReadFile,
 } from '@forge/kernel';
 
 import { checkC1, checkC1b, checkC7 } from './preflight-gate.ts';
@@ -169,6 +170,10 @@ function checkBrainStaleness(
     title: 'Brain freshness (themes cite live source paths)',
     hard: false,
   };
+  // forge-mfv5.1.11 (ruling 1977a) — a profile still all-TODO is a stub, not context.
+  if (isUnfilledProfile(guardedReadFile(resolve(forgeRoot), ['brain', 'projects', projectName, 'profile.md']))) {
+    return { ...base, pass: false, detail: `brain/projects/${projectName}/profile.md is still the scaffold stub — every section is TODO, so forge's planners read no architecture facts. Author it (the onboarding agent does).` };
+  }
   // Brain 3 is forge-owned + CENTRAL (SPEC §4): brain/projects/<name>/themes/.
   const themesDir = projectThemesDir(forgeRoot, projectName);
   if (!existsSync(themesDir)) {
@@ -217,6 +222,15 @@ function checkBrainStaleness(
       `will mislead the planner (PM/architect read the brain first). Reconcile against the code ` +
       `(or run a reflection pass). Sample: ${sample}`,
   };
+}
+
+/** True when every authored `## ` section's first line is TODO (the constraint-block
+ *  reference section is documentation, never filled in). */
+function isUnfilledProfile(text: string | null): boolean {
+  if (text === null) return false;
+  const sections = text.split(/^## /m).slice(1).filter((sec) => !/^Constraint blocks/.test(sec));
+  // An empty section, or one whose first line is a (bulleted / emphasised / commented) TODO, is unfilled.
+  return sections.length > 0 && sections.every((sec) => /^([-*_>]|<!--)?\s*_?TODO(?![A-Za-z0-9])|^$/i.test(sec.split('\n').slice(1).find((l) => l.trim() !== '')?.trim() ?? ''));
 }
 
 /**

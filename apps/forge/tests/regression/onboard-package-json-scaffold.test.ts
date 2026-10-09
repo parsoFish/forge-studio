@@ -216,7 +216,7 @@ test('POST /api/studio/projects: qualityGateCmd "npm run verify" produces a pack
 
 test('(RED) POST /api/studio/projects: a symlinked package.json pointing outside the project root is REFUSED, not written through', async (t) => {
   // Mirrors apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts's dangling-
-  // leaf shape for roadmap.md/brain/profile.md exactly (same escape class,
+  // leaf shape for roadmap.md exactly (same escape class,
   // same `resolveGuardedPath` guard): a DANGLING symlink is what actually
   // drives the pure Phase-1 pre-check (`checkContractArtifactContainment`)
   // into rejecting the whole onboard with a non-200 BEFORE any write on the

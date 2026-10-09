@@ -3,7 +3,7 @@ title: Project contract
 description: "What a project must provide before forge works on it unattended: .forge files, test tiers, preflight clauses, and what forge preflight reports."
 type: reference
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [packages/projects/**, apps/forge/cli.ts, studio/starters/**]
 ---
 
@@ -78,7 +78,7 @@ The fields of `.forge/project.json` are in that file's schema; the project build
 | `C10` | advisory | A declared `releaseProcess` has its changelog, version and docs paths. |
 | `DEMO`, `DEMO-SKILL`, `DEMO-ALIGN` | advisory | The demo process has capture and verify steps, drives a runnable command, and references the test process. |
 | `BUILD`, `ARTIFACTS` | advisory | A declared build workflow exists; build output is ignored by git. |
-| `BRAIN` | advisory | Knowledge themes cite source paths that still exist. |
+| `BRAIN` | advisory | The Knowledge profile is filled in, not the all-TODO stub forge seeds, and Knowledge themes cite source paths that still exist. |
 
 `forge preflight` and the claim check both include `DEPS`.
 

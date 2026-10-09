@@ -29,11 +29,13 @@
  * type-only import of it is a layer violation from this package. The runner's
  * wider status satisfies both shapes structurally and passes straight through.
  */
+import { basename } from 'node:path';
 import { guardedReadFile, guardedWriteFile, guardedReadDir, sessionDirSegments } from '@forge/kernel';
 import type { KbBinding } from '@forge/contracts';
 
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
+import { ensureLinked } from './brain-fix-auto.ts';
 import { cyclesRawDir } from './brain-paths.ts';
 
 /**
@@ -136,7 +138,7 @@ export function commitProjectBrain(args: {
   sessionId: string;
   forgeRoot: string;
   status: ProjectBrainCommitInput; // `status.project` is the session's home under `<logsRoot>/_sessions`
-}): { wrote: string[]; themes: string[] } {
+}): { wrote: string[]; themes: string[]; unindexed: Array<{ theme: string; reason: string }> } {
   const { logsRoot, sessionId, forgeRoot, status } = args;
   const staged = listStagedThemes(logsRoot, status.project, sessionId);
 
@@ -168,6 +170,7 @@ export function commitProjectBrain(args: {
   const brainSegs = isCreateHandoff ? ['brain', kbId] : ['brain', 'projects', kbId];
 
   const wrote: string[] = [];
+  const committedThemes: string[] = [];
   for (const file of staged) {
     // Source: a staged theme leaf the agent authored under the session dir.
     // Route the READ through the guard (a symlinked staged file → null → skip),
@@ -184,6 +187,15 @@ export function commitProjectBrain(args: {
       );
     }
     wrote.push(dest);
+    if (file !== 'profile.md') committedThemes.push(dest);
+  }
+
+  // forge-mfv5.1.18 — file each theme in its category index through the one idempotent
+  // writer (`ensureLinked`); one it cannot file is reported, never hidden (lint flags it too).
+  const unindexed: Array<{ theme: string; reason: string }> = [];
+  for (const themeFile of committedThemes) {
+    const r = ensureLinked(forgeRoot, themeFile);
+    if (!r.ok) unindexed.push({ theme: basename(themeFile), reason: r.detail });
   }
 
   // Ensure a kb.yaml descriptor exists so the brain is discoverable.
@@ -215,5 +227,5 @@ export function commitProjectBrain(args: {
 
   try { regenerateBrainIndex({ cwd: forgeRoot }); } catch { /* index regen best-effort */ }
 
-  return { wrote, themes: staged };
+  return { wrote, themes: staged, unindexed };
 }
