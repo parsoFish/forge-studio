@@ -450,35 +450,28 @@ test('AT-5 (HAZARD PIN — SPEC §4 brain-first injection survives): the brain-n
 // AT-6 — HAZARD PIN: fail-open exploring (park §2b)
 // ---------------------------------------------------------------------------
 
-test('AT-6 (HAZARD PIN — fail-open exploring): an explore step whose structured call THROWS still advances the session to drafting, with no throw out of runArchitectTurn', async () => {
+// Re-pinned by T1's ruling on the row-2 park (forge-nk1y.5; for operator
+// ratification at the pre-1.0 review, P16). Every session is capped now, and a
+// crashed call is charged its whole remaining cap (rulings 849/1973gx), so a
+// crashed explore step under a ceiling FAILS CLOSED, by name: the refusal names
+// the unpriced call, the cap it was charged, and how to continue — never a
+// silent fail-open that spends past the bound.
+test('AT-6 (HAZARD PIN — re-pinned): a crashed explore step under a ceiling fails CLOSED by name — the draft is refused, naming the unpriced call and its charged cap', async () => {
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ phase: 'exploring' });
   let calls = 0;
-  const draftPrompts: string[] = [];
-  const queryFn: QueryFn = ({ prompt }) => {
+  const queryFn: QueryFn = () => {
     calls += 1;
-    if (calls === 1) {
-      // The FIRST call in an 'exploring'-phase turn is always the explore
-      // step (readInterview/readExploreFindings do not call queryFn).
-      // Simulate a thrown stream/SDK error here.
-      throw new Error('simulated explore-stage crash');
-    }
-    draftPrompts.push(prompt);
-    async function* gen(): AsyncGenerator<unknown> {
-      yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: validDraftOutput() };
-    }
-    return gen();
+    if (calls === 1) throw new Error('simulated explore-stage crash');
+    throw new Error('the draft must never reach the SDK once the crash exhausted the ceiling');
   };
 
-  const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
-    sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn,
-    logger: logger(logsRoot, sessionId),
-  });
-
-  // Three calls since ruling 380: the crashed explore, the draft, and the
-  // completeness critic that now runs at the END of the drafting turn.
-  assert.equal(calls, 3, 'the explore call crashed but the draft step still ran — the phase advanced past exploring');
-  assert.equal(draftPrompts.length, 2, 'exactly one draft call after the fail-open explore crash, then its critic');
-  assert.equal(result.phase, 'awaiting-verdict', 'the turn completed via the draft step despite the explore crash');
+  await assert.rejects(
+    runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId, projectRoot, project: 'demo', logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    (err: Error) => err.name === 'TurnBudgetExhaustedError'
+      && /the last call \(architect\.turn-ended-unpriced\) ended \S+ and was charged its \$10\.00 cap/.test(err.message)
+      && /To continue: start a new session with a higher ceiling/.test(err.message),
+  );
+  assert.equal(calls, 1, 'the crashed explore was the only SDK call — the draft was refused before it spawned');
   assert.ok(!existsSync(join(sessionDir, 'edge-cases.json')), 'no findings file — the crashed explore step wrote nothing');
 });
 

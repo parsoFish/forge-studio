@@ -21,6 +21,7 @@ import { PROJECT_BRAIN_KIND_DIR } from '@forge/knowledge';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
+import { ceilingStatusFields, resolveStartCeilingFor } from './session-start-ceiling.ts';
 import { listProjectBrainSessions } from './bridge-studio-session-index.ts';
 
 import {
@@ -171,6 +172,8 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
+      const ceiling = resolveStartCeilingFor(ctx, 'project-brain-builder'); // forge-nk1y.5: before any session dir
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
       // forge-8vfn.5.51 — back-port of forge-osz / forge-4vt. The DEFAULT repo
       // path is resolved through the containment guard rather than folded raw:
       // `guardedSessionDir` above happens to reject a traversal `body.project`
@@ -201,6 +204,7 @@ export async function handleProjectBrainRoutes(
         session_id: sessionId, project: body.project, project_repo_path: repoPath,
         phase: 'briefing', prompt: '', updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        ...ceilingStatusFields(ceiling),
       }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;

@@ -162,7 +162,7 @@ test('the driver refuses a status advance over a cancelled phase, naming the rea
     let refusal: Error | null = null;
     const variant: SessionKindVariant<{ phase: string }, { phase: string; wrote: string[] }> = {
       id: 'probe', kindDir: '_probe', label: 'probe runner', eventLabel: 'probe turn',
-      eventPhase: 'orchestrator', eventSkill: 'probe',
+      eventPhase: 'orchestrator', eventSkill: 'probe', agentSlug: 'project-brain-builder',
       initiativeId: (sid) => `probe-${sid}`,
       steps: {
         // The operator cancels WHILE the turn runs, then the turn writes its advance.
@@ -210,7 +210,7 @@ test('runKindTurn: a THROWING step still terminates the log with exactly one end
 
     const variant: SessionKindVariant<{ phase: string }, { phase: string; wrote: string[] }> = {
       id: 'probe-throw', kindDir: '_probe', label: 'probe runner', eventLabel: 'probe turn',
-      eventPhase: 'orchestrator', eventSkill: 'probe',
+      eventPhase: 'orchestrator', eventSkill: 'probe', agentSlug: 'project-brain-builder',
       initiativeId: (sid) => `probe-throw-${sid}`,
       steps: {
         working: async () => {

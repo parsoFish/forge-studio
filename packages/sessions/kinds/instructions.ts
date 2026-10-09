@@ -189,6 +189,7 @@ export const instructionsKind: SessionKindVariant<
   eventLabel: 'instructions turn',
   eventPhase: 'instructions',
   eventSkill: 'instructions-runner',
+  agentSlug: 'instructions-creator',
   initiativeId: (sessionId) => `instructions-${sessionId}`,
 
   steps: {

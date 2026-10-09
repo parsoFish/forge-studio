@@ -30,6 +30,7 @@ import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-session
 import { GENERATIONS_DIRNAME, DEMO_KIND_DIR } from './kinds/demo-session-store.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
+import { ceilingStatusFields, resolveStartCeilingFor } from './session-start-ceiling.ts';
 import { listDemoSessions } from './bridge-studio-session-index.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
@@ -359,6 +360,8 @@ export async function handleDemoRoutes(
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
+      const ceiling = resolveStartCeilingFor(ctx, 'demo-builder'); // forge-nk1y.5: before any session dir
+      if (!ceiling.ok) { sendJson(res, 409, { error: ceiling.error }, origin); return true; }
       // The CREATE case — `dirOutcome.dir` does not exist on disk yet;
       // `resolveDemoSessionDir` proves its closest EXISTING ancestor is
       // contained (see its header) rather than false-rejecting a brand new
@@ -409,6 +412,7 @@ export async function handleDemoRoutes(
         prompt: '',
         updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        ...ceilingStatusFields(ceiling),
       }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;

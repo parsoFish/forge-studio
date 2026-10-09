@@ -20,6 +20,7 @@
       "Read"
     ],
     "canUseTool": "<fn>",
+    "maxBudgetUsd": 3,
     "abortController": "<AbortController>"
   },
   "optionsKeyOrder": [
@@ -30,6 +31,7 @@
     "permissionMode",
     "allowedTools",
     "canUseTool",
+    "maxBudgetUsd",
     "abortController"
   ],
   "result": {

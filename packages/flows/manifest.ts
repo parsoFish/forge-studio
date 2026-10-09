@@ -13,6 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import { assertManifestPathFields } from './manifest-path-guard.ts';
+import { resolveRunCeiling } from '@forge/kernel';
 
 // R4-11-F1: `merged` mirrors the QueueState directory of the same name (a
 // transient pass-through promoted to `done/` in the same sweep) — distinct
@@ -415,23 +416,10 @@ export function readManifestFlowId(manifestPath: string): string | null {
   }
 }
 
-/**
- * Margin over the architect's `cost_budget_usd` when a manifest carries no
- * explicit `cost_ceiling_usd`. The budget estimates the dev loop only; the
- * architect, PM, review and reflect bill against the same ceiling.
- *
- * A SHARE, not a flat figure (bead forge-8vfn.6.10.23). The flat $40 it replaces
- * was written for a saga whose unifier is now retired, and did not scale: it
- * turned G2's $18 docs budget into a $58 ceiling. Sized from the two real runs
- * on disk — G2 spent $23.9721 deduplicated against an $18 budget (1.33x, of
- * which $3.79 was non-dev-loop legs); G1 run 3 spent ~$6.84 on a ~$3.05 dev loop
- * (~$3.8 of legs). Near-fixed legs, a variable dev loop: 0.5 covers the worst
- * measured ratio with ~12% headroom and cannot triple a small budget.
- *
- * A policy number. An operator wanting another bound sets `cost_ceiling_usd` on
- * the manifest or `FORGE_COST_CEILING_USD` on the run; both win, and say so.
- */
-export const DERIVED_CEILING_MARGIN_SHARE = 0.5;
+/** The 1.5× margin and the precedence live in ONE place, `@forge/kernel`'s
+ *  `resolveRunCeiling` (forge-nk1y.4): the plan card, the run and the stop all
+ *  read it. Re-exported here for the callers that import it from flows. */
+export { DERIVED_CEILING_MARGIN_SHARE } from '@forge/kernel';
 
 /**
  * Read the per-run cost ceiling (USD) off the manifest frontmatter, WITH the
@@ -448,13 +436,9 @@ export function readManifestCostCeiling(
 ): { ceilingUsd: number; source: 'manifest' | 'derived' } | null {
   try {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    if (typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0) {
-      return { ceilingUsd: m.cost_ceiling_usd, source: 'manifest' };
-    }
-    if (typeof m.cost_budget_usd === 'number' && m.cost_budget_usd > 0) {
-      return { ceilingUsd: m.cost_budget_usd * (1 + DERIVED_CEILING_MARGIN_SHARE), source: 'derived' };
-    }
-    return null;
+    // envRaw undefined: the env tier is the caller's (resolveCostCeilingOverride).
+    const c = resolveRunCeiling({ envRaw: undefined, costCeilingUsd: m.cost_ceiling_usd, costBudgetUsd: m.cost_budget_usd });
+    return c.source === 'manifest' || c.source === 'derived' ? { ceilingUsd: c.ceilingUsd, source: c.source } : null;
   } catch {
     return null;
   }
