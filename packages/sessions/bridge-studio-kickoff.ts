@@ -30,7 +30,7 @@ import type { ModelTier } from '@forge/agents';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, sendIfDispatchRefused, KB_ID_RE, SAFE_ID_RE } from '@forge/kernel';
+import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, sendIfDispatchRefused, KB_ID_RE, SAFE_ID_RE, decodeUrlPart } from '@forge/kernel';
 import { isSafeRunId } from '@forge/kernel';
 import { guardedReadDir, guardedWriteFile, resolveGuardedPath, sessionDirSegments, sessionKindSegments } from '@forge/kernel';
 import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
@@ -223,8 +223,8 @@ export async function handleKickoffRoutes(
   // this URL, so nothing here can trigger a run (mirrors the ingest-activity
   // route's own GET-only contract, packages/knowledge/bridge-studio-kbs.ts).
   if (method === 'GET' && url.startsWith('/api/studio/projects/') && url.endsWith('/onboarding/active')) {
+    const project = decodeUrlPart(url.slice('/api/studio/projects/'.length, url.length - '/onboarding/active'.length));
     try {
-      const project = decodeURIComponent(url.slice('/api/studio/projects/'.length, url.length - '/onboarding/active'.length));
       const projectReason = invalidGenerationProjectReason(project);
       if (projectReason) { sendJson(res, 400, { error: projectReason }, origin); return true; }
       if (resolveContainedProjectDir(ctx.projectsRoot, project) === null) { sendJson(res, 404, { error: `project not found: ${project}` }, origin); return true; }
@@ -413,8 +413,8 @@ export async function handleKickoffRoutes(
   // session write exactly.
   const kbCleanupStartMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/);
   if (method === 'POST' && kbCleanupStartMatch) {
+    const kbId = decodeUrlPart(kbCleanupStartMatch[1]);
     try {
-      const kbId = decodeURIComponent(kbCleanupStartMatch[1]);
       if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;

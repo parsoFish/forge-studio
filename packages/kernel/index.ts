@@ -70,6 +70,8 @@ export * from './route-entry.ts';
 /** The HTTP response envelope every carved route table needs: origin decision,
  *  JSON write, error sanitisation, URL splitting, `StudioContext`. */
 export * from './http-envelope.ts';
+/** The ONE safe percent-decoder for request URL parts: a named error, never a bare `URIError`. */
+export * from './url-decode.ts';
 /** The dry-bridge env gate and the typed 409 refusal — the two pieces five
  *  packages consumed and could previously reach only by importing `cli/`.
  *  The route classification table itself stays in `cli/dry-bridge.ts`. */

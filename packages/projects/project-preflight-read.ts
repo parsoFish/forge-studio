@@ -38,6 +38,7 @@ import {
   PROJECT_ID_RE,
   SAFE_ID_RE,
   type StudioContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 
 /**
@@ -107,8 +108,8 @@ export async function handleProjectPreflight(
   const origin = allowedOrigin(req);
   const preflightMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight$/);
   if (preflightMatch && method === 'GET') {
+    const id = decodeUrlPart(preflightMatch[1]);
     try {
-      const id = decodeURIComponent(preflightMatch[1]);
       if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
@@ -166,8 +167,8 @@ export async function handleProjectRepoStatus(
   const origin = allowedOrigin(req);
   const repoStatusMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/repo-status$/);
   if (repoStatusMatch && method === 'GET') {
+    const id = decodeUrlPart(repoStatusMatch[1]);
     try {
-      const id = decodeURIComponent(repoStatusMatch[1]);
       if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
@@ -200,7 +201,7 @@ export async function handleProjectPreflightFixAgentStatus(
   const origin = allowedOrigin(req);
   const pfStatusMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-agent\/([^/]+)$/);
   if (pfStatusMatch && method === 'GET') {
-    const runId = decodeURIComponent(pfStatusMatch[2]);
+    const runId = decodeUrlPart(pfStatusMatch[2]);
     if (!SAFE_ID_RE.test(runId)) {
       sendJson(res, 400, { error: 'invalid run id' }, origin);
       return true;

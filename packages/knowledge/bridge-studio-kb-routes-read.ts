@@ -18,7 +18,7 @@ import { basename } from 'node:path';
 import { type UnroutableKb } from './kb-sites.ts';
 import { getKbBackend, type KbBackend } from './kb-backend.ts';
 import { attachKbLintSummaries } from './kb-lint-summary.ts';
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, decodeUrlPart } from '@forge/kernel';
 import { buildKbHealth, loadKbDescriptors, requireValidKbId } from './bridge-studio-kbs.ts';
 
 /**
@@ -92,8 +92,8 @@ export async function handleKbResolveNode(
   // Must be matched BEFORE /api/studio/kbs/:id (resolve-node would be captured as a kb id).
   const resolveNodeMatch = url.match(/^\/api\/studio\/kbs\/resolve-node\/(.+)$/);
   if (resolveNodeMatch && method === 'GET') {
+    const nodeId = decodeUrlPart(resolveNodeMatch[1]);
     try {
-      const nodeId = decodeURIComponent(resolveNodeMatch[1]);
       // NODE_ID_RE: allow alphanumeric, dash, underscore, colon, dot
       const NODE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/;
       if (!NODE_ID_RE.test(nodeId)) {
@@ -149,9 +149,9 @@ export async function handleKbNode(
   // Must be matched before /api/studio/kbs/:id (more specific path).
   const kbNodeMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/nodes\/([^/]+)$/);
   if (kbNodeMatch && method === 'GET') {
+    const kbId = decodeUrlPart(kbNodeMatch[1]);
+    const nodeId = decodeUrlPart(kbNodeMatch[2]);
     try {
-      const kbId = decodeURIComponent(kbNodeMatch[1]);
-      const nodeId = decodeURIComponent(kbNodeMatch[2]);
 
       // Guard both ids (KB_ID_RE for the kb id; nodeIds may have
       // 'raw:' prefix — use a slightly broader guard for nodeId).
@@ -219,8 +219,8 @@ export async function handleKbGet(
   // ---- GET /api/studio/kbs/:id (single kb — graph + health) ---------------
   const kbGetMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)$/);
   if (kbGetMatch && method === 'GET') {
+    const kbId = decodeUrlPart(kbGetMatch[1]);
     try {
-      const kbId = decodeURIComponent(kbGetMatch[1]);
 
       // Slug-guard before any fs operation
       if (!requireValidKbId(kbId, res, origin)) return true;

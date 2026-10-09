@@ -25,7 +25,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, decodeUrlPart } from '@forge/kernel';
 import { isDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedWriteFileExclusive } from '@forge/kernel';
 import { fireReflectorRerun } from './example-hooks.ts';
@@ -80,12 +80,6 @@ function resolveCycleId(ctx: ReflectContext, id: string): string | null {
   return run !== null ? run.id : null;
 }
 
-/** `decodeURIComponent`, or null on a malformed escape — a URIError thrown
- *  out of this async handler would otherwise kill the bridge (security review). */
-function decodeSegment(raw: string): string | null {
-  try { return decodeURIComponent(raw); } catch { return null; }
-}
-
 /** Parse an already-read JSON string; null on malformed content. Companion to
  *  the guarded read primitives (which return raw contents, not parsed JSON) so
  *  a SEC-04 guarded read can replace a `readJsonFile(join(dir, leaf))` call
@@ -121,11 +115,7 @@ export async function handleReflect(
   }
 
   if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
-    const requestedCycleId = decodeSegment(url.slice('/api/reflect/'.length));
-    if (requestedCycleId === null) {
-      sendJson(res, 400, { error: 'malformed cycleId encoding' }, origin);
-      return true;
-    }
+    const requestedCycleId = decodeUrlPart(url.slice('/api/reflect/'.length));
     if (!requestedCycleId) {
       sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin);
       return true;
@@ -194,11 +184,7 @@ export async function handleReflect(
     // and detached-firing rerunReflector (the real agent turn). Only the
     // latter is dry-bridge-gated below; the write always proceeds so the
     // route's normal 200 stays truthful ("feedback captured").
-    const requestedCycleId = decodeSegment(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
-    if (requestedCycleId === null) {
-      sendJson(res, 400, { error: 'malformed cycleId encoding' }, origin);
-      return true;
-    }
+    const requestedCycleId = decodeUrlPart(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string; close?: boolean };
       // Ruling 1736 (bead forge-8vfn.8.1.34) — same resolution as the GET
