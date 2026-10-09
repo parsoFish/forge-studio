@@ -139,7 +139,7 @@ describe('D-45: the planner picks the form and the narrative; the orchestrator v
     assert.equal(demo.narrative, NARRATIVE);
     // D-15: the orchestrator ran the capture and the stamp is the nonce IT generated.
     assert.ok(existsSync(join(root, 'capture-ran')));
-    const capture = events.find((e) => (e as { message?: string }).message === 'demo.capture') as { metadata: { capture_nonce: string } };
+    const capture = events.find((e) => (e as { message?: string }).message === 'demo.capture') as unknown as { metadata: { capture_nonce: string } };
     assert.equal(demo.capture.nonce, capture.metadata.capture_nonce);
     // The plan is inert: recorded beside demo.json, it carries no output, delta or stamp.
     const planText = readFileSync(join(demoDir(), 'demo-plan.json'), 'utf8');
@@ -147,7 +147,7 @@ describe('D-45: the planner picks the form and the narrative; the orchestrator v
     assert.match(readFileSync(join(demoDir(), 'DEMO.md'), 'utf8'), /## What this enables\n\n_Agent narrative — not evidence\._/);
     // The event log carries the plan and what it cost.
     assert.ok(messages().includes('demo.plan.start'));
-    const validated = events.find((e) => (e as { message?: string }).message === 'demo.plan.validated') as { cost_usd?: number };
+    const validated = events.find((e) => (e as { message?: string }).message === 'demo.plan.validated') as unknown as { cost_usd?: number };
     assert.equal(validated.cost_usd, 0.12);
   });
 
