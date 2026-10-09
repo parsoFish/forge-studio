@@ -19,6 +19,8 @@
  * the sibling `git-residue-guard.mjs`.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Every non-clean TRACKED path `git status --porcelain -uno` reports under
@@ -50,4 +52,76 @@ export function trackedPorcelainLines(cwd) {
  */
 export function newTrackedChanges(before, after) {
   return [...after].filter((line) => !before.has(line)).sort();
+}
+
+/**
+ * Is a live forge run writing into `root`? The signal is the one the daemon
+ * itself keeps: `forge studio` supervises `forge serve`, which records its pid
+ * in `<root>/_logs/daemon/forge.pid` (`daemonPaths`, `packages/flows/daemon.ts`)
+ * for as long as it runs — a real cycle's reflector writes TRACKED `brain/`
+ * files only under that daemon. Re-derived here rather than imported because
+ * this preload is plain `.mjs` and must stay import-light.
+ *
+ * Three-valued on purpose (fail closed): `{ state: 'none' }` only when there is
+ * no pid file, or it names a dead pid; `{ state: 'live', pid }` when the pid is
+ * alive; `{ state: 'unknown', pidFile, reason }` when the file exists but cannot
+ * be read/parsed, or `isPidAlive` throws. An unreadable signal is never read as
+ * "no live run" (and never as "live run") — the report says it was inconclusive.
+ *
+ * `isPidAlive` is injected so a unit test needs no real daemon; the preload
+ * passes a `process.kill(pid, 0)` probe.
+ */
+export function liveRunVerdict(root, isPidAlive) {
+  const pidFile = join(root, '_logs', 'daemon', 'forge.pid');
+  let raw;
+  try {
+    raw = readFileSync(pidFile, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return { state: 'none' };
+    return { state: 'unknown', pidFile, reason: `unreadable: ${err?.message ?? err}` };
+  }
+  const pid = Number.parseInt(raw.trim(), 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return { state: 'unknown', pidFile, reason: `unparseable content ${JSON.stringify(raw.trim().slice(0, 40))}` };
+  }
+  try {
+    return isPidAlive(pid) ? { state: 'live', pid } : { state: 'none' };
+  } catch (err) {
+    return { state: 'unknown', pidFile, reason: `liveness probe failed for pid ${pid}: ${err?.message ?? err}` };
+  }
+}
+
+/**
+ * The stderr report for a finished test file, or `null` when nothing new is
+ * dirty. A new tracked change while a forge run is live is that run's write,
+ * not the test's, so the message names the live writer instead of telling the
+ * reader to restore files the test never touched. The file still FAILS either
+ * way (the caller sets `exitCode = 1`): a suite whose tree changed under it is
+ * not clean evidence.
+ */
+export function residueReport({ root, before, after, isPidAlive }) {
+  const changed = newTrackedChanges(before, after);
+  if (changed.length === 0) return null;
+  const files = changed.join(', ');
+  const verdict = liveRunVerdict(root, isPidAlive);
+  if (verdict.state === 'live') {
+    return (
+      `\ngit-residue-guard: a live forge run is writing ${files}; stop forge studio before npm test ` +
+      `(daemon pid ${verdict.pid} is alive in ${root}). This file's tree changed under it, so its result is not clean evidence.\n`
+    );
+  }
+  if (verdict.state === 'unknown') {
+    return (
+      `\ngit-residue-guard: ${changed.length} tracked file(s) changed (${files}) and the live-run probe was ` +
+      `inconclusive (${verdict.reason}; pid file ${verdict.pidFile}). Cannot tell a test's write from a ` +
+      "running forge's — stop forge studio and fix or remove the pid file before npm test.\n"
+    );
+  }
+  return (
+    `\ngit-residue-guard: this test run left ${changed.length} tracked file(s) dirty in the ` +
+    `REPO ROOT (${root}) that were clean when it started:\n` +
+    changed.map((line) => `  ${line}`).join('\n') +
+    '\nA test that writes into a real tracked path (rather than a caller-owned tmp dir) must ' +
+    'restore it — `git status --short` must be empty when a test file exits.\n'
+  );
 }
