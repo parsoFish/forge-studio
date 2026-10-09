@@ -51,6 +51,8 @@ When a project's generated mechanisms have drifted from the current template, pr
 - *The onboarding button says a run is in progress.* An onboarding run is already in flight for this project. Wait for it or cancel it.
 - **choose an app type first**: **Preview drift** needs an app type when the project has none recorded.
 - *The project page lists `.forge/project.json`, `.gitignore`, `AGENTS.md` or `roadmap.md` as not committed.* That contract file has a change outside the project's `forge-studio` branch, so a Save would push the default branch without it. Press **Commit these files and save** to commit them to `forge-studio` and save, or discard the change first. **Save pending changes** appears whenever `forge-studio` holds work the default branch does not have, even with no unsaved edits on the page.
+- *Save opened a pull request.* The project's default branch is protected (or refused the push), so Save pushed `forge-studio` and opened a pull request with auto-merge requested; the page links it. After it merges, press **Save** again to bring the default branch up to date.
+- *Save shows commits that will move to `forge-studio`.* Your local default branch holds commits its remote does not. Confirm to move them to `forge-studio`, reset the local branch to the remote, and open a pull request.
 
 ## Related
 
