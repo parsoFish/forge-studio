@@ -18,13 +18,14 @@ collapsed the legacy `"./*"` door; every importer now goes through
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (42)
+### Values (44)
 
 | area | exports |
 |---|---|
 | config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` · `writeProjectConfigPatch` · `validateDemoDeclaration` · `WI_GATE_PACKAGE_PLACEHOLDER` |
 | preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` · `clauseTarget` · `loadDeclaredSkills` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
+| demo means | `parseDemoMeans` · `isOwnServerPath` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
 | repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` · `dirtyPaths` · `isGitRepo` · `beginStudioTransaction` |
 | the reset | `cmdProjectReset` · `computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` |
@@ -34,11 +35,11 @@ both directions, and is required to FAIL against an empty index.
 | studio validation | `validateDiscoveredProjects` |
 | HTTP routes | `projectsRoutes` |
 
-### Types (10)
+### Types (11)
 
 `ProjectConfig` · `AcceptanceGateConfig` · `ClauseId` · `ContractStageRow` ·
 `DeriveContractStagesResult` · `ScaffoldResult` · `ConstraintBlock` ·
-`ConstraintMatchContext` · `DeclaredSkill` · `ProjectsRouteDeps`
+`ConstraintMatchContext` · `DeclaredSkill` · `ProjectsRouteDeps` · `DemoMeans`
 
 ### The one test-only subpath
 

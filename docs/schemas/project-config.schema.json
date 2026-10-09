@@ -140,6 +140,25 @@
         }
       }
     },
+    "demoMeans": {
+      "type": "object",
+      "description": "What a demo may drive. The demo planner picks each change's evidence form from these means; forge captures and compares the evidence itself.",
+      "additionalProperties": false,
+      "properties": {
+        "commands": { "type": "array", "items": { "type": "string" }, "description": "Commands a CLI before/after checkpoint may run. Each runs without a shell, so it may not contain shell operators such as `|`, `;` or `$`." },
+        "routes": { "type": "array", "items": { "type": "string" }, "description": "In-app paths a screenshot checkpoint may open, starting `/` with no traversal." },
+        "api": {
+          "type": "object",
+          "description": "Means for an API before/after checkpoint, compared as JSON.",
+          "additionalProperties": false,
+          "properties": {
+            "paths": { "type": "array", "items": { "type": "string" }, "description": "Paths forge requests with GET on each capture tree's own server. No scheme or host: reach an external API through `commands`." },
+            "commands": { "type": "array", "items": { "type": "string" }, "description": "Commands that print a JSON body to standard output, such as the project's own CLI reading a live service with its own credentials." },
+            "ignoreKeys": { "type": "array", "items": { "type": "string" }, "description": "Extra key names dropped at any depth before before/after JSON is compared, on top of the default volatile keys (`id`, `node_id`, timestamps, `url`, `*_url`, `etag`, `size`, `watchers`, `watchers_count`)." }
+          }
+        }
+      }
+    },
     "skills": {
       "type": "array",
       "items": { "type": "string" },
