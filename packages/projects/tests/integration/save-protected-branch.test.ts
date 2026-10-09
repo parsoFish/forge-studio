@@ -2,7 +2,7 @@
  * forge-mfv5.1.22 — a Save against a protected default branch. On gitweave the
  * push of main was refused AFTER the local merge, forge-studio was deleted
  * anyway, and the result read as a save: local main sat "ahead 6" with no
- * Studio path back. Fixtures: tests/test-fixtures/save-origin.ts (real local git,
+ * Studio path back. Fixtures: packages/projects/tests/test-fixtures/save-origin.ts (real local git,
  * a protected bare origin, a stub gh). No network.
  */
 import { test } from 'node:test';

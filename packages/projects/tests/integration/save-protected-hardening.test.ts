@@ -2,7 +2,7 @@
  * forge-mfv5.1.22 security review — the Save's GitHub path trusts only its own
  * PR, never hangs on a prompt, survives an origin with no default branch yet,
  * recognises a squash-merged PR, and leaves the operator on their own branch.
- * Real local git, a stub gh (tests/test-fixtures/save-origin.ts). No network.
+ * Real local git, a stub gh (packages/projects/tests/test-fixtures/save-origin.ts). No network.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
