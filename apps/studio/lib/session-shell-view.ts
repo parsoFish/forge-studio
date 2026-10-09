@@ -357,8 +357,8 @@ const CEILING_SOURCE_LABEL: Record<SessionCeiling['source'], string> = {
  *  says "not recorded" out loud; it is never an empty string. */
 export function sessionCeilingLine(ceiling: SessionCeiling | null): string {
   return ceiling === null
-    ? 'Spend ceiling not recorded'
-    : `Spend ceiling $${ceiling.usd.toFixed(2)} (${CEILING_SOURCE_LABEL[ceiling.source]})`;
+    ? "Session spend ceiling not recorded (the agent's own budget applies)"
+    : `Session spend ceiling $${ceiling.usd.toFixed(2)} (${CEILING_SOURCE_LABEL[ceiling.source]})`;
 }
 
 function buildReadyState(payload: SessionShellPayload, stage: string): SessionShellReadyState {

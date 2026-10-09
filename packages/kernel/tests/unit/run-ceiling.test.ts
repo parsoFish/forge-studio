@@ -23,10 +23,16 @@ test('run ceiling: FORGE_COST_CEILING_USD wins over the manifest and the derived
   assert.deepEqual(resolveRunCeiling({ envRaw: '30', costCeilingUsd: 9, costBudgetUsd: 5 }), { ceilingUsd: 30, source: 'env' });
 });
 
-test('run ceiling: a blank, zero, negative or non-numeric env is not a ceiling', () => {
-  for (const raw of ['', '  ', '0', '-3', 'abc']) {
+test('run ceiling: an unset or blank env is not a ceiling', () => {
+  for (const raw of [undefined, '', '  ']) {
     assert.equal(parseCeilingEnv(raw), undefined, `"${raw}"`);
     assert.equal(resolveRunCeiling({ envRaw: raw, costBudgetUsd: 2 }).source, 'derived', `"${raw}"`);
+  }
+});
+
+test('run ceiling: a SET but invalid env is refused by name, never treated as unset (review finding)', () => {
+  for (const raw of ['0', '-3', 'abc', '5abc', 'Infinity', '1e999']) {
+    assert.throws(() => resolveRunCeiling({ envRaw: raw, costBudgetUsd: 2 }), /invalid FORGE_COST_CEILING_USD=.*expected a positive number of USD, or unset/, `"${raw}"`);
   }
 });
 

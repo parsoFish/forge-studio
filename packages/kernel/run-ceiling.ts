@@ -25,12 +25,15 @@ export type RunCeiling =
   | { ceilingUsd: number; source: 'env' | 'manifest' | 'derived' }
   | { ceilingUsd: undefined; source: 'none' };
 
-/** A positive finite number from the env value, else undefined (a blank or
- *  non-positive value is not a ceiling). */
+/** The env ceiling: undefined when unset or blank; a positive finite number
+ *  when set; anything else THROWS by name — a typo in the operator's bound is
+ *  never silently treated as "no bound" (it used to fall through to a looser
+ *  tier). One strict parser (`Number`, so "5abc" is refused) for every reader. */
 export function parseCeilingEnv(raw: string | undefined): number | undefined {
   if (raw === undefined || raw.trim() === '') return undefined;
-  const n = Number.parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : undefined;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return n;
+  throw new Error(`invalid ${COST_CEILING_ENV}=${JSON.stringify(raw)}: expected a positive number of USD, or unset`);
 }
 
 const positive = (n: number | undefined): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;

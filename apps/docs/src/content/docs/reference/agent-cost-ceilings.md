@@ -15,7 +15,7 @@ A ceiling is a dollar limit on one run. Standalone agent runs and whole flow run
 |---|---|---|
 | Standalone agent run | The ceiling you set when you start the run, then the agent's own `budgets` | The Claude Agent SDK stops the run |
 | Flow run (a cycle) | `FORGE_COST_CEILING_USD`, the manifest's `cost_ceiling_usd`, the manifest's `cost_budget_usd` plus 50 %, the flow's `costCeilingUsd` | forge, at a clean boundary |
-| Interactive session | The ceiling you set at kickoff (architect only), `FORGE_COST_CEILING_USD`, the session agent's `budgets.maxBudgetUsd` | forge caps each turn at what remains |
+| Interactive session | The ceiling you set at kickoff (architect only), `FORGE_COST_CEILING_USD`, the session agent's `budgets.maxBudgetUsd` | forge caps each turn at what remains; with no source the turn is refused |
 
 The plan card's **ceiling** chip shows the flow-run ceiling from the same rule, and its **estimate** chip shows `cost_budget_usd`. Planning spend counts against the run's ceiling. A session shows its ceiling on its page.
 
@@ -40,7 +40,7 @@ Flow and manifest settings:
 | `costCeilingUsd` | flow definition | none | The flow's own ceiling. Shipped develop flow: 25. Architect flow: 10. |
 | `cost_budget_usd` | initiative manifest | required, above 0 | Estimated dev-loop spend. Without an explicit ceiling, the ceiling is this value times 1.5. |
 | `cost_ceiling_usd` | initiative manifest | none | Explicit ceiling for this initiative. Above 0 when present. |
-| `FORGE_COST_CEILING_USD` | environment | none | Overrides the manifest for a run. A non-numeric or non-positive value is ignored. |
+| `FORGE_COST_CEILING_USD` | environment | none | Overrides the manifest for a run and bounds every session. A value that is not a positive number is refused by name. |
 | `runs.defaultCostCeilingUsd` | `forge.config.json` | 10 | Pre-fills the ceiling field when you run an agent from Studio. Ignored if not a positive number. |
 
 ## Examples

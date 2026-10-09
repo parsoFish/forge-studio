@@ -1,15 +1,10 @@
 /**
  * forge-nk1y.5 — every interactive session starts with a spend ceiling.
- *
- * Capstone A (2026-10-09, 14:14 and 14:46): the instructions and project-brain
- * sessions started with `budgets: {}` and no ceiling field, so with
- * `FORGE_COST_CEILING_USD` unset nothing bounded them. A session start now
- * stamps `costCeilingUsd` + `costCeilingSource` on its first status, from the
- * one derivation (`resolveSessionCeiling`, @forge/kernel): an operator's
- * explicit kickoff ceiling, else `FORGE_COST_CEILING_USD`, else the agent's
- * `budgets.maxBudgetUsd`. With none, the start is refused by name before any
- * session dir is written. `turnBudgetUsd` (turn-budget.ts) already caps every
- * turn at the status ceiling's remaining — the same stop.
+ * Capstone A (2026-10-09) saw instructions and project-brain sessions start
+ * with `budgets: {}` and no ceiling. A start now stamps `costCeilingUsd` +
+ * `costCeilingSource` (operator kickoff figure, else FORGE_COST_CEILING_USD,
+ * else the agent's `budgets.maxBudgetUsd`) or is refused by name before any
+ * session dir; `turnBudgetUsd` caps every turn at what remains.
  */
 import { loadAgentDefinition, skillPath } from '@forge/agents';
 import { COST_CEILING_ENV, resolveSessionCeiling } from '@forge/kernel';
@@ -71,4 +66,10 @@ export function resolveStartCeiling(
 export function stampedCeilingUsd(status: Record<string, unknown>): number | undefined {
   const v = status.costCeilingUsd;
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
+}
+
+/** forge-nk1y.5 — an agent's own `budgets.maxBudgetUsd`, the turn-time arm for
+ *  a session that recorded no ceiling. An unreadable definition throws. */
+export function agentBudgetUsdFor(agentSlug: string): number | undefined {
+  return loadAgentDefinition(skillPath(agentSlug)).budgets.maxBudgetUsd;
 }

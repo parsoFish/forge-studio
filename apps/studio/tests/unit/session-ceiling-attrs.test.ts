@@ -76,8 +76,8 @@ test('parseSessionShellPayload: a wrong-shaped "ceiling" throws', () => {
 
 test('sessionCeilingLine names the amount and the source of each kind; null says "not recorded"', async () => {
   const { sessionCeilingLine } = await import('../../lib/session-shell-view.ts');
-  expect(sessionCeilingLine({ usd: 3, source: 'agent-budget' })).toBe('Spend ceiling $3.00 (agent budget)');
-  expect(sessionCeilingLine({ usd: 7, source: 'env' })).toBe('Spend ceiling $7.00 (FORGE_COST_CEILING_USD)');
-  expect(sessionCeilingLine({ usd: 12.5, source: 'operator' })).toBe('Spend ceiling $12.50 (set at kickoff)');
-  expect(sessionCeilingLine(null)).toBe('Spend ceiling not recorded');
+  expect(sessionCeilingLine({ usd: 3, source: 'agent-budget' })).toBe('Session spend ceiling $3.00 (agent budget)');
+  expect(sessionCeilingLine({ usd: 7, source: 'env' })).toBe('Session spend ceiling $7.00 (FORGE_COST_CEILING_USD)');
+  expect(sessionCeilingLine({ usd: 12.5, source: 'operator' })).toBe('Session spend ceiling $12.50 (set at kickoff)');
+  expect(sessionCeilingLine(null)).toBe("Session spend ceiling not recorded (the agent's own budget applies)");
 });

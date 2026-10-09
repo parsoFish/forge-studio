@@ -38,3 +38,26 @@ test('REFUSAL: an agent definition that cannot be read is refused by name, not t
   assert.equal(c.ok, false);
   assert.match(!c.ok ? c.error : '', /cannot read the spend budget of agent "no-such-agent-nk1y5"/);
 });
+
+test('REFUSAL at turn time: no declared ceiling, no agent budget, no env → NoSpendCeilingError by name + an error row, never an uncapped turn', async () => {
+  const { turnBudgetUsd } = await import('../../turn-budget.ts');
+  const emitted: Array<{ event_type: string; message: string }> = [];
+  const logger = { emit: (e: { event_type: string; message: string }) => { emitted.push(e); } } as unknown as Parameters<typeof turnBudgetUsd>[0]['logger'];
+  assert.throws(
+    () => turnBudgetUsd({
+      declaredCeilingUsd: undefined, agentBudgetUsd: undefined, env: {}, logsRoot: '/nonexistent-nk1y5', spentUsd: () => 0, logger,
+      identity: { initiativeId: 'i', phase: 'orchestrator', skill: 'some-agent', sessionId: 's' },
+    }),
+    (e: Error) => e.name === 'NoSpendCeilingError' && /no spend ceiling for this session turn: set FORGE_COST_CEILING_USD or budgets\.maxBudgetUsd on agent "some-agent"/.test(e.message),
+  );
+  assert.deepEqual(emitted.map((e) => e.event_type), ['error']);
+});
+
+test('turn time: an agent budget is the session arm when no ceiling was stamped (a session minted before nk1y.5)', async () => {
+  const { turnBudgetUsd } = await import('../../turn-budget.ts');
+  const logger = { emit: () => {} } as unknown as Parameters<typeof turnBudgetUsd>[0]['logger'];
+  assert.equal(turnBudgetUsd({
+    declaredCeilingUsd: undefined, agentBudgetUsd: 3, env: {}, logsRoot: '/nonexistent-nk1y5', spentUsd: () => 1, logger,
+    identity: { initiativeId: 'i', phase: 'orchestrator', skill: 'a', sessionId: 's' },
+  }), 2);
+});

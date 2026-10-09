@@ -51,7 +51,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { deriveSessionCostUsd, type EventLogger } from '@forge/kernel';
+import { deriveSessionCostUsd, parseCeilingEnv, type EventLogger } from '@forge/kernel';
 
 import { parseGuardedEventsJsonl } from './session-readability.ts';
 
@@ -67,13 +67,13 @@ export const BRIDGE_COST_CEILING_ENV = 'FORGE_COST_CEILING_USD';
 export const BRIDGE_STARTED_AT_ENV = 'FORGE_BRIDGE_STARTED_AT';
 
 /** Which knob bounded the turn, so a refusal names the number it compared. */
-export type TurnBudgetSource = 'session' | 'bridge';
+export type TurnBudgetSource = 'session' | 'bridge' | 'agent-budget';
 
 export class TurnBudgetExhaustedError extends Error {
   constructor(ceilingUsd: number, spentUsd: number, source: TurnBudgetSource) {
     super(
       `session turn budget exhausted: $${spentUsd.toFixed(4)} spent (priced + bounded) >= $${ceilingUsd.toFixed(2)} ` +
-      `${source === 'session' ? "session ceiling (the operator's start-form figure)" : `bridge ceiling (${BRIDGE_COST_CEILING_ENV})`} — ` +
+      `${source === 'session' ? 'session ceiling (stamped at start)' : source === 'agent-budget' ? "agent budget (the agent's budgets.maxBudgetUsd)" : `bridge ceiling (${BRIDGE_COST_CEILING_ENV})`} — ` +
       'refusing to start the turn rather than run it under a cap of $0 or less',
     );
     this.name = 'TurnBudgetExhaustedError';
@@ -147,8 +147,8 @@ export function bridgeSpentUsd(logsRoot: string, sinceIso: string | undefined): 
 type BudgetArm = { ceilingUsd: number; spentUsd: number; source: TurnBudgetSource };
 
 /**
- * The cap for the NEXT SDK call of one session turn, or `undefined` when no
- * ceiling exists anywhere. Throws `TurnBudgetExhaustedError` (after an `error`
+ * The cap for the NEXT SDK call of one session turn. With no ceiling anywhere
+ * (no declared, no agent budget, no env) it refuses by name. Throws `TurnBudgetExhaustedError` (after an `error`
  * row) when nothing remains. Called once per SDK call, so a turn that spends
  * across several calls — architect's interview → explore → draft → critic —
  * is capped against what is LEFT, not against the turn-start figure. Row
@@ -157,22 +157,36 @@ type BudgetArm = { ceilingUsd: number; spentUsd: number; source: TurnBudgetSourc
  */
 export function turnBudgetUsd(args: {
   declaredCeilingUsd: unknown;
+  /** forge-nk1y.5 — the agent's own `budgets.maxBudgetUsd`: the session arm when
+   *  no ceiling was declared (a session minted before starts stamped one). */
+  agentBudgetUsd: number | undefined;
   env: NodeJS.ProcessEnv;
   /** Row 209 — `_logs/`, the root `bridgeSpentUsd` walks (every caller already resolves this). */
   logsRoot: string;
   spentUsd: () => number;
   logger: EventLogger;
   identity: { initiativeId: string; phase: Parameters<EventLogger['emit']>[0]['phase']; skill: string; sessionId: string };
-}): number | undefined {
+}): number {
   const declared = positiveUsd(args.declaredCeilingUsd);
-  const bridgeCeiling = positiveUsd(args.env[BRIDGE_COST_CEILING_ENV]);
+  const agentBudget = positiveUsd(args.agentBudgetUsd);
+  const bridgeCeiling = parseCeilingEnv(args.env[BRIDGE_COST_CEILING_ENV]); // a set-but-invalid bound throws by name
 
-  const sessionArm: BudgetArm | undefined = declared === undefined ? undefined
-    : { ceilingUsd: declared, spentUsd: args.spentUsd(), source: 'session' };
+  const sessionArm: BudgetArm | undefined = declared !== undefined
+    ? { ceilingUsd: declared, spentUsd: args.spentUsd(), source: 'session' }
+    : agentBudget !== undefined ? { ceilingUsd: agentBudget, spentUsd: args.spentUsd(), source: 'agent-budget' } : undefined;
   const bridgeArm: BudgetArm | undefined = bridgeCeiling === undefined ? undefined
     : { ceilingUsd: bridgeCeiling, spentUsd: bridgeSpentUsd(args.logsRoot, args.env[BRIDGE_STARTED_AT_ENV]), source: 'bridge' };
 
-  if (sessionArm === undefined && bridgeArm === undefined) return undefined;
+  if (sessionArm === undefined && bridgeArm === undefined) {
+    // forge-nk1y.5 — never an uncapped turn: refused by name.
+    const err = new Error(`no spend ceiling for this session turn: set ${BRIDGE_COST_CEILING_ENV} or budgets.maxBudgetUsd on agent "${args.identity.skill}"`);
+    err.name = 'NoSpendCeilingError';
+    args.logger.emit({
+      initiative_id: args.identity.initiativeId, phase: args.identity.phase, skill: args.identity.skill,
+      event_type: 'error', input_refs: [], output_refs: [], message: err.message, metadata: { session_id: args.identity.sessionId },
+    });
+    throw err;
+  }
 
   // MIN of the two remainings: whichever arm would exhaust FIRST binds this turn.
   const remainingOf = (arm: BudgetArm): number => arm.ceilingUsd - arm.spentUsd;

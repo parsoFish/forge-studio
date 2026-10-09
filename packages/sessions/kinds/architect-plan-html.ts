@@ -350,7 +350,7 @@ ${session.initiatives.map((i, idx) => {
       return `      <div class="seg" style="flex: ${i.iteration_budget}; background: hsl(${hue}, 55%, 50%);" title="${esc(i.initiative_id)} — ${i.iteration_budget} iterations">${pct >= 8 ? esc(i.initiative_id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '')) : ''}</div>`;
     }).join('\n')}
     </div>
-    <div class="info">Informational only: forge sets no limit on this total, and the operator decides whether it is acceptable. Each initiative's develop run stops dispatching work when its spend reaches its own ceiling — the <strong>ceiling</strong> chip: <code>FORGE_COST_CEILING_USD</code> when set, else its <code>cost_ceiling_usd</code>, else <code>cost_budget_usd</code> plus 50%. Planning spend counts against it. The <strong>estimate</strong> chip is <code>cost_budget_usd</code>.</div>
+    <div class="info">Informational only: forge sets no limit on this total, and the operator decides whether it is acceptable. Each initiative's develop run stops dispatching work when its spend reaches its own ceiling — the <strong>ceiling</strong> chip: <code>FORGE_COST_CEILING_USD</code> when set, else its <code>cost_ceiling_usd</code>, else <code>cost_budget_usd</code> plus 50%. Planning spend counts against it. A ceiling set at Start development (<code>cost_ceiling_usd</code>) replaces the chip's figure. The <strong>estimate</strong> chip is <code>cost_budget_usd</code>.</div>
   </div>
 
   <!-- ── 5. OPERATOR BRIEF + INTERVIEW ── -->

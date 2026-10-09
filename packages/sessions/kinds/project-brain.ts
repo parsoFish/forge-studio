@@ -112,6 +112,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
   eventLabel: 'project-brain turn',
   eventPhase: 'project-brain',
   eventSkill: 'project-brain-builder',
+  agentSlug: 'project-brain-builder',
   initiativeId: (sessionId) => `project-brain-${sessionId}`,
 
   steps: {
