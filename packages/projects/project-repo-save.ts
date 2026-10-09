@@ -11,7 +11,7 @@
  * strand) is never reset on a plain Save: the Save proposes the recovery and
  * the operator confirms it with the two shas it named.
  */
-import { gitIdentityConfigArgs, guardedFile, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { gitIdentityConfigArgs, guardedFile, isDryBridge, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 import { defaultGh, githubSlug, mergedStudioPr, openStudioPr, openStudioPrWithAutoMerge, probeProtection, type GhRunner } from './project-repo-github.ts';
 import { branchExists, commitStudioChange, currentBranch, defaultBranch, git, isGitRepo, STUDIO_BRANCH, uncommittedContractPaths } from './project-repo-tx.ts';
@@ -105,11 +105,16 @@ function saveLocal(dir: string, base: string): SaveResult {
 
 function saveToOrigin(dir: string, base: string, gh: GhRunner, recover: RecoverConfirmation | undefined): SaveResult {
   const fetched = tryGit(dir, ['fetch', '--quiet', 'origin', `+refs/heads/${base}:${tracking(base)}`]);
+  if (!fetched.ok && /couldn't find remote ref/i.test(fetched.err)) return firstPush(dir, base, gh);
   if (!fetched.ok) return notSaved(`refused — could not fetch origin/${base} (${fetched.err}); nothing moved`);
   if (branchExists(dir, STUDIO_BRANCH)) {
     if (count(dir, `${base}..${STUDIO_BRANCH}`) > 0) {
       // A confirmation that arrives with new forge-studio work is moot: the PR carries the base's commits too.
-      if (count(dir, `${tracking(base)}..${STUDIO_BRANCH}`) === 0) return finishMergedPr(dir, base, gh);
+      const slug = originSlug(dir);
+      if (count(dir, `${tracking(base)}..${STUDIO_BRANCH}`) === 0) return finishMergedPr(dir, base, slug ? mergedStudioPr(gh, dir, slug, base) : undefined);
+      // A squash/rebase merge leaves forge-studio's commits off origin: our own merged PR whose head is this tip says it landed.
+      const squashed = slug ? mergedStudioPr(gh, dir, slug, base, sha(dir, STUDIO_BRANCH)) : undefined;
+      if (squashed) return finishMergedPr(dir, base, squashed);
       return publish(dir, base, gh);
     }
     // An empty forge-studio holds nothing; drop it so the base is judged alone.
@@ -135,6 +140,16 @@ function saveToOrigin(dir: string, base: string, gh: GhRunner, recover: RecoverC
     return { ...notSaved(`refused — stale recovery confirmation: local ${base} or origin/${base} moved since the proposal; nothing moved. Now: ${proposed}`), recovery: proposal };
   }
   return recoverStranded(dir, proposal, gh);
+}
+
+/** Origin has no <base> yet: it cannot be protected, so the first Save merges and creates it. */
+function firstPush(dir: string, base: string, gh: GhRunner): SaveResult {
+  if (!branchExists(dir, STUDIO_BRANCH) || count(dir, `${base}..${STUDIO_BRANCH}`) === 0) return notSaved(NOTHING_PENDING);
+  const direct = mergeAndPush(dir, base);
+  if (direct.ok) return { merged: true, pushed: true, detail: `merged ${STUDIO_BRANCH} → ${base} + pushed to origin (origin had no ${base} yet)` };
+  if (direct.conflict) return notSaved(`refused — merging ${STUDIO_BRANCH} into ${base} failed (${direct.err}); nothing moved`);
+  const slug = originSlug(dir);
+  return slug ? publishViaPr(dir, base, gh, slug, `push of ${base} refused: ${direct.err}`) : directRefused(base, direct.err);
 }
 
 function diverged(base: string, ahead: number, behind: number): SaveResult {
@@ -178,7 +193,11 @@ function publishDirect(dir: string, base: string): SaveResult {
   const direct = mergeAndPush(dir, base);
   if (direct.ok) return { merged: true, pushed: true, detail: `merged ${STUDIO_BRANCH} → ${base} + pushed to origin` };
   if (direct.conflict) return notSaved(`refused — merging ${STUDIO_BRANCH} into ${base} failed (${direct.err}); nothing moved`);
-  return notSaved(`push to origin refused and no GitHub PR path for a non-GitHub origin — ${STUDIO_BRANCH} kept, local ${base} restored; push ${STUDIO_BRANCH} and merge it by hand, then Save again (${direct.err})`);
+  return directRefused(base, direct.err);
+}
+
+function directRefused(base: string, err: string): SaveResult {
+  return notSaved(`push to origin refused and no GitHub PR path for a non-GitHub origin — ${STUDIO_BRANCH} kept, local ${base} restored; push ${STUDIO_BRANCH} and merge it by hand, then Save again (${err})`);
 }
 
 /** Merge + push the base. A refused push restores the base to its pre-merge sha
@@ -186,11 +205,12 @@ function publishDirect(dir: string, base: string): SaveResult {
 function mergeAndPush(dir: string, base: string): { ok: true } | { ok: false; conflict: boolean; err: string } {
   const pre = sha(dir, base);
   const from = currentBranch(dir);
+  const back = from === 'HEAD' ? ['checkout', '--detach', sha(dir, 'HEAD')] : ['checkout', from];
   git(dir, ['checkout', base]);
   const merged = tryGit(dir, [...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY), 'merge', '--no-ff', '--no-verify', '-m', MERGE_MESSAGE, STUDIO_BRANCH]);
   if (!merged.ok) {
     git(dir, ['merge', '--abort'], { allowFail: true });
-    git(dir, ['checkout', from]);
+    git(dir, back);
     return { ok: false, conflict: true, err: merged.err };
   }
   const pushed = tryGit(dir, ['push', 'origin', base]);
@@ -199,9 +219,11 @@ function mergeAndPush(dir: string, base: string): { ok: true } | { ok: false; co
     git(dir, ['branch', '-dr', `origin/${STUDIO_BRANCH}`], { allowFail: true });
     return { ok: true };
   }
-  git(dir, ['checkout', STUDIO_BRANCH]);
+  // Step off the base to restore it, then return the operator to the branch they were on.
+  git(dir, from === base ? ['checkout', STUDIO_BRANCH] : back);
   git(dir, ['branch', '-f', base, pre]);
   if (sha(dir, base) !== pre) throw new Error(`saveProjectRepo: could not restore ${base} to ${pre} after a refused push`);
+  if (from === base) git(dir, ['checkout', base]);
   return { ok: false, conflict: false, err: pushed.err };
 }
 
@@ -218,17 +240,18 @@ function publishViaPr(dir: string, base: string, gh: GhRunner, slug: string, why
   return { merged: false, pushed: true, prUrl: pr.url, detail: `${verb} (${why}) — ${STUDIO_BRANCH} → ${base}; ${pr.autoMerge}. Save again once it merges.` };
 }
 
-/** forge-studio is wholly on origin/<base>: fast-forward the base, drop forge-studio. */
-function finishMergedPr(dir: string, base: string, gh: GhRunner): SaveResult {
-  const ahead = count(dir, `${tracking(base)}..${base}`);
-  if (ahead > 0) return diverged(base, ahead, count(dir, `${base}..${tracking(base)}`));
+/** The PR landed (forge-studio wholly on origin/<base>, or our merged PR's head is its tip):
+ *  fast-forward the base — refused by name unless it is an ancestor of origin — and drop forge-studio. */
+function finishMergedPr(dir: string, base: string, url: string | undefined): SaveResult {
+  const name = `PR ${url ?? STUDIO_BRANCH}`;
+  if (!tryGit(dir, ['merge-base', '--is-ancestor', base, tracking(base)]).ok) {
+    return notSaved(`refused — ${name} merged, but local ${base} is not an ancestor of origin/${base} (${count(dir, `${tracking(base)}..${base}`)} local commit(s)): reconcile ${base} by hand, then Save again; nothing moved`);
+  }
   if (currentBranch(dir) !== base) git(dir, ['checkout', base]);
   git(dir, ['merge', '--ff-only', tracking(base)]);
   git(dir, ['branch', '-D', STUDIO_BRANCH]);
   git(dir, ['branch', '-dr', `origin/${STUDIO_BRANCH}`], { allowFail: true });
-  const slug = originSlug(dir);
-  const url = slug ? mergedStudioPr(gh, dir, slug) : undefined;
-  return { merged: true, pushed: true, detail: `PR ${url ?? STUDIO_BRANCH} merged — ${base} fast-forwarded to origin/${base} ${sha(dir, base).slice(0, 7)}` };
+  return { merged: true, pushed: true, detail: `${name} merged — ${base} fast-forwarded to origin/${base} ${sha(dir, base).slice(0, 7)}` };
 }
 
 /** Pending a Save: forge-studio has commits beyond the base, or the base sits
@@ -241,9 +264,12 @@ export function hasPendingStudioChanges(projectDir: string): boolean {
   return Number(git(projectDir, ['rev-list', '--count', `${tracking(base)}..${base}`], { allowFail: true }) || 0) > 0;
 }
 
-/** The open forge-studio PR for repo-status. Asks gh only once forge-studio was pushed. */
+/** The open forge-studio PR for repo-status (polled). Asks gh only outside the dry bridge,
+ *  once forge-studio was pushed, and while it is still ahead of origin/<base> — never per poll after it merged. */
 export function studioPullRequestUrl(projectDir: string, gh: GhRunner = defaultGh): string | undefined {
-  if (!isGitRepo(projectDir) || !refExists(projectDir, `refs/remotes/origin/${STUDIO_BRANCH}`)) return undefined;
+  if (isDryBridge() || !isGitRepo(projectDir) || !refExists(projectDir, `refs/remotes/origin/${STUDIO_BRANCH}`) || !branchExists(projectDir, STUDIO_BRANCH)) return undefined;
+  const base = defaultBranch(projectDir);
+  if (!refExists(projectDir, tracking(base)) || Number(git(projectDir, ['rev-list', '--count', `${tracking(base)}..${STUDIO_BRANCH}`], { allowFail: true }) || 0) === 0) return undefined;
   const slug = originSlug(projectDir);
-  return slug ? openStudioPr(gh, projectDir, slug) : undefined;
+  return slug ? openStudioPr(gh, projectDir, slug, base) : undefined;
 }

@@ -181,8 +181,8 @@ export async function handleProjectRepoStatus(
       }
       // forge-mfv5.1.20: the uncommitted contract files are what a Save would refuse on / adopt.
       // forge-mfv5.1.22: an open forge-studio PR (protected default branch) is served beside `pending`.
-      const prUrl = studioPullRequestUrl(projectRef.absPath);
-      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath), ...(prUrl ? { prUrl } : {}) }, origin);
+      const prUrl = studioPullRequestUrl(projectRef.absPath) ?? null; // null under the dry bridge too
+      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath), prUrl }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

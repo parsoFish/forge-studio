@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 7 | 1,627 | **1,627** | ratified 1,627 (+54, forge-8vfn.30.9, ruling 666): `resolveDeclaredBin`, the pure declared-bin containment rule shared by flows and factory. |
 | `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 52 | 11,713 | **9,919** | ratified 9,919 — forge-mfv5.1.22 (operator ruling 2026-10-09, T1 ask): Save opens a PR on a protected default branch, finalises a merged PR, and recovers a stranded local main in two steps (`project-repo-save.ts`, `project-repo-github.ts`); +283 measured. |
+| `projects` | 52 | 11,769 | **9,975** | ratified 9,975 — forge-mfv5.1.22 (operator ruling 2026-10-09, T1 ask, 9,919) + its security hardening (+56, lane-ratified, ruling 666): Save opens a PR on a protected default branch, finalises it, recovers a stranded main in two steps. |
 | `knowledge` | 44 | 13,477 | **12,899** | ratified 12,899 — forge-mfv5.1.18: a project-brain commit files each theme in its category index through `ensureLinked`; +15 measured, read for slack (comment cut), lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,938 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
@@ -68,7 +68,7 @@ operator-ratified new cap — never a silent raise.
 | `apps/forge` | 36 | 8,725 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **504** | **133,864** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **504** | **133,920** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -428,9 +428,9 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-types.ts | projects | verbatim | 208 |
 | packages/projects/project-config-validate.ts | projects | verbatim | 464 |
 | packages/projects/project-create.ts | projects | verbatim | 594 |
-| packages/projects/project-repo-github.ts | projects | rewritten | 104 |
-| packages/projects/project-repo-save.ts | projects | rewritten | 249 |
-| packages/projects/project-repo-tx.ts | projects | verbatim | 209 |
+| packages/projects/project-repo-github.ts | projects | rewritten | 117 |
+| packages/projects/project-repo-save.ts | projects | rewritten | 275 |
+| packages/projects/project-repo-tx.ts | projects | verbatim | 226 |
 | packages/projects/reset.ts | projects | verbatim | 711 |
 | packages/projects/reset-cli.ts | projects | verbatim | 160 |
 | packages/projects/reset-command-resolve.ts | projects | verbatim | 74 |

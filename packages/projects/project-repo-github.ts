@@ -3,7 +3,8 @@
  * protected, and the forge-studio pull request (open it, find it, request
  * merge-on-green, see it merged). gh is the only GitHub client (D-02); it runs
  * through an injectable runner so tests answer with gh's real output shapes and
- * never reach the network.
+ * never reach the network. Calls stay synchronous, like the git ones around them,
+ * each bounded by GH_TIMEOUT_MS so a hung gh fails the Save by name.
  */
 import { execFileSync } from 'node:child_process';
 
@@ -55,29 +56,41 @@ export function probeProtection(gh: GhRunner, cwd: string, slug: string, base: s
   return { kind: 'unknown', reason: 'gh api returned no "protected" field' };
 }
 
-const PR_URL_RE = /^https:\/\/\S+\/pull\/\d+$/;
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Only this origin's own PR URLs: github.com/<owner>/<repo>/pull/N (GitHub slugs are case-insensitive). */
+const prUrlRe = (slug: string): RegExp => new RegExp(`^https://github\\.com/${escapeRe(slug)}/pull/\\d+$`, 'i');
 
-function prUrls(gh: GhRunner, cwd: string, slug: string, state: 'open' | 'merged'): string[] | { error: string } {
-  const r = gh(['pr', 'list', '--repo', slug, '--head', STUDIO_BRANCH, '--state', state, '--json', 'url'], cwd);
+type PrRow = { url: string; headRefOid: string };
+
+/** forge-studio → base PRs of THIS repo. gh's `--head` matches by branch name only, so
+ *  a fork's PR, another base's, or another repo's URL is dropped here (security review). */
+function studioPrs(gh: GhRunner, cwd: string, slug: string, base: string, state: 'open' | 'merged'): PrRow[] | { error: string } {
+  const r = gh(['pr', 'list', '--repo', slug, '--head', STUDIO_BRANCH, '--base', base, '--state', state,
+    '--json', 'url,isCrossRepository,baseRefName,headRefName,headRefOid,headRepositoryOwner'], cwd);
   if (!r.ok) return { error: `gh pr list failed: ${firstLine(r.stderr)}` };
+  let rows: Array<Record<string, unknown>>;
   try {
-    const rows = JSON.parse(r.stdout) as Array<{ url?: unknown }>;
-    return rows.map((row) => row.url).filter((u): u is string => typeof u === 'string' && PR_URL_RE.test(u));
+    rows = JSON.parse(r.stdout) as Array<Record<string, unknown>>;
   } catch {
     return { error: 'gh pr list returned unparseable output' };
   }
+  const own = prUrlRe(slug);
+  return rows
+    .filter((row) => row.isCrossRepository === false && row.baseRefName === base && row.headRefName === STUDIO_BRANCH && typeof row.url === 'string' && own.test(row.url))
+    .map((row) => ({ url: row.url as string, headRefOid: typeof row.headRefOid === 'string' ? row.headRefOid : '' }));
 }
 
 /** The open forge-studio → base PR's URL, or undefined (none, or gh could not say). */
-export function openStudioPr(gh: GhRunner, cwd: string, slug: string): string | undefined {
-  const urls = prUrls(gh, cwd, slug, 'open');
-  return Array.isArray(urls) ? urls[0] : undefined;
+export function openStudioPr(gh: GhRunner, cwd: string, slug: string, base: string): string | undefined {
+  const rows = studioPrs(gh, cwd, slug, base, 'open');
+  return Array.isArray(rows) ? rows[0]?.url : undefined;
 }
 
-/** The most recent merged forge-studio PR's URL, for naming it in a detail. */
-export function mergedStudioPr(gh: GhRunner, cwd: string, slug: string): string | undefined {
-  const urls = prUrls(gh, cwd, slug, 'merged');
-  return Array.isArray(urls) ? urls[0] : undefined;
+/** A merged forge-studio → base PR — with `headOid`, only the one whose head was exactly that commit. */
+export function mergedStudioPr(gh: GhRunner, cwd: string, slug: string, base: string, headOid?: string): string | undefined {
+  const rows = studioPrs(gh, cwd, slug, base, 'merged');
+  if (!Array.isArray(rows)) return undefined;
+  return rows.find((row) => headOid === undefined || row.headRefOid === headOid)?.url;
 }
 
 export type PrOpened = { ok: true; url: string; created: boolean; autoMerge: string } | { ok: false; reason: string };
@@ -85,16 +98,16 @@ export type PrOpened = { ok: true; url: string; created: boolean; autoMerge: str
 /** Reuse the open forge-studio PR or open one, then request merge-on-green. A
  *  repo without auto-merge leaves the PR open — said, never an error. */
 export function openStudioPrWithAutoMerge(gh: GhRunner, cwd: string, slug: string, base: string): PrOpened {
-  const open = prUrls(gh, cwd, slug, 'open');
+  const open = studioPrs(gh, cwd, slug, base, 'open');
   if (!Array.isArray(open)) return { ok: false, reason: open.error };
-  let url = open[0];
+  let url = open[0]?.url;
   const created = url === undefined;
   if (url === undefined) {
     const r = gh(['pr', 'create', '--repo', slug, '--base', base, '--head', STUDIO_BRANCH,
       '--title', 'forge-studio: apply project configuration',
       '--body', 'Project configuration written from Forge Studio. The default branch is protected, so Studio opened this pull request instead of pushing it.'], cwd);
     if (!r.ok) return { ok: false, reason: `gh pr create failed: ${firstLine(r.stderr)}` };
-    const printed = r.stdout.trim().split('\n').map((l) => l.trim()).find((l) => PR_URL_RE.test(l));
+    const printed = r.stdout.trim().split('\n').map((l) => l.trim()).find((l) => prUrlRe(slug).test(l));
     if (!printed) return { ok: false, reason: `gh pr create printed no PR URL: ${firstLine(r.stdout)}` };
     url = printed;
   }

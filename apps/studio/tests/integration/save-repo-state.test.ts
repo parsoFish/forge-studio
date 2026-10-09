@@ -52,8 +52,10 @@ test('a stranded-base proposal comes back as not saved, carrying the recovery to
 test('repo-status carries the open PR link; a non-PR string is dropped', async () => {
   vi.stubGlobal('fetch', json({ pending: true, branch: 'forge-studio', uncommitted: [], prUrl: PR }));
   expect((await fetchRepoStatus('weave')).prUrl).toBe(PR);
-  vi.stubGlobal('fetch', json({ pending: true, branch: 'forge-studio', uncommitted: [], prUrl: 'javascript:alert(1)' }));
-  expect((await fetchRepoStatus('weave')).prUrl).toBeUndefined();
+  for (const bad of ['javascript:alert(1)', 'https://evil.example/x/pull/1', 'https://github.com.evil.io/a/b/pull/1', 'https://github.com/a/b/pull/1"onmouseover', null]) {
+    vi.stubGlobal('fetch', json({ pending: true, branch: 'forge-studio', uncommitted: [], prUrl: bad }));
+    expect((await fetchRepoStatus('weave')).prUrl).toBeUndefined();
+  }
 });
 
 test('the panel links the PR and lists the stranded commits with a confirm control', () => {

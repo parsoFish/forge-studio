@@ -7,7 +7,8 @@
  * default branch is saved (forge-mfv5.1.22).
  */
 const NO_OP_DETAILS = ['no pending forge-studio changes', 'not a git repo'];
-const PR_URL_RE = /^https:\/\/\S+\/pull\/\d+$/;
+/** Only a github.com pull-request URL is ever rendered as a link (forge-mfv5.1.22 review). */
+const PR_URL_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/\d+$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
 
 /** forge-mfv5.1.22 — a Save that found the default branch stranded ahead of origin

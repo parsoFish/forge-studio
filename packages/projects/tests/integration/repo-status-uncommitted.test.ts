@@ -99,7 +99,7 @@ test('a default branch stranded ahead of origin reads pending, with no PR to ser
     g(dir, ['commit', '-q', '-m', 'forge-studio: apply project configuration']);
     const r = await repoStatus(forgeRoot, 'weave');
     assert.equal(r.body.pending, true);
-    assert.equal(r.body.prUrl, undefined);
+    assert.equal(r.body.prUrl, null);
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

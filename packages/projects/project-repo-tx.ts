@@ -37,12 +37,29 @@ export class StudioWritePathIgnoredError extends Error {
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
 const SCRATCH_EXCLUDES = ['_preflight-fix', '.forge/work-items'];
 
+export /** Ceiling for one git call (a fetch/push to a dead remote must not hold a request forever);
+ *  `FORGE_GIT_TIMEOUT_MS` overrides it. */
+const DEFAULT_GIT_TIMEOUT_MS = 120_000;
+const gitTimeoutMs = (): number => Number(process.env['FORGE_GIT_TIMEOUT_MS']) || DEFAULT_GIT_TIMEOUT_MS;
+
+/** Never prompt: a credential or host-key question on /dev/tty would hang a bridge
+ *  route with nobody to answer it (forge-mfv5.1.22 review). */
+/** Never prompt on a tty; an operator's own GIT_SSH_COMMAND is kept (only the default ssh gets BatchMode). */
+const nonInteractiveEnv = (): Record<string, string> => ({
+  GIT_TERMINAL_PROMPT: '0',
+  ...(process.env.GIT_SSH_COMMAND ? {} : { GIT_SSH_COMMAND: 'ssh -o BatchMode=yes' }),
+});
+
 export function git(projectDir: string, args: string[], opts: { allowFail?: boolean; raw?: boolean } = {}): string { // raw: porcelain's leading status column survives (a trim eats it)
+  const timeout = gitTimeoutMs();
   try {
-    const out = execFileSync('git', ['-C', projectDir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = execFileSync('git', ['-C', projectDir, ...args], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout, env: { ...process.env, ...nonInteractiveEnv() },
+    });
     return opts.raw ? out : out.trim();
   } catch (err) {
     if (opts.allowFail) return '';
+    if ((err as { code?: unknown }).code === 'ETIMEDOUT') throw new Error(`git ${args.find((a) => !a.startsWith('-')) ?? ''} timed out after ${timeout} ms`);
     throw err;
   }
 }
