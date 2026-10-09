@@ -51,7 +51,6 @@ import { projectsRoutes, type ProjectsRouteDeps } from '../../routes.ts';
 const deps: ProjectsRouteDeps = {
   seedBrain: () => ({ projectId: 'stub', brainDir: '/stub', files: [] }),
   checkBrainSeedContainment: () => {},
-  readArtifactRoot: () => '.',
   isContainedProjectRepoPath: () => true,
   spawnPreflightFix: () => {},
   projectKbBindings: () => new Map(),

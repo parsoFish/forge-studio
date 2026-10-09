@@ -1540,7 +1540,7 @@ test('POST /api/studio/projects scaffolds project.json + C4 artifacts + git, rep
 
   // B3: the C4 artifacts + a git repo were scaffolded (idempotent stubs).
   assert.ok(existsSync(join(projDir, 'roadmap.md')), 'roadmap.md scaffolded (C4)');
-  assert.ok(existsSync(join(projDir, 'brain', 'profile.md')), 'brain/profile.md scaffolded (C4)');
+  assert.equal(existsSync(join(projDir, 'brain')), false, 'no in-ground brain/ — Brain 3 is central (forge-mfv5.1.10)');
   assert.ok(existsSync(join(projDir, '.git')), 'git repo initialised');
   assert.ok(body.scaffolded.includes('roadmap.md'), 'scaffolded list reports roadmap.md');
   assert.ok(Array.isArray(body.failingClauses), 'failingClauses is an array');

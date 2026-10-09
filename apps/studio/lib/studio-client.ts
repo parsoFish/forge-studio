@@ -1740,7 +1740,7 @@ export type FailingClause = { id: string; title: string; detail: string };
 
 /**
  * Onboard (create) a new project: scaffolds `.forge/project.json` + the C4
- * contract artifacts (roadmap.md + brain/profile.md stubs), git-inits if
+ * contract artifacts (the roadmap.md stub), git-inits if
  * needed, then preflights. Surfaces `ready` (every hard clause green),
  * `scaffolded` (relative paths the server created), and `failingClauses` (the
  * hard clauses still red) so the form can either celebrate or hand off to the

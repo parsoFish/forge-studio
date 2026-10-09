@@ -52,7 +52,6 @@ import { isTurnAlive } from '@forge/sessions';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';
 import { validateFlow } from '@forge/flows';
-import { readArtifactRoot } from '@forge/knowledge';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isDryBridge } from './dry-bridge.ts';
 import { cachedListRuns } from '@forge/flows';
@@ -67,8 +66,7 @@ import {
 // ---------------------------------------------------------------------------
 // C4 contract-artifact scaffolding (B3) — MOVED to
 // @forge/projects (M4-projects carve, worker B).
-// `scaffoldContractArtifacts` is re-exported here, with `readArtifactRoot`
-// wired to the real @forge/knowledge implementation, ONLY because
+// `scaffoldContractArtifacts` is re-exported here ONLY because
 // apps/forge/tests/regression/onboard-git-init.test.ts imports it directly from this module. Every
 // other helper that used to live here (ScaffoldContainmentError,
 // contractArtifactTargets, needsGitInit, isPackageManagerShaped,
@@ -76,16 +74,7 @@ import {
 // checkContractArtifactContainment) moved with NO shim: nothing else in this
 // repo imported them directly.
 // ---------------------------------------------------------------------------
-import { scaffoldContractArtifacts as scaffoldContractArtifactsImpl } from '@forge/projects';
-
-export function scaffoldContractArtifacts(
-  projectRoot: string,
-  name: string,
-  forgeRoot: string,
-  opts: { id?: string; qualityGateCmd?: readonly string[] } = {},
-): string[] {
-  return scaffoldContractArtifactsImpl(projectRoot, name, forgeRoot, readArtifactRoot, opts);
-}
+export { scaffoldContractArtifacts } from '@forge/projects';
 
 
 // ---------------------------------------------------------------------------

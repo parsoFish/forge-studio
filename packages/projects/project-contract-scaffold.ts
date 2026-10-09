@@ -8,23 +8,13 @@
  * `bridge-studio-project-onboard.ts`'s `POST /api/studio/projects` (onboard) handler; every
  * other function here exists only in service of those two.
  *
- * `readArtifactRoot` INJECTION (not in the original signature — a mandatory,
- * mechanical adaptation, not an improvement). `contractArtifactTargets` used
- * to import `readArtifactRoot` directly from `@forge/knowledge`.
- * `projects` and `knowledge` are BOTH rank 2 in the M4 §0 chain
- * (`scripts/check-boundaries.mjs`'s `PACKAGE_RANK`), so a package-file import
- * of `@forge/knowledge` from here is a `package-layer-order` violation —
- * exactly the boundary row this carve exists to delete, the same reasoning
- * the carve brief spells out for `seedProjectBrain`. Unlike the route
- * handlers in `bridge-studio-project-onboard.ts`, this file has no `RouteContext`/`deps`
- * factory to carry an injected function through, so the three functions that
- * need it now take `readArtifactRoot` as an explicit parameter instead —
- * `bridge-studio-project-onboard.ts`'s handler factory receives the real
- * `@forge/knowledge` function as a dep and threads it down into these calls.
- * `import type` was considered and rejected: `check-boundaries.mjs` cruises
- * with `tsPreCompilationDeps: true`, which tracks TypeScript type-only
- * imports as real dependency edges too, so even a type-only import of
- * `@forge/knowledge` would still mint the forbidden row.
+ * NO IN-GROUND `brain/` (bead forge-mfv5.1.10). Brain 3 is CENTRAL (SPEC.md
+ * §4): the project profile is `brain/projects/<id>/profile.md` under forgeRoot,
+ * seeded by `seedProjectBrain`, and preflight C4 checks only that file plus
+ * `roadmap.md`. The scaffold used to also write a second TODO stub at
+ * `brain/` profile under the artifactRoot inside the managed repo — two stubs
+ * that drift apart. It writes no `brain/` directory in the project repo, so it also
+ * needs no `readArtifactRoot` (artifactRoot only ever located that stub).
  *
  * Every other symbol below is a byte-for-byte move: same body, same
  * comments, same guard ordering. five separate containment
@@ -40,7 +30,7 @@
  * `EXPLICIT_MODULES` row added to `scripts/check-raw-fs-guarded.mjs` in the
  * same PR that wires this file in — not made here (T2's bookkeeping) — with
  * a positive control proving the row fires. Every raw fs sink in this file,
- * for that row: `existsSync`, `mkdirSync`, `writeFileSync`, `realpathSync`
+ * for that row: `existsSync`, `writeFileSync`, `realpathSync`
  * (read-only, but part of the same guard-adjacent surface), all reached
  * through request-derived `projectRoot`/`qualityGateCmd` parameters, most of
  * them behind `resolveGuardedPath` — see each call site's own comment for the
@@ -48,8 +38,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { existsSync, realpathSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { resolveGuardedPath } from '@forge/kernel';
 import { SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
@@ -69,13 +59,12 @@ import { isPackageManagerShaped, resolveScriptName } from './preflight-gate.ts';
  */
 export class ScaffoldContainmentError extends Error {}
 
-/** One of `contractArtifactTargets`'s two markdown targets (`roadmap.md`,
- *  `<artifactRoot>/brain/profile.md`). The scaffold's third, CONDITIONAL
- *  write target — the C2 hygiene `.gitignore`, written only on the branches
- *  that create the repo (`needsGitInit`) — is not one of these: its write
- *  condition depends on the git-init decision, so it is guarded inline at
- *  its write site and mirrored by the same `needsGitInit` predicate in the
- *  pre-check. */
+/** `contractArtifactTargets`'s one markdown target (`roadmap.md`). The
+ *  scaffold's other, CONDITIONAL write targets — the C2 hygiene `.gitignore`
+ *  (written only on the branches that create the repo, `needsGitInit`) and the
+ *  `package.json` (`needsPackageJsonScaffold`) — are not one of these: their
+ *  write conditions depend on git-state decisions, so each is guarded inline at
+ *  its write site and mirrored by the same predicate in the pre-check. */
 type ContractArtifactTarget = {
   /** Segments passed to `resolveGuardedPath(projectRoot, segments)`. */
   segments: readonly string[];
@@ -87,47 +76,29 @@ type ContractArtifactTarget = {
 };
 
 /**
- * SINGLE SOURCE OF TRUTH for `scaffoldContractArtifacts`'s two UNCONDITIONAL
- * write targets (`roadmap.md`, `<artifactRoot>/brain/profile.md`) beneath
- * `projectRoot`. Both `scaffoldContractArtifacts` itself (the write) and
+ * SINGLE SOURCE OF TRUTH for `scaffoldContractArtifacts`'s one UNCONDITIONAL
+ * markdown write target (`roadmap.md`) beneath `projectRoot`. Both
+ * `scaffoldContractArtifacts` itself (the write) and
  * `checkContractArtifactContainment` (the pure Phase-1 pre-check on `POST
- * /api/studio/projects`, below) compute their target paths from THIS
- * function — one path set, not two that could drift apart (SEC-03 round 4).
+ * /api/studio/projects`, below) compute their target path from THIS function —
+ * one path set, not two that could drift apart (SEC-03 round 4).
  *
- * W7-FIX-B-PROJ: the scaffold has a THIRD write target this function does
- * NOT own — the C2 hygiene `.gitignore`, written ONLY when the scaffold
- * itself creates the repo. Its write condition is the `needsGitInit`
- * three-way git probe (a side-effecting decision this pure path-set function
- * must not absorb), so check/write parity for it is kept by both sites
- * calling the SAME `needsGitInit` predicate instead. Anyone enumerating the
- * route's full write set (these comments are the record): `.forge/project.json` + the two targets below + the
- * conditional `.gitignore`.
- *
- * `readArtifactRoot` is an injected function, not an import — see this
- * file's header comment for why: it lives in `@forge/knowledge`, and
- * `projects`/`knowledge` are the same M4 §0 rank, so a direct import here
- * would mint a `package-layer-order` violation.
+ * The scaffold has further write targets this function does NOT own — the C2
+ * hygiene `.gitignore` (written ONLY when the scaffold itself creates the
+ * repo) and the conditional `package.json`. Their write conditions are
+ * side-effecting git probes (`needsGitInit`) this pure path-set function must
+ * not absorb, so check/write parity for them is kept by both sites calling the
+ * SAME predicate instead. Anyone enumerating the route's full write set (these
+ * comments are the record): `.forge/project.json` + `roadmap.md` + the
+ * conditional `.gitignore` / `package.json`. The project profile is NOT among
+ * them: it is central (`brain/projects/<id>/profile.md`), written by
+ * `seedProjectBrain`, never inside the managed repo.
  */
 export function contractArtifactTargets(
   projectRoot: string,
-  readArtifactRoot: (projectRoot: string) => string,
-): { roadmap: ContractArtifactTarget; profile: ContractArtifactTarget } {
-  // `readArtifactRoot` already rejects an absolute value, a backslash, or a
-  // literal '..' component in the RAW string — but a legitimate
-  // multi-component value (e.g. "sub/dir") must still be split into
-  // INDIVIDUAL segments[] elements before reaching resolveGuardedPath: a
-  // segment containing '/' fails `isSafeSegment` outright, so folding it as
-  // ONE element would always be rejected rather than silently under-checked.
-  const artifactRoot = readArtifactRoot(projectRoot);
-  const artifactSegments = artifactRoot === '.' ? [] : artifactRoot.split('/').filter((s) => s.length > 0 && s !== '.');
-  const profileRel = artifactRoot === '.' ? join('brain', 'profile.md') : join(artifactRoot, 'brain', 'profile.md');
+): { roadmap: ContractArtifactTarget } {
   return {
     roadmap: { segments: ['roadmap.md'], absPath: join(projectRoot, 'roadmap.md'), relPath: 'roadmap.md' },
-    profile: {
-      segments: [...artifactSegments, 'brain', 'profile.md'],
-      absPath: join(projectRoot, ...artifactSegments, 'brain', 'profile.md'),
-      relPath: profileRel.split(sep).join('/'),
-    },
   };
 }
 
@@ -237,10 +208,10 @@ export function needsPackageJsonScaffold(
  * dangling-symlink `.gitignore` the route was never going to touch), the
  * w8-a1 conditional `package.json` (`needsPackageJsonScaffold` — same
  * shared-predicate shape as `.gitignore`), plus `scaffoldContractArtifacts`'s
- * two unconditional targets (`roadmap.md`, `<artifactRoot>/brain/
- * profile.md`), computed via the SAME `contractArtifactTargets`
- * `scaffoldContractArtifacts` itself uses. Zero side effects: no
- * `mkdirSync`, no `writeFileSync`.
+ * one unconditional target (`roadmap.md`), computed via the SAME
+ * `contractArtifactTargets` `scaffoldContractArtifacts` itself uses. Zero side
+ * effects: no `mkdirSync`, no
+ * `writeFileSync`.
  *
  * When `projectRoot` does not exist yet (the common brand-new-onboard
  * case), nothing beneath it could carry a pre-planted symlink —
@@ -257,7 +228,6 @@ export function needsPackageJsonScaffold(
 export function checkContractArtifactContainment(
   projectRoot: string,
   forgeRoot: string,
-  readArtifactRoot: (projectRoot: string) => string,
   qualityGateCmd?: readonly string[],
 ): void {
   if (!existsSync(projectRoot)) return;
@@ -295,21 +265,22 @@ export function checkContractArtifactContainment(
     if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking package.json');
   }
 
-  const { roadmap, profile } = contractArtifactTargets(projectRoot, readArtifactRoot);
-  for (const target of [roadmap, profile]) {
-    if (existsSync(target.absPath)) continue; // already there — idempotent skip, nothing to guard
-    const guard = resolveGuardedPath(projectRoot, target.segments);
-    if (!guard.ok) throw new ScaffoldContainmentError(`path containment check failed while checking ${target.relPath}`);
+  const { roadmap } = contractArtifactTargets(projectRoot);
+  if (!existsSync(roadmap.absPath)) { // already there — idempotent skip, nothing to guard
+    const guard = resolveGuardedPath(projectRoot, roadmap.segments);
+    if (!guard.ok) throw new ScaffoldContainmentError(`path containment check failed while checking ${roadmap.relPath}`);
   }
 }
 
 /**
- * Idempotently scaffold the machine-readable architecture context the C4
- * preflight clause requires: a `roadmap.md` at the project root and the
- * project's brain sub-wiki `profile.md` (under the project.json `artifactRoot`,
- * default `.`). Each file is written ONLY if absent — an existing operator file
- * is never clobbered. The stubs are clearly marked as TODO scaffolding so a
- * hollow roadmap is never written silently. A git repo is initialised when
+ * Idempotently scaffold the roadmap the C4 preflight clause requires: a
+ * `roadmap.md` at the project root, written ONLY if absent — an existing
+ * operator file is never clobbered. The stub is clearly marked as TODO
+ * scaffolding so a hollow roadmap is never written silently. The project
+ * profile (the other C4 file) is NOT scaffolded here: it is central, at
+ * `brain/projects/<id>/profile.md`, seeded by `seedProjectBrain`; no `brain/`
+ * directory is ever written inside the managed repo (bead forge-mfv5.1.10).
+ * A git repo is initialised when
  * the dir has no legitimate repo of its own — its OWN work tree and an
  * enclosing NON-forge repo both count as legitimate; only "no repo" or
  * "inside forge's own work tree" init (C6/preflight needs a git surface;
@@ -321,8 +292,7 @@ export function checkContractArtifactContainment(
  * symlinked or hardlinked segment straight through. Every path this function
  * writes through is resolved via `resolveGuardedPath` (studio-path-
  * guard.ts), with `projectRoot` as the TRUSTED, already-verified root and
- * every path component (including every `artifactRoot` component — see
- * below) its OWN `segments[]` element, never folded into `root` (see that
+ * every path component its OWN `segments[]` element, never folded into `root` (see that
  * module's CONTRACT section: folding an untrusted segment into `root`
  * bypasses the per-segment identity walk entirely). A rejection throws
  * `ScaffoldContainmentError` rather than silently skipping the write (a
@@ -330,10 +300,10 @@ export function checkContractArtifactContainment(
  * this campaign keeps finding).
  *
  * SEC-03 Finding B (round-2 adversarial review) — the Defect-5 fix above
- * ran BOTH guards unconditionally, before either file's own `!exists`
+ * ran the guards unconditionally, before each file's own `!exists`
  * idempotency check. `resolveGuardedPath` rejects any EXISTING leaf with
  * `nlink !== 1`, so an ordinary, harmless, wholly-in-forgeRoot hardlinked
- * `roadmap.md`/`brain/profile.md` (the kind `cp -al`/dedup/cache tooling
+ * `roadmap.md` (the kind `cp -al`/dedup/cache tooling
  * produces routinely) false-rejected the WHOLE onboard — on a path this
  * function was only ever going to SKIP, never write. T1's rule: guard the
  * paths you WRITE, not the paths you merely test for existence. Each file
@@ -348,7 +318,7 @@ export function checkContractArtifactContainment(
  *
  * w8-a1 (bd forge-7pa): a CONDITIONAL FOURTH target, `package.json`, joins
  * the write set — mirroring the `.gitignore` precedent exactly rather than
- * `roadmap.md`/`profile.md`'s unconditional pair: written only when
+ * `roadmap.md`'s unconditional write: written only when
  * `needsPackageJsonScaffold(projectRoot, forgeRoot, opts.qualityGateCmd)`
  * says so (the declared gate is package-manager-shaped, no package.json
  * already exists, AND this call is itself the one creating the repo — the
@@ -366,7 +336,6 @@ export function scaffoldContractArtifacts(
   projectRoot: string,
   name: string,
   forgeRoot: string,
-  readArtifactRoot: (projectRoot: string) => string,
   opts: { id?: string; qualityGateCmd?: readonly string[] } = {},
 ): string[] {
   const created: string[] = [];
@@ -439,7 +408,7 @@ export function scaffoldContractArtifacts(
     }
   }
 
-  const { roadmap, profile } = contractArtifactTargets(projectRoot, readArtifactRoot);
+  const { roadmap } = contractArtifactTargets(projectRoot);
 
   // roadmap.md (C4) — TODO stub, clearly marked. SEC-03 Finding B: probe
   // existence FIRST (plain, symlink-following `existsSync` — "already
@@ -463,34 +432,10 @@ export function scaffoldContractArtifacts(
     created.push('roadmap.md');
   }
 
-  // brain sub-wiki profile.md (C4, Brain 3) under the artifactRoot. On THIS
-  // call path artifactRoot is always '.' in practice (this function always
-  // runs before .forge/project.json exists, and readArtifactRoot returns
-  // '.' whenever that file is absent) — but `contractArtifactTargets`
-  // applies the split unconditionally rather than leaning on that as an
-  // invariant, since scaffoldContractArtifacts's own contract makes no such
-  // promise about call order.
-  if (!existsSync(profile.absPath)) {
-    const profileGuard = resolveGuardedPath(projectRoot, profile.segments);
-    if (!profileGuard.ok) throw new ScaffoldContainmentError('path containment check failed while scaffolding brain/profile.md');
-    mkdirSync(dirname(profileGuard.realPath), { recursive: true });
-    writeFileSync(
-      profileGuard.realPath,
-      `# ${name} — Project Profile (Brain 3)\n\n` +
-        `> TODO (scaffold): replace this stub with the project's machine-readable\n` +
-        `> architecture profile — the durable facts forge's planners query before\n` +
-        `> designing (stack, module map, conventions, invariants). See\n` +
-        `> SPEC.md §6 (clause C4) and the forge-onboard-project skill.\n\n` +
-        `## Stack\n\nTODO\n\n## Module map\n\nTODO\n\n## Conventions & invariants\n\nTODO\n`,
-      'utf8',
-    );
-    created.push(profile.relPath);
-  }
-
   // package.json (w8-a1, bd forge-7pa) — the CONDITIONAL FOURTH target,
   // mirroring the `.gitignore` precedent exactly (not folded into
   // `contractArtifactTargets`, whose docstring reserves that function for
-  // the two UNCONDITIONAL targets only). Written ONLY when
+  // the one UNCONDITIONAL markdown target only). Written ONLY when
   // `needsPackageJsonScaffold` said so — see that function's docstring for
   // the shared-predicate rule with `checkContractArtifactContainment`
   // above, including its third conjunct (never litter a package.json into

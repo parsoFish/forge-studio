@@ -67,7 +67,6 @@ function minimalDeps(seedBrain: OnboardDeps['seedBrain']): OnboardDeps {
   return {
     seedBrain,
     checkBrainSeedContainment: () => {},
-    readArtifactRoot: () => '.',
     isContainedProjectRepoPath: (p, opts) => {
       const root = resolve(opts.projectsRoot ?? join(opts.forgeRoot, 'projects'));
       const resolved = resolve(p);

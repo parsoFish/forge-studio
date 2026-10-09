@@ -765,7 +765,7 @@ test('positive control (passes before AND after any Defect-5 fix): cloning a rea
   assert.equal(json?.ok, true, `expected ok:true — got ${text}`);
   assert.ok(existsSync(join(projectDir, '.forge', 'project.json')), 'expected .forge/project.json to be written inside the cloned repo');
   assert.ok(existsSync(join(projectDir, 'roadmap.md')), 'expected roadmap.md to be written inside the cloned repo');
-  assert.ok(existsSync(join(projectDir, 'brain', 'profile.md')), 'expected brain/profile.md to be written inside the cloned repo');
+  assert.equal(existsSync(join(projectDir, 'brain')), false, 'Brain 3 is central: no brain/ may be written inside the cloned repo (forge-mfv5.1.10)');
   // The pre-existing, unrelated repo file must survive untouched.
   assert.equal(readFileSync(join(projectDir, 'README.md'), 'utf8'), '# a totally normal cloned repo\n');
 });
@@ -981,8 +981,8 @@ test('positive control (passes before AND after any Finding-B fix): a pre-existi
 // projects" handler above): by the time `seedProjectBrain` is called, this
 // route has ALREADY (a) mkdirSync'd a bare `projectRoot` (the Defect-5 fix,
 // "safe to create — isContainedProjectRepoPath already proved it"), and (b)
-// run `scaffoldContractArtifacts`, which WRITES `.git/`, `roadmap.md`, and
-// the LOCAL `brain/profile.md` stub into that directory — all BEFORE
+// run `scaffoldContractArtifacts`, which WRITES `.git/` and `roadmap.md`
+// into that directory — all BEFORE
 // `seedProjectBrain` (the CENTRAL brain seed) ever runs. Unlike
 // `scaffoldContractArtifacts`'s call (wrapped in its own try/catch for
 // `ScaffoldContainmentError` → 400), `seedProjectBrain`'s call has NO
@@ -1016,7 +1016,7 @@ test('(RED) [SEC-03 round 3, onboard route — SECOND INSTANCE, not a clean rout
   const projectDir = join(forgeRoot, 'projects', id);
   assert.ok(
     !existsSync(projectDir),
-    `MEASURED: the onboard route is NOT clean — a seedProjectBrain rejection leaves the SAME class of leftover scaffoldGreenfieldProject does: a real, git-initialized "${projectDir}" (roadmap.md + a local brain stub written by scaffoldContractArtifacts, which runs BEFORE seedProjectBrain) with no .forge/project.json (written LAST, after seedProjectBrain returns). This is a SECOND INSTANCE of the round-3 half-created-project class, not a distinct or merely cosmetic issue — status ${status}: ${text}`,
+    `MEASURED: the onboard route is NOT clean — a seedProjectBrain rejection leaves the SAME class of leftover scaffoldGreenfieldProject does: a real, git-initialized "${projectDir}" (roadmap.md written by scaffoldContractArtifacts, which runs BEFORE seedProjectBrain) with no .forge/project.json (written LAST, after seedProjectBrain returns). This is a SECOND INSTANCE of the round-3 half-created-project class, not a distinct or merely cosmetic issue — status ${status}: ${text}`,
   );
 
   const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);

@@ -202,9 +202,9 @@ function newEventId(): string {
  * `file_change` for every tool mutation. The BRIDGE says nothing. Measured on
  * S1 run 5, five files landed in `projects/gitweave` that no session wrote —
  * `.forge/agent-run/PROMPT.md`, `.forge/contract-compliance-report.json`,
- * `.gitignore`, `roadmap.md`, `brain/profile.md` — so a containment check built
- * on session logs could not account for them, and the story failed for the
- * product working.
+ * `.gitignore`, `roadmap.md` and an in-ground `brain/profile.md` (since
+ * removed from the scaffold) — so a containment check built on session logs
+ * could not account for them, and the story failed for the product working.
  *
  * These three helpers live HERE, not beside `makeToolEventSink`, because the
  * writers span three packages — `packages/agents`, `packages/projects` and
