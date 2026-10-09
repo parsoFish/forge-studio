@@ -4,7 +4,10 @@
  * validateClaimable() is called in runOne BEFORE runCycle. It refuses claims
  * for three structural reasons:
  *
- *   1. Project not contract-ready (runPreflight hard clauses C1/C2/C4 fail).
+ *   1. Project not contract-ready (runPreflight hard clauses C1/C2/C4 fail) or
+ *      not READY by the one readiness rule (`projectReadiness`, SPEC §6 — the
+ *      same function Studio's ContractReadiness renders; a missing north star,
+ *      instructions, demo, skill or KB refuses here exactly as it shows there).
  *      → terminal: false  — the project might be fixed by the operator; leave in
  *        pending and log once (spin-guarded).
  *      → ONLY runs when the project directory exists on disk. If the path is absent
@@ -23,15 +26,16 @@
  *   after claim — the full edit-lock UX is M4).
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { runPreflight } from '@forge/projects';
+import { loadProjectsWithMeta, runPreflight } from '@forge/projects';
+import { projectKbBindings } from '@forge/knowledge';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents';
 import { validateFlow } from './studio/validate-flow.ts';
 import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';
-import type { ManifestClass } from '@forge/contracts';
+import { projectReadiness, type ManifestClass } from '@forge/contracts';
 import { skillRoots } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 import { demoCheckpointPreflightRefusal } from './demo-checkpoint-preflight.ts';
@@ -110,6 +114,65 @@ function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
   } catch {
     return new Map();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Internal: readiness (SPEC §6) — the same function Studio renders
+// ---------------------------------------------------------------------------
+
+/** Where a project's resolved path is compared: the realpath when it resolves. */
+function canonicalPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+}
+
+/**
+ * Read the project's Face-A definition through THE reader the bridge serves
+ * to Studio's project page (`GET /api/studio/projects` →
+ * `loadProjectsWithMeta` with `projectKbBindings`), then ask
+ * `projectReadiness`. Null when ready; otherwise the non-terminal refusal.
+ * A definition that cannot be read refuses by name — it is never treated as ready.
+ */
+function readinessRefusal(
+  initiativeId: string,
+  projectDir: string,
+  forgeRoot: string,
+  clauses: readonly { clause: string; hard: boolean; pass: boolean }[],
+): ClaimValidationResult | null {
+  const id = projectDir.split('/').pop() ?? projectDir;
+  const refuse = (reason: string, blockedClauses: string): ClaimValidationResult => {
+    recordPendingRefusal(initiativeId);
+    return { ok: false, reason, blockedClauses, terminal: false };
+  };
+  let definition;
+  try {
+    const here = canonicalPath(projectDir);
+    definition = loadProjectsWithMeta(forgeRoot, projectKbBindings).find(
+      (p) => canonicalPath(resolve(forgeRoot, p.path)) === here,
+    );
+  } catch (err) {
+    return refuse(`project "${id}" readiness unreadable: ${(err as Error).message}`, 'readiness-unreadable');
+  }
+  if (definition === undefined) {
+    return refuse(
+      `project "${id}" readiness unreadable: it is not in the project roster Studio reads (${projectDir})`,
+      'readiness-unreadable',
+    );
+  }
+  const verdict = projectReadiness({
+    northStar: definition.northStar ?? '',
+    instructions: definition.instructions ?? '',
+    demoProcess: (definition.demoProcess ?? []) as Parameters<typeof projectReadiness>[0]['demoProcess'],
+    skills: definition.skills ?? [],
+    kb: definition.kb ?? null,
+    clauses,
+  });
+  if (verdict.ready) return null;
+  const failing = verdict.failing.join(',');
+  return refuse(`project "${definition.id}" is not ready (failing: ${failing})`, failing);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +340,15 @@ export function validateClaimable(
         terminal: false, // leave in pending — operator can fix the project
       };
     }
+
+    // SPEC §6 — readiness is ONE function. Studio's ContractReadiness shows
+    // `projectReadiness(...)`; the claim gate refuses on the SAME call, over
+    // the definition the bridge serves Studio, so it refuses exactly what
+    // Studio shows as not-ready and nothing stricter. The preflight above
+    // already refused on any failing hard clause, so Face B is passed through
+    // as-is (`[]` when preflight itself threw — that catch stays non-blocking).
+    const readiness = readinessRefusal(initiativeId, projectDir, forgeRoot, report?.clauses ?? []);
+    if (readiness !== null) return readiness;
   }
 
   // -------------------------------------------------------------------

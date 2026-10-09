@@ -16,7 +16,7 @@ A project has two faces and one verdict.
 - **Authoring face.** The fields you declare in `.forge/project.json`: north star, instructions, demo process, bound skills, bound Knowledge. Studio shows these in the project builder.
 - **Operational face.** The preflight clauses. Studio marks a project flow-ready only when both faces pass.
 
-Hard clauses decline the run: forge refuses to start and names the clause. Advisory clauses warn and never change the verdict. Only the operational face gates a claim.
+Hard clauses decline the run: forge refuses to start and names the clause. Advisory clauses warn and never change the verdict. A claim needs the same verdict Studio shows: a project Studio marks not flow-ready is refused, naming each failing field or clause. The authoring face needs a north star of at most 140 characters, instructions, a demo with at least one capture and one verify step, at least one bound skill, and bound Knowledge.
 
 What a project provides:
 

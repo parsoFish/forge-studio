@@ -26,6 +26,10 @@ export * from './manifest-types.ts';
  *  manifest for a flow, plus the develop flow's id (forge-8vfn.7.6.132). */
 export * from './runnable-source.ts';
 
+/** `projectReadiness` — the ONE readiness rule Studio shows and the claim gate
+ *  enforces (SPEC §6, bead forge-8vfn.30.4). */
+export * from './project-readiness.ts';
+
 /** The run view's shape (SPEC §2) — moved from `packages/flows`, forge-8vfn.5.17. */
 export * from './run-view-types.ts';
 /** The demo declaration's pure extraction rules — shared by stations, factory

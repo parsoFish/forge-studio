@@ -254,11 +254,15 @@ contract**.
 
 ### Guarantees
 
-- **Two faces, one verdict.** Face A is the authoring object — north star,
-  instructions, demo process, bound skills, bound knowledge. Face B is the
-  operational preflight — the C-clauses. Studio shows a project as flow-ready
-  only when both pass. The claim gate enforces Face B (the hard preflight
-  clauses); Face A is an authoring-time gate shown in Studio.
+- **Two faces, one verdict, computed in one place.** Face A is the authoring
+  object — north star, instructions, demo process, bound skills, bound
+  knowledge. Face B is the operational preflight — the C-clauses. Readiness is
+  one function, `projectReadiness` (`@forge/contracts`): Studio renders its
+  verdict and the claim gate refuses on the same call over the definition the
+  bridge serves Studio, so a project Studio shows as not ready cannot be
+  claimed, and the refusal names each failing field or hard clause. The claim
+  additionally requires the runnable-gate clause DEPS, which Studio shows
+  beside the verdict.
 - **The hard set is C1 (gate command), C2 (scratch hygiene), C4 (architecture
   context), DEPS and SKILLS.** Every other clause is advisory.
 - **Hard clauses decline, advisory clauses warn.** A hard clause failure makes
@@ -287,5 +291,6 @@ contract**.
 
 **enforced by:** `packages/projects/tests/integration/preflight-gate.test.ts` ·
 `packages/projects/tests/integration/preflight-repo.test.ts` ·
-`packages/projects/tests/integration/preflight-instructions.test.ts`; Face A
-readiness in Studio: `review`.
+`packages/projects/tests/integration/preflight-instructions.test.ts` ·
+`packages/flows/tests/contract/readiness-one-function.test.ts` ·
+`packages/flows/tests/integration/claim-validator-readiness.test.ts`.
