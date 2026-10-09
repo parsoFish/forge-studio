@@ -155,6 +155,7 @@ export const architectKind: SessionKindVariant<
   eventLabel: 'architect turn',
   eventPhase: 'architect',
   eventSkill: 'architect-runner',
+  agentSlug: 'architect',
   initiativeId: (sessionId) => `architect-session-${sessionId}`,
   onMissingStatus: architectMissingStatus,
   preamble: architectPreamble,

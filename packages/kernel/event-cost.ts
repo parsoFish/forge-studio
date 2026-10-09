@@ -141,3 +141,18 @@ export function deriveSessionCostUsd(events: readonly Record<string, unknown>[])
   if (!events.some((e) => typeof e['cost_usd'] === 'number')) return null;
   return sumAuthoritativeCostUsd(events as unknown as readonly EventLogEntry[]);
 }
+
+/** The last call in a session log that ended unpriced, and the cap it was charged. */
+export type UnpricedCharge = { message: string; reason: string; chargedUsd: number };
+
+/** The newest unpriced-and-bounded row (forge-nk1y.5: a budget refusal names it), or null. */
+export function lastUnpricedCharge(events: readonly Record<string, unknown>[]): UnpricedCharge | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const meta = events[i]['metadata'] as Record<string, unknown> | undefined;
+    const bound = meta?.['upper_bound_usd'];
+    if (meta?.['priced'] === false && typeof bound === 'number' && Number.isFinite(bound) && bound > 0) {
+      return { message: String(events[i]['message']), reason: String(meta['unpriced_reason'] ?? 'unpriced'), chargedUsd: bound };
+    }
+  }
+  return null;
+}

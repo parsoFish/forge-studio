@@ -20,6 +20,7 @@ export * from './tool-fence.ts';
 export * from './event-cost.ts';
 /** Config and layout, plus the env-assertion boundary. */
 export * from './config.ts';
+export * from './run-ceiling.ts';
 
 // Which GitHub identity this host acts as for an outward action (6.11.35).
 export * from './gh-identity.ts';

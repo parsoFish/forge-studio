@@ -491,6 +491,7 @@ test('AT-F6-R1: Shape A over the wire (no ?project=) — GET /api/studio/session
   assert.deepEqual(body.transcriptSources, []);
   assert.equal(body.transcriptError, null);
   assert.equal(body.finalized, null);
+  assert.equal((body as { ceiling?: unknown }).ceiling, null, 'a legacy session recorded no ceiling — the key is present and null (forge-nk1y.5)');
   assert.equal((body.lifecycle as { state: string }).state, 'terminal');
 });
 

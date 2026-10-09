@@ -126,11 +126,10 @@ test('row 193b (b) a bounded unpriced row counts as spent at its bound — a sta
   assert.equal(r.options?.['maxBudgetUsd'], 3.5);
 });
 
-test('row 193b (b) no ceiling anywhere → no maxBudgetUsd key at all (operator sessions stay unbounded, options bag unchanged)', async () => {
+test('forge-nk1y.5 (was 193b (b) "unbounded"): no declared ceiling, no env → the architect\'s own budgets.maxBudgetUsd ($10) is the session arm, never an uncapped turn', async () => {
   const r = await architectTurn({ seed: priced(1.25) });
   assert.equal(r.error, null, String(r.error));
-  assert.ok(r.options !== null);
-  assert.equal(Object.hasOwn(r.options!, 'maxBudgetUsd'), false);
+  assert.equal(r.options?.['maxBudgetUsd'], 8.75);
 });
 
 test('row 193b (b) no declared ceiling → the bridge process\'s FORGE_COST_CEILING_USD is the fallback source', async () => {

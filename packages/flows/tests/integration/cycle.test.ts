@@ -106,17 +106,20 @@ test('resolveCostCeilingOverride: falls back to manifest when env unset', () => 
   }
 });
 
-test('resolveCostCeilingOverride: derives cost_budget_usd x (1 + margin share) when ceiling unset; bad env ignored', () => {
+test('resolveCostCeilingOverride: derives cost_budget_usd x (1 + margin share) when ceiling unset; a bad env is refused by name (forge-nk1y.4)', () => {
   const { path, dir } = writeManifestWithCeiling(undefined); // fixture carries cost_budget_usd: 25
   const derived = 25 * (1 + DERIVED_CEILING_MARGIN_SHARE);
   const prev = process.env.FORGE_COST_CEILING_USD;
   delete process.env.FORGE_COST_CEILING_USD;
   try {
     assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: derived, source: 'derived' });
+    // A set-but-invalid bound used to fall through to the looser derived tier
+    // silently; it now refuses by name (one strict parser, @forge/kernel).
     process.env.FORGE_COST_CEILING_USD = 'not-a-number';
-    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: derived, source: 'derived' });
+    assert.throws(() => resolveCostCeilingOverride(path), /invalid FORGE_COST_CEILING_USD="not-a-number"/);
     process.env.FORGE_COST_CEILING_USD = '-5';
-    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: derived, source: 'derived' });
+    assert.throws(() => resolveCostCeilingOverride(path), /invalid FORGE_COST_CEILING_USD="-5"/);
+    delete process.env.FORGE_COST_CEILING_USD;
     assert.deepEqual(resolveCostCeilingOverride('/nonexistent/manifest.md'), { ceilingUsd: undefined, source: 'none' });
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;

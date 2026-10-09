@@ -21,7 +21,8 @@ brainAccess: advisory
 interactivity: Authors a draft set of themes for operator review; never blocks mid-turn.
 allowed-tools: [Read, Grep, Glob, Write]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Bash, Edit, Task, Agent]
-budgets: {}
+budgets:
+  maxBudgetUsd: 3
 ---
 
 # Project-Brain Builder

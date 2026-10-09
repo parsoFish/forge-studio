@@ -683,11 +683,25 @@ export async function reapCensusAndSweep({
     if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
   }
   const roots = [...rootIdentities, ...descendantIdentities];
-  const censusOf = () => waitForCensusEmpty(roots, { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot, listPids });
+  // forge-nk1y.6 — the grace is measured on the MONOTONIC clock: this host's
+  // CLOCK_REALTIME steps by seconds (forge-nk1y.2), which stretched or cut the
+  // bound the SIGKILL decision rests on.
+  const monotonic = { now: () => performance.now(), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
+  const censusOf = () => waitForCensusEmpty(roots, { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot, listPids, clock: monotonic });
   let census = await censusOf();
-  if (!census.empty && census.survivors !== null) {
-    for (const pid of census.survivors) {
-      const r = verifiedKill(identifyPid(pid, { procRoot }), 'SIGKILL', { kill, procRoot });
+  if (!census.empty) {
+    // forge-nk1y.6 — an UNKNOWN census (survivors null: the table could not be
+    // read at the bound) used to skip the escalation, so a SIGTERM-ignoring
+    // writer lived on and the door hung. UNKNOWN is never "nothing to kill":
+    // SIGKILL every identity this pass recorded — each re-verified by start
+    // time, so a reused pid is never signalled — and let the census below
+    // still refuse the sweep if it cannot vouch for an empty tree.
+    const targets = census.survivors !== null
+      ? census.survivors.map((pid) => identifyPid(pid, { procRoot }))
+      : roots;
+    if (census.survivors === null) lines.push(`[stories] census read UNKNOWN — SIGKILL to every recorded identity (${roots.length}) rather than none`);
+    for (const identity of targets) {
+      const r = verifiedKill(identity, 'SIGKILL', { kill, procRoot });
       if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
     }
     census = await censusOf();

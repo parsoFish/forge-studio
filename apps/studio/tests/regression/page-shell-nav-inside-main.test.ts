@@ -16,16 +16,26 @@
  * first paint cannot reach are rendered through their own components in the
  * second block below, with the page's nav slot.
  *
+ * Page modules load through an eager `import.meta.glob`, so their cold
+ * transform (a big page plus its whole import graph — measured 3.4 s alone and
+ * 5.0 s timed-out at 2 CPUs under load for the first page, forge-nk1y.11)
+ * happens while the file is collected, which carries no timeout, instead of
+ * inside each test body against the 5 s testTimeout. The glob's key set is
+ * checked against the filesystem walk, so a glob that drifts from it fails.
+ *
  * Allowlist: empty. `app/layout.tsx` is not a page (it renders no main) and is
  * not enumerated; every enumerated page renders a `main[data-page]`, and a page
  * that renders none fails the "renders a main[data-page]" assertion instead of
  * passing silently.
  */
+/// <reference types="vite/types/importMeta.d.ts" />
 import { test, expect, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { FlowRunDetail } from '../../components/studio/FlowRunDetail.tsx';
+import { RunView } from '../../components/studio/agent-builder/RunView.tsx';
 
 const PARAMS: Record<string, string> = { id: 'x', runId: 'r1', kind: 'architect', sessionId: 's1' };
 vi.mock('next/navigation', () => ({
@@ -71,16 +81,30 @@ function mainsWithDataPage(html: string): string[] {
 
 const pages = enumeratePages(APP_DIR);
 
+type PageModule = { default: React.ComponentType<{ params: typeof PARAMS }> };
+const PAGE_MODULES = import.meta.glob<PageModule>(
+  ['../../app/**/page.tsx', '../../app/**/not-found.tsx'],
+  { eager: true },
+);
+const moduleFor = (file: string): PageModule | undefined =>
+  PAGE_MODULES[`../../app/${relative(APP_DIR, file)}`];
+
 test('the enumeration finds the pages', () => {
   expect(pages.length).toBeGreaterThan(30);
+});
+
+test('every enumerated page is loaded by the module glob, and nothing else is', () => {
+  const globbed = Object.keys(PAGE_MODULES).map((k) => k.slice('../../app/'.length)).sort();
+  expect(globbed).toEqual(pages.map((f) => relative(APP_DIR, f)));
 });
 
 for (const file of pages) {
   const rel = relative(APP_DIR, file);
   if (ALLOWLIST.has(rel)) continue;
-  test(`${rel}: main[data-page] contains the studio nav`, async () => {
-    const mod = await import(/* @vite-ignore */ file);
-    const html = renderToStaticMarkup(React.createElement(mod.default as React.ComponentType<{ params: typeof PARAMS }>, { params: PARAMS }));
+  test(`${rel}: main[data-page] contains the studio nav`, () => {
+    const mod = moduleFor(file);
+    expect(mod, `${rel} is loaded by the module glob`).toBeDefined();
+    const html = renderToStaticMarkup(React.createElement(mod!.default, { params: PARAMS }));
     const mains = mainsWithDataPage(html);
     expect(mains.length, `${rel} renders a main[data-page]`).toBeGreaterThan(0);
     for (const main of mains) {
@@ -95,8 +119,7 @@ for (const file of pages) {
 const NAV = React.createElement('nav', { 'data-component': 'studio-nav' });
 const FINDINGS = { doc: null, failed: false };
 
-test('FlowRunDetail renders the nav slot inside main[data-page="flow-run"]', async () => {
-  const { FlowRunDetail } = await import('../../components/studio/FlowRunDetail.tsx');
+test('FlowRunDetail renders the nav slot inside main[data-page="flow-run"]', () => {
   for (const found of [true, false]) {
     const html = renderToStaticMarkup(React.createElement(FlowRunDetail, {
       nav: NAV, runId: 'r1', found, flow: null, run: null, rows: [], findings: FINDINGS,
@@ -107,8 +130,7 @@ test('FlowRunDetail renders the nav slot inside main[data-page="flow-run"]', asy
   }
 });
 
-test('RunView renders the nav slot inside main[data-page="agent-run"]', async () => {
-  const { RunView } = await import('../../components/studio/agent-builder/RunView.tsx');
+test('RunView renders the nav slot inside main[data-page="agent-run"]', () => {
   for (const found of [true, false]) {
     const html = renderToStaticMarkup(React.createElement(RunView, {
       nav: NAV, runId: 'r1', found, state: 'complete', costUsd: 0, lines: [], materials: [], outputRefs: [],
