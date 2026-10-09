@@ -37,7 +37,7 @@ The reflection gate lists questions; answer all of them to submit. The reflector
 
 ## Set spend ceilings
 
-The plan flow stops at 10 USD. A develop run stops at its initiative's **cap** plus 50 %, unless `FORGE_COST_CEILING_USD` or the fields below override it ([Agent cost ceilings](/reference/agent-cost-ceilings/)). A run stops at a clean boundary and can be resumed.
+The plan flow stops at 10 USD. A develop run stops at the **ceiling** shown on its plan card (its **estimate** plus 50 %), unless `FORGE_COST_CEILING_USD` or the fields below override it ([Agent cost ceilings](/reference/agent-cost-ceilings/)). A run stops at a clean boundary and can be resumed.
 
 To override it for one run:
 

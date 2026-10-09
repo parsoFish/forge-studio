@@ -40,7 +40,8 @@ import {
 } from '@forge/knowledge';
 import type { KbBinding } from '@forge/contracts';
 
-import { runAgentTurn } from '../interactive-session.ts';
+import { runAgentTurn, type UnpricedTurnInfo } from '../interactive-session.ts';
+import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import { runKindTurn, type KindTurnInput, type SessionKindVariant } from './kind-turn.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec(skillPathRelative('project-brain-builder'));
@@ -135,6 +136,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
   eventLabel: 'project-brain turn',
   eventPhase: 'project-brain',
   eventSkill: 'project-brain-builder',
+  agentSlug: 'project-brain-builder',
   initiativeId: (sessionId) => `project-brain-${sessionId}`,
 
   steps: {
@@ -158,7 +160,12 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
         // content instead, so a turn that applied none of the notes is caught.
         const before = feedback === null ? null : stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId);
 
-        await runAgentTurn({
+        // forge-mfv5.1.16 — the turn leaves a priced row or an unpriced one (never
+        // both, never neither), the same pair the instructions kind leaves.
+        const rowIdentity = {
+          initiativeId: plumbing.initiativeId, phase: 'project-brain' as const, skill: 'project-brain-builder',
+        };
+        const { costUsd } = await runAgentTurn({
           queryFn: plumbing.queryFn,
           maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — the session's remaining, at dispatch
           prompt,
@@ -173,8 +180,14 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
           onToolUse: plumbing.onToolUse,
           onHeartbeat: plumbing.onHeartbeat,
           onThinking: plumbing.onThinking,
+          onTurnEndedUnpriced: (info: UnpricedTurnInfo) => emitTurnEndedUnpricedRow(plumbing.logger, {
+            ...rowIdentity, message: 'project-brain.analyzing.turn-ended-unpriced',
+          }, info),
           label: `project-brain-${input.sessionId}`,
         });
+        if (costUsd !== null) {
+          emitTurnCostRow(plumbing.logger, { ...rowIdentity, message: 'project-brain.analyzing.turn-cost' }, costUsd);
+        }
 
         const themes = listStagedThemes(plumbing.logsRoot, input.project, input.sessionId);
         if (themes.length === 0) {

@@ -91,6 +91,7 @@ import { makeHeartbeatWriter } from './heartbeat.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
 import { sessionSpentUsd, turnBudgetUsd } from './turn-budget.ts';
+import { agentBudgetUsdFor } from './session-start-ceiling.ts';
 import { createLogger, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents';
 import type { SessionKindDescriptor, TurnSpecPhase } from './studio/session-kinds.ts';
@@ -243,8 +244,9 @@ export async function runInteractiveTurn(
         // Row 193b — the same per-call cap every `runKindTurn` kind gets (`turn-budget.ts`).
         turnBudgetUsd: () => turnBudgetUsd({
           declaredCeilingUsd: (st as { costCeilingUsd?: unknown }).costCeilingUsd, env: process.env,
+          agentBudgetUsd: agentBudgetUsdFor(descriptor.agent),
           logsRoot,
-          spentUsd: () => sessionSpentUsd(logsRoot, cycleId), logger,
+          spentUsd: () => sessionSpentUsd(logsRoot, cycleId), sessionLogDir: cycleId, logger,
           identity: { initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, sessionId: ctx.sessionId },
         }),
         onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, { // forge-8vfn.22 — the tier/model the turn actually ran on.

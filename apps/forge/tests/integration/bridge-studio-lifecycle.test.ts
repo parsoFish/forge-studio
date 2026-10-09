@@ -553,6 +553,8 @@ test('W8-B3 shell (ON-5): the payload carries `transcriptSources` — the candid
   assert.deepEqual(instr.transcriptSources, ['prompt.md']);
   const arch = await expectJson<{ transcriptSources: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}?project=proja`), 200);
   assert.deepEqual(arch.transcriptSources, ['idea.md']);
+  // forge-nk1y.5 — these fixtures predate the ceiling stamp: the key is present and null.
+  for (const b of [cr, instr, arch]) assert.equal((b as { ceiling?: unknown }).ceiling, null);
 });
 
 test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the anchor project (a dot-anchor too) and carries lifecycle', async () => {

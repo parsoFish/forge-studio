@@ -125,7 +125,7 @@ export type AffordanceRouteContext = StudioContext & {
    *  slot — NEVER claims again. */
   spawnClaimedAgentDispatch: (
     forgeRoot: string, agentId: string, runId: string, project: string,
-    inputs: Record<string, string>, sessionDir: string, unused: undefined, logsRoot: string,
+    inputs: Record<string, string>, sessionDir: string, costCeilingUsd: number | undefined, logsRoot: string,
   ) => void;
   /** The projects root this bridge resolved once at start — the root the
    *  session dir was created under, handed to the dispatch so the subprocess's

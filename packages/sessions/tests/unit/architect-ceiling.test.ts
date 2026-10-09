@@ -84,13 +84,38 @@ test('AT-B6-16 (positive control) under the ceiling the guard stands aside — t
   }
 });
 
-test('AT-B6-17 (positive control) NO ceiling declared — spend never trips the guard', async () => {
-  const { projectRoot, logsRoot, root } = plantSession({}, 999);
+// Re-pinned by T1's ruling on the row-2 park (forge-nk1y.5): with no ceiling
+// declared the architect's own $10 budget binds, so the positive control is now
+// "priced calls that stay under the ceiling never trip it".
+test('AT-B6-17 (positive control) priced spend under the ceiling never trips the guard', async () => {
+  const { projectRoot, logsRoot, root } = plantSession({}, 5);
   try {
     await assert.rejects(
       runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
       new RegExp(MARKER),
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// T1 ruling on the row-2 park (forge-nk1y.5), condition 2: a crashed call is
+// charged its cap — the REMAINING cap, never more. $6 priced of the
+// architect's $10 budget, then a crash: the unpriced row is bounded at exactly
+// $4 and the session's priced + bounded spend lands ON the ceiling, not past it.
+test('a crashed call never charges more than the remaining cap (no overspend)', async () => {
+  const { projectRoot, logsRoot, root } = plantSession({}, 6);
+  try {
+    await assert.rejects(
+      runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(), sessionId: 'sess-1', projectRoot, project: 'p1', logsRoot, brainCwd: root, queryFn: markerQueryFn as never }),
+      new RegExp(MARKER),
+    );
+    const { readFileSync } = await import('node:fs');
+    const { sessionSpentUsd } = await import('../../turn-budget.ts');
+    const rows = readFileSync(join(logsRoot, '_architect-sess-1', 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { metadata?: Record<string, unknown> });
+    const bounds = rows.filter((r) => r.metadata?.['priced'] === false).map((r) => r.metadata?.['upper_bound_usd']);
+    assert.deepEqual(bounds, [4], 'the crashed call is charged the $4 that remained, not the $10 budget');
+    assert.equal(sessionSpentUsd(logsRoot, '_architect-sess-1'), 10, 'priced + bounded spend lands on the ceiling, never past it');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

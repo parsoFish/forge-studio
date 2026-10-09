@@ -40,6 +40,7 @@ const READY_PAYLOAD: SessionShellPayload = {
   finalized: null,
   transcriptError: null,
   modelTier: null, costUsd: null, sdk: 'claude',
+  ceiling: null,
   terminal: false,
   transcriptSources: [],
   lifecycle: { state: 'awaiting-operator' as const, needsYou: true, error: null, idleMs: null, cancellable: true },

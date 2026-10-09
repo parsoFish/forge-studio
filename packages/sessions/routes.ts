@@ -75,6 +75,8 @@ export type SessionsRouteDeps = {
    *  through it, so dropping the thread breaks a live operator path. */
   readonly runFixTurn: NonNullable<Parameters<typeof approveKbCleanup>[3]>['runFixTurn'];
   readonly authoringSession: AuthoringSessionPort;
+  /** Test injection only (forge-nk1y.5): the agent-budget read at session start. */
+  readonly agentBudgetUsd?: (agentSlug: string) => number | undefined;
 } & SessionHostSurface;
 
 /** Matching strips the query; handlers receive the RAW url and normalise for
@@ -140,6 +142,7 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     broadcastKindChanged: deps.broadcastKindChanged,
     runFixTurn: deps.runFixTurn,
     authoringSession: deps.authoringSession,
+    agentBudgetUsd: deps.agentBudgetUsd,
   };
 }
 
