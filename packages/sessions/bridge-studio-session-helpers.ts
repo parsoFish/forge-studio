@@ -158,6 +158,8 @@ export type SessionRootsContext = {
   readonly forgeRoot: string;
   readonly projectsRoot: string;
   readonly logsRoot: string;
+  /** Test injection only (forge-nk1y.5): the agent-budget read at session start. */
+  readonly agentBudgetUsd?: (agentSlug: string) => number | undefined;
 };
 
 /**

@@ -17,7 +17,7 @@ import { FORGE_ROOT, guardedFile, guardedReadDir, guardedReadFile, sessionDirSeg
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import type { CeilingSource } from './flow-budgets.ts';
-import { createLogger, errorEndMetadata } from '@forge/kernel';
+import { createLogger, errorEndMetadata, parseCeilingEnv, COST_CEILING_ENV } from '@forge/kernel';
 import { classifyCycleFailure } from '@forge/agents';
 import { OperatorStopError } from './operator-stop.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -97,11 +97,8 @@ import { loadFlowDefinition } from './studio/flow-registry.ts';
 export function resolveCostCeilingOverride(
   manifestPath: string,
 ): { ceilingUsd: number | undefined; source: CeilingSource } {
-  const rawEnv = process.env.FORGE_COST_CEILING_USD;
-  if (rawEnv !== undefined && rawEnv.trim() !== '') {
-    const n = Number.parseFloat(rawEnv);
-    if (Number.isFinite(n) && n > 0) return { ceilingUsd: n, source: 'env' };
-  }
+  const env = parseCeilingEnv(process.env[COST_CEILING_ENV]);
+  if (env !== undefined) return { ceilingUsd: env, source: 'env' };
   const fromManifest = readManifestCostCeiling(manifestPath);
   if (fromManifest !== null) return fromManifest;
   return { ceilingUsd: undefined, source: 'none' };

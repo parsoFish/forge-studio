@@ -30,6 +30,7 @@ function variant(seen: { costUsd?: number }): FixTurnVariant<FixTurnInput, FixTu
     cycleIdPrefix: PREFIX,
     eventPhase: 'orchestrator',
     eventSkill: 'budget-fix',
+    agentSlug: 'brain-fix',
     skillName: 'budget-fix',
     fallbackPrompt: 'fallback',
     inputRefs: () => [],
@@ -93,13 +94,12 @@ describe('fix-turn runs under the cost ceiling (row 199)', () => {
     assert.equal(cap.options?.['maxBudgetUsd'], 1.25);
   });
 
-  test('no ceiling anywhere → no maxBudgetUsd key, and the priced end row is as before', async () => {
+  test('forge-nk1y.5 (was "no ceiling anywhere → no maxBudgetUsd"): no declared and no env → the agent\'s own budgets.maxBudgetUsd ($3) caps the turn', async () => {
     const cap: { options?: Record<string, unknown> } = {};
     await run('none', stub(cap, [{ type: 'result', total_cost_usd: 0.2 }]));
-    assert.equal('maxBudgetUsd' in (cap.options ?? {}), false);
+    assert.equal(cap.options?.['maxBudgetUsd'], 3);
     const end = rows(join(root, '_logs'), 'none').find((r) => r.event_type === 'end');
     assert.equal(end?.cost_usd, 0.2);
-    assert.equal(end?.metadata?.['upper_bound_usd'], undefined);
   });
 
   test('a crashed turn under a cap leaves an unpriced row carrying upper_bound_usd', async () => {
@@ -112,25 +112,25 @@ describe('fix-turn runs under the cost ceiling (row 199)', () => {
     assert.equal(err?.metadata?.['upper_bound_usd'], 2);
   });
 
-  // T1 ruling 1973gx — with NO cap the turn is still unpriced, and says so:
-  // `priced: false` with no bound, which every reader must take as UNKNOWN
-  // (spend.mjs halts UNENFORCEABLE; the KB drain stops), never as free.
-  test('a crashed turn with NO cap is unpriced and unbounded — no bound invented', async () => {
+  // forge-nk1y.5: a fix turn always runs under a cap now (declared, env, or the
+  // agent's own budget), so T1 ruling 1973gx's "unpriced AND unbounded" shape
+  // is unreachable here; the bound is the agent budget's.
+  test('a crashed turn with no declared or env cap is bounded by the agent budget', async () => {
     await run('crash-free', stub({}, [], new Error('boom')));
     const err = rows(join(root, '_logs'), 'crash-free').find((r) => r.event_type === 'error');
     assert.equal(err?.cost_usd, undefined);
     assert.equal(err?.metadata?.['priced'], false);
     assert.equal(err?.metadata?.['unpriced_reason'], 'died');
-    assert.equal('upper_bound_usd' in (err?.metadata ?? {}), false);
+    assert.equal(err?.metadata?.['upper_bound_usd'], 3);
   });
 
-  test('a resultless turn with NO cap is unpriced and unbounded, not cost_usd 0 (ruling 849)', async () => {
+  test('a resultless turn with no declared or env cap is unpriced-with-bound (agent budget), not cost_usd 0 (ruling 849)', async () => {
     await run('noresult-free', stub({}, []));
     const end = rows(join(root, '_logs'), 'noresult-free').find((r) => r.event_type === 'end');
     assert.equal('cost_usd' in (end ?? {}), false);
     assert.equal(end?.metadata?.['priced'], false);
     assert.equal(end?.metadata?.['unpriced_reason'], 'no-result');
-    assert.equal('upper_bound_usd' in (end?.metadata ?? {}), false);
+    assert.equal(end?.metadata?.['upper_bound_usd'], 3);
   });
 
   test('a resultless turn under a cap is unpriced-with-bound, not cost_usd 0', async () => {

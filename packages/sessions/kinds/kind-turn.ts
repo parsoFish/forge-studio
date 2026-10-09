@@ -58,6 +58,7 @@ import { createLogger, guardedReadFile, resolveGuardedPath, sessionDirSegments, 
 import { makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
 import { makeHeartbeatWriter } from '../heartbeat.ts';
 import { sessionSpentUsd, turnBudgetUsd } from '../turn-budget.ts';
+import { agentBudgetUsdFor } from '../session-start-ceiling.ts';
 
 /**
  * The ONE "hooks, or nothing" spread. `sdkHooksForAgent` returns undefined when
@@ -223,6 +224,8 @@ export type SessionKindVariant<
   /** The event log's `phase` / `skill` columns for this kind's turns. */
   eventPhase: Phase;
   eventSkill: string;
+  /** forge-nk1y.5 — the agent whose `budgets.maxBudgetUsd` caps a turn when no ceiling was declared. */
+  agentSlug: string;
   /** The `initiative_id` this kind's events carry. */
   initiativeId: (sessionId: string) => string;
   steps: Record<string, KindStepHandler<S, R, I>>;
@@ -392,9 +395,11 @@ export async function runKindTurn<
     hooksForSkill,
     turnBudgetUsd: () => turnBudgetUsd({
       declaredCeilingUsd: (status as { costCeilingUsd?: unknown }).costCeilingUsd,
+      agentBudgetUsd: agentBudgetUsdFor(variant.agentSlug),
       env: process.env,
       logsRoot,
       spentUsd: () => sessionSpentUsd(logsRoot, cycleId),
+      sessionLogDir: cycleId,
       logger,
       identity: { initiativeId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.sessionId },
     }),

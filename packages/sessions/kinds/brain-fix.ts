@@ -90,6 +90,7 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
   cycleIdPrefix: '_brainfix',
   eventPhase: 'reflection',
   eventSkill: 'brain-fix',
+  agentSlug: 'brain-fix',
   skillName: 'brain-fix',
   fallbackPrompt: 'You are the forge brain-fix agent.',
   inputRefs: (input) => [input.file],

@@ -50,6 +50,7 @@ import {
 } from '../interactive-session.ts';
 import { makeHeartbeatTick, makeHeartbeatWriter, startHeartbeatTicker } from '../heartbeat.ts';
 import { budgetedResultCostUsd, turnBudgetUsd } from '../turn-budget.ts';
+import { agentBudgetUsdFor } from '../session-start-ceiling.ts';
 
 /**
  * The query seam, declared HERE with `options` REQUIRED because that is what
@@ -114,6 +115,8 @@ export type FixTurnVariant<I extends FixTurnInput, R extends FixTurnResult, P = 
   /** The event log's `phase` and `skill` columns for this kind's turns. */
   eventPhase: Phase;
   eventSkill: string;
+  /** forge-nk1y.5 — the agent whose `budgets.maxBudgetUsd` caps a turn when no ceiling was declared. */
+  agentSlug: string;
   /** The skill whose SKILL.md supplies the prompt, via `skillPath`. */
   skillName: string;
   /** Used when the SKILL.md cannot be read — each runner's own literal. */
@@ -238,6 +241,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // row 199 the bag carried no `maxBudgetUsd` and nothing bounded the turn.
   const capUsd = turnBudgetUsd({
     declaredCeilingUsd: input.costCeilingUsd,
+    agentBudgetUsd: agentBudgetUsdFor(variant.agentSlug),
     env: process.env,
     logsRoot,
     spentUsd: () => 0,

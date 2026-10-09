@@ -245,6 +245,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       // ruling 86 — the same real turn `knowledgeRoutes` above is given. Bound
       // here, at the assembly, so neither package names the other's function.
       runFixTurn: realKbDrainFixTurn,
+      agentBudgetUsd: deps.agentBudgetUsd,
     }),
   ];
 }

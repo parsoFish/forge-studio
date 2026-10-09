@@ -133,6 +133,7 @@ export const demoKind: SessionKindVariant<DemoBuilderStatus, RunDemoBuilderTurnR
   eventLabel: 'demo-builder turn',
   eventPhase: 'demo',
   eventSkill: 'demo-builder-runner',
+  agentSlug: 'demo-builder',
   initiativeId: (sessionId) => `demo-${sessionId}`,
 
   steps: {
