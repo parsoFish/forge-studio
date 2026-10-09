@@ -107,7 +107,8 @@ function expectFailClosedPrimitives(src: string, page: string): void {
   //    `{message}`-shaped state fed by `{error}` renders an empty error text
   //    (successor-resume finding: caught by tsc, pinned here so a vitest-only
   //    run also fails)
-  expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
+  // (forge-nk1y.9: the project page also carries `fetchErrorPropsFrom`'s optional `timedOut`.)
+  expect(src).toMatch(/useState<\{ error: string; status\?: number(; timedOut\?: boolean)? \} \| null>\(null\)/);
   expect(src).toMatch(/<PageLoadError[\s\S]{0,600}error=\{(page)?[lL]oadError\.error\}/);
   expect(src).not.toMatch(/loadError\.message/);
 }

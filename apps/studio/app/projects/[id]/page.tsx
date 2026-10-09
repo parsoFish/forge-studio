@@ -32,6 +32,8 @@ import { deriveSaveControl, useRepoStatus } from '@/lib/use-repo-status';
 import { NotFound } from '@/components/NotFound';
 import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
 import { PageLoadError } from '@/components/PageLoadError';
+import { PageLoading } from '@/components/PageLoading';
+import { allNamedReads } from '@/lib/named-reads';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { useRoadmapLiveRefresh } from '@/lib/use-roadmap-live-refresh';
@@ -140,7 +142,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // recovery. `panelError` is the softer sibling for the preflight/roadmap
   // reads: the project itself loaded, one side panel's read did not — shown
   // inline (never an unhandled rejection, never a silently-absent panel).
-  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [loadError, setLoadError] = useState<{ error: string; status?: number; timedOut?: boolean } | null>(null);
+  const [waitingOn, setWaitingOn] = useState<readonly string[]>([]); const [failedRead, setFailedRead] = useState<string | null>(null); // forge-nk1y.9: the load's reads, by name
   // One slot PER panel read (preflight / roadmap / cycles) — two failing
   // panels both stay visible; a panel's own success clears only its own slot.
   const [panelErrors, setPanelErrors] = useState<Record<string, { what: string; error: string; status?: number }>>({});
@@ -184,9 +187,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   const loadData = useCallback(async (signal: { cancelled: boolean }) => {
     try {
-      const [ps, ks, fs, cat] = await Promise.all([
-        fetchStudioProjects(), fetchStudioKbs(), fetchStudioFlows(), fetchStudioCatalog(),
-      ]);
+      const [ps, ks, fs, cat] = await allNamedReads([
+        ['the project roster', fetchStudioProjects()], ['the knowledge bases', fetchStudioKbs()], ['the flows', fetchStudioFlows()], ['the catalog', fetchStudioCatalog()],
+      ] as const, { onPending: (names) => { if (!signal.cancelled) setWaitingOn(names); }, onFailed: (read) => { if (!signal.cancelled) setFailedRead(read); } });
       if (signal.cancelled) return;
       setProjects(ps);
       setKbs(ks);
@@ -208,7 +211,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         setKb(p.kb ?? null);
         setKbTouched(false);
       }
-      setLoadError(null);
+      setLoadError(null); setFailedRead(null);
     } catch (err) {
       // W7-FIX-A1 (A1-02): the roster/kbs/flows/catalog read threw — an
       // ERROR state; `project` stays whatever it was, so NotFound (gated on
@@ -420,14 +423,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // (crosscut-27): that state is the ONE shared NotFound.
   // W7-FIX-A1 (A1-02): the read FAILED — the project may well exist. The
   // shared page-level error with Retry, never NotFound.
+  // forge-nk1y.9: before the load settles the page knows nothing about the project —
+  // say so, never render the editor's useState defaults as its truth.
+  if (!ready) return <PageLoading page="projects" rootAttrs={{ 'data-project-id': id, 'data-demo-declaration-state': 'idle' }} what={`project "${id}"`} waitingOn={waitingOn} />;
   if (ready && loadError) {
     return (
       <PageLoadError
         page="projects"
         rootAttrs={{ 'data-project-id': id }}
-        what={`project "${id}"`}
+        what={failedRead ? `${failedRead} for project "${id}"` : `project "${id}"`}
         error={loadError.error}
-        status={loadError.status}
+        status={loadError.status} timedOut={loadError.timedOut}
         onRetry={reload}
         backHref="/projects"
         backLabel="Projects"
@@ -508,12 +514,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           the fold on BOTH tabs — Plan · Start development · Run a flow ·
           Architect. Real controls (queue writes / flow-run POST), never an
           inert select. */}
-      <StartWorkActions
-        projectId={id}
-        roadmap={roadmap}
-        flows={flows}
-        onChanged={refreshRoadmap}
-      />
+      <StartWorkActions projectId={id} roadmap={roadmap} flows={flows} onChanged={refreshRoadmap} />
 
       {/* W7-FIX-A1 (A1-02): a side-panel read (preflight / roadmap) failed while
           the project itself loaded — shown inline, never silently absent. */}
@@ -620,14 +621,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
             <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); setKbTouched(true); markDirty(); }} />
 
-            <ContractReadiness
-              northStar={northStar}
-              instructions={instructions}
-              demoSteps={demoSteps}
-              skills={skills}
-              kb={kb}
-              preflight={preflight}
-            />
+            <ContractReadiness northStar={northStar} instructions={instructions} demoSteps={demoSteps} skills={skills} kb={kb} preflight={preflight} />
 
             {preflight && (
               <ContractResolutionPanel
