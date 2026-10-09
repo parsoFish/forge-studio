@@ -3,7 +3,7 @@ title: Projects
 description: Register a git repository so forge can build it, check it against the project contract, and rebuild the contract when it drifts.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [apps/studio/app/projects/**, packages/projects/**]
 sidebar:
   order: 4
@@ -50,6 +50,7 @@ When a project's generated mechanisms have drifted from the current template, pr
 - **Fill in the required fields first**: the onboarding button stays disabled until name, quality gate and north star are all set.
 - *The onboarding button says a run is in progress.* An onboarding run is already in flight for this project. Wait for it or cancel it.
 - **choose an app type first**: **Preview drift** needs an app type when the project has none recorded.
+- *Save is refused, naming `.forge/project.json`, `.gitignore`, `AGENTS.md` or `roadmap.md`.* That contract file has a change that is not committed to the project's `forge-studio` branch, so a Save would push the default branch without it. Commit the file to `forge-studio`, or discard the change, then save again.
 
 ## Related
 
