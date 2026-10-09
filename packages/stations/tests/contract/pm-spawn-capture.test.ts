@@ -21,6 +21,14 @@
  *    marker (a fresh controller is constructed every call; only ITS
  *    PRESENCE, not its identity, is a behavioural signal).
  *
+ * Brain masked (the live repo brain is NOT part of the pin): `runProjectManager`
+ * resolves its forge root from `import.meta.dirname` (no injectable root), so
+ * the system prompt's "Brain navigation index" (every `brain/**` index) and the
+ * user prompt's "Brain context (pre-fetched by forge)" block (profile + themes)
+ * carry the checkout's live brain bytes — which any real forge run rewrites.
+ * Both blocks are masked to `<BRAIN-CONTEXT>` between the prompt's own section
+ * markers; the framing, the block's presence and its position stay pinned.
+ *
  * Fixture-move note (SPEC §1 R3-03 amendment, `composition.hooks` →
  * `composition.guards`, 2026-08-04): `pm.json` moved by exactly one byte —
  * `hook` → `guard` at a single site — because `renderPmUserPrompt` (via
@@ -46,11 +54,17 @@ import { join, resolve } from 'node:path';
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot, maskBetween } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const FIXTURE_PATH = resolve(import.meta.dirname, '..', '..', '..', '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'pm.json');
+
+const BRAIN_MASK = '\n\n<BRAIN-CONTEXT>';
+// Last sentence of the system prompt's navigation-index intro (pm-binding.ts buildPmSystemPrompt).
+// Last sentence of the user prompt's brain-context intro (pm-binding.ts renderBrainContextBlock).
+const BRAIN_BLOCK_INTRO_END = 'that is not inlined here.';
+const NAV_INTRO_END = 'you should rarely need grep.';
 
 const INITIATIVE_ID = 'INIT-2026-01-01-spawn-capture';
 
@@ -136,8 +150,18 @@ Body for WI-1.
     await runProjectManager(input, logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
     assert.ok(captured, 'queryFn must have been invoked exactly once with the spawn call');
-    const normalized = normalizeForSnapshot(captured, [{ value: dir, placeholder: '<TMP>' }]);
-    assertMatchesJsonSnapshot(FIXTURE_PATH, normalized);
+    const normalized = normalizeForSnapshot(captured, [{ value: dir, placeholder: '<TMP>' }]) as {
+      prompt: string;
+      options: { systemPrompt: string };
+    };
+    assertMatchesJsonSnapshot(FIXTURE_PATH, {
+      ...normalized,
+      prompt: maskBetween(normalized.prompt, BRAIN_BLOCK_INTRO_END, '\n\nDo not update the manifest', BRAIN_MASK),
+      options: {
+        ...normalized.options,
+        systemPrompt: maskBetween(normalized.options.systemPrompt, NAV_INTRO_END, '\n\n---\n\n# project-manager skill contract', BRAIN_MASK),
+      },
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

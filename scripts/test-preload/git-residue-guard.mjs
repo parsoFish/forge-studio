@@ -31,7 +31,7 @@
  */
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { trackedPorcelainLines, newTrackedChanges } from './git-residue-guard-core.mjs';
+import { trackedPorcelainLines, residueReport } from './git-residue-guard-core.mjs';
 
 // This file's own location, not `process.cwd()` — same reasoning as
 // `logs-residue-guard.mjs`: `npm test` always runs from the repo root today,
@@ -42,19 +42,34 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const before = trackedPorcelainLines(REPO_ROOT);
 
+// `kill(pid, 0)` sends nothing, it only probes. ESRCH = gone; EPERM = exists but
+// owned by another user, still alive. Any other error propagates to
+// `liveRunVerdict`, which reports it as inconclusive rather than "no live run".
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    if (err?.code === 'ESRCH') return false;
+    if (err?.code === 'EPERM') return true;
+    throw err;
+  }
+}
+
 process.on('exit', () => {
-  const changed = newTrackedChanges(before, trackedPorcelainLines(REPO_ROOT));
-  if (changed.length === 0) return;
+  const report = residueReport({
+    root: REPO_ROOT,
+    before,
+    after: trackedPorcelainLines(REPO_ROOT),
+    isPidAlive,
+  });
+  if (report === null) return;
   // Same late-failure discipline as `logs-residue-guard.mjs`: set
   // `process.exitCode` inside the `exit` listener, never `process.exit()`,
   // so a sibling listener's own cleanup (a fixture's `rmSync` in a
   // `finally`/`after`) is never cut off mid-run.
   process.exitCode = 1;
-  process.stderr.write(
-    `\ngit-residue-guard: this test run left ${changed.length} tracked file(s) dirty in the ` +
-      `REPO ROOT (${REPO_ROOT}) that were clean when it started:\n` +
-      changed.map((line) => `  ${line}`).join('\n') +
-      '\nA test that writes into a real tracked path (rather than a caller-owned tmp dir) must ' +
-      "restore it — `git status --short` must be empty when a test file exits.\n",
-  );
+  // A live-run or inconclusive verdict still fails the file: a tree that
+  // changed under a suite is not clean evidence.
+  process.stderr.write(report);
 });

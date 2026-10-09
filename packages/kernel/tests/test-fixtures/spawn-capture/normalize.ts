@@ -75,6 +75,22 @@ export function normalizeForSnapshot(value: unknown, replacements: readonly Path
   return walk(value);
 }
 
+/**
+ * Replace everything strictly between `startMarker` and `endMarker` (the
+ * prompt's OWN section text, never a length) with `placeholder`, keeping both
+ * markers. Throws when either marker is missing or out of order, so a prompt
+ * whose framing changed fails loudly instead of masking nothing. Used to mask
+ * the live repo-brain blocks, whose bytes change with every real forge run.
+ */
+export function maskBetween(text: string, startMarker: string, endMarker: string, placeholder: string): string {
+  const startAt = text.indexOf(startMarker);
+  assert.notEqual(startAt, -1, `maskBetween: start marker not found: ${JSON.stringify(startMarker.slice(0, 80))}`);
+  const from = startAt + startMarker.length;
+  const endAt = text.indexOf(endMarker, from);
+  assert.notEqual(endAt, -1, `maskBetween: end marker not found after start: ${JSON.stringify(endMarker.slice(0, 80))}`);
+  return text.slice(0, from) + placeholder + text.slice(endAt);
+}
+
 const UPDATE_SNAPSHOT = process.env.UPDATE_SNAPSHOT === '1';
 
 /**
