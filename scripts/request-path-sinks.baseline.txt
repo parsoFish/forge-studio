@@ -80,6 +80,7 @@ packages/agents/spawn-marker.ts readdirSync 1
 packages/agents/spawn-marker.ts readFileSync 2
 packages/agents/spawn-marker.ts statSync 1
 packages/factory/class-profiles.ts readFileSync 1
+packages/factory/demo-planner.ts readFileSync 1
 packages/flows/bridge-recovery.ts execFileSync 4
 packages/flows/bridge-recovery.ts existsSync 8
 packages/flows/bridge-recovery.ts mkdirSync 2
@@ -660,6 +661,8 @@ packages/stations/demo-model.ts existsSync 1
 packages/stations/demo-model.ts readdirSync 2
 packages/stations/demo-model.ts readFileSync 4
 packages/stations/demo-model.ts writeFileSync 2
+packages/stations/demo-planner-port.ts mkdirSync 1
+packages/stations/demo-planner-port.ts writeFileSync 1
 packages/stations/gates/docs-gate.ts existsSync 2
 packages/stations/gates/docs-gate.ts readFileSync 1
 packages/stations/phases/adversarial-review.ts execFileSync 1

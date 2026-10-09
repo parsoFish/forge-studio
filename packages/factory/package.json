@@ -7,7 +7,8 @@
   "exports": {
     ".": "./index.ts",
     "./class-profiles.ts": "./class-profiles.ts",
-    "./demo.ts": "./demo.ts"
+    "./demo.ts": "./demo.ts",
+    "./demo-planner.ts": "./demo-planner.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

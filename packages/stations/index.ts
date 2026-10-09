@@ -21,6 +21,7 @@ export { createProjectGate, defaultRunClosure, type FlowRunnerDeps } from './pha
 
 // ---- The one port: the class table a factory binds in (operator ruling, items 81/83) ----
 export { type ChangeClass, type GateProfile, type ClassProfilePort } from './class-profile-port.ts';
+export { type DemoPlannerPort, type DemoPlannerInput, type DemoPlannerOutcome } from './demo-planner-port.ts';
 
 // ---- Bands the assembly binds statically (apps/forge/factory-wiring.ts) ----
 export { runReflector } from './phases/reflector.ts';

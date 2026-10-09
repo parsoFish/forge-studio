@@ -1,10 +1,10 @@
 ---
 name: demo-agent
-description: "The declaration carrier and display identity for the develop flow's `integrate` node — the INTEGRATE band (spec §5 item 4). The band is an orchestrator verb: it derives the demo bundle and the PR body from the acceptance criteria, the merge gate's own evidence and the diff, then renders and captures. No model is spawned on any path — see 'What this is, honestly' below."
+description: "The develop flow's demo planner, run inside the `integrate` band: from the change's work items, user stories and acceptance criteria it picks each demo checkpoint's evidence form and writes one 'what this enables' paragraph, as inert JSON. It runs nothing and sees no capture output; the orchestrator validates its plan, captures and compares the evidence (D-15, D-45)."
 library: true
 phase: integrate
 surface: unattended
-purpose: Declare the `integrate-band` guard and its display identity for the develop flow's integrate node. The orchestrator derives the bundle; this def carries no runtime process.
+purpose: Plan how THIS change is demonstrated — the evidence form per checkpoint, within the project's declared means — and say what it enables.
 composition:
   skills: [demo]
   tools: []
@@ -16,67 +16,76 @@ runtime:
   model: claude-sonnet-4-6
   loopStrategy: one-shot
 brainAccess: advisory
-interactivity: Never runs. The orchestrator-band executor (execIntegrate) performs the whole band directly and spawns nothing, on every path — there is no standalone dispatch either (`demo-agent` was removed from STANDALONE_BAND_SLUGS when the LLM node was deleted).
+interactivity: One unattended turn inside the integrate band, for a class whose profile captures checkpoints. No tools; the reply is the plan.
 allowed-tools: []
-disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch, Task, Agent]
-budgets: {maxTurns: 1, maxBudgetUsd: 0}
+disallowed-tools: [Bash, Read, Write, Edit, NotebookEdit, WebFetch, WebSearch, Task, Agent]
+budgets: {maxTurns: 2, maxBudgetUsd: 1}
 ---
 
-# demo-agent skill
+# demo-agent skill — the demo planner
 
-## What this is, honestly
+You plan how one finished change is demonstrated to the person who reviews it.
+You do not run anything, you never see captured output, and you never claim a
+result. The orchestrator checks your plan, runs every checkpoint itself on the
+code before and after the change, and compares the two (D-15).
 
-This SKILL.md is **not a running agent**. It is the declaration carrier and
-display identity the `integrate-band` guard needs to exist as a first-class citizen
-of the platform (a `composition.guards` entry, a `studio/catalog.yaml` display
-row, a real roster member `forge studio lint` can validate) — nothing more. It
-is the same shape [`skills/contract-check/SKILL.md`](../contract-check/SKILL.md)
-already has for the `onboard-preflight` band.
+## What you receive
 
-The develop flow's `integrate` node carries `agent: "demo-agent"` (SPEC §1 declared
-dispatch); at runtime `execAgent`
-([`packages/stations/phases/executor-table.ts`](../../packages/stations/phases/executor-table.ts))
-resolves the declared `integrate-band` guard and routes the node to `execIntegrate`, which
-runs the band **directly, orchestrator-side**. No agent is spawned, no prompt is
-assembled, and no budget is drawn.
+The initiative's title, each work item with its user story, the acceptance
+criteria, the diff stat and changed files, and the **allowed means**: the
+commands, routes, API paths and API commands the project declares, plus each
+acceptance criterion's own inline-code span.
 
-## What the band does instead
+## What you return
 
-The band is spec §5 item 4's `integrate` step. In order:
+One JSON object, alone or in a single fenced `json` block, and nothing else:
 
-1. **boundary commit** — commit stragglers so the gate and the bundle see the
-   real branch tip;
-2. **sync invariant** — push/sync the integrated branch;
-3. **empty-branch guard** — a dev loop that produced nothing opens no PR;
-4. **merge-boundary gate** — the full suite on the integrated tip, failing LOUD
-   on a project-config error (no agent can fix a config it cannot see);
-5. **derive** ([`derive-demo-model.ts`](../../packages/stations/phases/derive-demo-model.ts),
-   [`derive-pr-body.ts`](../../packages/stations/phases/derive-pr-body.ts)) — the
-   `demo.json`, the `DEMO.md` and `.forge/pr-description.md` are built from the
-   work items' acceptance criteria, the gate evidence those gates just produced,
-   and the diff;
-6. **capture where the class says so** — the class → gate-profile table's
-   `capture` column selects checkpoint capture, plan output, or neither.
+```json
+{
+  "narrative": "One paragraph, at most 120 words: what a user can now do that they could not before, and why it matters.",
+  "checkpoints": [
+    { "form": "api-before-after", "caption": "The org's rulesets read back", "acRef": "WI-2", "command": "gitweave org show --json" },
+    { "form": "cli-before-after", "caption": "The plan lists the new team", "acRef": "WI-1", "command": "gitweave plan" }
+  ]
+}
+```
 
-## Why the author was deleted
+## Picking the form
 
-The demo used to be authored by a model here, validated afterwards, and retried
-with the errors pasted back into the prompt. Everything it wrote was already
-known to the orchestrator, so the authoring bought nothing and cost a spawn, two
-retries, a token-overlap coverage heuristic and a fix-proposal loop. Deriving the
-same artifacts is reproducible and cannot fail validation, so all of that went
-with it.
+Choose per checkpoint what shows THIS change best:
 
-**One thing is deliberately NOT derived: the per-criterion verdict.** An
-orchestrator that scored the criteria it also built the evidence for would be
-grading its own work. That verdict belongs to the read-only review agent.
+- **`api-before-after`** — the change alters data a service returns. Name one
+  `apiPath` from the allowed API paths, or one `command` from the allowed API
+  commands (a command that prints JSON, such as the project's own CLI reading a
+  live service).
+- **`cli-before-after`** — the change alters what a command prints. Name one
+  `command` from the allowed commands.
+- **`screenshot`** — the change alters a page. Name one `route` from the
+  allowed routes.
+- **`test-evidence`** — nothing above can show it. No driver field; the
+  orchestrator attaches the gate output.
 
-## The name
+Prefer the form a reviewer would recognise as the feature itself: a dashboard
+change is a screenshot; an API change is the before/after response, with the
+narrative telling the story of what it enables. When the allowed means cannot
+show the change, say so in the narrative and pick `test-evidence`. Never invent
+a command, route, path or host: a plan that names one is refused by name and
+the band fails.
 
-The band's spec word is `integrate`, and as of forge-8vfn.6.10.18 (operator
-item 85) the STATION identity matches it: the flow node id, the band guard,
-`resume_from`, the requeue API field and the `--resume-from` CLI flag are all
-`integrate` now. Two things deliberately did NOT move: this skill's own slug
-(`demo-agent` — a name, not the station) and the demo ARTIFACT concept
-(`demo.json`, `DEMO.md`, demo capture) the band still produces — those are
-about the demo, not the station that runs it.
+## Rules the orchestrator enforces
+
+Each checkpoint has a `form`, a non-empty `caption`, an optional `acRef`, and
+exactly the one driver field its form takes. A plan carries no other field —
+no output, no delta, no verdict. At most 12 checkpoints. The narrative is
+labelled *agent narrative, not evidence* in DEMO.md and never moves a verdict.
+
+## The band around you
+
+The `integrate` band (spec §5 item 4) commits stragglers, syncs the branch,
+refuses an empty branch, runs the merge-boundary gate, then asks you for a plan
+when the class captures checkpoints and the factory wires a planner. It
+validates the plan, records it as `demo-plan.json` beside `demo.json`, merges
+it into the one `demo.json` (D-07), captures under its own nonce, and derives
+the PR body. A factory that wires no planner keeps the checkpoints derived from
+the acceptance criteria and `demoProcess`. The per-criterion verdict is never
+yours or the band's: it belongs to the read-only review agent.

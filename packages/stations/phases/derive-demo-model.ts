@@ -55,7 +55,7 @@ export type DerivedDemoInput = {
   diffStat: string;
   headSha: string;
   changedFiles: readonly string[];
-  workItems: readonly { id: string; title: string; status: string }[];
+  workItems: readonly { id: string; title: string; status: string; story?: string }[];
   /** The typed acceptance criteria (SPEC §3) — untouched by the reader; this
    *  module renders each to its one demo.json / PR-body line. */
   acceptanceCriteria: readonly AcceptanceCriterionInput[];
@@ -159,15 +159,20 @@ function diffCheckpoint(input: DerivedDemoInput): DemoModelCheckpoint {
  * before/after run. Nothing extra is spawned — the text is what the gate
  * already printed.
  */
-function planOutputCheckpoint(input: DerivedDemoInput): DemoModelCheckpoint {
-  const outputs = input.gateEvidence
+/** The merge-boundary gate's own output, as one text — shared with a planned `test-evidence` checkpoint. */
+export function gateOutputText(gateEvidence: readonly GateEvidenceRow[]): string {
+  const outputs = gateEvidence
     .map((row) => (row.outputTail ? `$ ${row.cmd.join(' ')}\n${row.outputTail}` : `$ ${row.cmd.join(' ')}`))
     .join('\n\n');
+  return outputs.length > 0 ? outputs : 'no gate produced output for this class';
+}
+
+function planOutputCheckpoint(input: DerivedDemoInput): DemoModelCheckpoint {
   return {
     label: 'Gate output',
     form: 'test-evidence',
     caption: 'The merge-boundary gate output this change was judged on.',
-    afterOutput: outputs.length > 0 ? outputs : 'no gate produced output for this class',
+    afterOutput: gateOutputText(input.gateEvidence),
   };
 }
 
