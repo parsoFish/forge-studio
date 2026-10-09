@@ -15,6 +15,11 @@
  *   GET  /api/reflect/<cycleId>         → { questions, answered, mode? }
  *   POST /api/reflect/<cycleId>/answer  → write user-feedback.md, fire the
  *                                          reflector rerun (detached)
+ *        body { close: true }            → forge-nk1y.3: close a reflection
+ *                                          that asked nothing — only when its
+ *                                          questions are [] (else 409); no rerun
+ *   GET  /api/reflections/pending       → { pending } — reflections waiting
+ *                                          on the operator (reflection-pending.ts)
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
@@ -26,6 +31,7 @@ import { fireReflectorRerun } from './example-hooks.ts';
 import type { InstalledFactory } from './factory-wiring.ts';
 import { readJson } from './bridge-http.ts';
 import { findRun } from './bridge-studio.ts';
+import { listPendingReflections } from './reflection-pending.ts';
 
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 
@@ -97,6 +103,16 @@ export async function handleReflect(
 ): Promise<boolean> {
   const origin = allowedOrigin(req);
 
+  // forge-nk1y.3 — Studio's Waiting on you reads this; derived per request.
+  if (method === 'GET' && url === '/api/reflections/pending') {
+    try {
+      sendJson(res, 200, { pending: listPendingReflections(ctx.logsRoot) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
   if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
     const requestedCycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
     if (!requestedCycleId) {
@@ -160,7 +176,7 @@ export async function handleReflect(
       url.slice('/api/reflect/'.length, url.length - '/answer'.length),
     );
     try {
-      const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
+      const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string; close?: boolean };
       // Ruling 1736 (bead forge-8vfn.8.1.34) — same resolution as the GET
       // route above, and load-bearing here in a second way: `fireReflectorRerun`
       // below needs the REAL `_logs/<cycleId>/` dir name, not the initiativeId
@@ -196,6 +212,28 @@ export async function handleReflect(
         return true;
       }
       const dir = dirGuard.realPath;
+      if (body.close === true) {
+        // forge-nk1y.3 — the one close act for a reflection that asked
+        // nothing: allowed only on an empty question list, and it spends no
+        // agent turn (there is nothing for a rerun to distil).
+        const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
+        const questions = questionsRaw !== null ? safeParseJson<unknown[]>(questionsRaw) : null;
+        if (!Array.isArray(questions)) {
+          sendJson(res, 409, { error: 'close refused: the reflection has no readable question list', cycleId: requestedCycleId }, origin);
+          return true;
+        }
+        if (questions.length > 0) {
+          sendJson(res, 409, { error: `close refused: ${questions.length} questions unanswered`, cycleId: requestedCycleId }, origin);
+          return true;
+        }
+        const closed = [`# Reflection feedback — ${cycleId}`, '', 'Reflection closed by the operator with no questions asked.', ''];
+        if (guardedWriteFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], closed.join('\n')) === null) {
+          sendJson(res, 400, { error: 'invalid cycle path', cycleId }, origin);
+          return true;
+        }
+        sendJson(res, 200, { ok: true, closed: true }, origin);
+        return true;
+      }
       const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
       for (const a of body.answers ?? []) {
         lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
