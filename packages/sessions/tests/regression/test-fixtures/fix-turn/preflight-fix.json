@@ -20,6 +20,7 @@
       "Agent"
     ],
     "maxTurns": 8,
+    "maxBudgetUsd": 3,
     "abortController": "<AbortController>"
   },
   "optionsKeyOrder": [
@@ -29,6 +30,7 @@
     "allowedTools",
     "disallowedTools",
     "maxTurns",
+    "maxBudgetUsd",
     "abortController"
   ],
   "result": {

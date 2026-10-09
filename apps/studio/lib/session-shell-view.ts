@@ -52,6 +52,7 @@ import type {
   SessionShellPayload,
   SessionTurn,
 } from './session-client';
+import type { SessionCeiling } from './session-ceiling';
 import { isPseudoProjectAnchor, COMMUNITY_REFRESH_PROJECT_ANCHOR as COMMUNITY_REGISTRY_ANCHOR } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
@@ -146,6 +147,10 @@ export type SessionShellReadyState = {
    *  (session-level, like `terminal`); null for a session that produced
    *  nothing. */
   finalized: { kind: string; id: string; exists: boolean } | null;
+  /** forge-nk1y.5 — the payload's own recorded spend ceiling, carried
+   *  through verbatim (session-level, like `costUsd`); `null` = none recorded,
+   *  which the shell says out loud rather than leaving it to read as "uncapped". */
+  ceiling: SessionCeiling | null;
   /** W7-C2 T1 review (P0-3) — the payload's own scoped transcript-derivation
    *  error (server-derived, see session-client.ts), carried through verbatim
    *  and UNCHANGED across a `selectStage` switch: a session-level fact about
@@ -302,6 +307,7 @@ function readyDataAttrs(input: {
   panes: SessionPaneSet;
   legacy: boolean;
   costUsd: number | null;
+  ceiling: SessionCeiling | null;
   sdk: string;
 }): SessionShellDataAttrs {
   return {
@@ -324,6 +330,12 @@ function readyDataAttrs(input: {
     // wherever it is asked. OMITTED when the route has no figure: absence
     // means "not recorded", never "cost nothing" (HistoryLedger's own rule).
     ...(input.costUsd !== null ? { 'data-ledger-cost-usd': input.costUsd.toFixed(2) } : {}),
+    // forge-nk1y.5 — the session's spend ceiling. UNLIKE the cost above this is
+    // NEVER omitted: an operator reading a missing attribute would take it for
+    // "uncapped", so a session that recorded none says `none` out loud.
+    ...(input.ceiling !== null
+      ? { 'data-session-ceiling-usd': input.ceiling.usd.toFixed(2), 'data-session-ceiling-source': input.ceiling.source }
+      : { 'data-session-ceiling-usd': 'none' }),
     // M6-A row 1 / 418 — stated, not chosen; always present, like the tier.
     'data-sdk': input.sdk,
     // W8-B3 (ON-5) — the derived pane set, in the DOM so a journey asserts
@@ -333,6 +345,20 @@ function readyDataAttrs(input: {
       ? { 'data-transcript-omitted': input.panes.transcriptOmittedReason }
       : {}),
   };
+}
+
+const CEILING_SOURCE_LABEL: Record<SessionCeiling['source'], string> = {
+  operator: 'set at kickoff',
+  env: 'FORGE_COST_CEILING_USD',
+  'agent-budget': 'agent budget',
+};
+
+/** forge-nk1y.5 — the one human line for a session's spend ceiling. `null`
+ *  says "not recorded" out loud; it is never an empty string. */
+export function sessionCeilingLine(ceiling: SessionCeiling | null): string {
+  return ceiling === null
+    ? "Session spend ceiling not recorded (the agent's own budget applies)"
+    : `Session spend ceiling $${ceiling.usd.toFixed(2)} (${CEILING_SOURCE_LABEL[ceiling.source]})`;
 }
 
 function buildReadyState(payload: SessionShellPayload, stage: string): SessionShellReadyState {
@@ -373,6 +399,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     panes,
     lifecycle: payload.lifecycle,
     finalized: payload.finalized,
+    ceiling: payload.ceiling,
     transcriptError: payload.transcriptError,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
@@ -384,6 +411,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
       panes,
       legacy: payload.legacy,
       costUsd: payload.costUsd,
+      ceiling: payload.ceiling,
       sdk: payload.sdk,
     }),
   };
@@ -438,6 +466,7 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
         // Session-level too: what the session has spent does not depend on
         // which stage of its transcript the operator is reading.
         costUsd: state.costUsd,
+        ceiling: state.ceiling,
         sdk: state.sdk,
       }),
     },

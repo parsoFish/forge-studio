@@ -22,6 +22,7 @@ directly.
 | the SDK tool-use fence | `toolFenceOptions` |
 | operator config (`forge.config.json`) + project starters | `loadConfig` · `defaultConfigPath` · `resolveProjectsDir` · `PROJECT_STARTERS_MANIFEST` · `projectStartersDir` · `listProjectStarters` · `describeProjectStarters` |
 | tunable caps & budgets resolved from config + env | `DEFAULT_DEV_WI_CONCURRENCY` · `DEV_WI_CONCURRENCY_CEILING` · `resolveDevWiConcurrency` · `DEFAULT_POST_MERGE_CI_TIMEOUT_MS` · `DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS` · `resolvePostMergeCiConfig` · `DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS` · `DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` · `resolveReviewLoopCaps` · `DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD` · `DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET` · `resolveTriggeredRunBudgets` · `DEFAULT_KICKOFF_COST_CEILING_USD` · `MAX_KICKOFF_COST_CEILING_USD` · `resolveDefaultKickoffCeilingUsd` |
+| the one spend-ceiling derivation (runs, the plan card, session starts) | `COST_CEILING_ENV` · `DERIVED_CEILING_MARGIN_SHARE` · `parseCeilingEnv` · `resolveRunCeiling` · `resolveSessionCeiling` · `lastUnpricedCharge` |
 | the env-assertion boundary | `collectEnvIssues` · `assertEnv` |
 | git commit identity (author, not the GitHub host identity below) | `ralphGitIdentity` · `UNIFIER_GIT_IDENTITY` · `ORCHESTRATOR_GIT_IDENTITY` · `gitIdentityEnvOverlay` · `gitIdentityConfigArgs` |
 | GitHub host identity for outward gh actions | `ghTokenFor` · `assertGhOwner` · `ghRunnerFor` |

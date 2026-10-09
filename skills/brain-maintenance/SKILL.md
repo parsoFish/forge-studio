@@ -36,7 +36,8 @@ allowed-tools: [Read, Grep, Glob, Write]
 # ambiguity, so the agent can never reach a general-purpose subagent and
 # route around its own "never edits a brain file" contract.
 disallowed-tools: [Edit, Bash, NotebookEdit, WebFetch, WebSearch, Task, Agent]
-budgets: {}
+budgets:
+  maxBudgetUsd: 3
 materials: []
 ---
 

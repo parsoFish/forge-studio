@@ -31,6 +31,7 @@
           ]
         }
       },
+      "maxBudgetUsd": 3,
       "disallowedTools": [
         "Write",
         "Edit",

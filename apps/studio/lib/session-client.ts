@@ -47,6 +47,7 @@
 import { bridgeFetch } from './bridge-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { parseGenerationDeclaration, type GenerationDeclarationStep } from './generation-declaration';
+import { parseSessionCeiling, type SessionCeiling } from './session-ceiling';
 
 export type { SessionLifecycle } from './session-lifecycle-client';
 
@@ -876,6 +877,8 @@ export type SessionShellPayload = {
    * of a dead one.
    */
   finalized: { kind: string; id: string; exists: boolean } | null;
+  /** forge-nk1y.5 — the ceiling recorded at start; `null` = none recorded, never "uncapped". */
+  ceiling: SessionCeiling | null;
   /**
    * W7-C2 T1 review (P0-3) — the transcript derivation's own fail-closed
    * error, SCOPED to the transcript pane. `null` when the derivation
@@ -946,18 +949,12 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   // non-boolean "terminal" throws, never defaulted to false.
   const terminal = requireBoolean(raw, 'terminal');
 
-  // W8-F6 (bead forge-6gv.27) — REQUIRED, hard-parsed exactly like "terminal"
-  // immediately above: a missing or non-boolean "legacy" throws by name and is
-  // NEVER defaulted to false. Defaulting would be the worst possible failure
-  // mode for this particular field — a bridge that forgot to send it would
-  // silently render a session whose working files are gone as a live one.
+  // W8-F6 (bead forge-6gv.27) — REQUIRED like "terminal", never defaulted to
+  // false: a dropped key would render a session whose files are gone as live.
   const legacy = requireBoolean(raw, 'legacy');
 
-  // W8-B3 (ON-5) — REQUIRED like "terminal": a missing or non-array
-  // "transcriptSources" throws, and every element must be a string. Never
-  // defaulted to [] — an empty array is the honest "nothing has been written
-  // yet" value and must be distinguishable from a bridge that forgot to send
-  // the field at all.
+  // W8-B3 (ON-5) — REQUIRED like "terminal", every element a string; never
+  // defaulted to [] (honest "nothing written yet" ≠ a bridge that forgot it).
   const transcriptSourcesRaw = raw['transcriptSources'];
   if (!Array.isArray(transcriptSourcesRaw) || transcriptSourcesRaw.some((v) => typeof v !== 'string')) {
     throw new Error(`missing or invalid "transcriptSources": expected an array of strings, got ${JSON.stringify(transcriptSourcesRaw)}`);
@@ -986,6 +983,8 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     finalized = { kind: finalizedRaw['kind'], id: finalizedRaw['id'], exists: finalizedRaw['exists'] };
   }
 
+  const ceiling = parseSessionCeiling(raw); // forge-nk1y.5 — required-nullable like "finalized"
+
   // W7-C2 T1 review (P0-3) — REQUIRED like "finalized": null is the honest
   // "the transcript derived cleanly" value; a string is the verbatim
   // fail-closed reason. Never absence-tolerant — an omitted key would let a
@@ -1006,6 +1005,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     transcriptSources,
     lifecycle,
     finalized,
+    ceiling,
     transcriptError,
   };
 }
