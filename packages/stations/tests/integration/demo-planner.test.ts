@@ -167,6 +167,15 @@ describe('D-45: the planner picks the form and the narrative; the orchestrator v
     });
   }
 
+  it('a screenshot checkpoint is marked kind screenshot, so capture opens it', async () => {
+    writeFileSync(join(root, '.forge', 'project.json'), JSON.stringify({ name: 'gitweave', testProcess: { local: { cmd: ['npm', 'test'] } }, demoMeans: { routes: ['/org'] } }));
+    const result = await run(port({ ok: true, costUsd: 0, raw: { narrative: NARRATIVE, checkpoints: [{ form: 'screenshot', caption: 'The org page', route: '/org' }] } }));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    const demo = JSON.parse(readFileSync(join(demoDir(), 'demo.json'), 'utf8'));
+    assert.equal(demo.checkpoints[0].kind, 'screenshot');
+    assert.ok(existsSync(join(root, 'capture-ran')), 'a route-only plan still reaches the orchestrated capture');
+  });
+
   it('a planner that produced nothing fails the band by name — never the derived checkpoints', async () => {
     const result = await run(port({ ok: false, reason: 'spawn-suppressed', detail: 'FORGE_DRY_BRIDGE' }));
     assert.equal(result.status === 'failed' && result.reason, 'plan-failed');

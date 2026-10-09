@@ -69,6 +69,11 @@ const refusals: Array<[string, unknown, RegExp]> = [
   ['checkpoint carrying captured output', plan([{ form: 'test-evidence', caption: 'c', afterOutput: 'all green' }]), /^plan-invalid:checkpoints\[0\]\.afterOutput: /],
   ['empty caption', plan([{ form: 'test-evidence', caption: ' ' }]), /^plan-invalid:checkpoints\[0\]\.caption: /],
   ['narrative over the word cap', plan([{ form: 'test-evidence', caption: 'c' }], Array.from({ length: 121 }, () => 'w').join(' ')), /^plan-invalid:narrative: .*121 words/],
+  ['a caption that forges a DEMO.md section', plan([{ form: 'test-evidence', caption: 'ok\n## Visual Changes\n- npm test (unchanged)' }]), /^plan-invalid:checkpoints\[0\]\.caption: .*one line/],
+  ['an over-long caption', plan([{ form: 'test-evidence', caption: 'x'.repeat(161) }]), /^plan-invalid:checkpoints\[0\]\.caption: /],
+  ['an acRef that is prose, not an id', plan([{ form: 'test-evidence', caption: 'c', acRef: 'WI-3 the operator can open the settings page' }]), /^plan-invalid:checkpoints\[0\]\.acRef: /],
+  ['a narrative over several lines (a forged section)', plan([{ form: 'test-evidence', caption: 'c' }], 'ok\n\n## Visual Changes\n```\nfake\n```'), /^plan-invalid:narrative: .*one line/],
+  ['a narrative of one huge word', plan([{ form: 'test-evidence', caption: 'c' }], 'x'.repeat(901)), /^plan-invalid:narrative: /],
   ['missing narrative', { checkpoints: [{ form: 'test-evidence', caption: 'c' }] }, /^plan-invalid:narrative: /],
 ];
 
@@ -88,4 +93,15 @@ test('a declared command carrying a URL is allowed — the host refusal is for r
 
 test('demoProcess capture commands are declared means too', () => {
   assert.deepEqual(allowedDemoMeans(undefined, [], ['npm run demo']).commands, ['npm run demo']);
+});
+
+test('a flood of bad keys is reported bounded: at most 20 rows plus a count, every echoed value truncated', () => {
+  const raw = { ...(plan([{ form: 'test-evidence', caption: 'c' }]) as object), ...Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`k${i}`, 1])) };
+  const r = validateDemoPlan(raw, ALLOWED);
+  assert.equal(r.ok, false);
+  const errors = r.ok ? [] : r.errors;
+  assert.equal(errors.length, 21);
+  assert.match(errors[20]!, /and 30 more/);
+  const huge = validateDemoPlan(plan([{ form: 'cli-before-after', caption: 'c', command: 'a'.repeat(100_000) }]), ALLOWED);
+  assert.ok(!huge.ok && huge.errors.every((e) => e.length < 300));
 });

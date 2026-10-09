@@ -37,6 +37,7 @@ export type DemoPlannerPort = {
 export function mergeDemoPlan(model: DemoModel, plan: DemoPlan, gateOutput: string): DemoModel {
   const checkpoints = plan.checkpoints.map(({ acRef, ...cp }, i) => ({
     label: `Plan ${i + 1}: ${acRef ?? cp.form}`, ...cp, ...(cp.form === 'test-evidence' ? { afterOutput: gateOutput } : {}),
+    ...(cp.form === 'screenshot' ? { kind: 'screenshot' as const } : {}), // capture keys a browser checkpoint on its kind
   }));
   return { ...model, checkpoints, narrative: plan.narrative };
 }

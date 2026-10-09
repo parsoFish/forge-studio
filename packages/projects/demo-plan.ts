@@ -44,6 +44,9 @@ const DRIVERS: Record<DemoEvidenceForm, readonly string[]> = {
   'cli-before-after': ['command'], 'api-before-after': ['command', 'apiPath'], screenshot: ['route'], 'test-evidence': [],
 };
 
+// An agent value echoed into a logged, thrown error is bounded; agent prose (DEMO.md, the PR body) is one bounded line.
+const shown = (v: unknown): string => JSON.stringify(v)?.slice(0, 80) ?? String(v);
+const isLine = (v: unknown, max: number): boolean => typeof v === 'string' && v.trim() !== '' && v.length <= max && !/[\r\n]/.test(v);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const hasHost = (v: string): boolean => /^[a-z][a-z0-9+.-]*:/i.test(v) || v.startsWith('//') || v.includes('://');
 
@@ -52,20 +55,20 @@ function checkDriver(cp: Record<string, unknown>, key: string, allowed: readonly
   if (v === undefined) return;
   const row = `plan-invalid:${at}.${key}`;
   if (typeof v !== 'string' || v.trim() === '') return void errors.push(`${row}: must be a non-empty string`);
-  if (key !== 'command' && hasHost(v)) return void errors.push(`${row}: ${JSON.stringify(v)} names a host — a plan names no host, only declared means`);
-  if (key === 'command' && SHELL_METACHARACTERS.test(v)) return void errors.push(`${row}: \`${v}\` contains shell metacharacters`);
-  if (key !== 'command' && !isOwnServerPath(v)) return void errors.push(`${row}: ${JSON.stringify(v)} is not a path on the tree's own server`);
-  if (!allowed.includes(v)) errors.push(`${row}: ${JSON.stringify(v)} is not a declared means (demoMeans or an acceptance criterion's span)`);
+  if (key !== 'command' && hasHost(v)) return void errors.push(`${row}: ${shown(v)} names a host — a plan names no host, only declared means`);
+  if (key === 'command' && SHELL_METACHARACTERS.test(v)) return void errors.push(`${row}: ${shown(v)} contains shell metacharacters`);
+  if (key !== 'command' && !isOwnServerPath(v)) return void errors.push(`${row}: ${shown(v)} is not a path on the tree's own server`);
+  if (!allowed.includes(v)) errors.push(`${row}: ${shown(v)} is not a declared means (demoMeans or an acceptance criterion's span)`);
 }
 
 function checkCheckpoint(raw: unknown, i: number, allowed: AllowedDemoMeans, errors: string[]): void {
   const at = `checkpoints[${i}]`;
   if (!isObject(raw)) return void errors.push(`plan-invalid:${at}: must be an object`);
-  for (const key of Object.keys(raw)) if (!CHECKPOINT_KEYS.includes(key)) errors.push(`plan-invalid:${at}.${key}: not a plan field — a plan carries no output or evidence`);
-  if (!(DEMO_EVIDENCE_FORMS as readonly unknown[]).includes(raw.form)) return void errors.push(`plan-invalid:${at}.form: must be one of ${DEMO_EVIDENCE_FORMS.join('|')} (got ${JSON.stringify(raw.form)})`);
+  for (const key of Object.keys(raw)) if (!CHECKPOINT_KEYS.includes(key)) errors.push(`plan-invalid:${at}.${key.slice(0, 40)}: not a plan field — a plan carries no output or evidence`);
+  if (!(DEMO_EVIDENCE_FORMS as readonly unknown[]).includes(raw.form)) return void errors.push(`plan-invalid:${at}.form: must be one of ${DEMO_EVIDENCE_FORMS.join('|')} (got ${shown(raw.form)})`);
   const form = raw.form as DemoEvidenceForm;
-  if (typeof raw.caption !== 'string' || raw.caption.trim() === '') errors.push(`plan-invalid:${at}.caption: must be a non-empty string`);
-  if (raw.acRef !== undefined && typeof raw.acRef !== 'string') errors.push(`plan-invalid:${at}.acRef: must be a string`);
+  if (!isLine(raw.caption, 160)) errors.push(`plan-invalid:${at}.caption: must be one line of at most 160 characters`);
+  if (raw.acRef !== undefined && !(typeof raw.acRef === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(raw.acRef))) errors.push(`plan-invalid:${at}.acRef: must be a work-item id (≤ 40 of A-Z a-z 0-9 . _ -)`);
   for (const key of ['command', 'route', 'apiPath']) {
     if (raw[key] !== undefined && !DRIVERS[form].includes(key)) errors.push(`plan-invalid:${at}.${key}: form ${form} takes no ${key}`);
   }
@@ -80,15 +83,13 @@ function checkCheckpoint(raw: unknown, i: number, allowed: AllowedDemoMeans, err
 export function validateDemoPlan(raw: unknown, allowed: AllowedDemoMeans): DemoPlanResult {
   if (!isObject(raw)) return { ok: false, errors: ['plan-invalid:plan: must be a JSON object'] };
   const errors: string[] = [];
-  for (const key of Object.keys(raw)) if (!PLAN_KEYS.includes(key)) errors.push(`plan-invalid:plan.${key}: not a plan field — a plan carries no output or evidence`);
+  for (const key of Object.keys(raw)) if (!PLAN_KEYS.includes(key)) errors.push(`plan-invalid:plan.${key.slice(0, 40)}: not a plan field — a plan carries no output or evidence`);
   const n = raw.narrative;
-  if (typeof n !== 'string' || n.trim() === '') errors.push('plan-invalid:narrative: must be a non-empty string');
-  else if (n.trim().split(/\s+/).length > NARRATIVE_MAX_WORDS) errors.push(`plan-invalid:narrative: ${n.trim().split(/\s+/).length} words — at most ${NARRATIVE_MAX_WORDS}`);
+  if (!isLine(n, 900)) errors.push('plan-invalid:narrative: must be one paragraph on one line, at most 900 characters');
+  else if ((n as string).trim().split(/\s+/).length > NARRATIVE_MAX_WORDS) errors.push(`plan-invalid:narrative: ${(n as string).trim().split(/\s+/).length} words — at most ${NARRATIVE_MAX_WORDS}`);
   const cps = raw.checkpoints;
-  if (!Array.isArray(cps) || cps.length === 0 || cps.length > MAX_PLAN_CHECKPOINTS) {
-    errors.push(`plan-invalid:checkpoints: must be an array of 1–${MAX_PLAN_CHECKPOINTS} checkpoints`);
-  } else {
-    cps.forEach((cp, i) => checkCheckpoint(cp, i, allowed, errors));
-  }
+  if (Array.isArray(cps) && cps.length > 0 && cps.length <= MAX_PLAN_CHECKPOINTS) cps.forEach((cp, i) => checkCheckpoint(cp, i, allowed, errors));
+  else errors.push(`plan-invalid:checkpoints: must be an array of 1–${MAX_PLAN_CHECKPOINTS} checkpoints`);
+  if (errors.length > 20) return { ok: false, errors: [...errors.slice(0, 20), `plan-invalid:plan: …and ${errors.length - 20} more`] };
   return errors.length > 0 ? { ok: false, errors } : { ok: true, plan: raw as unknown as DemoPlan };
 }

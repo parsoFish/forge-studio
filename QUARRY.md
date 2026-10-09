@@ -57,18 +57,18 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 7 | 1,627 | **1,627** | ratified 1,627 (+54, forge-8vfn.30.9, ruling 666): `resolveDeclaredBin`, the pure declared-bin containment rule shared by flows and factory. |
 | `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 50 | 11,428 | **9,634** | ratified 9,634 — forge-mfv5.1.19 PR 2: `validateDemoPlan`, the demo plan refused by row against declared means; +99 measured, read for slack (validator compressed 104→94), lane-ratified (≤100, ruling 666). |
+| `projects` | 50 | 11,429 | **9,635** | ratified 9,635 — forge-mfv5.1.19 PR 2: `validateDemoPlan`, the demo plan refused by row against declared means, agent prose bounded; +100 measured, read for slack (validator compressed 104→94), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,477 | **12,899** | ratified 12,899 — forge-mfv5.1.18: a project-brain commit files each theme in its category index through `ensureLinked`; +15 measured, read for slack (comment cut), lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,938 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 89 | 25,156 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 47 | 12,496 | **12,496** | ratified 12,496 — forge-mfv5.1.19 PR 2: the demo planner port + integrate wiring (`demo-planner-port.ts`); +97 measured, read for slack (port compressed 96→70, skill read moved to factory), lane-ratified (≤100, ruling 666). |
+| `stations` | 47 | 12,498 | **12,498** | ratified 12,498 — forge-mfv5.1.19 PR 2: the demo planner port + integrate wiring (`demo-planner-port.ts`); +99 measured, read for slack (port compressed 96→70, skill read moved to factory), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 35 | 8,553 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **500** | **133,328** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **500** | **133,331** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -226,7 +226,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/preflight-build.ts | projects | verbatim | 138 |
 | packages/projects/preflight-demo.ts | projects | verbatim | 179 |
 | packages/projects/demo-means.ts | projects | rewritten | 77 |
-| packages/projects/demo-plan.ts | projects | rewritten | 94 |
+| packages/projects/demo-plan.ts | projects | rewritten | 95 |
 | packages/projects/preflight-gate.ts | projects | verbatim | 281 |
 | packages/projects/preflight-instructions.ts | projects | verbatim | 135 |
 | packages/projects/preflight-release.ts | projects | verbatim | 71 |
@@ -371,7 +371,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/review-refusal.ts | stations | rewritten | 135 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 435 |
-| packages/stations/phases/executor-deps.ts | stations | verbatim | 336 |
+| packages/stations/phases/executor-deps.ts | stations | verbatim | 337 |
 | packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 139 |
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
 | packages/sessions/testing.ts | sessions | verbatim | 15 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `tests/architect-ports-stub.ts`'s `stubArchitectManifestPorts`, three `kinds/architect-critic.ts` symbols, and three `turn-cost-rows.ts` symbols have no production consumer outside this package, only `apps/forge`/`scripts/stories` tests reach for them.** |
@@ -443,7 +443,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
 | packages/stations/demo-delta.ts | stations | verbatim | 145 |
 | packages/stations/demo-form.ts | stations | rewritten | 73 |
-| packages/stations/demo-planner-port.ts | stations | rewritten | 76 |
+| packages/stations/demo-planner-port.ts | stations | rewritten | 77 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 292 |
 | packages/stations/demo-model.ts | stations | verbatim | 794 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 305 |

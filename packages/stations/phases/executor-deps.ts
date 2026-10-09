@@ -205,7 +205,8 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort, demoPlanner?:
           worktreePath: input.worktreePath,
           manifestPath: input.manifestPath,
           projectRepoPath: input.projectRepoPath,
-          ...(demoPlanner ? { planner: { port: demoPlanner, def, cycleId: requireCycleId(input, 'runIntegrate') } } : {}),
+          // cycleId is read only when the planner actually runs, so a class that captures no checkpoints never needs one.
+          ...(demoPlanner ? { planner: { port: demoPlanner, def, get cycleId() { return requireCycleId(input, 'runIntegrate'); } } } : {}),
         },
         logger,
         gateEvidence,
