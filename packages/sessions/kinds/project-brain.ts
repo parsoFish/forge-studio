@@ -62,6 +62,8 @@ export type ProjectBrainStatus = {
   phase: ProjectBrainPhase;
   /** The operator's focus/guidance for the brain (persisted to prompt.md). */
   prompt: string;
+  /** forge-mfv5.1.15 — the draft round; absent = 1, bumped by `/revise`. */
+  round?: number;
   updated_at: string;
   /**
    * R1-06 WI-2 (F2 hand-off, T1 ruling Q4 option (a)): when this session was
@@ -119,40 +121,44 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
       const staging = stagingThemesDir(plumbing.sessionDir);
       mkdirSync(staging, { recursive: true });
 
-      const skillFor = (turnId: string) =>
-        loadSkillTurnPrompt({
-          name: 'project-brain-builder',
-          turnId,
-          skillPromptPath: input.skillPromptPath,
+      // forge-mfv5.1.15 — consume-once feedback.md ("Revise with notes"),
+      // deleted only once the step resolves, so a failed turn's retry keeps it.
+      return await plumbing.withOperatorFeedback(async (feedback) => {
+        const skillFor = (turnId: string) =>
+          loadSkillTurnPrompt({
+            name: 'project-brain-builder',
+            turnId,
+            skillPromptPath: input.skillPromptPath,
+          });
+        const { cwd, prompt } = buildAnalyzePlan(status, plumbing.forgeRoot, staging, skillFor, feedback);
+
+        await runAgentTurn({
+          queryFn: plumbing.queryFn,
+          maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — the session's remaining, at dispatch
+          prompt,
+          cwd,
+          model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),
+          allowedTools: projectBrainAgentSpec.allowedTools,
+          disallowedTools: projectBrainAgentSpec.disallowedTools,
+          // W8-B6 — hook dispatch comes from the driver already bound to this
+          // turn's logger and initiative id, so no kind can spawn hook-blind.
+          ...plumbing.hooksForSkill(projectBrainAgentSpec.skill),
+          maxTurns: 30,
+          onToolUse: plumbing.onToolUse,
+          onHeartbeat: plumbing.onHeartbeat,
+          onThinking: plumbing.onThinking,
+          label: `project-brain-${input.sessionId}`,
         });
-      const { cwd, prompt } = buildAnalyzePlan(status, plumbing.forgeRoot, staging, skillFor);
 
-      await runAgentTurn({
-        queryFn: plumbing.queryFn,
-        maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — the session's remaining, at dispatch
-        prompt,
-        cwd,
-        model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),
-        allowedTools: projectBrainAgentSpec.allowedTools,
-        disallowedTools: projectBrainAgentSpec.disallowedTools,
-        // W8-B6 — hook dispatch comes from the driver already bound to this
-        // turn's logger and initiative id, so no kind can spawn hook-blind.
-        ...plumbing.hooksForSkill(projectBrainAgentSpec.skill),
-        maxTurns: 30,
-        onToolUse: plumbing.onToolUse,
-        onHeartbeat: plumbing.onHeartbeat,
-        onThinking: plumbing.onThinking,
-        label: `project-brain-${input.sessionId}`,
+        const themes = listStagedThemes(plumbing.logsRoot, input.project, input.sessionId);
+        if (themes.length === 0) {
+          throw new Error(
+            'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
+          );
+        }
+        writeStatus({ ...status, phase: 'awaiting-review' });
+        return { phase: 'awaiting-review', wrote: themes.map((t) => join(staging, t)), themes };
       });
-
-      const themes = listStagedThemes(plumbing.logsRoot, input.project, input.sessionId);
-      if (themes.length === 0) {
-        throw new Error(
-          'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
-        );
-      }
-      writeStatus({ ...status, phase: 'awaiting-review' });
-      return { phase: 'awaiting-review', wrote: themes.map((t) => join(staging, t)), themes };
     },
 
     // --- commit: copy staged themes into the central project brain -----------

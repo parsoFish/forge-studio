@@ -269,6 +269,14 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       handler: pbrain,
     },
     {
+      // forge-mfv5.1.15 — the review gate's third verdict; spawns like approve.
+      method: 'POST',
+      path: '/api/project-brain/revise',
+      matches: (url) => pathOf(url) === '/api/project-brain/revise',
+      dryClassification: 'stub-actions',
+      handler: pbrain,
+    },
+    {
       method: 'POST',
       path: '/api/project-brain/abandon',
       matches: (url) => pathOf(url) === '/api/project-brain/abandon',

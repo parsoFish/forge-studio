@@ -351,6 +351,9 @@ export type ProjectBrainSession = {
   project: string;
   phase: 'briefing' | 'analyzing' | 'awaiting-review' | 'committing' | 'committed' | 'abandoned';
   prompt: string;
+  /** forge-mfv5.1.15 — the draft round (absent on a fresh session = round 1);
+   *  bumped each time the operator sends the staged themes back with notes. */
+  round?: number;
   /** W8-A2 (ON-7 defect 1) — see `ArchitectSessionSummary.lifecycle`'s doc
    *  comment. `GET /api/project-brain/sessions` served `statuses` VERBATIM
    *  before this fix — no lifecycle AND no staleness of any kind, the
@@ -381,6 +384,12 @@ export async function projectBrainBrief(input: { project: string; sessionId: str
 /** Approve the staged themes → commit into the central brain (awaiting-review → committing). */
 export async function projectBrainApprove(input: { project: string; sessionId: string }): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/project-brain/approve', input);
+}
+
+/** Send the staged themes back for another draft with the operator's notes
+ *  (awaiting-review → analyzing, round + 1). `feedback` is required. */
+export async function projectBrainRevise(input: { project: string; sessionId: string; feedback: string }): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/project-brain/revise', input);
 }
 
 /** Abandon a project-brain session. */

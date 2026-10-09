@@ -55,12 +55,12 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 7 | 1,627 | **1,627** | ratified 1,627 (+54, forge-8vfn.30.9, ruling 666): `resolveDeclaredBin`, the pure declared-bin containment rule shared by flows and factory. |
-| `kernel` | 37 | 6,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 37 | 6,624 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,105 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 50 | 11,430 | **9,636** | ratified 9,636 — forge-mfv5.1.19 PR 2: `validateDemoPlan`, the demo plan refused by row against declared means, agent prose bounded; +100 measured (on main 405bc586), read for slack (validator compressed 104→94), lane-ratified (≤100, ruling 666). |
-| `knowledge` | 44 | 13,477 | **12,899** | ratified 12,899 — forge-mfv5.1.18: a project-brain commit files each theme in its category index through `ensureLinked`; +15 measured, read for slack (comment cut), lane-ratified (≤100, ruling 666). |
+| `knowledge` | 44 | 13,495 | **12,917** | ratified 12,917 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured, read for slack (comments cut), lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 64 | 20,938 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 64 | 21,044 | **21,006** | ratified 21,006 — forge-mfv5.1.15: the project-brain review's Revise with notes route, its verdict history and the revise turn; +11 measured, read for slack, lane-ratified (≤100, ruling 666). |
 | `flows` | 89 | 25,156 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 47 | 12,498 | **12,498** | ratified 12,498 — forge-mfv5.1.19 PR 2: the demo planner port + integrate wiring (`demo-planner-port.ts`); +99 measured, read for slack (port compressed 96→70, skill read moved to factory), lane-ratified (≤100, ruling 666). |
@@ -68,7 +68,7 @@ operator-ratified new cap — never a silent raise.
 | `apps/forge` | 35 | 8,553 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **500** | **133,332** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **500** | **133,458** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -139,8 +139,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/bridge-recovery.ts | flows | verbatim | 394 |
 | packages/flows/halt-watch.ts | flows | rewritten | 38 **New file, row 207 (forge-8vfn.8.5.57):** the serve tick's view of the emergency halt — logs on transition and at most every `HALT_REMINDER_MS`. |
 | packages/flows/operator-stop.ts | flows | rewritten | 205 |
-| packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 336 |
-| packages/sessions/bridge-studio-sessions-affordances.ts | sessions | rewritten | 502 |
+| packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 385 |
+| packages/sessions/bridge-studio-sessions-affordances.ts | sessions | rewritten | 458 |
 | packages/sessions/bridge-studio-agent-capability.ts | sessions | verbatim | 110 |
 | packages/library/bridge-studio-authoring-hook.ts | library | verbatim | 280 |
 | packages/library/bridge-studio-authoring-skill.ts | library | verbatim | 64 |
@@ -200,7 +200,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 62 |
-| apps/forge/dry-bridge.ts | kernel | rewritten | 317 |
+| apps/forge/dry-bridge.ts | kernel | rewritten | 319 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 800 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 306 |
@@ -240,13 +240,13 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/session-model-tier.ts | sessions | verbatim | 54 |
 | packages/sessions/bridge-studio-instructions.ts | sessions | verbatim | 254 |
 | packages/sessions/session-answer-limits.ts | sessions | verbatim | 14 |
-| packages/sessions/bridge-studio-project-brain.ts | sessions | verbatim | 318 |
+| packages/sessions/bridge-studio-project-brain.ts | sessions | verbatim | 405 |
 | packages/sessions/bridge-studio-kickoff.ts | sessions | verbatim | 776 |
 | packages/sessions/bridge-studio-demo.ts | sessions | verbatim | 620 |
 | packages/sessions/bridge-studio-session-index.ts | sessions | verbatim | 355 |
 | packages/sessions/bridge-studio-architect.ts | sessions | verbatim | 486 |
 | packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 578 |
-| packages/sessions/routes.ts | sessions | verbatim | 451 |
+| packages/sessions/routes.ts | sessions | verbatim | 459 |
 | packages/sessions/session-phases.ts | sessions | verbatim | 81 |
 | packages/sessions/session-readability.ts | sessions | verbatim | 259 |
 | packages/library/skill-path.ts | library | verbatim | 146 |
@@ -409,7 +409,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 171 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 477 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
-| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 187 |
+| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 193 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/sessions/kinds/architect-ports.ts | sessions | rewritten | 52 |
 | packages/contracts/manifest-types.ts | contracts | rewritten | 243 |
@@ -417,7 +417,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/session-kind-deps.ts | apps/forge | rewritten | 61 |
 | apps/forge/brain-fix-turn.ts | apps/forge | rewritten | 99 |
 | apps/forge/manifest-fixtures.ts | apps/forge | rewritten | 46 |
-| packages/knowledge/project-brain-build.ts | knowledge | rewritten | 231 |
+| packages/knowledge/project-brain-build.ts | knowledge | rewritten | 249 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 395 |
 | packages/knowledge/testing.ts | knowledge | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `resolveKbProcesses` has no production consumer outside this package, only two `apps/forge` tests reach for it, so it stays off the main door and behind `@forge/knowledge/testing` instead.** |
 | packages/projects/project-config.ts | projects | verbatim | 325 |

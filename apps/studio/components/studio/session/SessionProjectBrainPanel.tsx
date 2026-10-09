@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { projectBrainBrief, projectBrainApprove, projectBrainAbandon, type ProjectBrainSession, type EventLogEntry } from '@/lib/bridge-client';
+import { projectBrainBrief, projectBrainApprove, projectBrainRevise, projectBrainAbandon, type ProjectBrainSession, type EventLogEntry } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { ProvenanceStrip } from '@/components/studio/session/ProvenanceStrip';
@@ -77,6 +77,11 @@ export function SessionProjectBrainPanel({
   const [brief, setBrief] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
+  // forge-mfv5.1.15 — the third review verdict: revise with the operator's notes.
+  const [revising, setRevising] = useState(false);
+  const [reviseNotes, setReviseNotes] = useState('');
+  const [reviseError, setReviseError] = useState<string | null>(null);
+  const round = typeof session.round === 'number' && session.round >= 1 ? session.round : 1;
 
   const startAnalysis = useCallback(async () => {
     setBusy(true);
@@ -91,6 +96,21 @@ export function SessionProjectBrainPanel({
     setBusy(false);
     onRefresh();
   }, [session.project, session.session_id, onRefresh]);
+
+  const sendRevise = useCallback(async () => {
+    setBusy(true);
+    setReviseError(null);
+    const r = await projectBrainRevise({ project: session.project, sessionId: session.session_id, feedback: reviseNotes });
+    setBusy(false);
+    if (!r.ok) {
+      // Keep the typed notes: a refused revise must not cost the operator their words.
+      setReviseError(r.error ?? 'The revision could not be sent.');
+      return;
+    }
+    setReviseNotes('');
+    setRevising(false);
+    onRefresh();
+  }, [session.project, session.session_id, reviseNotes, onRefresh]);
 
   const abandon = useCallback(async () => {
     setBusy(true);
@@ -143,16 +163,25 @@ export function SessionProjectBrainPanel({
       )}
 
       {session.phase === 'awaiting-review' && (
-        <div data-section="brain-review" data-theme-count={themes.length} style={{ marginTop: 12 }}>
+        <div data-section="brain-review" data-theme-count={themes.length} data-brain-round={round} style={{ marginTop: 12 }}>
           <p style={{ fontSize: 13, color: 'var(--dim)' }}>
-            {themes.length} draft theme(s) — review them in the artifact pane on the right, then approve to commit into the central brain.
+            <strong data-component="brain-round">Draft round {round}</strong> — {themes.length} draft theme(s). Review them in the artifact pane on the right, then approve to commit into the central brain, or revise with notes to send them back for another draft.
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <button data-action="approve-brain" {...disabledAttrs(busy ? 'Working…' : confirmingAbandon ? 'Resolve the abandon confirmation first' : null)} onClick={() => void approve()} className="btn btn-primary">
               {busy ? 'Committing…' : 'Approve + commit'}
             </button>
+            <button
+              data-action="revise-brain"
+              aria-expanded={revising}
+              {...disabledAttrs(busy ? 'Working…' : confirmingAbandon ? 'Resolve the abandon confirmation first' : null)}
+              onClick={() => setRevising((open) => !open)}
+              className="btn"
+            >
+              Revise with notes…
+            </button>
             {!confirmingAbandon ? (
-              <button data-action="abandon-brain" disabled={busy} onClick={() => setConfirmingAbandon(true)} style={quietDangerBtn}>
+              <button data-action="abandon-brain" disabled={busy} onClick={() => { setRevising(false); setConfirmingAbandon(true); }} style={quietDangerBtn}>
                 Abandon…
               </button>
             ) : (
@@ -167,6 +196,33 @@ export function SessionProjectBrainPanel({
               </span>
             )}
           </div>
+          {revising && (
+            <div data-section="brain-revise" style={{ marginTop: 12 }}>
+              <p style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.6 }}>
+                Say what to correct (e.g. &ldquo;the build command is npm run build, not make&rdquo;). The agent revises the staged themes in place, applying every note.
+              </p>
+              <textarea
+                data-component="brain-revise-input"
+                data-field="brain-revise-notes"
+                value={reviseNotes}
+                onChange={(e) => setReviseNotes(e.target.value)}
+                rows={4}
+                placeholder="Revision notes"
+                style={textarea}
+              />
+              {reviseError !== null && (
+                <p data-section="brain-revise-error" role="alert" style={{ fontSize: 12.5, color: 'var(--red)' }}>{reviseError}</p>
+              )}
+              <button
+                data-action="send-brain-revise"
+                {...disabledAttrs(busy ? 'Working…' : reviseNotes.trim().length === 0 ? 'Write your revision notes first' : null)}
+                onClick={() => void sendRevise()}
+                className="btn btn-primary"
+              >
+                {busy ? 'Sending…' : 'Send for revision'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
