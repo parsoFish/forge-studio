@@ -43,3 +43,8 @@ test('answered, even with no questions (automated, self-answered) — stop polli
 test('answered with questions present — stop polling', () => {
   expect(needsReflectionPoll(data({ questions: ONE_QUESTION, answered: true }))).toBe(false);
 });
+
+test('forge-nk1y.3: an EMPTY list the reflector has FILED is its final word — stop polling (the gate offers the close act)', () => {
+  expect(needsReflectionPoll(data({ questions: [], answered: false, filed: true }))).toBe(false);
+  expect(needsReflectionPoll(data({ questions: [], answered: false, filed: false }))).toBe(true);
+});

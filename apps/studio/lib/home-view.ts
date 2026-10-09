@@ -94,6 +94,17 @@ export type HomeAttentionItem =
       href: string;
       sessionId: string;
       project: string;
+    }
+  | {
+      // forge-nk1y.3: a merged cycle's reflection waiting on the operator
+      // (built by `buildReflectionAttention`, lib/reflection-attention.ts).
+      id: string;
+      kind: 'reflection';
+      text: string;
+      sub: string;
+      status: 'gated' | 'unasked' | 'unreadable';
+      href: string;
+      cycleId: string;
     };
 
 /**
@@ -561,6 +572,10 @@ export const HOME_STATUS_FRAME: Record<HomeStatus, string> = {
 export const GATE_ATTENTION_STATUS_FRAME: Record<string, string> = {
   gated: 'retrying',
   flagged: 'failed',
+  // forge-nk1y.3 reflection rows: asked nothing → a gate to close; a file that
+  // does not parse is a failure the operator must see.
+  unasked: 'retrying',
+  unreadable: 'failed',
 };
 
 /** Never a fabricated guess for an attention status this frame doesn't

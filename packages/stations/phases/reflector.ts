@@ -36,7 +36,6 @@ import {
   REFLECT_MODE_FILE,
   type CycleInput,
   type LintStatus,
-  type ReflectMode,
   type ReflectionStatus,
   type ReflectorPhaseResult,
 } from '@forge/flows';
@@ -47,6 +46,9 @@ import { runPostReflectionKbHealth } from '@forge/knowledge';
 import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge';
 import { getPaths, type QueuePaths } from '@forge/flows';
 import { emitReflectionLost, runReflectorBrainWrites, listFreshThemes } from './reflector-brain-writes.ts';
+import { deriveUserQuestionsJson, emitUnasked, unaskedReason } from './reflector-questions.ts';
+
+export { parseUserQuestionsMd } from './reflector-questions.ts';
 
 // The live turn/budget caps (60 turns / $3.00 — raised from $1.50 by
 // forge-8vfn.8.1.37 / ruling 1770 row 147, after a real S10 run hit
@@ -327,9 +329,24 @@ async function reflectFromStart(
   // REF-1: derive user-questions.json from the agent-written user-questions.md.
   // The agent only writes the .md; we synthesise the structured .json here
   // post-exit so the in-UI /reflect screen has an AskUserQuestion-shaped array
-  // to render. Best-effort: a missing or unparse-able .md results in an empty
-  // array (no questions shown), which is acceptable (the .md is still readable).
-  deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath, reflectMode);
+  // to render. forge-nk1y.3: an interactive reflection that asks the operator
+  // nothing — no .md, no question in it, or a .json that cannot be written —
+  // is named `reflector.unasked`, never a silent `[]`.
+  const derivedQuestions = deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath, reflectMode);
+  const questionCount = derivedQuestions.ok ? derivedQuestions.count : 0;
+  const unasked = unaskedReason(derivedQuestions, reflectMode, existsSync(resolve(cycleLogDir, 'user-feedback.md')));
+  if (unasked !== null) {
+    emitUnasked({
+      logger,
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+      skill: def.slug,
+      reason: unasked,
+      mode: reflectMode,
+      questionsPath: userQuestionsJsonPath,
+      ...(derivedQuestions.ok ? {} : { error: derivedQuestions.error }),
+    });
+  }
 
   // REF-4: the brain index is regenerated as the KB-health `ingest` builtin
   // above (R4-09-F5), which emits reflector.brain-index-regenerated.
@@ -398,6 +415,7 @@ async function reflectFromStart(
       tool_use: toolUseSummary,
       lint_status: lintStatus,
       retention: retention.retention,
+      questions: questionCount,
     },
   });
   return { reflection_status: 'closed', lint_status: lintStatus };
@@ -573,143 +591,6 @@ export function resolveCurrentManifestPath(originalPath: string, forgeRoot: stri
     if (existsSync(candidate)) return candidate;
   }
   return originalPath;
-}
-
-/**
- * REF-1: Derive `user-questions.json` from `user-questions.md`.
- *
- * The agent writes only the .md (numbered headings). This function
- * synthesises the AskUserQuestion-shaped JSON array that the in-UI
- * /reflect screen expects, so the interview works in production without
- * requiring the agent to write two files.
- *
- * Parsing strategy: split on `## ` headings, use the heading text as
- * `header` (truncated to 12 chars per AskUserQuestion constraint) and the
- * body text as `question`. If the section supplies structured options (a
- * markdown bullet/dash list, optionally under an "Options:" marker) those
- * are parsed into `{label, description}`; otherwise `options` is left empty
- * so the /reflect screen renders a freeform textarea rather than a
- * one-size-fits-all generic triad. If the .md is absent or contains no
- * questions, an empty array is written (the UI treats that as "no questions
- * this cycle").
- */
-function deriveUserQuestionsJson(mdPath: string, jsonPath: string, mode: ReflectMode = 'interactive'): void {
-  try {
-    if (!existsSync(mdPath)) {
-      writeFileSync(jsonPath, '[]');
-      return;
-    }
-    const raw = readFileSync(mdPath, 'utf8');
-    const questions = parseUserQuestionsMd(raw, mode);
-    writeFileSync(jsonPath, JSON.stringify(questions, null, 2));
-  } catch {
-    // Best-effort: fall back to empty array so the UI shows "no questions".
-    try {
-      writeFileSync(jsonPath, '[]');
-    } catch {
-      /* silent */
-    }
-  }
-}
-
-type UserQuestion = {
-  question: string;
-  header: string;
-  options: Array<{ label: string; description: string }>;
-  /** R4-09-F3 (automated mode): the reflector-inferred answer for this question. */
-  answer?: string;
-  /** R4-09-F3: true when `answer` was inferred (no human), for UI provenance. */
-  inferred?: boolean;
-};
-
-/** R4-09-F3: the self-describing marker the automated prompt writes per question. */
-const INFERRED_ANSWER_RE = /^\s*\*\*Inferred answer:\*\*\s*(.+)$/i;
-
-/**
- * Parse the numbered heading format written by the agent:
- *   ## 1. <heading text>
- *   <body paragraphs>
- *
- * Returns one entry per `## ` heading found — nothing else is ever read as one, so
- * an H1/preamble prefix is dropped and a heading-less file yields `[]`, never a stand-in.
- */
-export function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interactive'): UserQuestion[] {
-  const out: UserQuestion[] = [];
-  // Split on `## ` headings; drop any leading section that isn't one (REF-1 H1/preamble, forge-8vfn.8.1.35).
-  const sections = raw.split(/^(?=## )/m).filter((s) => s.trim().startsWith('## '));
-  for (const section of sections) {
-    const lines = section.split(/\r?\n/);
-    const heading = lines[0].replace(/^##\s+\d+\.\s*/, '').replace(/^##\s+/, '').trim();
-    if (!heading) continue;
-    const bodyLines = lines.slice(1);
-    const options = parseSectionOptions(bodyLines);
-    // R4-09-F3: in automated mode, lift the self-describing `**Inferred
-    // answer:**` line into `answer` + `inferred: true`, and strip it from the
-    // question text so it isn't duplicated into the prompt. Interactive runs
-    // ignore any such line — the JSON shape is byte-identical to pre-F3.
-    let answer: string | undefined;
-    let inferred: boolean | undefined;
-    let contentLines = bodyLines;
-    if (mode === 'automated') {
-      const idx = bodyLines.findIndex((l) => INFERRED_ANSWER_RE.test(l));
-      if (idx >= 0) {
-        const m = bodyLines[idx].match(INFERRED_ANSWER_RE);
-        answer = m?.[1]?.trim();
-        inferred = true;
-        contentLines = bodyLines.filter((_, i) => i !== idx);
-      }
-    }
-    const body = contentLines.join('\n').trim();
-    // The question text is the body with any parsed option lines stripped, so
-    // the freeform/options content isn't duplicated into the prompt.
-    const question = stripOptionLines(body) || heading;
-    // header must be ≤12 chars (AskUserQuestion constraint).
-    const header = heading.slice(0, 12);
-    const entry: UserQuestion = { question, header, options };
-    if (answer !== undefined) entry.answer = answer;
-    if (inferred) entry.inferred = true;
-    out.push(entry);
-  }
-  return out;
-}
-
-/**
- * Parse a markdown bullet/dash list of options from a question section body.
- *
- * A "meaningful" option line looks like `- Label` or `* Label — description`
- * (em-dash, en-dash, or " - " as the label/description separator). Lines are
- * only treated as options when there are at least two of them — a single
- * stray bullet inside prose is prose, not a choice set. When no structured
- * options are present we return [] so the UI falls back to a freeform answer
- * rather than synthesizing a generic triad that fits no question.
- */
-function parseSectionOptions(bodyLines: string[]): Array<{ label: string; description: string }> {
-  const opts: Array<{ label: string; description: string }> = [];
-  for (const line of bodyLines) {
-    const m = line.match(/^\s*[-*]\s+(.+)$/);
-    if (!m) continue;
-    const text = m[1].trim();
-    if (!text) continue;
-    // Split label from description on em/en dash or " - ".
-    const sep = text.match(/\s+(?:—|–|-)\s+/);
-    if (sep && sep.index !== undefined) {
-      const label = text.slice(0, sep.index).trim();
-      const description = text.slice(sep.index + sep[0].length).trim();
-      opts.push({ label, description });
-    } else {
-      opts.push({ label: text, description: '' });
-    }
-  }
-  return opts.length >= 2 ? opts : [];
-}
-
-/** Drop markdown bullet/dash lines from a body so option text isn't duplicated into the question prompt. */
-function stripOptionLines(body: string): string {
-  return body
-    .split(/\r?\n/)
-    .filter((l) => !/^\s*[-*]\s+/.test(l))
-    .join('\n')
-    .trim();
 }
 
 /**
