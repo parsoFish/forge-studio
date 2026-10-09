@@ -3,13 +3,13 @@ title: Getting started
 description: Take one project from onboarding to a merged pull request with the example develop factory.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [apps/studio/app/projects/**, apps/studio/app/architect/**, apps/studio/app/artifact/**, apps/studio/components/PlanGate.tsx, apps/studio/components/ReviewVerdictForm.tsx, packages/projects/**]
 sidebar:
   order: 2
 ---
 
-This guide takes one of your repositories from onboarding to a merged pull request, using the example develop factory that ships with forge. It stops for you at four points: the plan, the kickoff, the verdict and the reflection.
+This guide takes one of your repositories from onboarding to a merged pull request, using the example develop factory that ships with forge. It stops for you at the plan, the kickoff and the verdict.
 
 ## Before you start
 
@@ -38,15 +38,19 @@ Fix every hard clause before you plan work. Install the project's own dependenci
 
 ## Plan the work
 
-On the project, press **Plan with Architect**, describe what you want built, and press **Start architect**. **Cost ceiling (USD, optional)** caps what the planning session may spend. The architect may ask questions before it drafts a plan.
+On the project page, press **Architect →** (on the **Roadmap** tab the same form opens from **Plan with Architect**). Describe what you want built and press **Start architect**. **Cost ceiling (USD, optional)** caps what this planning session may spend. The architect may ask questions before it drafts a plan.
 
-The plan stops at the plan gate. **Approve** queues it as an initiative, **Send back** returns it to the architect with your note, and **Reject** ends it.
+The plan stops at the plan gate. Each initiative card shows **budget** (how many build iterations it may take) and **cap** (its estimated spend in dollars). To send the plan back with instructions, type them in the note box first, then press **Send back**: the architect starts its next round at once. **Approve** queues the plan and starts it. **Reject** ends it.
+
+A **Completeness critic found N potential gaps** banner lists what the critic thinks the plan misses. You may approve anyway, or put the gaps in your note and send back; each new round is checked again.
 
 ## Kick off and review
 
-On the project's roadmap, press **Start development →** on the initiative's card. The ceiling field beside it caps the run's spend. The factory then builds, integrates and reviews the work without you, and opens a pull request with a demo of the change.
+After you approve, the factory breaks each initiative into work items and stops at the kickoff gate. The run page shows it as **gated** with 0 work items done, and the initiative's roadmap card reads READY-FOR-REVIEW. Press **Start development →** on that card. The **ceiling ($)** field at the top of the roadmap sets that run's spending ceiling. `FORGE_COST_CEILING_USD`, set before you start `forge studio`, overrides it; with neither, the ceiling is the initiative's cap plus 50 % ([Agent cost ceilings](/reference/agent-cost-ceilings/)). Spend before the kickoff counts toward it. A run that reaches it stops and can be resumed: set `FORGE_COST_CEILING_USD` higher, restart `forge studio`, and press **Resume** on the run.
 
-It stops again at the verdict gate. Write a rationale, then press **approve and merge**, or **add work items** to send it back with more to do. forge merges the pull request itself. After the merge, the reflection gate asks what the run taught, and the answers go into the project's Knowledge for later runs.
+The factory then builds, integrates and reviews the work without you, and opens a pull request with a demo of the change. When the review is done, the run page offers **Decide the verdict gate →**. The verdict page shows the demo and the review's findings. Press **+ comment** on any region to leave a note; a comment marked **blocking** turns the verdict into **send back (add work items)**, and the fix runs in the same cycle. With no blocking comments, press **approve and merge**, and forge merges the pull request itself. A run that filed no demo shows a plain form instead: write a rationale, then press **approve and merge**.
+
+After the merge, the reflector records what the run taught in the project's Knowledge for later runs. **Reflect on this cycle →** on the verdict page opens its reflection; if it lists questions, answer them and press **Submit reflection**.
 
 ## Related
 

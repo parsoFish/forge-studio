@@ -3,7 +3,7 @@ title: Sessions & gates
 description: Run an interactive agent conversation, answer its questions, and approve or send back a plan or verdict at a gate.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [apps/studio/app/sessions/**, apps/studio/app/architect/**, apps/studio/app/artifact/**, packages/sessions/**]
 sidebar:
   order: 10
@@ -42,9 +42,9 @@ A session whose state reads "Needs you" is waiting for an answer or a decision. 
 
 ## Decide at a gate
 
-To approve a plan, open the plan from the planning session (**Review the plan →**). Choose **Approve**, **Send back** or **Reject**. Add a note when you send back. Approve queues the plan as an initiative; development starts when you kick it off from the project's roadmap.
+To approve a plan, open the plan from the planning session (**Review the plan →**). Choose **Approve**, **Send back** or **Reject**. To send back with instructions, type them in the note box before you press **Send back**. Approve queues the plan and starts planning its work items; building starts when you kick it off from the project's roadmap.
 
-To decide on a cycle's verdict, open its verdict in the artifact viewer. Choose **approve** and give a rationale, then press **approve and merge**. Or choose **add work items**, write the rationale, and fill in at least one acceptance criterion with GIVEN, WHEN and THEN. The send-back runs in the same cycle.
+To decide on a cycle's verdict, press **Decide the verdict gate →** on its run page. Comment on the demo with **+ comment**; any **blocking** comment turns the verdict into **send back (add work items)**, which runs in the same cycle. With no blocking comments, press **approve and merge**. A run that filed no demo shows a plain form instead: choose **approve** or **add work items**, write a rationale, and for a send-back fill in at least one acceptance criterion with GIVEN, WHEN and THEN.
 
 Sessions of other kinds can end with **Approve**, **Request changes** or **Reject** on the session page. **Send for revision** needs a description of what should change.
 
