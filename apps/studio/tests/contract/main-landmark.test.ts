@@ -17,6 +17,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { MAIN_CONTENT_ID } from '../../lib/main-landmark';
+// Static imports: the shells' cold transform runs at collection (no timeout),
+// not inside a test body against the 5 s testTimeout (forge-nk1y.11).
+import { StudioPage } from '../../components/StudioPage';
+import { NotFound } from '../../components/NotFound';
+import { StudioArchitectShell } from '../../components/StudioArchitectShell';
+import { SkipLink } from '../../components/SkipLink';
 
 // The nav reads the active pillar from the router; nothing else in these
 // shells touches Next runtime context.
@@ -43,10 +49,7 @@ function tsxFiles(dir: string): string[] {
  */
 const JSX_MAIN_RE = /^[ \t]*<main\b/gm;
 
-test('A-H2/A-H3: the shared shells RENDER <main id="main-content"> — the id is in the markup, not an effect', async () => {
-  const { StudioPage } = await import('../../components/StudioPage');
-  const { NotFound } = await import('../../components/NotFound');
-  const { StudioArchitectShell } = await import('../../components/StudioArchitectShell');
+test('A-H2/A-H3: the shared shells RENDER <main id="main-content"> — the id is in the markup, not an effect', () => {
   const shells: Array<[string, string]> = [
     ['StudioPage', renderToStaticMarkup(createElement(StudioPage, { dataPage: 'x', title: 'X' }))],
     ['NotFound', renderToStaticMarkup(createElement(NotFound, { kind: 'skill', id: 'x', backHref: '/skills', backLabel: 'Skills' }))],
@@ -59,8 +62,7 @@ test('A-H2/A-H3: the shared shells RENDER <main id="main-content"> — the id is
   }
 });
 
-test('A-H3: the skip link points at that same declared id and stamps nothing', async () => {
-  const { SkipLink } = await import('../../components/SkipLink');
+test('A-H3: the skip link points at that same declared id and stamps nothing', () => {
   const html = renderToStaticMarkup(createElement(SkipLink));
   expect(html).toMatch(new RegExp(`href="#${MAIN_CONTENT_ID}"`));
   const src = readFileSync(resolve(ROOT, 'components/SkipLink.tsx'), 'utf8');

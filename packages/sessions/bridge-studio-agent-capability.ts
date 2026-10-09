@@ -43,7 +43,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { SLUG_RE } from '@forge/kernel';
+import { SLUG_RE, decodeUrlPart } from '@forge/kernel';
 import { isUnfilteredStudioAgent, loadAgentDefinition } from '@forge/agents';
 import { agentCapabilityDescriptor } from '@forge/agents';
 import { guardedSkillMdPath } from '@forge/library';
@@ -82,7 +82,7 @@ export async function handleStudioAgentCapabilityRoute(
 
   let slug: string;
   try {
-    slug = decodeURIComponent(match[1]);
+    slug = decodeUrlPart(match[1]);
   } catch {
     sendJson(res, 400, { error: 'invalid slug — malformed URL encoding' }, origin);
     return true;

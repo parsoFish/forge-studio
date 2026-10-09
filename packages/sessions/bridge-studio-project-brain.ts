@@ -15,7 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
-import { allowedOrigin, sendJson, sendIfDispatchRefused } from '@forge/kernel';
+import { allowedOrigin, sendJson, sendIfDispatchRefused, decodeUrlPart } from '@forge/kernel';
 import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { PROJECT_BRAIN_KIND_DIR } from '@forge/knowledge';
 
@@ -137,8 +137,8 @@ export async function handleProjectBrainRoutes(
       // `/` at decodeURIComponent time. DECODE FIRST, then guard the decoded
       // segments through the per-segment identity walk — an escaping
       // project/sessionId resolves to null and discloses no out-of-root theme.
-      const project = decodeURIComponent(themesMatch[1]);
-      const sessionId = decodeURIComponent(themesMatch[2]);
+      const project = decodeUrlPart(themesMatch[1]);
+      const sessionId = decodeUrlPart(themesMatch[2]);
       const dir = guardedSessionDir(ctx.logsRoot, project, PROJECT_BRAIN_KIND_DIR, sessionId);
       if (!dir) {
         sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);

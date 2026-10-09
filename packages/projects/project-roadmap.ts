@@ -25,6 +25,7 @@ import {
   pathOnly,
   PROJECT_ID_RE,
   type StudioContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 
 /**
@@ -48,8 +49,8 @@ export async function handleProjectContractStages(
   const origin = allowedOrigin(req);
   const contractStagesMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/contract-stages$/);
   if (contractStagesMatch && method === 'GET') {
+    const id = decodeUrlPart(contractStagesMatch[1]);
     try {
-      const id = decodeURIComponent(contractStagesMatch[1]);
       if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;

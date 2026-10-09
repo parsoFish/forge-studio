@@ -76,6 +76,7 @@ import {
   refuseDryBridge,
   type RouteContext,
   guardedFile,
+  decodeUrlPart,
 } from '@forge/kernel';
 
 import { runPreflight } from './preflight.ts';
@@ -590,8 +591,8 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       refuseDryBridge(res, origin, { route: '/api/studio/projects/:id', method, action: 'git-remote', logsRoot: ctx.logsRoot });
       return true;
     }
+    const id = decodeUrlPart(projectMatch[1]);
     try {
-      const id = decodeURIComponent(projectMatch[1]);
 
       // 1. Validate id before any fs operation (W7-A4: the case-preserving
       //    directory name, matched exactly — PROJECT_ID_RE)

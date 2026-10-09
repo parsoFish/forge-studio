@@ -11,7 +11,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { isSafeRunId } from '@forge/kernel';
+import { isSafeRunId, decodeUrlPart } from '@forge/kernel';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger } from '@forge/kernel';
 import { requireValidKbId } from './bridge-studio-kbs.ts';
@@ -56,8 +56,8 @@ export async function handleKbDrainCancel(
   // resolvable from the UI.
   const cancelMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/drain\/cancel$/);
   if (cancelMatch && method === 'POST') {
+    const kbId = decodeUrlPart(cancelMatch[1]);
     try {
-      const kbId = decodeURIComponent(cancelMatch[1]);
       if (!requireValidKbId(kbId, res, origin)) return true;
       const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
       if (!active) {
@@ -121,8 +121,8 @@ export async function handleKbActiveJob(
   // SAME derivation every mutating route 409s with (kb-job-state.ts).
   const activeJobMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/active-job$/);
   if (activeJobMatch && method === 'GET') {
+    const kbId = decodeUrlPart(activeJobMatch[1]);
     try {
-      const kbId = decodeURIComponent(activeJobMatch[1]);
       if (!requireValidKbId(kbId, res, origin)) return true;
       const job = deriveKbActiveJob(ctx.forgeRoot, kbId);
       sendJson(res, 200, { ok: true, job, ...(job ? { reason: activeJobReason(job) } : {}) }, origin);
@@ -154,8 +154,8 @@ export async function handleKbRuns(
   // above); the kbId only ever selects among them, never builds a path tail.
   const runsMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/runs$/);
   if (runsMatch && method === 'GET') {
+    const kbId = decodeUrlPart(runsMatch[1]);
     try {
-      const kbId = decodeURIComponent(runsMatch[1]);
       if (!requireValidKbId(kbId, res, origin)) return true;
       const runs = listKbRuns(ctx.forgeRoot, kbId, sessionIsReadable);
       sendJson(res, 200, { ok: true, runs }, origin);
@@ -218,8 +218,8 @@ export async function handleKbDrainRun(
   // /drain routes below (more specific path). --------------------------------
   const specificMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/drain\/([^/]+)$/);
   if (specificMatch && method === 'GET') {
-    const kbId = decodeURIComponent(specificMatch[1]);
-    const runId = decodeURIComponent(specificMatch[2]);
+    const kbId = decodeUrlPart(specificMatch[1]);
+    const runId = decodeUrlPart(specificMatch[2]);
     if (!requireValidKbId(kbId, res, origin)) return true;
     // Never trust runId alone to reach a dir: charset-gated (isSafeRunId,
     // blocks '/' and '..') AND kbId-prefix-checked (a syntactically valid but
@@ -299,8 +299,8 @@ export async function handleKbDrainStart(
 
   // ---- POST /api/studio/kbs/:id/drain — dispatch ---------------------------
   if (baseMatch && method === 'POST') {
+    const kbId = decodeUrlPart(baseMatch[1]);
     try {
-      const kbId = decodeURIComponent(baseMatch[1]);
       if (!requireValidKbId(kbId, res, origin)) return true;
       if (tryGetKbBackend(ctx.forgeRoot, kbId) === null) {
         sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
@@ -381,8 +381,8 @@ export async function handleKbDrainStatus(
 
   // ---- GET /api/studio/kbs/:id/drain — active-or-latest (page reattach) ---
   if (baseMatch && method === 'GET') {
+    const kbId = decodeUrlPart(baseMatch[1]);
     try {
-      const kbId = decodeURIComponent(baseMatch[1]);
       if (!requireValidKbId(kbId, res, origin)) return true;
       const chosen = findActiveKbDrainRun(ctx.forgeRoot, kbId) ?? latestKbDrainRun(ctx.forgeRoot, kbId);
       if (!chosen) {
