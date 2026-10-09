@@ -78,3 +78,23 @@ test('pending is not zero: while preflight has not answered, the panel makes no 
   const html = render(null);
   expect(html).not.toContain('unresolved');
 });
+
+// SPEC §6: DEPS counts exactly as the claim counts it. The preflight read now
+// carries DEPS in its clause set, so a hard DEPS failure is a hard preflight
+// failure here too — Studio does not say flow-ready for a ground the claim refuses.
+function hardClause(id: string, pass: boolean): PreflightClause {
+  return { id, title: id, hard: true, pass, detail: '' };
+}
+
+test('a failing hard DEPS clause reads not flow-ready, hard-fail — as the claim refuses it', () => {
+  const html = render({ ready: false, clauses: [hardClause('C1', true), hardClause('DEPS', false)] });
+  expect(html).toContain('data-flow-ready="false"');
+  expect(html).toContain('data-preflight-status="hard-fail"');
+  expect(html).not.toContain('flow-ready</span>');
+});
+
+test('a passing DEPS clause leaves the verdict ready — flow-ready, preflight ok', () => {
+  const html = render({ ready: true, clauses: [hardClause('C1', true), hardClause('DEPS', true)] });
+  expect(html).toContain('data-flow-ready="true"');
+  expect(html).toContain('data-preflight-status="ok"');
+});

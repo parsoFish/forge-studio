@@ -15,7 +15,7 @@ import { runCycle } from './cycle.ts';
 import { flowPathForId } from './flow-runner.ts';
 import type { PhaseWiring } from './phase-wiring.ts';
 import { parseManifest as parseFullManifest, type InitiativeManifest } from './manifest.ts';
-import type { EventLogEntry } from '@forge/kernel';
+import { defaultConfigPath, FORGE_ROOT, loadConfig, resolveProjectsDir, type EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
 import { endMetaIndicatesFailure } from './run-model-derive-status.ts';
@@ -611,7 +611,9 @@ function parseManifest(path: string): ParsedManifest {
   return {
     initiativeId: m.initiative_id,
     project: m.project,
-    projectRepoPath: m.project_repo_path || resolve('projects', m.project),
+    // No `project_repo_path`: the project lives in the configured projects dir —
+    // the one resolver Studio's roster and the claim gate read — not a cwd-relative `projects/`.
+    projectRepoPath: m.project_repo_path || resolve(resolveProjectsDir(FORGE_ROOT, loadConfig(defaultConfigPath(FORGE_ROOT))), m.project),
     changeClass: m.class,
     flowId: m.flow_id,
     resumeFrom: m.resume_from,

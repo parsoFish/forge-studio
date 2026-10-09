@@ -16,7 +16,7 @@ A project has two faces and one verdict.
 - **Authoring face.** The fields you declare in `.forge/project.json`: north star, instructions, demo process, bound skills, bound Knowledge. Studio shows these in the project builder.
 - **Operational face.** The preflight clauses. Studio marks a project flow-ready only when both faces pass.
 
-Hard clauses decline the run: forge refuses to start and names the clause. Advisory clauses warn and never change the verdict. A claim needs the same verdict Studio shows: a project Studio marks not flow-ready is refused, naming each failing field or clause. The authoring face needs a north star of at most 140 characters, instructions, a demo with at least one capture and one verify step, at least one bound skill, and bound Knowledge.
+Hard clauses decline the run: forge refuses to start and names the clause. Advisory clauses warn and never change the verdict. A claim needs the same verdict Studio shows, including `DEPS` (the gate command is runnable at head): a project Studio marks not flow-ready is refused, naming each failing field or clause. The authoring face needs a north star of at most 140 characters, instructions, a demo with at least one capture and one verify step, at least one bound skill, and bound Knowledge.
 
 What a project provides:
 
@@ -80,7 +80,7 @@ The fields of `.forge/project.json` are in that file's schema; the project build
 | `BUILD`, `ARTIFACTS` | advisory | A declared build workflow exists; build output is ignored by git. |
 | `BRAIN` | advisory | The Knowledge profile is filled in, not the all-TODO stub forge seeds, and Knowledge themes cite source paths that still exist. |
 
-`forge preflight` and the claim check both include `DEPS`.
+`forge preflight`, Studio's Contract Readiness verdict and the claim check all include `DEPS`.
 
 ## Examples
 

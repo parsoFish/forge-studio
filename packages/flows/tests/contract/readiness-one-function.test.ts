@@ -48,3 +48,11 @@ test('the rule itself lives in exactly one place: packages/contracts/project-rea
   assert.match(src, /'capture'/);
   assert.match(src, /'verify'/);
 });
+
+// Both callers feed `projectReadiness` the SAME clause set: the preflight run WITH
+// the runnable-gate (DEPS) clause. Studio's route and the claim gate each name it.
+for (const rel of ['packages/projects/project-preflight-read.ts', 'packages/flows/claim-validator.ts']) {
+  test(`${rel} runs preflight with requireRunnableGate: true, so DEPS counts in Studio exactly as at the claim`, () => {
+    assert.match(code(rel), /runPreflight\([^)]*requireRunnableGate:\s*true/);
+  });
+}

@@ -109,11 +109,12 @@ test('handleProjectPreflight: a real project fixture → 200 {clauses, ready}', 
   }
 });
 
-// Row 174 (forge-8vfn.8.5.9): the birth verdict (`ready`) stays as it is — a
-// project is born contract-green before anything is installed — and the claim's
-// DEPS verdict rides beside it, so Studio can say "not claimable" before the
-// operator presses Start development and the scheduler refuses the claim.
-test('handleProjectPreflight: an unprovisioned ground reports runnableGate.pass=false beside the birth verdict', async () => {
+// SPEC §6: Studio's Contract Readiness and the claim gate feed `projectReadiness`
+// the SAME clause set, DEPS included. An unprovisioned ground is therefore
+// not-ready HERE (the clause list carries a failing hard DEPS), exactly as the
+// claim refuses it; `runnableGate` is that one clause, projected for the
+// "not claimable" notice beside Start development.
+test('handleProjectPreflight: the clause set carries DEPS, so an unprovisioned ground is not ready', async () => {
   const forgeRoot = makeForgeRoot();
   try {
     const dir = writePreflightableProject(forgeRoot, 'unprovisioned');
@@ -123,15 +124,23 @@ test('handleProjectPreflight: an unprovisioned ground reports runnableGate.pass=
     const { res, captured } = mockRes();
     await handleProjectPreflight(mockReq(), res, ctxFor(forgeRoot), '/api/studio/projects/unprovisioned/preflight', 'GET');
     assert.equal(captured.status, 200, captured.body);
-    const body = JSON.parse(captured.body) as { clauses: { id: string }[]; runnableGate?: { pass: boolean; detail: string } };
-    assert.equal(body.runnableGate?.pass, false, `no node_modules: the claim would refuse this ground:\n${captured.body}`);
+    type Body = { clauses: { id: string; hard: boolean; pass: boolean; detail: string }[]; ready: boolean; runnableGate?: { pass: boolean; detail: string } };
+    const body = JSON.parse(captured.body) as Body;
+    const deps = body.clauses.find((c) => c.id === 'DEPS');
+    assert.ok(deps, `the clause list must carry DEPS, as the claim's does:\n${captured.body}`);
+    assert.equal(deps.hard, true);
+    assert.equal(deps.pass, false, 'no node_modules: the claim would refuse this ground');
+    assert.equal(body.ready, false, 'ready is the one verdict: a failing hard DEPS makes it false');
+    assert.equal(body.runnableGate?.pass, false);
     assert.match(body.runnableGate!.detail, /npm ci/);
-    assert.equal(body.clauses.some((c) => c.id === 'DEPS'), false, 'the birth clause list is untouched');
+    assert.equal(body.runnableGate!.detail, deps.detail, 'runnableGate is the DEPS clause, not a second computation');
 
     mkdirSync(join(dir, 'node_modules'));
     const again = mockRes();
     await handleProjectPreflight(mockReq(), again.res, ctxFor(forgeRoot), '/api/studio/projects/unprovisioned/preflight', 'GET');
-    assert.equal((JSON.parse(again.captured.body) as { runnableGate: { pass: boolean } }).runnableGate.pass, true);
+    const provisioned = JSON.parse(again.captured.body) as Body;
+    assert.equal(provisioned.clauses.find((c) => c.id === 'DEPS')?.pass, true);
+    assert.equal(provisioned.runnableGate?.pass, true);
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

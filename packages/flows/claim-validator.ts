@@ -27,7 +27,7 @@
  */
 
 import { existsSync, realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 import { loadProjectsWithMeta, runPreflight } from '@forge/projects';
 import { projectKbBindings } from '@forge/knowledge';
@@ -36,7 +36,7 @@ import { listAgentDefinitions } from '@forge/agents';
 import { validateFlow } from './studio/validate-flow.ts';
 import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';
 import { projectReadiness, type ManifestClass } from '@forge/contracts';
-import { skillRoots } from '@forge/kernel';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, skillRoots } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 import { demoCheckpointPreflightRefusal } from './demo-checkpoint-preflight.ts';
 
@@ -130,6 +130,22 @@ function canonicalPath(p: string): string {
 }
 
 /**
+ * The roster entry for `projectDir`, matched on canonical path. Two entries on
+ * one path (a tie) go to the one whose id is the directory's own name, so the
+ * verdict is attributed to the project the claim was handed, whatever the
+ * roster's order.
+ */
+export function rosterEntryFor<T extends { id: string; path: string }>(
+  roster: readonly T[],
+  projectDir: string,
+  forgeRoot: string,
+): T | undefined {
+  const here = canonicalPath(projectDir);
+  const onPath = roster.filter((p) => canonicalPath(resolve(forgeRoot, p.path)) === here);
+  return onPath.find((p) => p.id === basename(projectDir)) ?? onPath[0];
+}
+
+/**
  * Read the project's Face-A definition through THE reader the bridge serves
  * to Studio's project page (`GET /api/studio/projects` →
  * `loadProjectsWithMeta` with `projectKbBindings`), then ask
@@ -140,25 +156,24 @@ function readinessRefusal(
   initiativeId: string,
   projectDir: string,
   forgeRoot: string,
-  clauses: readonly { clause: string; hard: boolean; pass: boolean }[],
+  clauses: readonly { clause: string; hard: boolean; pass: boolean }[] | null,
 ): ClaimValidationResult | null {
-  const id = projectDir.split('/').pop() ?? projectDir;
+  const id = basename(projectDir);
   const refuse = (reason: string, blockedClauses: string): ClaimValidationResult => {
     recordPendingRefusal(initiativeId);
     return { ok: false, reason, blockedClauses, terminal: false };
   };
   let definition;
   try {
-    const here = canonicalPath(projectDir);
-    definition = loadProjectsWithMeta(forgeRoot, projectKbBindings).find(
-      (p) => canonicalPath(resolve(forgeRoot, p.path)) === here,
-    );
+    definition = rosterEntryFor(loadProjectsWithMeta(forgeRoot, projectKbBindings), projectDir, forgeRoot);
   } catch (err) {
     return refuse(`project "${id}" readiness unreadable: ${(err as Error).message}`, 'readiness-unreadable');
   }
   if (definition === undefined) {
+    // The configured dir, through the one resolver the roster itself reads.
+    const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
     return refuse(
-      `project "${id}" readiness unreadable: it is not in the project roster Studio reads (${projectDir})`,
+      `project "${id}" is not in the project roster Studio reads (projects dir: ${projectsDir})`,
       'readiness-unreadable',
     );
   }
@@ -309,9 +324,10 @@ export function validateClaimable(
       // acceptance to satisfy this one.
       report = runPreflight(projectDir, { forgeRoot, requireRunnableGate: true });
     } catch {
-      // Preflight itself threw (e.g. git not available, malformed project).
-      // Treat as non-blocking: the cycle will likely fail on its own, and
-      // the failure-classifier + auto-retry machinery handles that.
+      // Preflight itself threw (e.g. an unreadable file). The preflight hard-
+      // clause refusal below needs a report, so it is skipped — but readiness
+      // is NOT: `null` clauses read as "preflight has not answered", which
+      // `projectReadiness` refuses by name (`preflight`), never as no failures.
       report = null;
     }
 
@@ -346,8 +362,9 @@ export function validateClaimable(
     // the definition the bridge serves Studio, so it refuses exactly what
     // Studio shows as not-ready and nothing stricter. The preflight above
     // already refused on any failing hard clause, so Face B is passed through
-    // as-is (`[]` when preflight itself threw — that catch stays non-blocking).
-    const readiness = readinessRefusal(initiativeId, projectDir, forgeRoot, report?.clauses ?? []);
+    // as-is; when preflight itself threw there is no report, so Face B is `null`
+    // and readiness refuses by name rather than being computed over no clauses.
+    const readiness = readinessRefusal(initiativeId, projectDir, forgeRoot, report?.clauses ?? null);
     if (readiness !== null) return readiness;
   }
 

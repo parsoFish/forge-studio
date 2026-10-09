@@ -22,7 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { runReflector } from './phases/reflector.ts';
-import { createLogger } from '@forge/kernel';
+import { createLogger, defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { parseManifest } from '@forge/flows';
 import { REFLECT_MODE_FILE, type ReflectMode } from '@forge/flows';
 import { loadAgentDefinition, skillPath } from '@forge/agents';
@@ -95,7 +95,7 @@ export async function rerunReflector(input: RerunInput): Promise<void> {
 
   const m = parseManifest(readFileSync(manifestPath, 'utf8'));
   const projectRepoPath =
-    m.project_repo_path ?? resolve(FORGE_ROOT, 'projects', m.project);
+    m.project_repo_path ?? resolve(resolveProjectsDir(FORGE_ROOT, loadConfig(defaultConfigPath(FORGE_ROOT))), m.project);
 
   const logger = createLogger(input.cycleId, logsRoot);
   const mode = readReflectMode(input.cycleId, logsRoot);

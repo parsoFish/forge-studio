@@ -260,9 +260,12 @@ contract**.
   one function, `projectReadiness` (`@forge/contracts`): Studio renders its
   verdict and the claim gate refuses on the same call over the definition the
   bridge serves Studio, so a project Studio shows as not ready cannot be
-  claimed, and the refusal names each failing field or hard clause. The claim
-  additionally requires the runnable-gate clause DEPS, which Studio shows
-  beside the verdict.
+  claimed, and the refusal names each failing field or hard clause. Both
+  read the same clause set — the preflight with its runnable-gate clause DEPS
+  — so DEPS counts identically in both. A preflight that cannot answer is
+  never read as passing: readiness refuses by name. The scheduler, the claim
+  and Studio resolve one projects dir, and a project outside that roster is
+  refused, naming the dir.
 - **The hard set is C1 (gate command), C2 (scratch hygiene), C4 (architecture
   context), DEPS and SKILLS.** Every other clause is advisory.
 - **Hard clauses decline, advisory clauses warn.** A hard clause failure makes
@@ -293,4 +296,5 @@ contract**.
 `packages/projects/tests/integration/preflight-repo.test.ts` ·
 `packages/projects/tests/integration/preflight-instructions.test.ts` ·
 `packages/flows/tests/contract/readiness-one-function.test.ts` ·
-`packages/flows/tests/integration/claim-validator-readiness.test.ts`.
+`packages/flows/tests/integration/claim-validator-readiness.test.ts` ·
+`packages/flows/tests/integration/projects-root-agreement.test.ts`.

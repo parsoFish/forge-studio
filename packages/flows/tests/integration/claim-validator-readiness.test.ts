@@ -17,6 +17,7 @@ import {
   validateClaimable,
   isNonTerminalRefused,
   clearAllPendingRefusalLogs,
+  rosterEntryFor,
   type ClaimValidationResult,
 } from '../../claim-validator.ts';
 import {
@@ -109,6 +110,23 @@ test('a malformed .forge/project.json is never ready — refused non-terminal (p
   assert.equal((result as Refused).terminal, false);
 });
 
+// runPreflight reads `.gitignore` unguarded, so a `.gitignore` that cannot be read
+// (a directory here — EISDIR, deterministic where a chmod-000 file would not be
+// under root) makes preflight THROW rather than return a failing clause.
+test('preflight THROWS → readiness refused by name ("preflight"), never computed as if no clause failed', () => {
+  const result = claim('INIT-preflight-throws', (d) => {
+    plantStudioReadyProject(d);
+    rmSync(join(d, '.gitignore'));
+    mkdirSync(join(d, '.gitignore'));
+  });
+  assert.ok(!result.ok, 'a project whose preflight cannot answer is never ready');
+  const refused = result as Refused;
+  assert.equal(refused.terminal, false);
+  assert.equal(refused.blockedClauses, 'preflight', 'the failing list names preflight, with no clause names to follow');
+  assert.ok(refused.reason.includes('(failing: preflight)'), refused.reason);
+  assert.equal(isNonTerminalRefused('INIT-preflight-throws'), true);
+});
+
 test('a project the roster cannot serve to Studio → refused by name, never treated as ready', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-claim-ready-'));
   try {
@@ -124,8 +142,11 @@ test('a project the roster cannot serve to Studio → refused by name, never tre
     assert.ok(!result.ok);
     const refused = result as Refused;
     assert.equal(refused.terminal, false);
-    assert.ok(refused.reason.includes('readiness unreadable'), refused.reason);
-    assert.ok(refused.reason.includes('stray-project'), refused.reason);
+    assert.equal(
+      refused.reason,
+      `project "stray-project" is not in the project roster Studio reads (projects dir: ${join(root, 'projects')})`,
+    );
+    assert.equal(refused.blockedClauses, 'readiness-unreadable');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -151,6 +172,26 @@ test('a project directory that does not exist still skips the contract block', (
     writeFileSync(join(flowDir, 'flow.yaml'), FLOW_YAML);
     const result = validateClaimable('INIT-nodir', join(root, 'projects', 'absent'), root, 'code', join(flowDir, 'flow.yaml'));
     assert.ok(result.ok);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// LOW: two roster entries can canonicalise to one directory; the claim must
+// attribute the verdict to the entry named for the directory it was handed.
+test('rosterEntryFor: on a realpath tie, prefers the entry whose id is the directory name', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-claim-tie-'));
+  try {
+    const dir = join(root, 'projects', 'beta');
+    mkdirSync(dir, { recursive: true });
+    const roster = [
+      { id: 'alpha', path: 'projects/beta' },
+      { id: 'beta', path: 'projects/beta' },
+    ];
+    assert.equal(rosterEntryFor(roster, dir, root)?.id, 'beta', 'the tie goes to the id equal to basename(projectDir)');
+    assert.equal(rosterEntryFor([...roster].reverse(), dir, root)?.id, 'beta', 'independent of roster order');
+    assert.equal(rosterEntryFor([roster[0]], dir, root)?.id, 'alpha', 'with no id match, the sole entry on the path still answers');
+    assert.equal(rosterEntryFor([{ id: 'gamma', path: 'projects/gamma' }], dir, root), undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
