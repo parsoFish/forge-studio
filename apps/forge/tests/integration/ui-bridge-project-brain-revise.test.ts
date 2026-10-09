@@ -201,3 +201,26 @@ test('abandon records abandon and keeps its response shape', async () => {
   assert.equal(readStatus(dir).phase, 'abandoned');
   assert.deepEqual(readVerdicts(dir).map((v) => v.verdict), ['abandon']);
 });
+
+test('abandon proceeds on an unreadable verdicts.json: 200, abandoned, history untouched, named event with the session id; approve still 409', async () => {
+  const { sessionId, dir } = seed('awaiting-review');
+  writeFileSync(join(dir, 'verdicts.json'), '{ not json');
+  const r = await post('/api/project-brain/abandon', { project: PROJECT, sessionId });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(readStatus(dir).phase, 'abandoned', 'a corrupt history must not strand the session');
+  assert.equal(readFileSync(join(dir, 'verdicts.json'), 'utf8'), '{ not json', 'the unreadable history is never overwritten');
+
+  const eventsPath = join(forgeRoot, '_logs', `_project-brain-${sessionId}`, 'events.jsonl');
+  assert.ok(existsSync(eventsPath), 'the skipped record is reported, never silent');
+  const events = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean)
+    .map((l) => JSON.parse(l) as { message?: string; metadata?: { session_id?: string } });
+  const named = events.filter((e) => e.message === 'project-brain.verdict-history-unreadable');
+  assert.equal(named.length, 1);
+  assert.equal(named[0].metadata?.session_id, sessionId);
+
+  const other = seed('awaiting-review');
+  writeFileSync(join(other.dir, 'verdicts.json'), '{ not json');
+  const approved = await post('/api/project-brain/approve', { project: PROJECT, sessionId: other.sessionId });
+  assert.equal(approved.status, 409, JSON.stringify(approved.json));
+  assert.equal(readStatus(other.dir).phase, 'awaiting-review');
+});

@@ -122,3 +122,24 @@ test('feedback.md is NOT consumed when the turn fails, so the retry still carrie
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+test('a revise round whose agent turn changes no staged theme is rejected by name, keeps feedback.md, and leaves the session at analyzing', async () => {
+  const { forgeRoot, projectRoot, sessionDir, sessionId, logsRoot } = setup('analyzing', { round: 2 });
+  try {
+    const themes = join(sessionDir, 'themes');
+    writeFileSync(join(themes, 'structure.md'), '---\nname: structure\n---\nBuild with make.\n');
+    writeFileSync(join(sessionDir, 'feedback.md'), NOTES);
+    await assert.rejects(
+      () => runProjectBrainTurn({
+        sessionId, project: 'demoproj', projectRoot, forgeRoot, logsRoot,
+        queryFn: capturingQueryFn([], () => { /* the agent edits nothing: round N's themes are still staged */ }),
+      }),
+      /revise round changed no staged theme — the operator's notes were not applied/,
+    );
+    assert.equal(readFileSync(join(sessionDir, 'feedback.md'), 'utf8'), NOTES, 'the retry still carries the notes');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as ProjectBrainStatus;
+    assert.equal(status.phase, 'analyzing', 'the session is not advanced to review on an unapplied revision');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

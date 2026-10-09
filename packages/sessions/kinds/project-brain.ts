@@ -21,7 +21,8 @@
  * `interactive-runners-golden.test.ts` against
  * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-project-brain.json`.
  */
-import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sessionDirSegments } from '@forge/kernel';
 
@@ -106,6 +107,23 @@ function stagingThemesDir(sessionDir: string): string {
   return join(sessionDir, 'themes');
 }
 
+/** name -> sha256 of each staged theme's content, for the revise round's
+ *  "did the turn change anything" check. A read failure propagates by name
+ *  (the file was listed a moment ago) rather than hashing as empty. */
+function stagedThemeHashes(logsRoot: string, project: string, sessionId: string, staging: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const name of listStagedThemes(logsRoot, project, sessionId)) {
+    out.set(name, createHash('sha256').update(readFileSync(join(staging, name))).digest('hex'));
+  }
+  return out;
+}
+
+function sameHashes(a: ReadonlyMap<string, string>, b: ReadonlyMap<string, string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [name, hash] of a) if (b.get(name) !== hash) return false;
+  return true;
+}
+
 export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProjectBrainTurnResult> = {
   id: 'project-brain',
   kindDir: PROJECT_BRAIN_KIND_DIR,
@@ -131,6 +149,10 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
             skillPromptPath: input.skillPromptPath,
           });
         const { cwd, prompt } = buildAnalyzePlan(status, plumbing.forgeRoot, staging, skillFor, feedback);
+        // A revise round starts with round N's themes already staged, so the
+        // "no theme files" guard below can never fire; snapshot the staged
+        // content instead, so a turn that applied none of the notes is caught.
+        const before = feedback === null ? null : stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId, staging);
 
         await runAgentTurn({
           queryFn: plumbing.queryFn,
@@ -154,6 +176,11 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
         if (themes.length === 0) {
           throw new Error(
             'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
+          );
+        }
+        if (before !== null && sameHashes(before, stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId, staging))) {
+          throw new Error(
+            "project-brain runner: revise round changed no staged theme — the operator's notes were not applied — re-run to retry; the notes are kept.",
           );
         }
         writeStatus({ ...status, phase: 'awaiting-review' });

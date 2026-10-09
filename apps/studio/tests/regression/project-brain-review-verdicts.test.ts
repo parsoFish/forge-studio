@@ -20,13 +20,14 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 const reviseMock = vi.fn<(i: { project: string; sessionId: string; feedback: string }) => Promise<{ ok: boolean; error?: string }>>();
-const approveMock = vi.fn<(i: unknown) => Promise<{ ok: boolean }>>(async () => ({ ok: true }));
+const approveMock = vi.fn<(i: unknown) => Promise<{ ok: boolean; error?: string }>>(async () => ({ ok: true }));
+const abandonMock = vi.fn<(i: unknown) => Promise<{ ok: boolean; error?: string }>>(async () => ({ ok: true }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/bridge-client', () => ({
   projectBrainBrief: vi.fn(async () => ({ ok: true })),
   projectBrainApprove: (i: unknown) => approveMock(i),
-  projectBrainAbandon: vi.fn(async () => ({ ok: true })),
+  projectBrainAbandon: (i: unknown) => abandonMock(i),
   projectBrainRevise: (i: { project: string; sessionId: string; feedback: string }) => reviseMock(i),
 }));
 
@@ -39,7 +40,10 @@ let root: Root;
 beforeEach(() => {
   reviseMock.mockReset();
   reviseMock.mockResolvedValue({ ok: true });
-  approveMock.mockClear();
+  approveMock.mockReset();
+  approveMock.mockResolvedValue({ ok: true });
+  abandonMock.mockReset();
+  abandonMock.mockResolvedValue({ ok: true });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -145,4 +149,39 @@ test('approve still works from the three-verdict block', async () => {
   await act(async () => { q('[data-action="approve-brain"]')!.click(); });
   expect(approveMock).toHaveBeenCalledTimes(1);
   expect(reviseMock).not.toHaveBeenCalled();
+});
+
+test('a refused approve surfaces the bridge error as an alert instead of vanishing', async () => {
+  approveMock.mockResolvedValue({ ok: false, error: 'verdicts.json is present but is not a JSON array' });
+  const onRefresh = vi.fn();
+  await mount(session(), onRefresh);
+  await act(async () => { q('[data-action="approve-brain"]')!.click(); });
+
+  const alert = q('[data-section="brain-verdict-error"]');
+  expect(alert?.getAttribute('role')).toBe('alert');
+  expect(alert?.textContent).toMatch(/verdicts\.json/);
+  expect(q<HTMLButtonElement>('[data-action="approve-brain"]')!.disabled).toBe(false);
+});
+
+test('a refused abandon surfaces the bridge error as an alert instead of vanishing', async () => {
+  abandonMock.mockResolvedValue({ ok: false, error: 'session not found' });
+  await mount(session());
+  await act(async () => { q('[data-action="abandon-brain"]')!.click(); });
+  await act(async () => { q('[data-action="confirm-abandon-brain"]')!.click(); });
+
+  const alert = q('[data-section="brain-verdict-error"]');
+  expect(alert?.getAttribute('role')).toBe('alert');
+  expect(alert?.textContent).toMatch(/session not found/);
+});
+
+test('a refusal with no error text still says so, and a later successful approve clears the alert', async () => {
+  approveMock.mockResolvedValueOnce({ ok: false });
+  const onRefresh = vi.fn();
+  await mount(session(), onRefresh);
+  await act(async () => { q('[data-action="approve-brain"]')!.click(); });
+  expect(q('[data-section="brain-verdict-error"]')?.textContent).toMatch(/could not be/i);
+
+  await act(async () => { q('[data-action="approve-brain"]')!.click(); });
+  expect(q('[data-section="brain-verdict-error"]')).toBeNull();
+  expect(onRefresh).toHaveBeenCalledTimes(1);
 });

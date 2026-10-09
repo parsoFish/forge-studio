@@ -81,6 +81,8 @@ export function SessionProjectBrainPanel({
   const [revising, setRevising] = useState(false);
   const [reviseNotes, setReviseNotes] = useState('');
   const [reviseError, setReviseError] = useState<string | null>(null);
+  // A refused approve / abandon: shown beside the verdict buttons, never dropped.
+  const [verdictError, setVerdictError] = useState<string | null>(null);
   const round = typeof session.round === 'number' && session.round >= 1 ? session.round : 1;
 
   const startAnalysis = useCallback(async () => {
@@ -92,8 +94,13 @@ export function SessionProjectBrainPanel({
 
   const approve = useCallback(async () => {
     setBusy(true);
-    await projectBrainApprove({ project: session.project, sessionId: session.session_id });
+    setVerdictError(null);
+    const r = await projectBrainApprove({ project: session.project, sessionId: session.session_id });
     setBusy(false);
+    if (!r.ok) {
+      setVerdictError(r.error ?? 'The approval could not be sent.');
+      return;
+    }
     onRefresh();
   }, [session.project, session.session_id, onRefresh]);
 
@@ -114,8 +121,13 @@ export function SessionProjectBrainPanel({
 
   const abandon = useCallback(async () => {
     setBusy(true);
-    await projectBrainAbandon({ project: session.project, sessionId: session.session_id });
+    setVerdictError(null);
+    const r = await projectBrainAbandon({ project: session.project, sessionId: session.session_id });
     setBusy(false);
+    if (!r.ok) {
+      setVerdictError(r.error ?? 'The abandon could not be sent.');
+      return;
+    }
     setConfirmingAbandon(false);
     onRefresh();
   }, [session.project, session.session_id, onRefresh]);
@@ -196,6 +208,9 @@ export function SessionProjectBrainPanel({
               </span>
             )}
           </div>
+          {verdictError !== null && (
+            <p data-section="brain-verdict-error" role="alert" style={{ fontSize: 12.5, color: 'var(--red)', marginTop: 8 }}>{verdictError}</p>
+          )}
           {revising && (
             <div data-section="brain-revise" style={{ marginTop: 12 }}>
               <p style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.6 }}>

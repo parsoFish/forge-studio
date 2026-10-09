@@ -15,7 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
-import { allowedOrigin, sendJson, sendIfDispatchRefused } from '@forge/kernel';
+import { allowedOrigin, createLogger, releaseDispatchSlot, sendJson, sendIfDispatchRefused } from '@forge/kernel';
 import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { PROJECT_BRAIN_KIND_DIR } from '@forge/knowledge';
 
@@ -278,10 +278,12 @@ export async function handleProjectBrainRoutes(
         return true;
       }
       // forge-mfv5.1.15 — the decision history (verdicts.json) is PRE-FLIGHTED
-      // like the generic verdict path: an unreadable history refuses the
-      // verdict before anything is written, rather than being overwritten.
+      // like the generic verdict path: an unreadable history refuses an APPROVE
+      // before anything is written, rather than being overwritten. ABANDON is
+      // the escape hatch for a stuck session, so it is never blocked by a
+      // corrupt history: it proceeds, skips its own record, and says so by name.
       const history = readVerdictHistory(ctx.logsRoot, dirSegs);
-      if (!history.ok) { sendJson(res, 409, { ok: false, error: history.message }, origin); return true; }
+      if (!history.ok && approve) { sendJson(res, 409, { ok: false, error: history.message }, origin); return true; }
       // Row 206 part (a) — claim BEFORE the write, but only on the `approve`
       // path: `abandon` never spawns, so it has no claim to protect.
       if (approve) ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', body.sessionId);
@@ -289,7 +291,16 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
       }
-      appendVerdictRecord(ctx.logsRoot, dirSegs, history.prior, approve ? 'approve' : 'abandon', '', '');
+      if (history.ok) {
+        appendVerdictRecord(ctx.logsRoot, dirSegs, history.prior, approve ? 'approve' : 'abandon', '', '');
+      } else {
+        createLogger(`_${ctx.spawnAgentSpecs['project-brain'].logPrefix}-${body.sessionId}`, ctx.logsRoot).emit({
+          initiative_id: `project-brain-${body.sessionId}`, phase: 'project-brain', skill: 'project-brain-builder',
+          event_type: 'log', input_refs: [], output_refs: [],
+          message: 'project-brain.verdict-history-unreadable',
+          metadata: { session_id: body.sessionId, verdict: 'abandon', reason: history.message },
+        });
+      }
       if (approve) ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       // Only approve spawns — abandon is exempt-local and carries no marker.
@@ -363,6 +374,9 @@ async function handleProjectBrainRevise(
     guardedWriteFile(ctx.logsRoot, [...dirSegs, 'feedback.md'], feedback) === null ||
     guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs, { ...status, phase: 'analyzing', round }) === null
   ) {
+    // No turn will ever start for this claim: release it, or the session's
+    // dispatch slot stays held and every retry 409s as DispatchInFlight.
+    releaseDispatchSlot(ctx.forgeRoot, `_${ctx.spawnAgentSpecs['project-brain'].logPrefix}-${sessionId}`);
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
   }
