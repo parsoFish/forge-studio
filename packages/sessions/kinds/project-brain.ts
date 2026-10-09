@@ -22,9 +22,9 @@
  * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-project-brain.json`.
  */
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { sessionDirSegments } from '@forge/kernel';
+import { guardedReadFile, sessionDirSegments } from '@forge/kernel';
 
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // architect-session.ts's own module doc — `kinds/registry.ts` needs
@@ -108,12 +108,16 @@ function stagingThemesDir(sessionDir: string): string {
 }
 
 /** name -> sha256 of each staged theme's content, for the revise round's
- *  "did the turn change anything" check. A read failure propagates by name
+ *  "did the turn change anything" check — read through the same guard
+ *  `listStagedThemes` lists with. A read the guard refuses throws by name
  *  (the file was listed a moment ago) rather than hashing as empty. */
-function stagedThemeHashes(logsRoot: string, project: string, sessionId: string, staging: string): Map<string, string> {
+function stagedThemeHashes(logsRoot: string, project: string, sessionId: string): Map<string, string> {
   const out = new Map<string, string>();
+  const dir = [...sessionDirSegments(project, PROJECT_BRAIN_KIND_DIR, sessionId), 'themes'];
   for (const name of listStagedThemes(logsRoot, project, sessionId)) {
-    out.set(name, createHash('sha256').update(readFileSync(join(staging, name))).digest('hex'));
+    const content = guardedReadFile(logsRoot, [...dir, name]);
+    if (content === null) throw new Error(`project-brain runner: staged theme ${name} could not be read for the revise check`);
+    out.set(name, createHash('sha256').update(content).digest('hex'));
   }
   return out;
 }
@@ -152,7 +156,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
         // A revise round starts with round N's themes already staged, so the
         // "no theme files" guard below can never fire; snapshot the staged
         // content instead, so a turn that applied none of the notes is caught.
-        const before = feedback === null ? null : stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId, staging);
+        const before = feedback === null ? null : stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId);
 
         await runAgentTurn({
           queryFn: plumbing.queryFn,
@@ -178,7 +182,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
             'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
           );
         }
-        if (before !== null && sameHashes(before, stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId, staging))) {
+        if (before !== null && sameHashes(before, stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId))) {
           throw new Error(
             "project-brain runner: revise round changed no staged theme — the operator's notes were not applied — re-run to retry; the notes are kept.",
           );
