@@ -7,6 +7,7 @@
  */
 
 import type { DemoStep, ReleaseConfig, BuildProcess } from '@forge/contracts';
+import type { DemoMeans } from './demo-means.ts';
 
 /**
  * S7 / C13 — optional logging block. Currently surfaces
@@ -149,6 +150,8 @@ export type ProjectConfig = {
   instructions?: string;
   /** Typed demo steps: capture | verify | present. */
   demoProcess?: DemoStep[];
+  /** What a demo may drive (forge-mfv5.1.19) — means only, never the form. */
+  demoMeans?: DemoMeans;
   /** Skill slugs bound to this project. */
   skills?: string[];
   /** KB id bound to this project, or null to explicitly leave unbound. */

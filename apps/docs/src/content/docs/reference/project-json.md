@@ -35,6 +35,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `northStar` | string | no | - | One-line mission statement for the project, at most 140 characters. |
 | `instructions` | string | no | - | Standing instructions added to every planning prompt. When the project root has an `AGENTS.md` (or else `CLAUDE.md`) file, its content replaces this value. |
 | `demoProcess` | array of object | no | - | Ordered demo steps for the demo agent. |
+| `demoMeans` | object | no | - | What a demo may drive. The demo planner picks each change's evidence form from these means; forge captures and compares the evidence itself. |
 | `skills` | array of string | no | - | Skill names bound to this project. |
 | `kb` | string or null | no | - | Knowledge base id bound to this project, or `null` for none. |
 | `artifactRoot` | string | no | - | Project-relative directory that holds the forge artifacts committed in the project repository. Must be a relative path with no leading slash, no backslash and no `..` segment. A value of `.` or an empty string means the project root. |
@@ -85,6 +86,22 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `kind` | string | yes | - | What the step does: `capture` records evidence, `verify` checks it, `present` attaches it to the pull request. |
 | `text` | string | yes | - | Description of the step. |
 | `element` | string | no | - | Name of a demo element from the demo element library, for a composed demo. |
+
+### `demoMeans`
+
+| Name | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `commands` | array of string | no | - | Commands a CLI before/after checkpoint may run, as a bare argv with no shell metacharacters. |
+| `routes` | array of string | no | - | In-app paths a screenshot checkpoint may open, starting `/` with no traversal. |
+| `api` | object | no | - | Means for an API before/after checkpoint, compared as JSON. |
+
+### `demoMeans.api`
+
+| Name | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `paths` | array of string | no | - | Paths forge GETs on each capture tree's own server. No scheme or host: reach an external API through `commands`. |
+| `commands` | array of string | no | - | Commands that print a JSON body on stdout, such as the project's own CLI reading a live service with its own credentials. |
+| `ignoreKeys` | array of string | no | - | Extra key names dropped at any depth before before/after JSON is compared, on top of the default volatile keys (`id`, `node_id`, timestamps, `url`, `*_url`, `etag`, `size`, `watchers*`). |
 
 ### `buildProcess`
 
@@ -152,6 +169,8 @@ A project's forge configuration, stored at `.forge/project.json`.
 - `northStar` is at most 140 characters.
 - `demoProcess[]` requires `kind`, `text`.
 - `demoProcess[].kind` is one of `capture`, `verify`, `present`.
+- `demoMeans` rejects unknown keys.
+- `demoMeans.api` rejects unknown keys.
 - `appType` is not blank.
 - `logging.heartbeat_seconds` must be greater than 0.
 - `releaseProcess` requires `steps`.

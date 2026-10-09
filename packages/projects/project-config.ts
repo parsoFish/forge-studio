@@ -59,6 +59,7 @@ import type { AcceptanceGateConfig, ProjectConfig } from './project-config-types
 
 export { readQualityGateSidecar, injectSidecarIntoTestProcess } from './project-config-sidecar.ts';
 import { readQualityGateSidecar, injectSidecarIntoTestProcess } from './project-config-sidecar.ts';
+import { parseDemoMeans } from './demo-means.ts';
 
 import {
   parseAppType,
@@ -223,6 +224,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const northStar = parseNorthStar(obj.northStar);
   const instructions = parseInstructions(obj.instructions);
   const demoProcess = parseDemoProcess(obj.demoProcess);
+  const demoMeans = parseDemoMeans(obj.demoMeans);
   const skills = parseSkills(obj.skills);
   const kb = parseKb(obj.kb);
   const artifactRoot = parseArtifactRoot(obj.artifactRoot);
@@ -243,6 +245,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(northStar !== undefined ? { northStar } : {}),
     ...(instructions !== undefined ? { instructions } : {}),
     ...(demoProcess !== undefined ? { demoProcess } : {}),
+    ...(demoMeans !== undefined ? { demoMeans } : {}),
     ...(skills !== undefined ? { skills } : {}),
     ...(kb !== undefined ? { kb } : {}),
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
