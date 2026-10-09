@@ -319,11 +319,11 @@ export function parseLogging(raw: unknown): LoggingConfig | undefined {
 
 // An empty string is allowed here, deliberately: this parser judges the
 // CONTRACT FILE's shape, not whether the operator has written a north star
-// yet. It used to say the business-level emptiness check "lives in
-// validateProject" — that function had no production caller and was deleted
-// (bead `forge-8vfn.6.10.10`, ruling 204). The check that actually runs is
-// `ContractReadiness`'s `ns.length > 0`, which is what gates `flow-ready` and
-// therefore what a Flow refuses on.
+// yet. (`validateProject` once held that check; it had no production caller and
+// was deleted, bead `forge-8vfn.6.10.10`.) The emptiness check is
+// `projectReadiness` (`@forge/contracts`, SPEC §6): Studio's `ContractReadiness`
+// renders it and the claim gate calls the SAME function, so a flow refuses an
+// empty north star exactly when Studio shows it unticked (`forge-8vfn.30.4`).
 export function parseNorthStar(v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v !== 'string') {

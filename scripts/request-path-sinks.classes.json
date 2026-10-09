@@ -167,6 +167,12 @@
   "verified": "read",
   "note": "`POST /api/plan-verdict` body `project`, `sessionId`"
  },
+ "packages/flows/claim-validator.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "realpathSync only canonicalises the claimed manifest's project_repo_path (validated upstream by assertManifestPathFields) and the roster's own paths, to match the project against the roster Studio reads (forge-8vfn.30.4); no content is read through it"
+ },
  "packages/flows/cost-by-class.ts": {
   "class": "not-request-derived",
   "guard": null,

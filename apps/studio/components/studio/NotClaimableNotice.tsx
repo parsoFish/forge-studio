@@ -1,10 +1,10 @@
 /**
  * Row 174 (forge-8vfn.8.5.9) — "not claimable" beside Start development.
  *
- * A project is born contract-green before anything is installed, so the
- * birth verdict can read ready while `forge serve`'s claim refuses the
- * ground on DEPS (its declared gate needs node_modules it does not have).
- * The bridge's preflight read returns that claim verdict as `runnableGate`;
+ * A project is born contract-green before anything is installed, but
+ * `forge serve`'s claim refuses a ground on DEPS (its declared gate needs
+ * node_modules it does not have). Contract Readiness counts DEPS the same way
+ * (SPEC §6); the preflight read's `runnableGate` is that one DEPS clause, and
  * this says so where the operator is about to press Start development,
  * instead of leaving the refusal in `_logs/daemon/serve.log`.
  */

@@ -1,5 +1,6 @@
 'use client';
 
+import { projectReadiness } from '@forge/contracts';
 import type { DemoStep, PreflightResult } from '@/lib/studio-client';
 
 export function ContractReadiness({
@@ -12,38 +13,25 @@ export function ContractReadiness({
   kb: string | null;
   preflight: PreflightResult | null;
 }) {
-  const ns = northStar.trim();
-  const nsOk = ns.length > 0 && ns.length <= 140;
-  const instrOk = instructions.trim().length > 0;
-  const hasCapture = demoSteps.some((s) => s.kind === 'capture');
-  const hasVerify = demoSteps.some((s) => s.kind === 'verify');
-  const demoOk = hasCapture && hasVerify;
-  const skillOk = skills.length > 0;
-  const kbOk = !!kb;
-
-  const uiChecks = [
-    { ok: nsOk,    text: 'North star set (≤ 140 chars)' },
-    { ok: instrOk, text: 'Instructions present' },
-    { ok: demoOk,  text: 'Demo has ≥ 1 capture + ≥ 1 verify step' },
-    { ok: skillOk, text: '≥ 1 relevant skill bound' },
-    { ok: kbOk,    text: 'Knowledge base bound' },
-  ];
-
+  // The ONE readiness rule (SPEC §6): `projectReadiness` in `@forge/contracts`,
+  // the same function the scheduler's claim gate calls. Nothing is computed
+  // here — this component only renders the verdict.
+  const verdict = projectReadiness({
+    northStar,
+    instructions,
+    demoProcess: demoSteps,
+    skills,
+    kb,
+    clauses: preflight === null ? null : preflight.clauses.map((c) => ({ clause: c.id, hard: c.hard, pass: c.pass })),
+  });
+  const uiChecks = verdict.checks.filter((c) => c.id !== 'preflight');
   const readyCount = uiChecks.filter((c) => c.ok).length;
   const uiAllReady = readyCount === uiChecks.length;
-
-  // Preflight gate: must be loaded and have no failing hard clauses.
   const preflightLoaded = preflight !== null;
-  const hardFailures = preflightLoaded
-    ? preflight!.clauses.filter((c) => c.hard && !c.pass)
-    : [];
-  const preflightOk = preflightLoaded && hardFailures.length === 0;
-
-  // Combined verdict: both surfaces must pass.
-  const allReady = uiAllReady && preflightOk;
+  const allReady = verdict.ready;
 
   // Preflight status attribute value for automation / e2e.
-  const preflightStatus = !preflightLoaded ? 'pending' : hardFailures.length > 0 ? 'hard-fail' : 'ok';
+  const preflightStatus = !preflightLoaded ? 'pending' : verdict.checks.find((c) => c.id === 'preflight')!.ok ? 'ok' : 'hard-fail';
   // forge-nk1y.9: a verdict only from what has been read — `false` while preflight has
   // not answered only when a UI row already fails; otherwise it is still `pending`.
   const flowReady = allReady ? 'true' : !uiAllReady || preflightLoaded ? 'false' : 'pending';

@@ -2,7 +2,7 @@
   "aligns": [
     {
       "path": "SPEC.md",
-      "digest": "822f1517c85a4344",
+      "digest": "7ddfad90c51cd82c",
       "why": "SPEC §1: Whole story: skills/hooks/templates are library parts every agent composes; beat22 \"a hook is inert until an agent carries it\""
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "path": "SPEC.md",
-      "digest": "822f1517c85a4344",
+      "digest": "7ddfad90c51cd82c",
       "why": "SPEC §5: Beat5: SessionInteractivePanel renders session-package-id generically via affordance.meta.requires — the generic surface in active use (contrast S2/S6's boundary cases)"
     }
   ]

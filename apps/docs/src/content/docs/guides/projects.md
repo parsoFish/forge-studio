@@ -35,7 +35,7 @@ To drive a project to a passing contract without hand-fixing each clause, open i
 
 The contract is the set of clauses a project must meet for forge to work on it unattended. Hard clauses block work: a trustworthy quality gate, forge's scratch files ignored by git, machine-readable architecture context, and every declared skill resolving. Advisory clauses, such as a demo process or an agent-instruction file, only warn.
 
-The editor's **Contract Readiness** panel shows the preflight result clause by clause; until the project has loaded, the page says what it is still reading instead of showing a verdict, and a read that takes over 30 seconds is named as timed out with a retry. To re-check from a terminal, run:
+The editor's **Contract Readiness** panel shows the preflight result clause by clause. A flow claims the project only when this panel says it is flow-ready; the panel counts the runnable gate (`DEPS`), so a project whose dependencies are not installed reads not ready. Until the project has loaded, the page says what it is still reading instead of showing a verdict, and a read that takes over 30 seconds is named as timed out with a retry. To re-check from a terminal, run:
 
 ```bash
 forge preflight <project-name | path>
