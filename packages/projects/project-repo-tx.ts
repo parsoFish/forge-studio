@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { gitIdentityConfigArgs, guardedFile, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 export const STUDIO_BRANCH = 'forge-studio';
 
@@ -208,8 +208,9 @@ export function beginStudioTransaction(projectDir: string): { commit: (message: 
   return { commit: (message) => commitStudioChange(projectDir, message, dirtyFiles().filter((p) => !pre.has(p))) };
 }
 
-/** `refused` names the uncommitted contract files when the Save declined to run. */
-export type SaveResult = { merged: boolean; pushed: boolean; detail: string; refused?: string[] };
+/** `refused` names the uncommitted contract files when the Save declined to run;
+ *  `adopted` names the ones an adopting Save committed to forge-studio first. */
+export type SaveResult = { merged: boolean; pushed: boolean; detail: string; refused?: string[]; adopted?: string[] };
 
 /**
  * "Save" the accumulated forge-UI changes: merge `forge-studio` into the default
@@ -217,10 +218,19 @@ export type SaveResult = { merged: boolean; pushed: boolean; detail: string; ref
  * on the default branch so the next batch starts fresh. Idempotent when there is
  * nothing pending.
  */
-export function saveProjectRepo(projectDir: string): SaveResult {
+export function saveProjectRepo(projectDir: string, opts: { adopt?: readonly string[] } = {}): SaveResult {
   if (!isGitRepo(projectDir)) return { merged: false, pushed: false, detail: 'not a git repo' };
   // forge-mfv5.1.12 — fail closed before any checkout.
-  const uncommitted = uncommittedContractPaths(projectDir);
+  let uncommitted = uncommittedContractPaths(projectDir);
+  // Row 6 (ruling T1 1977a): the operator may adopt the files they were SHOWN —
+  // committed to forge-studio, re-read (anything else, or a deletion, still refuses), then saved.
+  const shown = opts.adopt ?? [];
+  const adoptable = uncommitted.filter((p) => shown.includes(p) && guardedFile(projectDir, p.split('/'), 'read') !== null);
+  const adopted = adoptable.length > 0 ? adoptable : undefined;
+  if (adopted) {
+    commitStudioChange(projectDir, 'chore(forge): adopt uncommitted contract files', adopted);
+    uncommitted = uncommittedContractPaths(projectDir);
+  }
   if (uncommitted.length > 0) {
     return {
       merged: false,
@@ -266,7 +276,7 @@ export function saveProjectRepo(projectDir: string): SaveResult {
   }
   // Delete the studio branch; recreated from the merged base on the next write.
   git(projectDir, ['branch', '-D', STUDIO_BRANCH], { allowFail: true });
-  return { merged: true, pushed, detail };
+  return { merged: true, pushed, detail, ...(adopted ? { adopted } : {}) };
 }
 
 /** Whether the project repo has uncommitted forge-studio changes pending a save. */

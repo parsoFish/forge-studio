@@ -8,12 +8,10 @@
  * file that exercises `checkContractArtifactContainment`/
  * `scaffoldContractArtifacts` THEMSELVES — Defect 5 (the per-write
  * containment guard: `.forge` dir symlink, `.forge/project.json` dangling +
- * live-target symlink, `roadmap.md` dangling + live-target symlink, `brain/`
- * dir symlink, `brain/profile.md` dangling + live-target symlink, a
+ * live-target symlink, `roadmap.md` dangling + live-target symlink, a
  * HARDLINKED `.forge/project.json`) and Finding B (the hardlink
- * false-rejection fix, both files, plus its ordinary-file idempotency
- * control) and the "clone a real repo first" positive control for
- * `needsGitInit`'s three-way rule. That is 9 (Defect 5) + 3 (Finding B, incl.
+ * false-rejection fix, plus its ordinary-file idempotency control) and the "clone a real repo first" positive control for
+ * `needsGitInit`'s three-way rule. That was 9 (Defect 5) + 3 (Finding B, incl.
  * the ordinary-file control) + 1 (clone-first) = 13 tests, reproduced below
  * calling the moved functions DIRECTLY (no `startBridge`, no HTTP) — the
  * point of the carve.
@@ -35,7 +33,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, linkSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, linkSync, writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -46,12 +44,6 @@ import {
   checkContractArtifactContainment,
   scaffoldContractArtifacts,
 } from '../../project-contract-scaffold.ts';
-
-/** `readArtifactRoot` faked as the constant it always resolves to in these
- *  fixtures (no `.forge/project.json` ever exists here — the real function
- *  would return '.' too; see project-contract-scaffold.ts's header for why
- *  this is injected rather than imported). */
-const readArtifactRootFake = (_projectRoot: string): string => '.';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -81,8 +73,7 @@ function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
 /** True iff any project-onboarding artifact exists directly under `dir`. */
 function hasAnyArtifact(dir: string): boolean {
   return existsSync(join(dir, '.forge', 'project.json'))
-    || existsSync(join(dir, 'roadmap.md'))
-    || existsSync(join(dir, 'brain', 'profile.md'));
+    || existsSync(join(dir, 'roadmap.md'));
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +87,7 @@ test('[Defect 5] a .forge dir SYMLINKED beneath a real, contained projectRoot: c
   try {
     symlinkSync(outside, join(projectRoot, '.forge'), 'dir');
     assert.throws(
-      () => checkContractArtifactContainment(projectRoot, projectRoot, readArtifactRootFake, ['echo', 'ok']),
+      () => checkContractArtifactContainment(projectRoot, projectRoot, ['echo', 'ok']),
       ScaffoldContainmentError,
       'a symlinked .forge dir must be rejected by the pre-check',
     );
@@ -114,7 +105,7 @@ test('[Defect 5] .forge/project.json a DANGLING symlink: containment check rejec
     mkdirSync(join(projectRoot, '.forge'), { recursive: true });
     symlinkSync(join(projectRoot, 'does-not-exist-target'), join(projectRoot, '.forge', 'project.json'));
     assert.throws(
-      () => checkContractArtifactContainment(projectRoot, projectRoot, readArtifactRootFake, ['echo', 'ok']),
+      () => checkContractArtifactContainment(projectRoot, projectRoot, ['echo', 'ok']),
       ScaffoldContainmentError,
     );
   } finally {
@@ -129,7 +120,7 @@ test('[Defect 5] roadmap.md a DANGLING symlink pointing outside projectRoot: sca
   try {
     symlinkSync(join(outside, 'ESCAPED.md'), join(projectRoot, 'roadmap.md'));
     assert.throws(
-      () => scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake),
+      () => scaffoldContractArtifacts(projectRoot, 'demo', projectRoot),
       ScaffoldContainmentError,
     );
     assert.equal(existsSync(join(outside, 'ESCAPED.md')), false, 'the dangling target must never be created');
@@ -151,7 +142,7 @@ test('[Defect 5] roadmap.md a LIVE symlink to a real file OUTSIDE projectRoot: p
     // guarded. Named explicitly (per the original AT's own framing) rather
     // than banked as a deliberate defense: it means the check never even
     // reaches resolveGuardedPath for this path.
-    assert.doesNotThrow(() => checkContractArtifactContainment(projectRoot, projectRoot, readArtifactRootFake, ['echo', 'ok']));
+    assert.doesNotThrow(() => checkContractArtifactContainment(projectRoot, projectRoot, ['echo', 'ok']));
     assert.equal(readFileSync(join(outside, 'REAL.md'), 'utf8'), 'pre-existing outside content\n', 'the outside file must not be modified');
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
@@ -159,34 +150,34 @@ test('[Defect 5] roadmap.md a LIVE symlink to a real file OUTSIDE projectRoot: p
   }
 });
 
-test('[Defect 5] a brain/ dir SYMLINKED beneath a real, contained projectRoot: scaffoldContractArtifacts rejects the profile.md write, nothing created outside', (t) => {
+// forge-mfv5.1.10: the scaffold writes NO in-ground `brain/profile.md` (Brain 3
+// is central), so a symlinked / dangling / hardlinked `brain/` inside the
+// project is simply never touched — the three Defect-5 / Finding-B brain tests
+// that pinned the write (and its guard) now pin the absence of any write there.
+test('[forge-mfv5.1.10] a brain/ dir SYMLINKED beneath projectRoot is never written through: scaffold succeeds, nothing created outside', (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const projectRoot = tmp('scaffold-d5-braindir-');
-  const outside = tmp('scaffold-d5-braindir-outside-');
+  const projectRoot = tmp('scaffold-nb-braindir-');
+  const outside = tmp('scaffold-nb-braindir-outside-');
   try {
     symlinkSync(outside, join(projectRoot, 'brain'), 'dir');
-    assert.throws(
-      () => scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake),
-      ScaffoldContainmentError,
-    );
-    assert.equal(existsSync(join(outside, 'profile.md')), false);
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
+    assert.ok(created.includes('roadmap.md'));
+    assert.deepEqual(readdirSync(outside), [], 'nothing written through the brain/ symlink');
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
   }
 });
 
-test('[Defect 5] brain/profile.md a DANGLING symlink (brain/ itself real): scaffoldContractArtifacts rejects the write', (t) => {
+test('[forge-mfv5.1.10] brain/profile.md a DANGLING symlink is never written through: scaffold succeeds, target stays absent', (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const projectRoot = tmp('scaffold-d5-profile-dangle-');
-  const outside = tmp('scaffold-d5-profile-dangle-outside-');
+  const projectRoot = tmp('scaffold-nb-profile-dangle-');
+  const outside = tmp('scaffold-nb-profile-dangle-outside-');
   try {
     mkdirSync(join(projectRoot, 'brain'), { recursive: true });
     symlinkSync(join(outside, 'ESCAPED-profile.md'), join(projectRoot, 'brain', 'profile.md'));
-    assert.throws(
-      () => scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake),
-      ScaffoldContainmentError,
-    );
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
+    assert.ok(created.includes('roadmap.md'));
     assert.equal(existsSync(join(outside, 'ESCAPED-profile.md')), false);
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
@@ -194,16 +185,16 @@ test('[Defect 5] brain/profile.md a DANGLING symlink (brain/ itself real): scaff
   }
 });
 
-test('[Defect 5] brain/profile.md a LIVE symlink to a real outside file (brain/ itself real): idempotency-skips, outside file untouched', (t) => {
+test('[forge-mfv5.1.10] brain/profile.md a LIVE symlink to an outside file is left untouched and unreported', (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const projectRoot = tmp('scaffold-d5-profile-live-');
-  const outside = tmp('scaffold-d5-profile-live-outside-');
+  const projectRoot = tmp('scaffold-nb-profile-live-');
+  const outside = tmp('scaffold-nb-profile-live-outside-');
   try {
     mkdirSync(join(projectRoot, 'brain'), { recursive: true });
     writeFileSync(join(outside, 'REAL-profile.md'), 'pre-existing\n');
     symlinkSync(join(outside, 'REAL-profile.md'), join(projectRoot, 'brain', 'profile.md'));
-    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake);
-    assert.equal(created.includes('brain/profile.md'), false, 'must be reported as already-present, not freshly created');
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
+    assert.equal(created.includes('brain/profile.md'), false);
     assert.equal(readFileSync(join(outside, 'REAL-profile.md'), 'utf8'), 'pre-existing\n');
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
@@ -238,7 +229,7 @@ test('[Defect 5] a HARDLINKED .forge/project.json sharing an inode with an outsi
     // is ever called — reproduced as its own AT in project-onboard.test.ts
     // ("[Defect 2, carried]"), since that is a route-level property, not a
     // property of this pure function in isolation.
-    assert.doesNotThrow(() => checkContractArtifactContainment(projectRoot, projectRoot, readArtifactRootFake, ['echo', 'ok']));
+    assert.doesNotThrow(() => checkContractArtifactContainment(projectRoot, projectRoot, ['echo', 'ok']));
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
@@ -262,7 +253,7 @@ test('[Finding B] an in-forgeRoot HARDLINKED roadmap.md must not false-reject sc
       t.skip('hardlink creation unavailable in this environment');
       return;
     }
-    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake);
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
     assert.equal(created.includes('roadmap.md'), false, 'the hardlinked file is already present — skip, do not overwrite');
     assert.equal(readFileSync(join(projectRoot, 'roadmap.md'), 'utf8'), '# pre-existing roadmap (hardlinked)\n');
   } finally {
@@ -270,9 +261,9 @@ test('[Finding B] an in-forgeRoot HARDLINKED roadmap.md must not false-reject sc
   }
 });
 
-test('[Finding B] an in-forgeRoot HARDLINKED brain/profile.md must not false-reject scaffoldContractArtifacts', (t) => {
+test('[forge-mfv5.1.10] an in-forgeRoot HARDLINKED brain/profile.md is left byte-identical and unreported by scaffoldContractArtifacts', (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const projectRoot = tmp('scaffold-fb-profile-');
+  const projectRoot = tmp('scaffold-nb-profile-hardlink-');
   try {
     mkdirSync(join(projectRoot, 'brain'), { recursive: true });
     const sibling = join(projectRoot, 'profile-source.md');
@@ -283,7 +274,7 @@ test('[Finding B] an in-forgeRoot HARDLINKED brain/profile.md must not false-rej
       t.skip('hardlink creation unavailable in this environment');
       return;
     }
-    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake);
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
     assert.equal(created.includes('brain/profile.md'), false);
     assert.equal(readFileSync(join(projectRoot, 'brain', 'profile.md'), 'utf8'), '# pre-existing profile (hardlinked)\n');
   } finally {
@@ -295,7 +286,7 @@ test('[Finding B, positive control] a pre-existing ORDINARY roadmap.md (no hardl
   const projectRoot = tmp('scaffold-fb-ordinary-');
   try {
     writeFileSync(join(projectRoot, 'roadmap.md'), '# operator-authored roadmap\n');
-    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake);
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
     assert.equal(created.includes('roadmap.md'), false);
     assert.equal(readFileSync(join(projectRoot, 'roadmap.md'), 'utf8'), '# operator-authored roadmap\n');
   } finally {
@@ -307,7 +298,7 @@ test('[Finding B, positive control] a pre-existing ORDINARY roadmap.md (no hardl
 // needsGitInit's three-way rule — positive control (1 AT)
 // ---------------------------------------------------------------------------
 
-test('[positive control] cloning a real repo into place FIRST, then scaffolding: skips git-init (own repo governs), still writes roadmap.md/profile.md', () => {
+test('[positive control] cloning a real repo into place FIRST, then scaffolding: skips git-init (own repo governs), still writes roadmap.md, writes no brain/', () => {
   const projectRoot = tmp('scaffold-clone-first-');
   try {
     execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: projectRoot });
@@ -317,11 +308,11 @@ test('[positive control] cloning a real repo into place FIRST, then scaffolding:
     execFileSync('git', ['add', '-A'], { cwd: projectRoot });
     execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: projectRoot });
 
-    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake);
+    const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
 
     assert.equal(created.includes('.git/'), false, 'must NOT re-init an already-real repo');
     assert.ok(created.includes('roadmap.md'));
-    assert.ok(created.includes('brain/profile.md'));
+    assert.equal(existsSync(join(projectRoot, 'brain')), false, 'no brain/ in the project repo (Brain 3 is central)');
     assert.ok(hasAnyArtifact(projectRoot));
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });

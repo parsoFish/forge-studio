@@ -9,7 +9,8 @@
  *
  *   .forge/agent-run/PROMPT.md              runAgent
  *   .forge/contract-compliance-report.json  the contract checker
- *   .gitignore · roadmap.md · brain/profile.md   the onboard scaffold
+ *   .gitignore · roadmap.md · brain/profile.md   the onboard scaffold (then; the
+ *                                                scaffold no longer writes brain/, forge-mfv5.1.10)
  *
  * So a containment check built on session logs can never account for them, and
  * every story that onboards a project fails containment for the product

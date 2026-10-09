@@ -3,7 +3,7 @@
  * (create, onboard, PUT :id) directly with a fake req/res/ctx (ruling 5: no
  * bridge is booted).
  *
- * `OnboardDeps` (`seedBrain`, `checkBrainSeedContainment`, `readArtifactRoot`,
+ * `OnboardDeps` (`seedBrain`, `checkBrainSeedContainment`,
  * `isContainedProjectRepoPath`) are FAKED, not the real `@forge/knowledge`/
  * `@forge/flows` implementations — this package cannot import either
  * directly (see `bridge-studio-project-onboard.ts`'s header for the boundary reasoning),
@@ -101,7 +101,6 @@ function fakeDeps(overrides: Partial<OnboardDeps> = {}): FakeDeps {
     checkBrainSeedContainment: (forgeRoot, projectId) => {
       checkBrainSeedContainmentCalls.push({ forgeRoot, projectId });
     },
-    readArtifactRoot: () => '.',
     // A lexical stand-in for @forge/flows's real (realpath-identity) guard —
     // sufficient to test the ROUTE's reaction to true/false, not to
     // re-prove flows' own escape-shape coverage (out of scope here).
@@ -376,7 +375,7 @@ test('onboard: a scaffold containment rejection is reported as 400 (project-cont
   }
 });
 
-test('onboard: a full success wires seedBrain/readArtifactRoot correctly and answers 200 with a bound kb', async () => {
+test('onboard: a full success wires seedBrain correctly and answers 200 with a bound kb', async () => {
   const forgeRoot = baseForgeRoot();
   try {
     const deps = fakeDeps();
@@ -742,7 +741,7 @@ test('[6.11.13] a forge root WITHOUT the skill gets NO binding — the scaffold 
 // S1 run 5 ended RED on containment with nine undeclared paths in
 // `projects/gitweave`. C's 663 attribution reads each session's own
 // `file_change` events and accounts for four. `.gitignore`, `roadmap.md`,
-// `brain/profile.md` and `.forge/project.json` were written by THIS ROUTE, so
+// and `.forge/project.json` were written by THIS ROUTE, so
 // no session log could ever account for them — and the story failed for the
 // product working, since S1's whole subject is that forge creates `.forge/`
 // rather than the story creating it by hand.
@@ -771,12 +770,13 @@ test('forge-qm4d: onboarding emits a file_change for every path it wrote into th
       .filter((e) => e.event_type === 'file_change');
 
     const projectRoot = join(forgeRoot, 'projects', 'gitweave');
-    for (const rel of ['.gitignore', 'roadmap.md', 'brain/profile.md', '.forge/project.json']) {
+    for (const rel of ['.gitignore', 'roadmap.md', '.forge/project.json']) {
       assert.ok(
         changed.some((e) => e.output_refs[0] === join(projectRoot, rel)),
         `${rel} was undeclared on S1 run 5 and must now be attributable — got: ${changed.map((e) => e.output_refs[0]).join(', ')}`,
       );
     }
+    assert.equal(existsSync(join(projectRoot, 'brain')), false, 'Brain 3 is central: the route writes no brain/ into the project repo (forge-mfv5.1.10)');
     assert.equal(changed[0]!.metadata?.['cause'], 'POST /api/studio/projects', 'named by its cause — "forge wrote this" without "why" is half an answer');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });

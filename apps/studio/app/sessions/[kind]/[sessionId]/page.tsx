@@ -591,8 +591,11 @@ export default function SessionShellPage({
                 draftContext={
                   summary?.kind === 'instructions'
                     ? {
-                        targetPath: `${summary.data.projectRepoPath}/${summary.data.currentInstructionsFile ?? 'AGENTS.md'}`,
+                        // forge-mfv5.1.13 — approve always writes AGENTS.md.
+                        targetPath: `${summary.data.projectRepoPath}/AGENTS.md`,
                         current: summary.data.currentInstructions,
+                        replaces: summary.data.currentInstructionsFile === 'AGENTS.md',
+                        leftInPlace: summary.data.legacyInstructionsFile,
                       }
                     : undefined
                 }

@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-240 files, 1411 sink calls; 166 classified (accidentally-safe 8, guarded 45, not-request-derived 22, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+240 files, 1408 sink calls; 166 classified (accidentally-safe 8, guarded 45, not-request-derived 22, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -185,7 +185,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/projects/preflight-repo.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/projects/preflight.ts` | 6 | guarded |  | read | bridge preflight routes (via the validated project dir) |
 | `packages/projects/project-config-write.ts` | 4 | guarded | `resolveGuardedPath` |  | `projectRoot` (the PUT route's discovered project dir; the demo lock's `status.project_repo_path`, validated at `/start` by… |
-| `packages/projects/project-contract-scaffold.ts` | 21 | unclassified |  |  |  |
+| `packages/projects/project-contract-scaffold.ts` | 18 | unclassified |  |  |  |
 | `packages/projects/project-create.ts` | 24 | guarded |  | read | `POST` body `name`, `appType` |
 | `packages/projects/project-migrate.ts` | 4 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/projects/project-preflight-read.ts` | 1 | unclassified |  |  |  |

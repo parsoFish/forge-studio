@@ -132,4 +132,4 @@ function mentionsCommand(content: string, cmd: string): boolean {
   return needle !== '' && hay.includes(needle);
 }
 
-export { checkC5, checkC8 };
+export { checkC5, checkC8, mentionsCommand };

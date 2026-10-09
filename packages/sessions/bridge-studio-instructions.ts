@@ -110,6 +110,7 @@ export async function handleInstructionsRoutes(
         draftUrl,
         currentInstructions: current ? current.content : null,
         currentInstructionsFile: current ? current.file : null,
+        legacyInstructionsFile: guardedReadFile(s.project_repo_path, ['CLAUDE.md']) !== null ? 'CLAUDE.md' : null,
         staleMs,
         ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
       };

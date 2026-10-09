@@ -110,7 +110,7 @@ export function Instructions({
       {...disabledAttrs(launching ? 'Launching the instructions session…' : null)}
       style={{ alignSelf: 'flex-start', opacity: launching ? 0.6 : 1 }}
     >
-      {launching ? 'Starting…' : fileBound ? `✦ Edit ${fileName} with the instructions agent` : '✦ Generate AGENTS.md with the instructions agent'}
+      {launching ? 'Starting…' : fileBound ? (fileName === 'AGENTS.md' ? '✦ Edit AGENTS.md with the instructions agent' : `✦ Write AGENTS.md from ${fileName} with the instructions agent`) : '✦ Generate AGENTS.md with the instructions agent'}
     </button>
   );
 

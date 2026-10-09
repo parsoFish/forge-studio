@@ -3,8 +3,9 @@
  * attribution is derived from what it WROTE, not from what it might write.
  *
  * S1 run 5 ended RED on containment with nine undeclared paths in
- * `projects/gitweave`. Three of them are this scaffold's: `.gitignore`,
- * `roadmap.md` and `brain/profile.md`. No session wrote them, so no session log
+ * `projects/gitweave`. Three of them were this scaffold's: `.gitignore`,
+ * `roadmap.md` and an in-ground `brain/profile.md` (since removed — Brain 3 is
+ * central, bead forge-mfv5.1.10). No session wrote them, so no session log
  * could account for them, and the story failed for the product working.
  *
  * WHY THE RETURNED LIST AND NOT THE CONTAINMENT LIST. The route computes a
@@ -25,11 +26,9 @@ import { join } from 'node:path';
 import { emitGroundFileChanges, type EventLogEntry } from '@forge/kernel';
 import { scaffoldContractArtifacts } from '../../project-contract-scaffold.ts';
 
-const readArtifactRootFake = (_projectRoot: string): string => '.';
-
 /** Exactly what the route does: scaffold, then emit from what came back. */
 function scaffoldAndEmit(projectRoot: string, forgeRoot: string): string[] {
-  const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot, readArtifactRootFake);
+  const created = scaffoldContractArtifacts(projectRoot, 'demo', projectRoot);
   emitGroundFileChanges({
     forgeRoot, cause: 'POST /api/studio/projects', projectRoot,
     relPaths: created.filter((p) => p !== '.git/'),
@@ -47,20 +46,25 @@ function changedPaths(forgeRoot: string): string[] {
     .map((e) => e.output_refs[0]!);
 }
 
-test('forge-qm4d: S1 run 5\'s three scaffold paths appear as file_change lines, from the real writer', () => {
+test('forge-qm4d: S1 run 5\'s scaffold paths appear as file_change lines, from the real writer', () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'qm4d-scaffold-'));
   const forgeRoot = mkdtempSync(join(tmpdir(), 'qm4d-forge-'));
   try {
     scaffoldAndEmit(projectRoot, forgeRoot);
     const paths = changedPaths(forgeRoot);
 
-    for (const rel of ['.gitignore', 'roadmap.md', 'brain/profile.md']) {
+    for (const rel of ['.gitignore', 'roadmap.md']) {
       assert.ok(
         paths.includes(join(projectRoot, rel)),
         `${rel} was undeclared on S1 run 5 and must now be attributable — got: ${paths.join(', ')}`,
       );
       assert.ok(existsSync(join(projectRoot, rel)), `and the file must really be there — an event for a file nobody wrote is worse than no event`);
     }
+    assert.equal(
+      paths.some((p) => p.includes('/brain/')),
+      false,
+      'the scaffold writes no in-ground brain/ file, so none may be claimed (forge-mfv5.1.10)',
+    );
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
     rmSync(forgeRoot, { recursive: true, force: true });

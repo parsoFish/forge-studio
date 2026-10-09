@@ -27,7 +27,7 @@
  * THREE INJECTED DEPENDENCIES, not direct imports — `OnboardDeps` below.
  * `projects` and `knowledge` are the SAME M4 §0 rank (both rank 2), so this
  * package importing `@forge/knowledge` (`seedProjectBrain`,
- * `checkProjectBrainSeedContainment`, `readArtifactRoot`) is a
+ * `checkProjectBrainSeedContainment`) is a
  * `package-layer-order` violation — the exact boundary row this carve
  * exists to delete. `flows` is a HIGHER rank (5) than `projects` (2), so
  * `isContainedProjectRepoPath` (`@forge/flows`) is
@@ -80,6 +80,7 @@ import {
 
 import { runPreflight } from './preflight.ts';
 import { scaffoldGreenfieldProject } from './project-create.ts';
+import { SCAFFOLD_DEMO_PROCESS } from './contract-stages.ts';
 import { validateProjectConfig, readAgentInstructionsFile } from './project-config.ts';
 import { ProjectConfigWriteError, writeProjectConfigPatch } from './project-config-write.ts';
 import { commitStudioChange, saveProjectRepo, StudioWritePathIgnoredError, uncommittedContractPaths } from './project-repo-tx.ts';
@@ -105,9 +106,6 @@ export type OnboardDeps = {
    *  `PathGuardContainmentError` (a real `@forge/kernel` export, imported
    *  above — that part is rank-safe) on rejection. */
   checkBrainSeedContainment: (forgeRoot: string, projectId: string) => void;
-  /** `@forge/knowledge`'s `readArtifactRoot`, threaded down into
-   *  `project-contract-scaffold.ts`'s injected-parameter functions. */
-  readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
   /** `@forge/knowledge`'s `isUntouchedBrainSeedStub` (G3, forge-8vfn.8.5.3),
@@ -362,9 +360,9 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // PURE containment checks — zero side effects on anything
       // request-derived — for EVERY path this route (and the two helpers it
       // calls) will write: `.forge/project.json`, `roadmap.md`,
-      // `<artifactRoot>/brain/profile.md`, plus — only when the scaffold's
-      // `needsGitInit` decision means it would CREATE the repo — the C2
-      // hygiene `.gitignore`, all beneath `projectRoot`
+      // plus — only when the scaffold's `needsGitInit` decision means it
+      // would CREATE the repo — the C2 hygiene `.gitignore`, all beneath
+      // `projectRoot`
       // (`checkContractArtifactContainment`), and the
       // `brain/projects/<id>/**` targets `seedProjectBrain` owns
       // (`checkProjectBrainSeedContainment`). A rejection from either check
@@ -386,7 +384,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // safe, so `seedProjectBrain` can be restored to writing where it
       // always made most sense — after the project directory exists.
       try {
-        checkContractArtifactContainment(projectRoot, ctx.forgeRoot, deps.readArtifactRoot, qualityGate);
+        checkContractArtifactContainment(projectRoot, ctx.forgeRoot, qualityGate);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
@@ -433,14 +431,14 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // missing). All writes are idempotent — never clobber an existing
       // operator file, and the stubs are clearly marked as TODO scaffolding.
       // scaffoldContractArtifacts computes its OWN per-segment guards
-      // (roadmap.md, brain/profile.md) BEFORE either of its writes — see its
+      // (roadmap.md) BEFORE its write — see its
       // docstring — and throws ScaffoldContainmentError, never a silent
       // skip, on rejection. Fail closed here too: refuse before ANY of this
       // route's remaining writes (including the .forge/project.json write
       // below), never surface it as an unrelated 500.
       let scaffoldedLocal: string[];
       try {
-        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name, ctx.forgeRoot, deps.readArtifactRoot, { id, qualityGateCmd: qualityGate });
+        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name, ctx.forgeRoot, { id, qualityGateCmd: qualityGate });
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
@@ -483,10 +481,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         instructions: typeof b['instructions'] === 'string' && b['instructions'].trim()
           ? b['instructions'].trim()
           : 'Managed by forge. See AGENTS.md for project-specific rules.',
-        demoProcess: [
-          { kind: 'capture', text: 'Capture the before state of the change.' },
-          { kind: 'verify', text: 'Run the quality gate to verify the change.' },
-        ],
+        demoProcess: SCAFFOLD_DEMO_PROCESS.map((step) => ({ ...step })), // reads `stub` until replaced (forge-mfv5.1.11)
         // R1-03-F1: the typed test process is the one JSON source of the gate
         // fields (flat keys are rejected by the validator). The legacy `demo`
         // block (shape/command) had no reader and is no longer scaffolded.
@@ -672,7 +667,9 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // already safe on forge-studio, so a merge/push failure (e.g. protected
       // main) doesn't fail the save — it's surfaced in `save`.
       let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
-      try { save = saveProjectRepo(projectRoot); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
+      const adoptRaw = b['adoptUncommitted'];
+      const adopt = Array.isArray(adoptRaw) && adoptRaw.every((f) => typeof f === 'string') ? (adoptRaw as string[]) : undefined;
+      try { save = saveProjectRepo(projectRoot, adopt ? { adopt } : {}); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
 
       // F5: when demoProcess CHANGED in this save, say so — the declaration IS
       // the cycle input (forge-mfv5.2.8), so nothing is generated from it; the
