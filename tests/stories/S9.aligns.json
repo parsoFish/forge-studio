@@ -18,12 +18,12 @@
     },
     {
       "path": "SPEC.md",
-      "digest": "822f1517c85a4344",
+      "digest": "7ddfad90c51cd82c",
       "why": "SPEC §5: Beat12: \"the ONLY place in the nine stories where the BARE generic interview is exercised\" (session-answer/SessionInteractivePanel)"
     },
     {
       "path": "SPEC.md",
-      "digest": "822f1517c85a4344",
+      "digest": "7ddfad90c51cd82c",
       "why": "SPEC §1: Beat11: fixed vs range model-tier picker — \"the tier comes from the agent's own SKILL-declared envelope... never a UI decision\""
     }
   ]

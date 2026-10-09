@@ -17,7 +17,7 @@
     },
     {
       "path": "SPEC.md",
-      "digest": "822f1517c85a4344",
+      "digest": "7ddfad90c51cd82c",
       "why": "SPEC §5: Beat4: the onboarding brief form becomes \"a CLIENT of the affordance, which is SPEC §5's own direction\" (explicit spec citation)"
     },
     {
@@ -34,7 +34,7 @@
     },
     {
       "path": "SPEC.md",
-      "digest": "822f1517c85a4344",
+      "digest": "7ddfad90c51cd82c",
       "why": "SPEC §6: Beats 3 and 9: preflight-status/flow-ready/checklist keys are the unified project-readiness contract"
     }
   ]
