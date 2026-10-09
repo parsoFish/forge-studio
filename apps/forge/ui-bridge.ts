@@ -470,7 +470,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       runReleaseFinalize: runReleaseFinalizeFn,
       rerunReflector: rerunReflectorFn,
       getServeStatus,
-    }));
+    })).catch((err) => console.error('[bridge] safeDispatch backstop:', err));
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 

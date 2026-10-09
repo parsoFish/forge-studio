@@ -133,7 +133,7 @@ export async function handleDemoRoutes(
   // Reads status.json to resolve project_repo_path. (Unlike the instructions
   // /file route, the served file lives in the repo, NOT the session dir.)
   if (method === 'GET' && url.startsWith('/api/demo-builder/demo/')) {
-    const rest = url.slice('/api/demo-builder/demo/'.length).split('/').map(decodeURIComponent);
+    const rest = url.slice('/api/demo-builder/demo/'.length).split('/').map(decodeUrlPart);
     const [project, sessionId] = rest;
     if (!project || !sessionId) {
       sendJson(res, 400, { error: 'expected /api/demo-builder/demo/<project>/<sid>' }, origin);

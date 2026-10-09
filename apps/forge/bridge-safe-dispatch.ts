@@ -7,15 +7,18 @@
  * (forge-nk1y.8). This wrapper turns every escape into an HTTP answer:
  *
  *   - `MalformedUrlEncodingError` (`decodeUrlPart`, `@forge/kernel`) -> 400
- *   - anything else                                                  -> 500, sanitised and logged
+ *   - anything else                                                  -> 500 `internal error` (detail logged only)
  *   - headers already sent                                           -> just end the response
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { MalformedUrlEncodingError, allowedOrigin, sanitizeError, sendJson } from '@forge/kernel';
+import { MalformedUrlEncodingError, allowedOrigin, sendJson } from '@forge/kernel';
 
 /** The body of the 400 a malformed percent-escape earns. */
 export const MALFORMED_URL_MESSAGE = 'malformed percent-encoding in request URL';
+
+/** The fixed body of the 500 — error text, classes and paths stay in the log. */
+export const INTERNAL_ERROR_MESSAGE = 'internal error';
 
 /** Run `handler`; never reject. */
 export async function safeDispatch(
@@ -39,6 +42,6 @@ export async function safeDispatch(
       return;
     }
     logError(err);
-    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    sendJson(res, 500, { error: INTERNAL_ERROR_MESSAGE }, origin);
   }
 }

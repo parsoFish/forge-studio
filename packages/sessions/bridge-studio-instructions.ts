@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 
 
 
-import { allowedOrigin, sendJson } from '@forge/kernel';
+import { allowedOrigin, decodeUrlPart, sendJson } from '@forge/kernel';
 import { guardedFile, guardedReadFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import { readAgentInstructionsFile } from '@forge/projects';
@@ -122,7 +122,7 @@ export async function handleInstructionsRoutes(
   // GET /api/instructions/file/<project>/<sid>/<filename> — serve a session-dir
   // file (AGENTS.draft.md etc.) with a path-escape guard + content-type sniff.
   if (method === 'GET' && url.startsWith('/api/instructions/file/')) {
-    const rest = url.slice('/api/instructions/file/'.length).split('/').map(decodeURIComponent);
+    const rest = url.slice('/api/instructions/file/'.length).split('/').map(decodeUrlPart);
     const [project, sessionId, ...fileParts] = rest;
     const filename = fileParts.join('/');
     if (!project || !sessionId || !filename) {

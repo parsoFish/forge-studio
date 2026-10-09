@@ -44,6 +44,9 @@ const FAMILIES: Family[] = [
   { family: 'agents (slug history)', method: 'GET', path: `/api/agents/${BAD}/history`, own: true },
   { family: 'library (instructions)', method: 'POST', path: `/api/studio/agents/${BAD}/instructions-draft`, own: true },
   { family: 'library (skills)', method: 'GET', path: `/api/studio/skills/${BAD}`, own: true },
+  { family: 'architect (session file)', method: 'GET', path: `/api/architect/file/${BAD}/s/f.html` },
+  { family: 'demo-builder (demo)', method: 'GET', path: `/api/demo-builder/demo/${BAD}/s` },
+  { family: 'instructions (session file)', method: 'GET', path: `/api/instructions/file/${BAD}/s/f.md` },
 ];
 
 let forgeRoot: string;

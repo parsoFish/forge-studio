@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
-import { allowedOrigin, sendJson, sendIfDispatchRefused, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
+import { allowedOrigin, decodeUrlPart, sendJson, sendIfDispatchRefused, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import {
@@ -180,7 +180,7 @@ export async function handleArchitectRoutes(
   // GET /api/architect/file/<project>/<sid>/<filename> — serve a session-dir
   // file (PLAN.html etc.) with a path-escape guard + content-type sniff.
   if (method === 'GET' && url.startsWith('/api/architect/file/')) {
-    const rest = url.slice('/api/architect/file/'.length).split('/').map(decodeURIComponent);
+    const rest = url.slice('/api/architect/file/'.length).split('/').map(decodeUrlPart);
     const [project, sessionId, ...fileParts] = rest;
     const filename = fileParts.join('/');
     if (!project || !sessionId || !filename) {

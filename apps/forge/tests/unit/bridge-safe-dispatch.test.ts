@@ -25,13 +25,14 @@ test('safeDispatch: a MalformedUrlEncodingError becomes the named 400', async ()
   assert.deepEqual(JSON.parse(res.body ?? ''), { error: 'malformed percent-encoding in request URL' });
 });
 
-test('safeDispatch: any other error becomes a 500 with the sanitised message, and is logged', async () => {
+test('safeDispatch: any other error becomes a FIXED 500 body (no detail leaks) and is logged in full', async () => {
   const res = fakeRes();
   const logged: unknown[] = [];
-  await safeDispatch(req, res, async () => { throw new Error('boom at /home/x/secret.txt'); }, (e) => logged.push(e));
+  const err = new Error('boom at /home/x/my secret dir/secret.txt');
+  await safeDispatch(req, res, async () => { throw err; }, (e) => logged.push(e));
   assert.equal(res.status, 500);
-  assert.deepEqual(JSON.parse(res.body ?? ''), { error: 'Error: boom at [path]' });
-  assert.equal(logged.length, 1);
+  assert.deepEqual(JSON.parse(res.body ?? ''), { error: 'internal error' });
+  assert.deepEqual(logged, [err]);
 });
 
 test('safeDispatch: a non-Error throw is still a 500, never a rejection', async () => {
