@@ -12,7 +12,7 @@
  * Its own module (not bridge-client-core) so both clients share it AND tests that
  * mock `./bridge-client` down to `bridgeFetch` still run the real deadline.
  */
-import { BridgeReadTimeoutError, readBridgeJson, type BridgeReadResult } from './bridge-result';
+import { BridgeReadTimeoutError, readBridgeJson, type BridgeReadResult } from './bridge-result.ts';
 
 export const BRIDGE_READ_TIMEOUT_MS = 30_000;
 
