@@ -237,8 +237,8 @@ export function renderPlanDoc(session: ArchitectSession): string {
     '_This block surfaces the **informational** footprint of the proposed initiatives — ' +
       'how many cycles + dollars they would consume if every one were queued today. ' +
       'It is informational only: forge sets no limit on this total. Each initiative\'s develop run ' +
-      'stops dispatching work when its spend reaches its own ceiling: its `cost_ceiling_usd`, else ' +
-      '`cost_budget_usd` plus 50%, unless an operator sets one at Start development._',
+      'stops dispatching work when its spend reaches its own ceiling: `FORGE_COST_CEILING_USD` when set, ' +
+      'else its `cost_ceiling_usd`, else `cost_budget_usd` plus 50%. Planning spend counts against it._',
   );
   parts.push('');
   const totalIterations = session.initiatives.reduce((s, i) => s + i.iteration_budget, 0);
