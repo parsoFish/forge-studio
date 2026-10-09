@@ -160,38 +160,52 @@ function fakeClaude() {
  * construction, exactly the pid that becomes `comm=claude` — no fork, no
  * poll, no window for anything to diverge from what gets written.
  */
-function laneBin(name: string, opts: { spawnOnTmuxEnd?: boolean; spawnAfterKill?: boolean } = {}) {
+/**
+ * forge-nk1y.11: every lane fixture signals READY (`<bin>.ready`) only once its HUP-side setup
+ * is in place, and the fixture roster (the `LANES_ROSTER_CMD` seam) does not answer the confirm
+ * poll until it exists — so die_launch's kill lands after the lane program is running, by
+ * construction. MEASURED red without it (2-CPU taskset + 6 burners, 2 of 3 runs): stderr
+ * `launch_pid=none` — under load the pane shell had not started the lane program inside the
+ * 4 s confirm window, so the kill landed before any watcher or trap existed.
+ */
+const AWAIT_CLAUDE = `await_claude() { local p; while :; do p="$(cat "$1" 2>/dev/null)"; [ -n "$p" ] && [ "$(cat "/proc/$p/comm" 2>/dev/null)" = claude ] && return 0; sleep 0.05; done; }`;
+const AWAIT_RETIRED = `await_retired() { while [ -d "/proc/$1" ] && ! grep -q '^State:[[:space:]]*Z' "/proc/$1/status" 2>/dev/null; do sleep 0.05; done; }`;
+function laneBin(name: string, opts: { spawnOnTmuxEnd?: boolean; spawnOnHup?: boolean } = {}) {
   const detachedpid = join(dir, `${name}.detachedpid`);
+  const ready = join(dir, `${name}.ready`);
   const spawn = `setsid nohup bash -c 'echo $$ > "$1"; exec "$2" "$3"' _ '${detachedpid}' '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &`;
-  if (opts.spawnAfterKill) {
-    // The late claude appears BECAUSE the kill happened (forge-1rk5.3 row 139), with no wall-clock sleep and no signal
-    // handler to race: a detached watcher (bash, not claude-named, so the before-kill census sees nothing) polls until
-    // this fixture process is gone, then execs the fake claude within ~50 ms of the kill — inside die_launch's own
-    // post-death quiet window, which is the guarantee under test.
-    return writeExec(name, `#!/usr/bin/env bash
-echo $$ > '${join(dir, `${name}.selfpid`)}'
-setsid nohup bash -c 'while [ -d "/proc/$1" ]; do sleep 0.05; done; echo $$ > "$2"; exec "$3" 300' _ $$ '${detachedpid}' '${fakeClaude()}' </dev/null >/dev/null 2>&1 &
-sleep 120
+  // `--version` answers and exits, as the real CLI does: launch's preflight runs `timeout 5 "$bin" --version` BEFORE the
+  // tmux session exists. Without this the WHOLE fixture ran there (forge-nk1y.11, measured): 5 s of every launch,
+  // a stray claude in the wrong cwd, and this lane's .selfpid/.detachedpid/.ready written by the wrong process.
+  const head = `#!/usr/bin/env bash\nif [ "\${1:-}" = --version ]; then echo '1.0.0 (fake)'; exit 0; fi\necho $$ > '${join(dir, `${name}.selfpid`)}'\n${AWAIT_CLAUDE}\n${AWAIT_RETIRED}\n`;
+  if (opts.spawnOnHup) {
+    // The claude appears BECAUSE of the kill and AFTER the before-kill census: the HUP trap spawns it, waits until it
+    // is `comm=claude`, and only THEN lets the lane program (die_launch's launch_pid) exit. die_launch counts a quiet
+    // tick only once launch_pid is dead, so its next census strictly follows the claude's existence — no window to
+    // outrun at any load. (`sleep & wait` so the trap runs at once; `trap '' HUP` first so a second HUP from the pane
+    // shell cannot hit the spawn mid-fork.)
+    return writeExec(name, `${head}on_hup() { trap '' HUP; ${spawn} await_claude '${detachedpid}'; exit 0; }
+trap on_hup HUP
+: > '${ready}'
+sleep 120 & wait $!
 `);
   }
   if (opts.spawnOnTmuxEnd) {
-    // The grandchild appears BECAUSE the tmux session ended, with no wall-clock sleep: a detached watcher (bash, not
-    // claude-named, so the before-kill census sees nothing) polls `tmux has-session` and execs the fake claude the moment
-    // die_launch's kill-session lands. The lane program itself ignores HUP and stays ALIVE, so — unlike `spawnAfterKill`,
-    // where it is already dead — die_launch's `launch_pid` is still running when the grandchild appears: the after-kill
-    // loop must look through a live launch_pid, not just past a dead one. (A HUP-trap version of this was tried twice and
-    // raced the pane teardown: red 1 run in 3 alone.)
-    return writeExec(name, `#!/usr/bin/env bash
-echo $$ > '${join(dir, `${name}.selfpid`)}'
-trap '' HUP
+    // The grandchild appears BECAUSE the tmux session ended: a detached watcher (bash, not claude-named, so the
+    // before-kill census sees nothing) polls `tmux has-session` and execs the fake claude once the kill lands. The lane
+    // program ignores HUP and stays ALIVE until that claude is retired, so die_launch's launch_pid is running whenever
+    // the claude appears: the after-kill loop must look through a live launch_pid. The watcher writes READY itself,
+    // after setsid/nohup took effect, so the kill can never reach it half-started.
+    return writeExec(name, `${head}trap '' HUP
 S="$(tmux display -p '#{session_name}')"
-setsid nohup bash -c 'while tmux has-session -t "$1" 2>/dev/null; do sleep 0.05; done; echo $$ > "$2"; exec "$3" 300' _ "$S" '${detachedpid}' '${fakeClaude()}' </dev/null >/dev/null 2>&1 &
-sleep 120
+setsid nohup bash -c ': > "$4"; while tmux has-session -t "=$1" 2>/dev/null; do sleep 0.05; done; echo $$ > "$2"; exec "$3" 300' _ "$S" '${detachedpid}' '${fakeClaude()}' '${ready}' </dev/null >/dev/null 2>&1 &
+await_claude '${detachedpid}'
+await_retired "$(cat '${detachedpid}')"
 `);
   }
-  return writeExec(name, `#!/usr/bin/env bash
-echo $$ > '${join(dir, `${name}.selfpid`)}'
-${spawn}
+  return writeExec(name, `${head}${spawn}
+await_claude '${detachedpid}'
+: > '${ready}'
 sleep 120
 `);
 }
@@ -218,18 +232,27 @@ function lanes(args: string[], env: Record<string, string> = {}) {
       LANES_ROSTER_CMD: rosterCmd,
       LANES_CWD: join(dir, 'repo'),
       LANES_WORKTREE_ROOT: join(dir, 'wt'),
+      // forge-nk1y.11: the WARN-only advisory preflight is not this file's subject, and on the REAL /proc it scans every
+      // host process — measured 12.5 s of a 19 s launch at 2 CPUs (foreign residents 8.0 s, earlyoom 4.5 s), past the
+      // 60 s spawnSync bound under concurrent load. Same seams lanes-preflight.test.ts launches with: an empty proc tree,
+      // no DNS, a fixture claude.json. The census itself reads the real /proc (self_chain/proc_cwd), unaffected.
+      LANES_PROC_ROOT: join(dir, 'procroot'),
+      LANES_DNS_CMD: 'true',
+      LANES_CLAUDE_JSON: join(dir, 'claude.json'),
       ...env,
     },
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
+/** Env for the fixture roster's confirm-poll gate: this launch's session name and its lane fixture's READY file. */
+const readyGate = (lane: string, bin: string) => ({ CENSUS_SESSION: `${PREFIX}${lane}`, CENSUS_READY: `${bin}.ready` });
 function launchUnconfirmed(lane: string, bin: string, env: Record<string, string> = {}) {
   const laneCwd = join(dir, `cwd-${lane}`);
   mkdirSync(laneCwd, { recursive: true });
   const prompt = join(dir, `prompt-${lane}.md`);
   writeFileSync(prompt, `never consumed\nSuites: flock ${camp}/.suite-lock npm test\n`);
   sessions.add(`${PREFIX}${lane}`);
-  return { laneCwd, r: lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, ...env }) };
+  return { laneCwd, r: lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, ...readyGate(lane, bin), ...env }) };
 }
 
 before(() => {
@@ -240,7 +263,16 @@ before(() => {
   mkdirSync(join(dir, 'wt'), { recursive: true });
   writeFileSync(join(dir, 'meminfo'), 'MemTotal: 16000000 kB\nMemFree: 1000000 kB\nMemAvailable: 9437184 kB\n');
   writeFileSync(join(dir, 'roster.json'), '[]');
-  rosterCmd = writeExec('roster', `#!/usr/bin/env bash\ncat '${join(dir, 'roster.json')}'\n`);
+  mkdirSync(join(dir, 'procroot', 'net'), { recursive: true });
+  writeFileSync(join(dir, 'claude.json'), '{}');
+  // The confirm-poll gate (see AWAIT_CLAUDE's doc): once this launch's session exists, answer only after its lane
+  // fixture wrote READY. Preflight also reads the roster, before the session exists, and is answered at once.
+  rosterCmd = writeExec('roster', `#!/usr/bin/env bash
+if [ -n "$CENSUS_READY" ] && tmux has-session -t "=$CENSUS_SESSION" 2>/dev/null; then
+  while [ ! -e "$CENSUS_READY" ]; do sleep 0.05; done
+fi
+cat '${join(dir, 'roster.json')}'
+`);
   const repo = join(dir, 'repo');
   mkdirSync(join(repo, '.claude', 'skills', 'tiered-orchestration'), { recursive: true });
   writeFileSync(join(repo, '.claude', 'skills', 'tiered-orchestration', 'SKILL.md'), '# skill\n');
@@ -496,14 +528,20 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
    * `LANES_CONFIRM_TIMEOUT_S` stays at its production default (4 s, no
    * override). Both doors below are EVENT-driven (2026-10-06, forge-8vfn.30.17:
    * the old first door spawned after `sleep 1.5` and was red 3 gates in a
-   * row under load 8-10): the grandchild is spawned by a detached watcher
-   * BECAUSE the tmux session ended (lane program still alive) or BECAUSE the
-   * lane program died, so it lands in the after-kill loop by construction,
-   * at any host load, with no number to outrun.
+   * row under load 8-10): the grandchild is spawned BECAUSE the tmux session
+   * ended or BECAUSE of the HUP, so it lands in the after-kill loop by
+   * construction. forge-nk1y.11 closed the two orderings that were still
+   * scheduling races: the kill could land before the lane program started
+   * (now gated on READY, see `AWAIT_CLAUDE`), and the old door-2 watcher had
+   * to exec its claude inside die_launch's ~0.5 s post-death tick (now the
+   * lane program outlives its claude's spawn, so launch_pid's death orders it).
    */
   test('a lane program that spawns its grandchild WHEN the tmux session ends (and stays alive) is still retired, and stderr says what the census saw', () => {
     const bin = laneBin('lane-late', { spawnOnTmuxEnd: true });
-    const { r } = launchUnconfirmed('late', bin);
+    // The lane program lives until its claude is retired, so the loop ends on launch_pid's death, never on the ceiling;
+    // 45 s (< `lanes()`'s 60 s spawnSync timeout) only bounds a REGRESSION, which then fails with die_launch's own
+    // "at the 45s ceiling" line instead of a killed process. A passing run never approaches it.
+    const { r } = launchUnconfirmed('late', bin, { LANES_RECENSUS_S: '45' });
     const self = pidFrom('lane-late.selfpid', 8000);
     const stray = pidFrom('lane-late.detachedpid', 12000);
     try {
@@ -518,12 +556,13 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
   });
 
   test('M7-C last-flakes #2: a claude spawned BECAUSE of the kill — past the confirm window — is still retired by the AFTER-kill census', () => {
-    // The late claude is spawned BECAUSE the kill happened (forge-1rk5.3 row 139): a detached watcher execs it once the
-    // fixture process is gone, so it lands after the before-kill census by construction and inside die_launch's own
-    // post-death quiet window. It used to be a wall-clock `sleep 6` racing a tick-counted re-census window (red at a 3 s
-    // ceiling, green at 2 s, same tree); a HUP-trap version was tried and raced die_launch's kill of the pane process.
+    // The late claude is spawned BECAUSE the kill happened (forge-1rk5.3 row 139): the lane program's HUP trap spawns
+    // it, after the before-kill census, and exits only once it is `comm=claude` — so die_launch's first quiet tick
+    // (counted only after launch_pid is dead) is strictly later than the claude. It used to be a detached watcher that
+    // exec'd the claude AFTER the lane program died, racing die_launch's ~0.5 s post-death tick; an earlier HUP-trap
+    // version raced the kill landing before the trap was installed (now closed by the READY gate).
     // die_launch's own ceiling stays at its production default.
-    const bin = laneBin('lane-margin', { spawnAfterKill: true });
+    const bin = laneBin('lane-margin', { spawnOnHup: true });
     const { r } = launchUnconfirmed('margin', bin);
     const self = pidFrom('lane-margin.selfpid', 8000);
     const stray = pidFrom('lane-margin.detachedpid', 12000);
@@ -542,14 +581,15 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
   test('1023: a non-numeric LANES_RECENSUS_S is reported and defaulted — the re-census still runs', () => {
     // Before this, the loop's `-lt` test errored on 'soon0' and the function fell out after
     // ONE census: exactly the one-shot shape it stopped having, silently. The late-spawn
-    // fixture is the proof: with the loop gone, the stray survives.
-    const bin = laneBin('lane-late2', { spawnOnTmuxEnd: true });
+    // fixture is the proof: with the loop gone, the stray survives. (The HUP-trap fixture: its claude
+    // exists before launch_pid dies, so only the loop running at all decides this door.)
+    const bin = laneBin('lane-late2', { spawnOnHup: true });
     const laneCwd = join(dir, 'cwd-late2');
     mkdirSync(laneCwd, { recursive: true });
     const prompt = join(dir, 'prompt-late2.md');
     writeFileSync(prompt, `never consumed\nSuites: flock ${camp}/.suite-lock npm test\n`);
     sessions.add(`${PREFIX}late2`);
-    const r = lanes(['launch', camp, 'late2', prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, LANES_RECENSUS_S: 'soon' });
+    const r = lanes(['launch', camp, 'late2', prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, ...readyGate('late2', bin), LANES_RECENSUS_S: 'soon' });
     const self = pidFrom('lane-late2.selfpid', 8000);
     const stray = pidFrom('lane-late2.detachedpid', 12000);
     try {
