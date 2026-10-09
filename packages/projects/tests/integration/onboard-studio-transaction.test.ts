@@ -107,3 +107,18 @@ test('onboarding a bare directory (repo created by the scaffold) also ends clean
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+test('a commit that git refuses does not turn a finished onboarding into a 500 — the response says it is uncommitted', async () => {
+  const { forgeRoot, ground } = forgeRootWithClone('blanket');
+  try {
+    writeFileSync(join(ground, '.gitignore'), '.forge/\n'); // operator ignores all of .forge (C2 will say so)
+    g(ground, ['add', '.gitignore']);
+    g(ground, ['commit', '-q', '-m', 'ignore forge']);
+    const r = await onboard(forgeRoot, 'blanket');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.committed, false);
+    assert.match(String(r.body.commitError), /\.forge\/project\.json/);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

@@ -201,8 +201,11 @@ export function uncommittedContractPaths(projectDir: string): string[] {
 export function beginStudioTransaction(projectDir: string): { commit: (message: string) => boolean } {
   if (!isGitRepo(projectDir)) return { commit: () => false };
   ensureStudioBranch(projectDir);
-  const pre = new Set(dirtyPaths(projectDir));
-  return { commit: (message) => commitStudioChange(projectDir, message, dirtyPaths(projectDir).filter((p) => !pre.has(p))) };
+  // Files, not collapsed dirs: a new dir holding an ignored file must not trip
+  // StudioWritePathIgnoredError, and a pre-dirty dir must not mask new files in it.
+  const dirtyFiles = () => porcelainPaths(git(projectDir, ['status', '--porcelain', '-z', '--untracked-files=all'], { raw: true }));
+  const pre = new Set(dirtyFiles());
+  return { commit: (message) => commitStudioChange(projectDir, message, dirtyFiles().filter((p) => !pre.has(p))) };
 }
 
 /** `refused` names the uncommitted contract files when the Save declined to run. */

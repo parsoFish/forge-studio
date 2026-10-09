@@ -84,3 +84,32 @@ test('a FAILED project-bound run commits nothing — its partial edits stay dirt
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+test('a run that creates a new directory holding an ignored file still completes, and commits the real file', async () => {
+  const { forgeRoot, ground } = fixture();
+  try {
+    appendFileSync(join(ground, '.gitignore'), '__pycache__/\n');
+    g(ground, ['commit', '-q', '-am', 'ignore pycache']);
+    const deps = {
+      dispatch: (async (opts: { slug: string; runId: string }) => {
+        mkdirSync(join(ground, 'pkg', '__pycache__'), { recursive: true });
+        writeFileSync(join(ground, 'pkg', '__pycache__', 'm.pyc'), 'x');
+        writeFileSync(join(ground, 'pkg', 'm.py'), 'x = 1\n');
+        return { slug: opts.slug, runId: opts.runId, result: { suppressed: false, costUsd: 0 } };
+      }) as never,
+    };
+    const exit = process.exit;
+    let code: number | undefined;
+    process.exit = ((c?: number) => { code = c; }) as never;
+    try {
+      await cmdAgentDispatch(['onboarding-agent', '--run-id', 'tx-dir', '--project', 'weave'], forgeRoot, deps);
+    } finally {
+      process.exit = exit;
+    }
+    assert.equal(code, undefined, 'a successful run is not turned into a failure by its commit');
+    assert.deepEqual(g(ground, ['show', '--name-only', '--pretty=', 'HEAD']).split('\n'), ['pkg/m.py']);
+    assert.equal(g(ground, ['status', '--porcelain']), '');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

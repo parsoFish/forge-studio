@@ -495,7 +495,12 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
       ...(costCeilingUsd !== undefined ? { kickoffCeilingUsd: costCeilingUsd } : {}),
     });
     const { result } = out;
-    studioTx?.commit(`chore(forge): ${out.slug} run ${out.runId}`);
+    try {
+      studioTx?.commit(`chore(forge): ${out.slug} run ${out.runId}`);
+    } catch (err) {
+      // The run itself succeeded; its edits stay dirty, where the Save refusal names them.
+      console.error(`forge agent dispatch: committing ${out.slug}'s edits to forge-studio failed — they remain uncommitted: ${err instanceof Error ? err.message : String(err)}`);
+    }
     // R2-08-F2, M7-E boundary fix: on a real (non-suppressed) completion,
     // fire every declared `on: agent-complete` watcher for this slug — the
     // ONE production standalone-agent completion site (moved here from
