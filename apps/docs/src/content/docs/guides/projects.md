@@ -50,7 +50,7 @@ When a project's generated mechanisms have drifted from the current template, pr
 - **Fill in the required fields first**: the onboarding button stays disabled until name, quality gate and north star are all set.
 - *The onboarding button says a run is in progress.* An onboarding run is already in flight for this project. Wait for it or cancel it.
 - **choose an app type first**: **Preview drift** needs an app type when the project has none recorded.
-- *Save is refused, naming `.forge/project.json`, `.gitignore`, `AGENTS.md` or `roadmap.md`.* That contract file has a change that is not committed to the project's `forge-studio` branch, so a Save would push the default branch without it. Press **Commit these files and save** to commit them to `forge-studio` and save, or discard the change first.
+- *The project page lists `.forge/project.json`, `.gitignore`, `AGENTS.md` or `roadmap.md` as not committed.* That contract file has a change outside the project's `forge-studio` branch, so a Save would push the default branch without it. Press **Commit these files and save** to commit them to `forge-studio` and save, or discard the change first. **Save pending changes** appears whenever `forge-studio` holds work the default branch does not have, even with no unsaved edits on the page.
 
 ## Related
 

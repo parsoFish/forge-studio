@@ -1871,10 +1871,9 @@ export async function fetchContractStages(id: string): Promise<ContractStageRow[
 
 /** Whether the project repo has forge-UI changes accumulated on forge-studio,
  *  pending a merge to main. */
-export async function fetchRepoStatus(projectId: string): Promise<{ pending: boolean; branch: string }> {
-  return studioRead<{ pending: boolean; branch: string }>(
-    `/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`,
-  );
+export async function fetchRepoStatus(projectId: string): Promise<{ pending: boolean; branch: string; uncommitted: string[] }> {
+  const r = await studioRead<{ pending: boolean; branch: string; uncommitted?: unknown }>(`/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`);
+  return { ...r, uncommitted: Array.isArray(r.uncommitted) ? r.uncommitted.filter((f): f is string => typeof f === 'string') : [] };
 }
 
 /** Merge the accumulated forge-studio changes into the project's default branch + push. */

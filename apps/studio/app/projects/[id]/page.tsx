@@ -27,6 +27,7 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveRefusal } from '@/components/studio/project-builder/SaveRefusal';
+import { deriveSaveControl, useRepoStatus } from '@/lib/use-repo-status';
 import { NotFound } from '@/components/NotFound';
 import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
 import { PageLoadError } from '@/components/PageLoadError';
@@ -330,14 +331,15 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     router.push(resolveDemoEntryHref(sessions, id, initiativeId));
   }, [id, router]);
 
-  // Unified save feedback (X1). Row 6 (T1 1977a): a refused Save offers adopt-and-save.
+  // Unified save feedback (X1). Save derives from the form AND repo-status (forge-mfv5.1.20); a refused Save offers adopt (1977a).
   const [refusedFiles, setRefusedFiles] = useState<string[]>([]); const adoptNextSave = useRef(false);
+  const { repo, refresh: refreshRepo } = useRepoStatus(isNew ? null : id);
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
     if (!project) return { ok: false, error: 'project not loaded' };
     const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched });
     const adopt = adoptNextSave.current; adoptNextSave.current = false; // consumed whether or not the save throws
-    const result = await saveProject(id, adopt ? { ...payload, adoptUncommitted: refusedFiles } : payload);
-    setRefusedFiles(result.refused ?? []);
+    const result = await saveProject(id, adopt ? { ...payload, adoptUncommitted: saveControl.adoptFiles } : payload);
+    setRefusedFiles(result.refused ?? []); refreshRepo();
     if (result.ok) {
       setDirty(false);
       setKbTouched(false);
@@ -354,6 +356,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     return result;
   });
 
+  const saveControl = deriveSaveControl({ dirty, saving, repo, refused: refusedFiles });
   const handleSaveRef = useRef(handleSave);
   useEffect(() => { handleSaveRef.current = handleSave; });
 
@@ -492,17 +495,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         </div>
 
         <SaveStatus saving={saving} error={saveError} {...saveFb} />
-        <button
-          className="btn btn-primary"
-          data-action="save-project"
-          onClick={() => void handleSave()}
-          {...disabledAttrs(saving ? 'Saving…' : !dirty ? 'No unsaved changes' : null)}
-        >
-          {saving ? 'Saving…' : 'Save project'}
+        <button className="btn btn-primary" data-action="save-project" onClick={() => void handleSave()} {...disabledAttrs(saveControl.disabledReason)}>
+          {saveControl.label}
         </button>
       </div>
 
-      <SaveRefusal files={refusedFiles} busy={saving} onAdopt={() => { adoptNextSave.current = true; void handleSave(); }} />
+      <SaveRefusal files={saveControl.adoptFiles} busy={saving} onAdopt={() => { adoptNextSave.current = true; void handleSave(); }} />
       {/* Editor | Roadmap tab bar */}
       <ProjectTabs tab={tab} onSelect={setTab} />
 
