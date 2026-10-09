@@ -1,6 +1,6 @@
 /**
  * Evidence forms (forge-mfv5.1.19): demo.json's per-checkpoint `form`,
- * `apiPath`, `ignoreKeys` and per-demo `narrative` — validated and rendered
+ * `apiPath` and per-demo `narrative` — validated and rendered
  * here so `demo-model.ts` (D-07's one schema) stays under the file cap — and
  * the JSON half of the control `demo-delta.ts` applies to `api-before-after`.
  * The narrative is agent prose, never evidence: DEMO.md labels it so and the
@@ -26,8 +26,8 @@ export function validateFormFields(cp: Record<string, unknown>, at: string): str
   if (cp.apiPath !== undefined && (typeof cp.apiPath !== 'string' || !isOwnServerPath(cp.apiPath))) {
     errors.push(`${at}.apiPath must be a path on the tree's own server — no scheme, host or traversal (got ${JSON.stringify(cp.apiPath)})`);
   }
-  if (cp.ignoreKeys !== undefined && (!Array.isArray(cp.ignoreKeys) || cp.ignoreKeys.some((k) => typeof k !== 'string'))) {
-    errors.push(`${at}.ignoreKeys must be an array of key names when set`);
+  if (cp.apiPath !== undefined && (cp.command !== undefined || cp.form !== 'api-before-after')) {
+    errors.push(`${at}.apiPath belongs to form api-before-after alone — one driver per checkpoint, never with a command`);
   }
   return errors;
 }
@@ -49,11 +49,14 @@ export function sourceLine(c: DemoModelCheckpoint): string | null {
   return c.apiPath ? `- **GET (each tree's own server):** \`${c.apiPath}\`` : null;
 }
 
-/** Keys that differ on every read of an unchanged resource; also any `*_url` and `watchers*` key. */
-export const DEFAULT_VOLATILE_JSON_KEYS: readonly string[] = Object.freeze(['id', 'node_id', 'created_at', 'updated_at', 'pushed_at', 'url', 'etag', 'size']);
+/** Keys that differ on every read of an unchanged resource (dropped at any depth — a real change confined to
+ *  them is not seen; DEMO.md says so), plus any `*_url` key. ISO timestamps in values go by the text rules. */
+export const DEFAULT_VOLATILE_JSON_KEYS: readonly string[] = Object.freeze([
+  'id', 'node_id', 'created_at', 'updated_at', 'pushed_at', 'url', 'etag', 'size', 'watchers', 'watchers_count',
+]);
 
 const isVolatile = (key: string, ignoreKeys: readonly string[]): boolean =>
-  DEFAULT_VOLATILE_JSON_KEYS.includes(key) || ignoreKeys.includes(key) || key.endsWith('_url') || key.startsWith('watchers');
+  DEFAULT_VOLATILE_JSON_KEYS.includes(key) || ignoreKeys.includes(key) || key.endsWith('_url');
 
 function strip(value: unknown, ignoreKeys: readonly string[]): unknown {
   if (Array.isArray(value)) return value.map((v) => strip(v, ignoreKeys));

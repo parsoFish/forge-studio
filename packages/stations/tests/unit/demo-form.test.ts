@@ -37,8 +37,9 @@ test('an apiPath carrying a host, protocol-relative or traversing is refused', (
   assert.deepEqual(validateDemoModel(model({}, { command: undefined, apiPath: '/api/org' })), []);
 });
 
-test('ignoreKeys must be key names', () => {
-  assert.match(validateDemoModel(model({}, { ignoreKeys: [1] })).join('\n'), /ignoreKeys must be an array of key names/);
+test('apiPath is one driver: never with a command, never on another form', () => {
+  assert.match(validateDemoModel(model({}, { apiPath: '/api/org' })).join('\n'), /apiPath belongs to form api-before-after alone/);
+  assert.match(validateDemoModel(model({}, { command: undefined, form: 'screenshot', apiPath: '/api/org' })).join('\n'), /apiPath belongs to form api-before-after alone/);
 });
 
 test('a narrative over the word cap, or empty, is refused', () => {

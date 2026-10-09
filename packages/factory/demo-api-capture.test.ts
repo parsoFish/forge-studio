@@ -16,6 +16,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { captureApiGet } from './demo-api-capture.ts';
+import { declaredApiCheckpoints } from './demo.ts';
 import { computeCheckpointDeltas } from '@forge/stations/demo-delta.ts';
 import type { DemoModel } from '@forge/stations/demo-model.ts';
 
@@ -40,8 +41,9 @@ function spyFetch(): { calls: string[]; fetchImpl: typeof fetch } {
 test('records status + JSON body from the tree\'s own server', async () => {
   const srv = await fixtureServer({ '/api/org': { id: 1, login: 'dave-parso' } });
   try {
-    const out = JSON.parse(await captureApiGet(srv.url, '/api/org'));
-    assert.deepEqual(out, { status: 200, body: { id: 1, login: 'dave-parso' } });
+    const got = await captureApiGet(srv.url, '/api/org');
+    assert.ok(got.ok);
+    assert.deepEqual(JSON.parse(got.out), { status: 200, body: { id: 1, login: 'dave-parso' } });
     assert.deepEqual(srv.hits, ['/api/org']);
   } finally {
     await srv.close();
@@ -59,8 +61,11 @@ test('before/after servers → .out files → the control: volatile-only change 
   mkdirSync(join(dir, 'after'));
   try {
     for (const [label, path] of [['org', '/api/org'], ['rulesets', '/api/rulesets']] as const) {
-      writeFileSync(join(dir, 'before', `${label}.out`), await captureApiGet(before.url, path));
-      writeFileSync(join(dir, 'after', `${label}.out`), await captureApiGet(after.url, path));
+      for (const [side, srv] of [['before', before], ['after', after]] as const) {
+        const got = await captureApiGet(srv.url, path);
+        assert.ok(got.ok);
+        writeFileSync(join(dir, side, `${label}.out`), got.out);
+      }
     }
     const model: DemoModel = {
       title: 'T', essence: 'E', project: 'p', diffStat: 'd',
@@ -82,13 +87,48 @@ test('before/after servers → .out files → the control: volatile-only change 
 for (const apiPath of ['//evil.example/x', 'https://evil.example/x', '/a/../../b', 'api/org']) {
   test(`refuses ${apiPath} without fetching anything`, async () => {
     const spy = spyFetch();
-    const out = await captureApiGet('http://127.0.0.1:9/', apiPath, spy.fetchImpl);
-    assert.match(out, /^\[request refused: /);
+    const got = await captureApiGet('http://127.0.0.1:9/', apiPath, spy.fetchImpl);
+    assert.equal(got.ok, false);
+    assert.match(got.ok ? '' : got.reason, /^request refused: /);
     assert.deepEqual(spy.calls, []);
   });
 }
 
-test('a server that cannot be reached is recorded as a failure, never as a body', async () => {
+test('a failure is not evidence: no body comes back, so the caller writes no .out and the control says unknown', async () => {
   const failing = (async () => { throw new Error('ECONNREFUSED'); }) as typeof fetch;
-  assert.match(await captureApiGet('http://127.0.0.1:9/', '/api/org', failing), /^\[request failed: ECONNREFUSED\]/);
+  assert.deepEqual(await captureApiGet('http://127.0.0.1:9/', '/api/org', failing), { ok: false, reason: 'request failed: ECONNREFUSED' });
+});
+
+test('a body over the cap is refused, never truncated into a comparable record', async () => {
+  const big = (async () => new Response('x'.repeat(40_000))) as typeof fetch;
+  const got = await captureApiGet('http://127.0.0.1:9/', '/api/org', big);
+  assert.equal(got.ok, false);
+});
+
+test('a redirect is recorded with its target and never followed; the per-tree origin is tokenised', async () => {
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/r') { res.writeHead(302, { location: '/a' }); res.end(); return; }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ self: `http://${req.headers.host}/x` }));
+  });
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/`;
+  try {
+    const redirect = await captureApiGet(url, '/r');
+    assert.deepEqual(redirect.ok && JSON.parse(redirect.out), { status: 302, location: '/a', body: '' });
+    const self = await captureApiGet(url, '/x');
+    assert.deepEqual(self.ok && JSON.parse(self.out), { status: 200, body: { self: '<server>/x' } });
+  } finally {
+    await new Promise((r) => srv.close(r));
+  }
+});
+
+test('capture fetches only api paths the project declares; an undeclared one stays uncaptured (→ unknown)', () => {
+  const cps = [
+    { label: 'org', apiPath: '/api/org' },
+    { label: 'secret', apiPath: '/api/admin' },
+    { label: 'cli', command: 'gitweave org show --json', apiPath: '/api/org' },
+  ];
+  assert.deepEqual(declaredApiCheckpoints(cps, ['/api/org']), [{ label: 'org', apiPath: '/api/org' }]);
+  assert.deepEqual(declaredApiCheckpoints(cps, []), []);
 });

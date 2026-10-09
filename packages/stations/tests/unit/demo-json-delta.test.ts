@@ -35,7 +35,8 @@ function model(cp: Partial<DemoModelCheckpoint> = {}, extra: Partial<DemoModel> 
   };
 }
 
-const deltaOf = (m: DemoModel, dir: string): DemoModelCheckpoint => computeCheckpointDeltas(m, dir).checkpoints[0]!;
+const deltaOf = (m: DemoModel, dir: string, ignoreKeys: string[] = []): DemoModelCheckpoint =>
+  computeCheckpointDeltas(m, dir, ignoreKeys).checkpoints[0]!;
 
 const BEFORE = JSON.stringify({
   id: 1, node_id: 'A', login: 'dave-parso', created_at: '2026-10-09T01:00:00Z', updated_at: '2026-10-09T01:00:00Z',
@@ -59,11 +60,18 @@ test('a real field change is "changed", with an excerpt naming it', () => {
   assert.match(cp.deltaExcerpt ?? '', /default_repository_permission/);
 });
 
-test('declared ignoreKeys are dropped at any depth', () => {
+test('the project\'s declared ignoreKeys (passed by the capture, never read from demo.json) are dropped at any depth', () => {
   const before = JSON.stringify({ a: { sha: '1', name: 'x' } });
   const after = JSON.stringify({ a: { sha: '2', name: 'x' } });
   assert.equal(deltaOf(model(), bundle(before, after)).delta, 'changed');
-  assert.equal(deltaOf(model({ ignoreKeys: ['sha'] }), bundle(before, after)).delta, 'unchanged');
+  assert.equal(deltaOf(model({ ignoreKeys: ['sha'] } as Partial<DemoModelCheckpoint>), bundle(before, after)).delta, 'changed', 'a demo.json ignoreKeys is not honoured');
+  assert.equal(deltaOf(model(), bundle(before, after), ['sha']).delta, 'unchanged');
+});
+
+test('an ISO timestamp in a value under any key name (camelCase too) is normalised', () => {
+  const before = JSON.stringify({ name: 'x', updatedAt: '2026-10-09T01:00:00Z' });
+  const after = JSON.stringify({ name: 'x', updatedAt: '2026-10-09T02:00:00Z' });
+  assert.equal(deltaOf(model(), bundle(before, after)).delta, 'unchanged');
 });
 
 test('a missing side fails closed to "unknown"', () => {
@@ -95,7 +103,8 @@ test('normaliseJsonBody: defaults cover the volatile key list, *_url and watcher
   for (const key of ['id', 'node_id', 'created_at', 'updated_at', 'pushed_at', 'url', 'etag', 'size']) {
     assert.ok(DEFAULT_VOLATILE_JSON_KEYS.includes(key), key);
   }
-  assert.equal(normaliseJsonBody('{"html_url":"x","watchers":3,"k":1}', []), normaliseJsonBody('{"k":1}', []));
+  assert.equal(normaliseJsonBody('{"html_url":"x","watchers":3,"watchers_count":4,"k":1}', []), normaliseJsonBody('{"k":1}', []));
+  assert.notEqual(normaliseJsonBody('{"watchersEnabled":true}', []), normaliseJsonBody('{}', []), 'only the exact watcher keys are volatile');
   assert.equal(normaliseJsonBody('not json', []), null);
 });
 

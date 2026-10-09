@@ -62,13 +62,13 @@ operator-ratified new cap — never a silent raise.
 | `agents` | 44 | 12,501 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 64 | 20,938 | **20,995** | ratified 20,995 — row 209 (forge-8vfn.8.5.45): a session turn is capped at MIN(session-declared remaining, bridge-funded remaining), and `bridgeSpentUsd` sums every session spent under the bridge, +80 on 20,915, lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 89 | 25,156 | **24,966** | ratified 24,966 — row 207 (forge-8vfn.8.5.57): the one emergency halt at the queue claim seams (halt-watch, claim, tick, drain sweep) and serve's default queue root through `forgeQueueRoot`, +48 net on 24,918, lane-ratified (≤100, ruling 666). |
-| `factory` | 16 | 2,953 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 46 | 12,397 | **12,397** | ratified 12,397 — forge-mfv5.1.19: evidence form per checkpoint, narrative, JSON-normalised api control (`demo-form.ts`); +96 measured, read for slack (JSON control folded into one file), lane-ratified (≤100, ruling 666). |
+| `factory` | 16 | 2,981 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 46 | 12,399 | **12,399** | ratified 12,399 — forge-mfv5.1.19: evidence form per checkpoint, narrative, JSON-normalised api control (`demo-form.ts`); +98 measured, read for slack (JSON control folded into one file), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 35 | 8,552 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **497** | **133,009** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **497** | **133,039** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -441,9 +441,9 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-loop-events.ts | stations | rewritten | 167 |
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
 | packages/stations/demo-delta.ts | stations | verbatim | 145 |
-| packages/stations/demo-form.ts | stations | rewritten | 72 |
+| packages/stations/demo-form.ts | stations | rewritten | 75 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 287 |
-| packages/stations/demo-model.ts | stations | verbatim | 795 |
+| packages/stations/demo-model.ts | stations | verbatim | 794 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 305 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
@@ -565,8 +565,8 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 194 |
 | packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/factory/demo.ts | factory | verbatim | 435 |
-| packages/factory/demo-api-capture.ts | factory | rewritten | 33 |
+| packages/factory/demo.ts | factory | verbatim | 454 |
+| packages/factory/demo-api-capture.ts | factory | rewritten | 42 |
 | packages/flows/index.ts | flows | verbatim | 132 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 441 |

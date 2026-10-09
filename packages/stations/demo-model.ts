@@ -60,10 +60,9 @@ export type DemoModelCheckpoint = {
   /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route to navigate
    *  to (`server.url + route`) instead of the server root. Validated by `isSafeDemoRoute`. */
   route?: string;
-  /** Evidence form; `apiPath` GETs the tree's own server; `ignoreKeys` (orchestrator-stamped) feed the JSON control. */
+  /** Evidence form; `apiPath` (api-before-after only, never with `command`) GETs the tree's own server. */
   form?: DemoEvidenceForm;
   apiPath?: string;
-  ignoreKeys?: string[];
   /** Delta honesty (forge-mfv5.1.7): whether this checkpoint's before/after evidence
    *  differs. Computed post-capture from the real bytes; fails closed to 'unknown'. */
   delta?: 'changed' | 'unchanged' | 'unknown';
