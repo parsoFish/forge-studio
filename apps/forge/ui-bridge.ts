@@ -71,6 +71,7 @@ import {
 } from './bridge-agent-dispatch.ts';
 import { handleReflect, safeParseJson } from './bridge-reflect.ts';
 import { readJson } from './bridge-http.ts';
+import { safeDispatch } from './bridge-safe-dispatch.ts';
 import {
   type Cycle,
   type LivenessReport,
@@ -92,8 +93,6 @@ import { createLogger, bridgeCycleId, installForgeRefGuardHook, ARCHITECT_KIND_D
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
-
-
 
 const TAIL_POLL_MS = 200;
 
@@ -438,7 +437,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   });
 
   const http = createServer((req, res) => {
-    void handleHttp(req, res, {
+    void safeDispatch(req, res, () => handleHttp(req, res, {
       routeTable,
       broadcastKindChanged,
       identity,
@@ -471,7 +470,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       runReleaseFinalize: runReleaseFinalizeFn,
       rerunReflector: rerunReflectorFn,
       getServeStatus,
-    });
+    }));
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 

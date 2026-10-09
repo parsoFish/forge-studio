@@ -23,7 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { allowedOrigin, sanitizeError, sendJson, sendIfDispatchRefused, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
+import { allowedOrigin, sanitizeError, sendJson, sendIfDispatchRefused, SAFE_ID_RE, MAX_SKILL_ID_LENGTH, decodeUrlPart } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 
 import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-session-store.ts';
@@ -227,10 +227,10 @@ export async function handleDemoRoutes(
     let n: string;
     let filename: string;
     try {
-      project = decodeURIComponent(generationMatch[1]);
-      sessionId = decodeURIComponent(generationMatch[2]);
-      n = decodeURIComponent(generationMatch[3]);
-      filename = decodeURIComponent(generationMatch[4]);
+      project = decodeUrlPart(generationMatch[1]);
+      sessionId = decodeUrlPart(generationMatch[2]);
+      n = decodeUrlPart(generationMatch[3]);
+      filename = decodeUrlPart(generationMatch[4]);
     } catch {
       sendJson(res, 400, { error: 'invalid generation route — malformed URL encoding' }, origin);
       return true;
@@ -262,7 +262,7 @@ export async function handleDemoRoutes(
   // (snapshots under <repo>/.forge/demo/history/<id>/), newest first.
   const histListMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)$/);
   if (method === 'GET' && histListMatch) {
-    const project = decodeURIComponent(histListMatch[1]);
+    const project = decodeUrlPart(histListMatch[1]);
     // SEC-04 (bd forge-ebj) — `project` was folded raw into
     // `join(projectsRoot, project, '.forge','demo','history')` and enumerated
     // with NO guard: a `%2F`-smuggled `../..` project enumerated an
@@ -301,8 +301,8 @@ export async function handleDemoRoutes(
   // GET /api/demo-builder/history/<project>/<id> — serve a snapshotted DEMO.html.
   const histServeMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)\/([^/]+)$/);
   if (method === 'GET' && histServeMatch) {
-    const project = decodeURIComponent(histServeMatch[1]);
-    const id = decodeURIComponent(histServeMatch[2]);
+    const project = decodeUrlPart(histServeMatch[1]);
+    const id = decodeUrlPart(histServeMatch[2]);
     // SEC-04 (bd forge-ebj) — the old `requested.startsWith(base)` was
     // self-defeating: `base` and `requested` were BOTH built from the same
     // untrusted `project`, so a `../..` traversal sat in BOTH sides and the

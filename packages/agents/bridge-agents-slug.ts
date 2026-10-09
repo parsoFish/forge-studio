@@ -37,6 +37,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   allowedOrigin, createLogger, guardedFile, sanitizeError, sendJson, sendIfDispatchRefused,
   MAX_KICKOFF_COST_CEILING_USD, PROJECT_ID_RE, type RouteContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 
@@ -254,7 +255,7 @@ export const handleAgentHistory = (deps: AgentSlugRouteDeps): Handler => async (
   const url = req.url ?? '';
   let slug: string;
   try {
-    slug = decodeURIComponent(url.slice('/api/agents/'.length, url.length - '/history'.length));
+    slug = decodeUrlPart(url.slice('/api/agents/'.length, url.length - '/history'.length));
   } catch {
     sendJson(res, 400, { error: 'invalid agent slug (malformed percent-encoding)' }, origin);
     return true;
@@ -284,7 +285,7 @@ export const handleAgentHistory = (deps: AgentSlugRouteDeps): Handler => async (
 export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async (req, res, ctx) => {
   const origin = allowedOrigin(req);
   const url = req.url ?? '';
-  const slug = decodeURIComponent(url.slice('/api/agents/'.length, url.length - '/run'.length));
+  const slug = decodeUrlPart(url.slice('/api/agents/'.length, url.length - '/run'.length));
   if (!SAFE_AGENT_SLUG_RE.test(slug)) {
     sendJson(res, 400, { error: `invalid agent slug: ${JSON.stringify(slug)}` }, origin);
     return true;

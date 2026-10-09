@@ -16,7 +16,7 @@ import { parseManifest, serializeManifest } from './manifest.ts';
 import type { ArchitectStatus } from '@forge/sessions';
 import { planGateClassRefusals } from './plan-gate-class-check.ts';
 import { getPaths } from './queue.ts';
-import { PROJECT_ID_RE } from '@forge/kernel';
+import { PROJECT_ID_RE, decodeUrlPart } from '@forge/kernel';
 import { runRequeue } from './forge-requeue.ts';
 import { resolveGuardedPath, guardedReadDir, guardedReadFile, guardedWriteFile, sessionDirSegments, ARCHITECT_KIND_DIR } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
@@ -395,7 +395,7 @@ export async function handleStudioPostRoutes(
       refuseDryBridge(res, origin, { route: '/api/runs/:id/resume', method, action: 'git-remote', logsRoot: ctx.logsRoot });
       return true;
     }
-    const runId = decodeURIComponent(resumeMatch[1]);
+    const runId = decodeUrlPart(resumeMatch[1]);
     if (!runId || !SAFE_ID_RE.test(runId)) {
       sendJson(res, 400, { error: 'invalid run id' }, origin);
       return true;
@@ -412,8 +412,8 @@ export async function handleStudioPostRoutes(
   // ---- POST /api/runs/:id/gates/:gateId — gate verdict --------------------
   const gateMatch = url.match(/^\/api\/runs\/([A-Za-z0-9_-]+)\/gates\/([A-Za-z0-9_-]+)$/);
   if (gateMatch) {
-    const runId = decodeURIComponent(gateMatch[1]);
-    const gateId = decodeURIComponent(gateMatch[2]);
+    const runId = decodeUrlPart(gateMatch[1]);
+    const gateId = decodeUrlPart(gateMatch[2]);
 
     if (!runId || !SAFE_ID_RE.test(runId)) {
       sendJson(res, 400, { error: 'invalid run id' }, origin);

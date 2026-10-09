@@ -44,7 +44,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, decodeUrlPart } from '@forge/kernel';
 import { CANCELLED_PHASE } from './session-status-io.ts';
 import { resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
@@ -86,8 +86,8 @@ export async function handleSessionCancelRoute(
     let kind: string;
     let sessionId: string;
     try {
-      kind = decodeURIComponent(routeMatch[1]);
-      sessionId = decodeURIComponent(routeMatch[2]);
+      kind = decodeUrlPart(routeMatch[1]);
+      sessionId = decodeUrlPart(routeMatch[2]);
     } catch {
       sendJson(res, 400, { error: 'invalid session cancel route — malformed URL encoding' }, origin);
       return true;

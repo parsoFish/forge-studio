@@ -53,6 +53,7 @@ import {
   pathOnly,
   type StudioContext,
   type RouteContext,
+  decodeUrlPart,
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
@@ -108,7 +109,7 @@ function toClientEntry(entry: SkillLibraryEntry): Omit<SkillLibraryEntry, 'path'
 /** Decode a URL path segment; throws (never silently passes through a raw,
  *  still-encoded id) on malformed percent-encoding. */
 function decodeIdSegment(raw: string): string {
-  return decodeURIComponent(raw);
+  return decodeUrlPart(raw);
 }
 
 // ---------------------------------------------------------------------------

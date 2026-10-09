@@ -16,7 +16,7 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdirSync, readFileSync, openSync, closeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, decodeUrlPart } from '@forge/kernel';
 import { claimDispatchSlot, releaseDispatchSlot, randomRunSuffix, sendIfDispatchRefused } from '@forge/kernel';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
@@ -170,7 +170,7 @@ export async function handleKbFixAgentStatus(
   // ---- GET /api/studio/kbs/:id/fix-agent/:runId — agent-fix run state ----
   const fixStatusMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/fix-agent\/([^/]+)$/);
   if (fixStatusMatch && method === 'GET') {
-    const runId = decodeURIComponent(fixStatusMatch[2]);
+    const runId = decodeUrlPart(fixStatusMatch[2]);
     if (!EXACT_ID_RE.test(runId)) { sendJson(res, 400, { error: 'invalid run id' }, origin); return true; }
     sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
     return true;
@@ -214,7 +214,7 @@ export async function handleKbConsolidateActive(
   // kb this process never dispatched (fresh process / untouched kb).
   const consolidateActiveMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/consolidate\/active$/);
   if (consolidateActiveMatch && method === 'GET') {
-    const kbId = decodeURIComponent(consolidateActiveMatch[1]);
+    const kbId = decodeUrlPart(consolidateActiveMatch[1]);
     if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
     const recorded = lastConsolidateDispatchFor(kbId);
     // SEC-04: `recorded` embeds request-derived kbId text, so its existence
@@ -292,8 +292,8 @@ export async function handleKbIngestActivity(
   // CYCLES get opened, not on lines read within one.)
   const ingestActivityMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/ingest-activity$/);
   if (ingestActivityMatch && method === 'GET') {
+    const kbId = decodeUrlPart(ingestActivityMatch[1]);
     try {
-      const kbId = decodeURIComponent(ingestActivityMatch[1]);
       if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
 
       const events: Array<{ kb: string; freshThemes: number; impl: string; cycleId: string }> = [];
@@ -382,8 +382,8 @@ export async function handleKbMaintenance(
   // ---- POST /api/studio/kbs/:id/maintenance (K3) — manual brain maintenance --
   const maintMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/maintenance$/);
   if (maintMatch && method === 'POST') {
+    const kbId = decodeUrlPart(maintMatch[1]);
     try {
-      const kbId = decodeURIComponent(maintMatch[1]);
       if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
       let body: unknown;
       try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }

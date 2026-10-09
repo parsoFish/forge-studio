@@ -105,7 +105,7 @@ import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { resolveGuardedPath } from '@forge/kernel';
+import { resolveGuardedPath, decodeUrlPart } from '@forge/kernel';
 import yaml from 'js-yaml';
 
 import {
@@ -239,7 +239,7 @@ function hookScriptIsContained(forgeRoot: string, id: string): boolean {
  *  still-encoded id) on malformed percent-encoding. Exported: bridge-studio-
  *  hooks-decline.ts reuses this rather than duplicating it. */
 export function decodeIdSegment(raw: string): string {
-  return decodeURIComponent(raw);
+  return decodeUrlPart(raw);
 }
 
 /**
