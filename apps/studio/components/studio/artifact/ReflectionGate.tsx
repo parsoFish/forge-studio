@@ -18,7 +18,8 @@
  * (`filed: true`, no questions, not answered) gets one close act instead of
  * the "not filed yet" note —
  *   data-section="reflect-unasked" · data-action="close-reflection" ·
- *   data-reflect-closed="true" (on reflect-done after the close)
+ *   data-reflect-closed="true" (on reflect-done after the close) ·
+ *   data-section="reflect-unreadable" (a filed list that does not parse; no close)
  * R4-09-F3 (automated mode): when every question was reflector-inferred the gate
  * renders a read-only view instead of the form —
  *   data-reflect-automated="true" (on the reflect-questions section) ·
@@ -201,6 +202,25 @@ export function ReflectionGate({
         {closed
           ? 'Reflection closed — the reflector asked nothing this cycle.'
           : 'Reflection captured — the reflector will fold it into the brain.'}
+      </div>
+    );
+  }
+
+  if (data?.unreadable === true) {
+    return (
+      <div
+        data-section="reflect-unreadable"
+        role="alert"
+        style={{
+          border: '1px solid var(--red)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '14px 18px',
+          background: 'var(--panel)',
+          fontSize: 13,
+          color: 'var(--red)',
+        }}
+      >
+        The reflector filed a question list that cannot be read (user-questions.json does not parse). Check the cycle&apos;s log directory.
       </div>
     );
   }

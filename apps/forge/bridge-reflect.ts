@@ -12,26 +12,27 @@
  * command into an in-UI page, consistent with the in-UI architect + review
  * moments.
  *
- *   GET  /api/reflect/<cycleId>         → { questions, answered, filed, mode? }
+ *   GET  /api/reflect/<cycleId>         → { questions, answered, filed, unreadable?, mode? }
  *   POST /api/reflect/<cycleId>/answer  → write user-feedback.md, fire the
  *                                          reflector rerun (detached)
- *        body { close: true }            → forge-nk1y.3: close a reflection
- *                                          that asked nothing — only when its
- *                                          questions are [] (else 409); no rerun
+ *        body { close: true }            → forge-nk1y.3: close an interactive
+ *                                          reflection that asked nothing — writes
+ *                                          reflection-closed.json, no rerun;
+ *                                          anything else is a named 409
  *   GET  /api/reflections/pending       → { pending } — reflections waiting
  *                                          on the operator (reflection-pending.ts)
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { sendJson, allowedOrigin } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
 import { isDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedWriteFileExclusive } from '@forge/kernel';
 import { fireReflectorRerun } from './example-hooks.ts';
 import type { InstalledFactory } from './factory-wiring.ts';
 import { readJson } from './bridge-http.ts';
 import { findRun } from './bridge-studio.ts';
-import { listPendingReflections } from './reflection-pending.ts';
+import { listPendingReflections, REFLECTION_CLOSED_FILE } from './reflection-pending.ts';
 
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 
@@ -79,6 +80,12 @@ function resolveCycleId(ctx: ReflectContext, id: string): string | null {
   return run !== null ? run.id : null;
 }
 
+/** `decodeURIComponent`, or null on a malformed escape — a URIError thrown
+ *  out of this async handler would otherwise kill the bridge (security review). */
+function decodeSegment(raw: string): string | null {
+  try { return decodeURIComponent(raw); } catch { return null; }
+}
+
 /** Parse an already-read JSON string; null on malformed content. Companion to
  *  the guarded read primitives (which return raw contents, not parsed JSON) so
  *  a SEC-04 guarded read can replace a `readJsonFile(join(dir, leaf))` call
@@ -108,13 +115,17 @@ export async function handleReflect(
     try {
       sendJson(res, 200, { pending: listPendingReflections(ctx.logsRoot) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
 
   if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
-    const requestedCycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
+    const requestedCycleId = decodeSegment(url.slice('/api/reflect/'.length));
+    if (requestedCycleId === null) {
+      sendJson(res, 400, { error: 'malformed cycleId encoding' }, origin);
+      return true;
+    }
     if (!requestedCycleId) {
       sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin);
       return true;
@@ -150,8 +161,15 @@ export async function handleReflect(
       return true;
     }
     const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
-    const questions = questionsRaw !== null ? (safeParseJson<unknown[]>(questionsRaw) ?? []) : [];
-    const answered = guardedFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null;
+    const parsedQuestions = questionsRaw !== null ? safeParseJson<unknown>(questionsRaw) : null;
+    // forge-nk1y.3: a filed list that does not parse is named, never passed
+    // off as "asked nothing" (the gate would offer a close that cannot succeed).
+    const unreadable = questionsRaw !== null && !Array.isArray(parsedQuestions);
+    const questions = Array.isArray(parsedQuestions) ? parsedQuestions : [];
+    // A reflection closed with no questions (reflection-closed.json) reads as
+    // answered: the gate shows it done.
+    const answered = guardedFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null
+      || guardedFile(ctx.logsRoot, [cycleId, REFLECTION_CLOSED_FILE], 'read') !== null;
     // R4-09-F3: the durable reflect mode (REFLECT_MODE_FILE) — the authoritative
     // signal the UI uses to render the automated read-only view, independent of
     // per-question inferred-marker compliance.
@@ -166,7 +184,7 @@ export async function handleReflect(
     // questions yet" (still running) from "it filed none" (asked nothing —
     // the gate offers the one close act).
     const filed = questionsRaw !== null;
-    sendJson(res, 200, { cycleId: requestedCycleId, questions, answered, filed, ...(mode ? { mode } : {}) }, origin);
+    sendJson(res, 200, { cycleId: requestedCycleId, questions, answered, filed, ...(unreadable ? { unreadable } : {}), ...(mode ? { mode } : {}) }, origin);
     return true;
   }
 
@@ -176,9 +194,11 @@ export async function handleReflect(
     // and detached-firing rerunReflector (the real agent turn). Only the
     // latter is dry-bridge-gated below; the write always proceeds so the
     // route's normal 200 stays truthful ("feedback captured").
-    const requestedCycleId = decodeURIComponent(
-      url.slice('/api/reflect/'.length, url.length - '/answer'.length),
-    );
+    const requestedCycleId = decodeSegment(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
+    if (requestedCycleId === null) {
+      sendJson(res, 400, { error: 'malformed cycleId encoding' }, origin);
+      return true;
+    }
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string; close?: boolean };
       // Ruling 1736 (bead forge-8vfn.8.1.34) — same resolution as the GET
@@ -217,21 +237,39 @@ export async function handleReflect(
       }
       const dir = dirGuard.realPath;
       if (body.close === true) {
-        // forge-nk1y.3 — the one close act for a reflection that asked
-        // nothing: allowed only on an empty question list, and it spends no
-        // agent turn (there is nothing for a rerun to distil).
-        const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
-        const questions = questionsRaw !== null ? safeParseJson<unknown[]>(questionsRaw) : null;
-        if (!Array.isArray(questions)) {
-          sendJson(res, 409, { error: 'close refused: the reflection has no readable question list', cycleId: requestedCycleId }, origin);
+        // forge-nk1y.3 — the one close act for an INTERACTIVE reflection that
+        // asked nothing. Recorded in its own file, never user-feedback.md: the
+        // boot reconcile re-runs the reflector for fresh feedback, and a close
+        // is not feedback (no agent turn is spent on it). Every other case is
+        // refused by name.
+        const refuse = (error: string): true => {
+          sendJson(res, 409, { error, cycleId: requestedCycleId }, origin);
           return true;
+        };
+        const modeRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'reflect-mode.json']);
+        if (safeParseJson<{ mode?: string }>(modeRaw ?? '')?.mode !== 'interactive') {
+          return refuse('close refused: not an interactive reflection');
+        }
+        if (guardedFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null) {
+          return refuse('close refused: the reflection is already answered');
+        }
+        const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
+        const questions = questionsRaw !== null ? safeParseJson<unknown>(questionsRaw) : null;
+        if (!Array.isArray(questions)) {
+          return refuse('close refused: the reflection has no readable question list');
         }
         if (questions.length > 0) {
-          sendJson(res, 409, { error: `close refused: ${questions.length} questions unanswered`, cycleId: requestedCycleId }, origin);
-          return true;
+          return refuse(`close refused: ${questions.length} questions unanswered`);
         }
-        const closed = [`# Reflection feedback — ${cycleId}`, '', 'Reflection closed by the operator with no questions asked.', ''];
-        if (guardedWriteFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], closed.join('\n')) === null) {
+        const record = JSON.stringify({ closedAt: new Date().toISOString(), reason: 'no-questions' });
+        let written: string | null;
+        try {
+          written = guardedWriteFileExclusive(ctx.logsRoot, [cycleId, REFLECTION_CLOSED_FILE], record);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'EEXIST') return refuse('close refused: the reflection is already closed');
+          throw err;
+        }
+        if (written === null) {
           sendJson(res, 400, { error: 'invalid cycle path', cycleId }, origin);
           return true;
         }
@@ -270,7 +308,7 @@ export async function handleReflect(
         });
       }
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }

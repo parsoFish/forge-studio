@@ -524,6 +524,8 @@ export type ReflectionData = {
    * the close act); with `filed: false` it is still running.
    */
   filed?: boolean;
+  /** forge-nk1y.3: the filed question list does not parse — named, and the gate offers no close. */
+  unreadable?: boolean;
 };
 
 export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {

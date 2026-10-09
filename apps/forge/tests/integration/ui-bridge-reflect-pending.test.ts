@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { startBridge } from '../../ui-bridge.ts';
+import { reconcileReflectFeedback } from '@forge/stations';
 
 const FIXTURE = resolve(import.meta.dirname, '..', 'test-fixtures', 'reflection-stranger-a2');
 
@@ -73,6 +74,14 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
+function post(id: string, body: unknown): Promise<Response> {
+  return fetch(`${url}/api/reflect/${id}/answer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify(body),
+  });
+}
+
 async function pending(): Promise<Pending[]> {
   const res = await fetch(`${url}/api/reflections/pending`);
   assert.equal(res.status, 200);
@@ -114,20 +123,67 @@ test('close refused while questions are unanswered: 409 by name, nothing written
   assert.equal(rerunCalls, 0);
 });
 
-test('close on a zero-question reflection: 200, feedback records the close, NO rerun, leaves pending', async () => {
+test('close on a zero-question reflection: 200, records reflection-closed.json (NOT user-feedback.md), NO rerun, leaves pending, reads answered', async () => {
   rerunCalls = 0;
-  const res = await fetch(`${url}/api/reflect/${UNASKED}/answer`, {
+  const res = await post(UNASKED, { close: true });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, closed: true });
+  const dir = join(forgeRoot, '_logs', UNASKED);
+  assert.ok(existsSync(join(dir, 'reflection-closed.json')), 'the close is recorded in its own file');
+  assert.ok(!existsSync(join(dir, 'user-feedback.md')), 'a close is not operator feedback for a rerun to distil');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(rerunCalls, 0, 'closing an empty reflection must not spend an agent turn');
+  assert.ok(!(await pending()).some((p) => p.cycleId === UNASKED));
+  const got = (await (await fetch(`${url}/api/reflect/${UNASKED}`)).json()) as { answered: boolean };
+  assert.equal(got.answered, true, 'the gate shows a closed reflection as done');
+});
+
+test('a closed reflection is never re-run by the boot reconcile (review finding: the close used to look like fresh feedback)', async () => {
+  const dir = join(forgeRoot, '_logs', UNASKED);
+  writeFileSync(join(dir, 'events.jsonl'), JSON.stringify({ message: 'reflector.end', event_type: 'end', started_at: '2026-01-01T00:00:00.000Z' }) + '\n');
+  let reran = 0;
+  const done = await reconcileReflectFeedback({
+    logsRoot: join(forgeRoot, '_logs'),
+    queueRoot: join(forgeRoot, '_queue'),
+    rerunReflector: async () => { reran++; },
+    listCycleDirs: () => [UNASKED],
+  });
+  assert.deepEqual(done, []);
+  assert.equal(reran, 0);
+});
+
+test('close refused by name: a second close, an automated cycle, a cycle that already has feedback', async () => {
+  const again = await post(UNASKED, { close: true });
+  assert.equal(again.status, 409);
+  assert.match(((await again.json()) as { error: string }).error, /already closed/);
+  cycle(`${AUTOMATED}-empty`, { 'reflect-mode.json': JSON.stringify({ mode: 'automated' }), 'user-questions.json': '[]' });
+  const auto = await post(`${AUTOMATED}-empty`, { close: true });
+  assert.equal(auto.status, 409);
+  assert.match(((await auto.json()) as { error: string }).error, /not an interactive reflection/);
+  cycle('2026-10-09T07-00-00_INIT-2026-10-09-fb-empty', { 'reflect-mode.json': interactive, 'user-questions.json': '[]', 'user-feedback.md': '# real answers\n' });
+  const fb = await post('2026-10-09T07-00-00_INIT-2026-10-09-fb-empty', { close: true });
+  assert.equal(fb.status, 409);
+  assert.match(((await fb.json()) as { error: string }).error, /already answered/);
+  assert.equal(readFileSync(join(forgeRoot, '_logs', '2026-10-09T07-00-00_INIT-2026-10-09-fb-empty', 'user-feedback.md'), 'utf8'), '# real answers\n');
+});
+
+test('GET /api/reflect/<id> names an unreadable question list instead of passing it off as "asked nothing"', async () => {
+  const body = (await (await fetch(`${url}/api/reflect/${UNREADABLE}`)).json()) as { questions: unknown[]; filed: boolean; unreadable?: boolean };
+  assert.deepEqual([body.questions.length, body.filed, body.unreadable], [0, true, true]);
+  const close = await post(UNREADABLE, { close: true });
+  assert.equal(close.status, 409);
+});
+
+test('a malformed percent-escape is a 400, never a bridge crash (security review: URIError escaped the handler)', async () => {
+  const get = await fetch(`${url}/api/reflect/%E0%A4%A`);
+  assert.equal(get.status, 400);
+  const postRes = await fetch(`${url}/api/reflect/%E0%A4%A/answer`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
     body: JSON.stringify({ close: true }),
   });
-  assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ok: true, closed: true });
-  const fb = readFileSync(join(forgeRoot, '_logs', UNASKED, 'user-feedback.md'), 'utf8');
-  assert.match(fb, /closed by the operator with no questions asked/);
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(rerunCalls, 0, 'closing an empty reflection must not spend an agent turn');
-  assert.ok(!(await pending()).some((p) => p.cycleId === UNASKED));
+  assert.equal(postRes.status, 400);
+  assert.equal((await fetch(`${url}/api/health`)).status, 200, 'the bridge must still answer');
 });
 
 test('GET /api/reflect/<id> says whether the questions were filed: a still-running reflector is not "asked nothing"', async () => {

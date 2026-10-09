@@ -89,3 +89,14 @@ test('an already-closed reflection (answered) renders reflect-done, no close act
   expect(container.querySelector('[data-section="reflect-done"]')).not.toBeNull();
   expect(container.querySelector('[data-action="close-reflection"]')).toBeNull();
 });
+
+test('an unreadable filed list is named and offers NO close (review finding: the close could never succeed)', async () => {
+  await act(async () => {
+    root.render(React.createElement(ReflectionGate, {
+      cycleId: CYCLE,
+      data: { cycleId: CYCLE, questions: [], answered: false, filed: true, unreadable: true },
+    }));
+  });
+  expect(container.querySelector('[data-section="reflect-unreadable"]')).not.toBeNull();
+  expect(container.querySelector('[data-action="close-reflection"]')).toBeNull();
+});

@@ -78,6 +78,7 @@ export type StudioHomeFetchError = ScopedFetchError;
 
 /** Scope tag for {@link useStudioHomeData}'s post-cancel sessions-only refetch (W7A2-06). */
 const SESSIONS_REFRESH_SCOPE = 'sessions';
+const REFLECTIONS_SCOPE = 'reflections';
 
 export type StudioHomeData = {
   agents: Agent[];
@@ -132,6 +133,21 @@ export function useStudioHomeData(): StudioHomeData {
   // mount-only effect below.
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  // forge-nk1y.3: pending reflections under their OWN error scope — only
+  // Monitor reads them, so a failed read is named on the page without
+  // failing the seven-read load Home depends on, or the runs refresh.
+  async function refreshReflections(signal: { cancelled: boolean }): Promise<void> {
+    try {
+      const rf = await fetchPendingReflections();
+      if (signal.cancelled) return;
+      setReflections(rf);
+      setError((prev) => afterRefreshSuccess(prev, REFLECTIONS_SCOPE));
+    } catch (err) {
+      if (signal.cancelled) return;
+      setError((prev) => afterRefreshFailure(prev, scopedFetchError(err, REFLECTIONS_SCOPE)));
+    }
+  }
+
   useBridgeRecovery(reload);
 
   useEffect(() => {
@@ -139,7 +155,7 @@ export function useStudioHomeData(): StudioHomeData {
 
     async function loadAll(): Promise<void> {
       try {
-        const [a, f, p, k, r, at, s, rf] = await Promise.all([
+        const [a, f, p, k, r, at, s] = await Promise.all([
           fetchStudioAgents(),
           fetchStudioFlows(),
           fetchStudioProjects(),
@@ -147,7 +163,6 @@ export function useStudioHomeData(): StudioHomeData {
           fetchRuns(),
           fetchProjectAttention(),
           fetchStudioSessions(),
-          fetchPendingReflections(),
         ]);
         if (signal.cancelled) return;
         setAgents(a);
@@ -157,7 +172,6 @@ export function useStudioHomeData(): StudioHomeData {
         setRuns(r);
         setAttention(at);
         setSessions(s);
-        setReflections(rf);
         setError(null);
       } catch (err) {
         // W7-A1: a failed read is a FAILURE, not an empty fleet — every
@@ -171,6 +185,7 @@ export function useStudioHomeData(): StudioHomeData {
     }
 
     void loadAll();
+    void refreshReflections(signal);
     return () => { signal.cancelled = true; };
   }, [loadKey]);
 
@@ -187,13 +202,10 @@ export function useStudioHomeData(): StudioHomeData {
     const REFRESH_SCOPE = 'runs+sessions';
     async function refreshRunsAndSessions(): Promise<void> {
       try {
-        // forge-nk1y.3: a cycle that just finished reflecting changes the
-        // pending-reflection set on the same signal.
-        const [r, s, rf] = await Promise.all([fetchRuns(), fetchStudioSessions(), fetchPendingReflections()]);
+        const [r, s] = await Promise.all([fetchRuns(), fetchStudioSessions()]);
         if (signal.cancelled) return;
         setRuns(r);
         setSessions(s);
-        setReflections(rf);
         setError((prev) => afterRefreshSuccess(prev, REFRESH_SCOPE));
       } catch (err) {
         if (signal.cancelled) return;
@@ -211,6 +223,9 @@ export function useStudioHomeData(): StudioHomeData {
     // renders the shared banner and drives `reload` on recovery.
     const debouncedRefresh = createDebouncedRefreshRuns(() => {
       void refreshRunsAndSessions();
+      // forge-nk1y.3: a cycle that just finished reflecting changes the
+      // pending-reflection set on the same signal.
+      void refreshReflections(signal);
     });
     const sub = subscribe({
       onMessage: (msg) => {

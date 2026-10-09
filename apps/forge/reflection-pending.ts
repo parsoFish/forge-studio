@@ -9,7 +9,8 @@
  *     R4-09-F3; a cycle without it predates reflect modes and is not listed),
  *   - `user-questions.json` exists (the reflector reached its post-exit
  *     derivation; a still-running reflector has none yet),
- *   - `user-feedback.md` is absent (no answer and no close yet).
+ *   - neither `user-feedback.md` (answered) nor `reflection-closed.json`
+ *     (closed with no questions) exists.
  *
  * Status: `awaiting` (questions to answer) · `unasked` (the reflector asked
  * nothing — Studio offers the one close act) · `unreadable` (a questions or
@@ -18,6 +19,11 @@
 import { existsSync, readdirSync } from 'node:fs';
 
 import { guardedFile, guardedReadFile } from '@forge/kernel';
+
+/** Written by the gate's close act for a reflection that asked nothing. Its
+ *  own file, not `user-feedback.md`: the boot reconcile re-runs the reflector
+ *  for fresh feedback, and a close is not feedback. */
+export const REFLECTION_CLOSED_FILE = 'reflection-closed.json';
 
 export type PendingReflectionStatus = 'awaiting' | 'unasked' | 'unreadable';
 
@@ -44,11 +50,13 @@ function parse(raw: string): { ok: true; value: unknown } | { ok: false } {
 
 /** One cycle dir's pending row, or null when it is not waiting on the operator. */
 export function pendingReflectionOf(logsRoot: string, cycleId: string): PendingReflection | null {
+  // Answered or closed first: the cheap existence checks before any read.
+  if (guardedFile(logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null) return null;
+  if (guardedFile(logsRoot, [cycleId, REFLECTION_CLOSED_FILE], 'read') !== null) return null;
   const modeRaw = guardedReadFile(logsRoot, [cycleId, 'reflect-mode.json']);
   if (modeRaw === null) return null;
   const questionsRaw = guardedReadFile(logsRoot, [cycleId, 'user-questions.json']);
   if (questionsRaw === null) return null;
-  if (guardedFile(logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null) return null;
 
   const initiativeId = initiativeOf(cycleId);
   const mode = parse(modeRaw);
