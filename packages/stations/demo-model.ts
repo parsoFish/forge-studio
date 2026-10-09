@@ -24,6 +24,7 @@ import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
 import { isSafeDemoRoute } from '@forge/contracts';
 
 import type {
+  DemoEvidenceForm,
   HarnessMetricRow,
   DemoSummarySection,
   DemoApiDiffEntry,
@@ -31,6 +32,7 @@ import type {
 } from './demo-types.ts';
 import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
 import { MAX_DELTA_EXCERPT_CHARS } from './demo-delta.ts';
+import { narrativeLines, sourceLine, validateFormFields, validateNarrative } from './demo-form.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */
@@ -59,6 +61,10 @@ export type DemoModelCheckpoint = {
   /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route to navigate
    *  to (`server.url + route`) instead of the server root. Validated by `isSafeDemoRoute`. */
   route?: string;
+  /** Evidence form; `apiPath` GETs the tree's own server; `ignoreKeys` (orchestrator-stamped) feed the JSON control. */
+  form?: DemoEvidenceForm;
+  apiPath?: string;
+  ignoreKeys?: string[];
   /** Delta honesty (forge-mfv5.1.7): whether this checkpoint's before/after evidence
    *  differs. Computed post-capture from the real bytes; fails closed to 'unknown'. */
   delta?: 'changed' | 'unchanged' | 'unknown';
@@ -96,6 +102,8 @@ export type DemoModel = {
   baseRef?: string;
   changedRef?: string;
   checkpoints: DemoModelCheckpoint[];
+  /** "What this enables" — agent narrative, never evidence (D-15); excluded from the delta. */
+  narrative?: string;
   /** `git diff --stat baseRef..changedRef`. Required — grounds the demo. */
   diffStat: string;
   /**
@@ -214,6 +222,7 @@ export function validateDemoModel(raw: unknown): string[] {
       if (cp.route !== undefined && (typeof cp.route !== 'string' || !isSafeDemoRoute(cp.route))) {
         errors.push(`${at}.route must be an absolute in-app path with no traversal when set (got ${JSON.stringify(cp.route)})`);
       }
+      errors.push(...validateFormFields(cp, at));
       const validDeltas = new Set(['changed', 'unchanged', 'unknown']);
       if (cp.delta !== undefined && !validDeltas.has(cp.delta as string)) {
         errors.push(`${at}.delta must be one of changed|unchanged|unknown when set (got ${JSON.stringify(cp.delta)})`);
@@ -236,6 +245,7 @@ export function validateDemoModel(raw: unknown): string[] {
     });
   }
 
+  errors.push(...validateNarrative(m.narrative));
   if (m.acceptanceCriteria !== undefined && !Array.isArray(m.acceptanceCriteria)) {
     errors.push('acceptanceCriteria must be an array of strings when set');
   }
@@ -631,6 +641,7 @@ export function renderDemoMarkdown(model: DemoModel): string {
   lines.push('');
   lines.push(`> _Derived from \`demo.json\` (D-07). Essence:_ ${model.essence}`);
   lines.push('');
+  lines.push(...narrativeLines(model.narrative));
 
   if (model.summary) {
     lines.push('## Summary');
@@ -653,7 +664,8 @@ export function renderDemoMarkdown(model: DemoModel): string {
     // Captured CLI output — the REAL terminal output before/after, fenced so the PR
     // artifact shows it (the in-UI review renders it side-by-side).
     if (c.beforeOutput || c.afterOutput) {
-      if (c.command) lines.push(`- **Command:** \`${c.command}\``);
+      const source = sourceLine(c);
+      if (source) lines.push(source);
       const fence = (label: string, out?: string | null): void => {
         if (!out) return;
         lines.push('');

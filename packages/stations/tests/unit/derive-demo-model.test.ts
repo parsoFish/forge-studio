@@ -254,3 +254,18 @@ describe('deriveDeltaSummary — says what was ignored (forge-1rk5.3, CONTROL RE
     assert.equal(deriveDeltaSummary([{ label: 'c', caption: 'c' }]), null);
   });
 });
+
+describe('deriveDemoModel — evidence form stamped on what it already derives (forge-mfv5.1.19)', () => {
+  it('a command checkpoint is cli-before-after, a route checkpoint is screenshot, gate output is test-evidence', () => {
+    const model = modelOf(
+      baseInput({
+        acceptanceCriteria: [
+          { workItemId: 'WI-1', given: 'g', when: 'run `npm run report`', then: 'prints' },
+          { workItemId: 'WI-2', given: 'g', when: 'visit `/reports/latest`', then: 'renders' },
+        ],
+      }),
+    );
+    assert.deepEqual(model.checkpoints.map((c) => c.form), ['cli-before-after', 'screenshot', 'cli-before-after']);
+    assert.equal(modelOf(baseInput({ capture: 'plan-output' })).checkpoints[0]?.form, 'test-evidence');
+  });
+});

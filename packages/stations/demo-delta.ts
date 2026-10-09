@@ -20,6 +20,7 @@ import { join } from 'node:path';
 
 import { checkpointArtifactStem } from './demo-types.ts';
 import type { DemoModel, DemoModelCheckpoint } from './demo-model.ts';
+import { normaliseJsonBody } from './demo-json-delta.ts';
 
 /** Cap on a checkpoint's `deltaExcerpt`: the PR reader needs the first
  *  differing lines, not a second copy of the whole captured output. */
@@ -99,7 +100,8 @@ type CheckpointDeltaResult = {
  */
 function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): CheckpointDeltaResult {
   const stem = checkpointArtifactStem(cp.label);
-  const [beforeFile, afterFile] = cp.command
+  const textual = cp.command !== undefined || cp.apiPath !== undefined;
+  const [beforeFile, afterFile] = textual
     ? [join(bundleDir, 'before', `${stem}.out`), join(bundleDir, 'after', `${stem}.out`)]
     : [join(bundleDir, 'before', `${stem}.filmstrip.png`), join(bundleDir, 'after', `${stem}.filmstrip.png`)];
   let before: Buffer;
@@ -110,9 +112,16 @@ function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): Checkpoint
   } catch {
     return { delta: 'unknown' };
   }
-  if (cp.command) {
-    const beforeText = normaliseCapturedOutput(before.toString('utf8'));
-    const afterText = normaliseCapturedOutput(after.toString('utf8'));
+  if (textual) {
+    // An api checkpoint whose sides both parse is compared as JSON; a side that
+    // is not JSON (an endpoint that did not exist before) falls to text.
+    const ignore = cp.ignoreKeys ?? [];
+    const [beforeJson, afterJson] = cp.form === 'api-before-after'
+      ? [normaliseJsonBody(before.toString('utf8'), ignore), normaliseJsonBody(after.toString('utf8'), ignore)]
+      : [null, null];
+    const json = beforeJson !== null && afterJson !== null;
+    const beforeText = json ? beforeJson : normaliseCapturedOutput(before.toString('utf8'));
+    const afterText = json ? afterJson : normaliseCapturedOutput(after.toString('utf8'));
     if (beforeText === afterText) return { delta: 'unchanged' };
     return { delta: 'changed', deltaExcerpt: deltaExcerptOf(beforeText, afterText) };
   }

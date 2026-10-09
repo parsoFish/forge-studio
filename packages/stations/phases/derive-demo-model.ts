@@ -103,7 +103,7 @@ function captureCheckpoints(steps: readonly DemoStep[]): { checkpoints: DemoMode
       );
       return;
     }
-    checkpoints.push({ label: `Step ${i + 1}: capture`, caption: step.text, command: result.command });
+    checkpoints.push({ label: `Step ${i + 1}: capture`, caption: step.text, form: 'cli-before-after', command: result.command });
   });
   if (checkpoints.length === 0 && errors.length === 0) {
     errors.push(
@@ -132,11 +132,11 @@ function acDerivedCheckpoints(criteria: readonly AcceptanceCriterionInput[]): De
     const caption = ac.then.trim();
     const routeExtraction = extractDemoRoute(ac.when);
     if (routeExtraction.routeShaped) {
-      if (routeExtraction.route !== null) checkpoints.push({ label, caption, route: routeExtraction.route });
+      if (routeExtraction.route !== null) checkpoints.push({ label, caption, form: 'screenshot', route: routeExtraction.route });
       return;
     }
     const result = extractDrivableCommand(ac.when);
-    if (result.ok) checkpoints.push({ label, caption, command: result.command });
+    if (result.ok) checkpoints.push({ label, caption, form: 'cli-before-after', command: result.command });
   });
   return checkpoints;
 }
@@ -165,6 +165,7 @@ function planOutputCheckpoint(input: DerivedDemoInput): DemoModelCheckpoint {
     .join('\n\n');
   return {
     label: 'Gate output',
+    form: 'test-evidence',
     caption: 'The merge-boundary gate output this change was judged on.',
     afterOutput: outputs.length > 0 ? outputs : 'no gate produced output for this class',
   };
@@ -211,6 +212,9 @@ export function deriveDeltaSummary(checkpoints: readonly DemoModelCheckpoint[]):
   // never has to trust "unchanged" blind.
   const normalisedAway = [...CAPTURE_NORMALISATION_RULES.map((rule) => rule.name), 'worktree path'];
   sentences.push(`Command output compared after normalising: ${normalisedAway.join(', ')}.`);
+  if (withDelta.some((c) => c.form === 'api-before-after')) {
+    sentences.push('API bodies compared as JSON after dropping volatile JSON keys (ids, timestamps, urls, etags, sizes, watchers) and declared ignoreKeys.');
+  }
   return sentences.join(' ');
 }
 
