@@ -237,7 +237,7 @@ test('fetchAgentCapability: issues one GET to /api/studio/agents/:slug/capabilit
   const capability = await fetchAgentCapability('demo-builder');
 
   expect(fetchSpy).toHaveBeenCalledTimes(1);
-  expect(fetchSpy).toHaveBeenCalledWith(`${BRIDGE_BASE}/api/studio/agents/demo-builder/capability`);
+  expect(fetchSpy).toHaveBeenCalledWith(`${BRIDGE_BASE}/api/studio/agents/demo-builder/capability`, { signal: expect.any(AbortSignal) }); // a bounded read (forge-nk1y.9)
   expect(capability?.allowedTiers).toEqual(['sonnet', 'opus']);
 });
 

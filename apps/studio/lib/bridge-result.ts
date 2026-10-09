@@ -40,6 +40,9 @@ export type BridgeReadFailure = {
   /** The parsed non-2xx body when the bridge sent JSON — callers wanting an
    *  extra field (e.g. a 409's `runId`) read it here; most ignore it. */
   body?: unknown;
+  /** Set when the read was cut off by its deadline (`BRIDGE_READ_TIMEOUT_MS`) —
+   *  neither "refused" nor "unreachable": the bridge did not answer in time. */
+  timedOut?: true;
 };
 
 export type BridgeReadResult<T> = { ok: true; status: number; data: T } | BridgeReadFailure;
@@ -61,8 +64,21 @@ export function bridgeErrorMessage(status: number, body: unknown): string {
   return `HTTP ${status}`;
 }
 
+/** The abort reason a read's deadline fires with (forge-nk1y.9). Named
+ *  `TimeoutError` — like `AbortSignal.timeout`'s — so the transport treats it as a
+ *  caller cut-off, never as evidence of a wrong bridge port. */
+export class BridgeReadTimeoutError extends Error {
+  readonly timeoutMs: number;
+  constructor(timeoutMs: number) {
+    super(`timed out after ${timeoutMs / 1000} s`);
+    this.name = 'TimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 /** The transport threw — the bridge was never reached. `status` is absent. */
 export function transportFailure(err: unknown): BridgeReadFailure {
+  if (err instanceof BridgeReadTimeoutError) return { ok: false, error: err.message, timedOut: true };
   const text = err instanceof Error ? err.message : String(err);
   return { ok: false, error: `bridge unreachable (${text})` };
 }
@@ -84,6 +100,7 @@ export async function readBridgeJson<T>(doFetch: () => Promise<Response>): Promi
   try {
     body = await res.json();
   } catch (err) {
+    if (err instanceof BridgeReadTimeoutError) return transportFailure(err); // the deadline hit mid-body
     jsonError = err instanceof Error ? err.message : String(err);
   }
   if (!res.ok) {
@@ -104,6 +121,7 @@ export class BridgeReadError extends Error {
   readonly path: string;
   readonly status?: number;
   readonly body?: unknown;
+  readonly timedOut?: true;
 
   constructor(path: string, failure: BridgeReadFailure) {
     super(failure.error);
@@ -111,6 +129,7 @@ export class BridgeReadError extends Error {
     this.path = path;
     if (failure.status !== undefined) this.status = failure.status;
     if (failure.body !== undefined) this.body = failure.body;
+    if (failure.timedOut) this.timedOut = true;
   }
 }
 
@@ -142,8 +161,9 @@ export function unwrapBridgeReadOr404<T>(path: string, r: BridgeReadResult<T>): 
  *   - `reachable: false` — the transport threw / no status: the bridge is
  *     unreachable (or the error is not a bridge error at all).
  */
-export function describeBridgeError(err: unknown): { message: string; status?: number; reachable: boolean } {
+export function describeBridgeError(err: unknown): { message: string; status?: number; reachable: boolean; timedOut?: true } {
   if (isBridgeReadError(err)) {
+    if (err.timedOut) return { message: err.message, reachable: false, timedOut: true };
     return err.status !== undefined
       ? { message: err.message, status: err.status, reachable: true }
       : { message: err.message, reachable: false };
