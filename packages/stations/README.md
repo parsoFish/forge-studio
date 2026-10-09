@@ -17,6 +17,9 @@ port, never through a direct import of `class-profiles.ts`.
 `createPhaseExecutor` takes the port optionally; with none bound, a station
 that needs the class table throws, naming `ClassProfilePort`, rather than
 silently guessing a default profile.
+`createPhaseExecutor({ demoPlanner })` is the second, optional port (D-45):
+the integrate band asks it how to show a change and validates the answer by
+name; with none bound the band keeps the checkpoints it derives.
 
 ## API (10 values)
 
@@ -26,7 +29,8 @@ silently guessing a default profile.
 
 ### Types
 
-`ChangeClass` · `ClassProfilePort` · `FlowRunnerDeps` · `GateProfile`
+`ChangeClass` · `ClassProfilePort` · `FlowRunnerDeps` · `GateProfile` ·
+`DemoPlannerPort` · `DemoPlannerInput` · `DemoPlannerOutcome`
 
 ## One door, plus three literal production subpaths and one test-only subpath
 
