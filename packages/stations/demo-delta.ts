@@ -20,7 +20,7 @@ import { join } from 'node:path';
 
 import { checkpointArtifactStem } from './demo-types.ts';
 import type { DemoModel, DemoModelCheckpoint } from './demo-model.ts';
-import { normaliseJsonBody } from './demo-json-delta.ts';
+import { normaliseJsonBody } from './demo-form.ts';
 
 /** Cap on a checkpoint's `deltaExcerpt`: the PR reader needs the first
  *  differing lines, not a second copy of the whole captured output. */

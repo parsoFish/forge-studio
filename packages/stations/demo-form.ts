@@ -1,20 +1,21 @@
 /**
- * demo.json's evidence-form fields (forge-mfv5.1.19): per checkpoint `form`,
- * `apiPath`, `ignoreKeys`; per demo a `narrative`. Validated and rendered here
- * so `demo-model.ts` (D-07's one schema) stays under the file cap; it calls in.
- *
- * The narrative says what the change enables. It is agent prose, never
- * evidence: DEMO.md labels it so, and the control never reads it.
+ * Evidence forms (forge-mfv5.1.19): demo.json's per-checkpoint `form`,
+ * `apiPath`, `ignoreKeys` and per-demo `narrative` — validated and rendered
+ * here so `demo-model.ts` (D-07's one schema) stays under the file cap — and
+ * the JSON half of the control `demo-delta.ts` applies to `api-before-after`.
+ * The narrative is agent prose, never evidence: DEMO.md labels it so and the
+ * control never reads it.
  */
 
 import { isOwnServerPath } from '@forge/projects';
 
-import { DEMO_EVIDENCE_FORMS } from './demo-types.ts';
 import type { DemoModelCheckpoint } from './demo-model.ts';
+
+export const DEMO_EVIDENCE_FORMS = ['cli-before-after', 'api-before-after', 'screenshot', 'test-evidence'] as const;
+export type DemoEvidenceForm = (typeof DEMO_EVIDENCE_FORMS)[number];
 
 /** A narrative longer than this is a second essay, not a paragraph. */
 export const NARRATIVE_MAX_WORDS = 120;
-
 export const wordCount = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length;
 
 export function validateFormFields(cp: Record<string, unknown>, at: string): string[] {
@@ -39,14 +40,33 @@ export function validateNarrative(narrative: unknown): string[] {
 }
 
 /** DEMO.md's "What this enables" section, labelled as narrative. */
-export function narrativeLines(narrative: string | undefined): string[] {
-  if (!narrative) return [];
-  return ['## What this enables', '', '_Agent narrative — not evidence._', '', narrative.trim(), ''];
-}
+export const narrativeLines = (narrative: string | undefined): string[] =>
+  narrative ? ['## What this enables', '', '_Agent narrative — not evidence._', '', narrative.trim(), ''] : [];
 
 /** What a captured checkpoint ran: its command, or the GET on the tree's own server. */
 export function sourceLine(c: DemoModelCheckpoint): string | null {
   if (c.command) return `- **Command:** \`${c.command}\``;
-  if (c.apiPath) return `- **GET (each tree's own server):** \`${c.apiPath}\``;
-  return null;
+  return c.apiPath ? `- **GET (each tree's own server):** \`${c.apiPath}\`` : null;
+}
+
+/** Keys that differ on every read of an unchanged resource; also any `*_url` and `watchers*` key. */
+export const DEFAULT_VOLATILE_JSON_KEYS: readonly string[] = Object.freeze(['id', 'node_id', 'created_at', 'updated_at', 'pushed_at', 'url', 'etag', 'size']);
+
+const isVolatile = (key: string, ignoreKeys: readonly string[]): boolean =>
+  DEFAULT_VOLATILE_JSON_KEYS.includes(key) || ignoreKeys.includes(key) || key.endsWith('_url') || key.startsWith('watchers');
+
+function strip(value: unknown, ignoreKeys: readonly string[]): unknown {
+  if (Array.isArray(value)) return value.map((v) => strip(v, ignoreKeys));
+  if (value === null || typeof value !== 'object') return value;
+  const kept = Object.keys(value).sort().filter((k) => !isVolatile(k, ignoreKeys));
+  return Object.fromEntries(kept.map((k) => [k, strip((value as Record<string, unknown>)[k], ignoreKeys)]));
+}
+
+/** A JSON body, volatile keys dropped at any depth and keys sorted, one field per line; `null` when not JSON. */
+export function normaliseJsonBody(text: string, ignoreKeys: readonly string[]): string | null {
+  try {
+    return JSON.stringify(strip(JSON.parse(text), ignoreKeys), null, 2);
+  } catch {
+    return null;
+  }
 }

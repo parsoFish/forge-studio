@@ -113,7 +113,3 @@ export function checkpointArtifactName(label: string, ext: string): string {
 // `@forge/contracts`'s `demo-declaration.ts` (bead forge-mfv5.2.2) — stations,
 // factory and projects all need it, and contracts is the one rank all three
 // may import. Import it from there; no re-export shim is kept here.
-
-/** The closed set of evidence forms a demo checkpoint may take (forge-mfv5.1.19). */
-export const DEMO_EVIDENCE_FORMS = ['cli-before-after', 'api-before-after', 'screenshot', 'test-evidence'] as const;
-export type DemoEvidenceForm = (typeof DEMO_EVIDENCE_FORMS)[number];

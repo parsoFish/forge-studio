@@ -24,7 +24,6 @@ import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
 import { isSafeDemoRoute } from '@forge/contracts';
 
 import type {
-  DemoEvidenceForm,
   HarnessMetricRow,
   DemoSummarySection,
   DemoApiDiffEntry,
@@ -32,7 +31,7 @@ import type {
 } from './demo-types.ts';
 import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
 import { MAX_DELTA_EXCERPT_CHARS } from './demo-delta.ts';
-import { narrativeLines, sourceLine, validateFormFields, validateNarrative } from './demo-form.ts';
+import { narrativeLines, sourceLine, validateFormFields, validateNarrative, type DemoEvidenceForm } from './demo-form.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */

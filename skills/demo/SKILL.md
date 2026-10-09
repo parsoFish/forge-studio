@@ -201,34 +201,33 @@ enhancement, never a gate. **Do author `summary` + `apiDiff` + `testEvidence` ev
 for notes-only demos when the diff touches a visible API or adds tests** — these
 sections make the rendered DEMO.md genuinely useful without requiring media capture.
 
-## Evidence forms (what the declaration's capture steps produce)
+## Evidence forms
 
-A project's `demoProcess` capture steps produce one of these evidence forms based on what the project's code actually exposes:
+Each checkpoint carries one `form` from a closed set. The project's `demoMeans`
+(`.forge/project.json`) supplies the means a form may use; it never picks the
+form. The orchestrator captures and compares every form (D-15).
 
-- **Portal/browser screenshot** — a rendered UI. Author checkpoints; the
-  orchestrator's `forge demo capture` run back-fills before/after screenshots.
-  `kind: "screenshot"` for a settled UI state; `kind: "video"` for
-  time-dependent behaviour.
-- **Harness metrics** — behaviour measurable at the test layer. Run the project's
-  measurement command against baseline AND HEAD, scrape stable result lines,
-  encode them as a `kind: "harness"` checkpoint with
-  `metrics: [{ label, before, after, deltaPct, parity }]`. **Reuse the project's
-  test — never re-derive the measurement.** Pair with `testEvidence` rows.
-  **Parity vocabulary:** `match` (exact same result), `within` (within tolerance),
-  `diverged` (regression), `incomplete` (no baseline available).
-- **Live external API round-trip** — the change stands up a REAL resource in a
-  live external system. The evidence floor is a **real REST round-trip, not a
-  test-name table**: provision the resource, read it back via the system's API,
-  and persist that GET under `.forge/live-evidence/<label>.json`; `forge demo render`
-  back-fills it into a checkpoint carrying `liveEvidence.url`. The demo MUST end
-  with such a checkpoint. Pair with `testEvidence` (the live acceptance result)
-  and, for a new capability, `usage_example` + `impact`. When credentials are
-  absent, fall back to notes-only and **document the fallback in `essence`** —
-  never fabricate the live read-back.
-- **JSON-diff / notes-only** — no UI surface, no measurement command, no live
-  external calls. A single checkpoint whose caption + `afterNote` is a rationale
-  block ("what changed and why it's correct"). Use `summary` bullets for the
-  rationale. `apiDiff` to show any changed API/config surface.
+- **`cli-before-after`** — a command from `demoMeans.commands` or an acceptance
+  criterion's inline-code span runs as a bare argv in the before and after
+  trees; the outputs are compared after normalising timings and timestamps.
+- **`api-before-after`** — a JSON body read twice and compared after dropping
+  volatile keys (ids, timestamps, `url`/`*_url`, etags, sizes, watchers) and
+  `demoMeans.api.ignoreKeys`. Two drivers: `demoMeans.api.paths` (a GET on each
+  tree's own server, no host) or `demoMeans.api.commands` (a command that prints
+  JSON, such as the project's own CLI reading a live service with its own
+  credentials). One fixed external base reads the same live resource for before
+  and after, so the control would always say "unchanged" — a live service is
+  reached through a command.
+  Separately, a project's own live acceptance test may persist a real GET under
+  `.forge/live-evidence/<label>.json`; `forge demo render` back-fills it as a
+  checkpoint's `liveEvidence`.
+- **`screenshot`** — a route from `demoMeans.routes` or an acceptance
+  criterion, opened on each tree's own server.
+- **`test-evidence`** — the gate output and test rows, for a change nothing
+  above can show.
+
+A demo may carry a `narrative` ("what this enables"). DEMO.md labels it agent
+narrative, not evidence, and the control never reads it.
 
 ## Media capture (the optional, best-effort step — orchestrator-run, D-15)
 

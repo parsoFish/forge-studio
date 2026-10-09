@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { computeCheckpointDeltas } from '../../demo-delta.ts';
-import { DEFAULT_VOLATILE_JSON_KEYS, normaliseJsonBody } from '../../demo-json-delta.ts';
+import { DEFAULT_VOLATILE_JSON_KEYS, normaliseJsonBody } from '../../demo-form.ts';
 import { deriveDeltaSummary } from '../../phases/derive-demo-model.ts';
 import type { DemoModel, DemoModelCheckpoint } from '../../demo-model.ts';
 
