@@ -2274,12 +2274,6 @@
     "count": 1
   },
   {
-    "file": "packages/kernel/tests/unit/project-layout-root-manages.test.ts",
-    "kind": "path",
-    "cited": "brain/projects/gitweave/profile.md",
-    "count": 1
-  },
-  {
     "file": "packages/kernel/tests/unit/project-layout.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/registry.ts",
@@ -4071,12 +4065,6 @@
     "file": "scripts/stories/fence-containment.test.ts",
     "kind": "path",
     "cited": "apps/studio/lib/__ws_probe__.ts",
-    "count": 1
-  },
-  {
-    "file": "scripts/stories/fence-containment.test.ts",
-    "kind": "path",
-    "cited": "brain/projects/gitweave/profile.md",
     "count": 1
   },
   {
