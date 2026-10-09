@@ -186,6 +186,8 @@ export type InstructionsSessionSummary = {
   currentInstructions: string | null;
   /** The agent-instruction file backing `currentInstructions` (e.g. 'AGENTS.md'), or null. */
   currentInstructionsFile: string | null;
+  /** A CLAUDE.md approve leaves untouched beside AGENTS.md, or null (forge-mfv5.1.13). */
+  legacyInstructionsFile: string | null;
   /** Bridge-relative URL to the pending AGENTS.draft.md, or null until drafted. */
   draftUrl: string | null;
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
