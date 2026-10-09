@@ -24,8 +24,8 @@ test('the refusal names every uncommitted file and offers commit-and-save', () =
   const html = renderToStaticMarkup(
     React.createElement(SaveRefusal, { files: ['.forge/project.json', 'roadmap.md'], busy: false, onAdopt: () => {} }),
   );
-  expect(html).toContain('data-section="save-refused"');
-  expect(html).toContain('data-save-refused-count="2"');
+  expect(html).toContain('data-section="save-uncommitted"');
+  expect(html).toContain('data-save-uncommitted-count="2"');
   expect(html).toContain('.forge/project.json');
   expect(html).toContain('roadmap.md');
   expect(html).toContain('data-action="adopt-and-save"');
