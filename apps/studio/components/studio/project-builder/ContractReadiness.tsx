@@ -44,6 +44,9 @@ export function ContractReadiness({
 
   // Preflight status attribute value for automation / e2e.
   const preflightStatus = !preflightLoaded ? 'pending' : hardFailures.length > 0 ? 'hard-fail' : 'ok';
+  // forge-nk1y.9: a verdict only from what has been read — `false` while preflight has
+  // not answered only when a UI row already fails; otherwise it is still `pending`.
+  const flowReady = allReady ? 'true' : !uiAllReady || preflightLoaded ? 'false' : 'pending';
 
   // Ruling 169 (bead `forge-8vfn.6.5`): a created project reads what is still
   // OPEN until the demo agent has run, rather than being told by the create
@@ -71,7 +74,7 @@ export function ContractReadiness({
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
         data-ready-count={readyCount}
-        data-flow-ready={allReady ? 'true' : 'false'}
+        data-flow-ready={flowReady}
         data-preflight-status={preflightStatus}
       >
         {uiChecks.map((c, i) => (
