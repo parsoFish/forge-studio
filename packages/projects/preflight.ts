@@ -55,6 +55,7 @@ import {
   projectBrainDir,
   projectThemesDir,
   FORGE_ROOT,
+  guardedReadFile,
 } from '@forge/kernel';
 
 import { checkC1, checkC1b, checkC7 } from './preflight-gate.ts';
@@ -170,7 +171,7 @@ function checkBrainStaleness(
     hard: false,
   };
   // forge-mfv5.1.11 (ruling 1977a) — a profile still all-TODO is a stub, not context.
-  if (isUnfilledProfile(readFileOr(join(projectBrainDir(forgeRoot, projectName), 'profile.md')))) {
+  if (isUnfilledProfile(guardedReadFile(resolve(forgeRoot), ['brain', 'projects', projectName, 'profile.md']))) {
     return { ...base, pass: false, detail: `brain/projects/${projectName}/profile.md is still the scaffold stub — every section is TODO, so forge's planners read no architecture facts. Author it (the onboarding agent does).` };
   }
   // Brain 3 is forge-owned + CENTRAL (SPEC §4): brain/projects/<name>/themes/.
@@ -221,10 +222,6 @@ function checkBrainStaleness(
       `will mislead the planner (PM/architect read the brain first). Reconcile against the code ` +
       `(or run a reflection pass). Sample: ${sample}`,
   };
-}
-
-function readFileOr(path: string): string | null {
-  try { return readFileSync(path, 'utf8'); } catch { return null; }
 }
 
 /** True when every authored `## ` section's first line is TODO (the constraint-block
