@@ -527,6 +527,14 @@ export type ReflectionData = {
    * cycles ⇒ fall back to the per-question inferred heuristic.
    */
   mode?: 'interactive' | 'automated';
+  /**
+   * forge-nk1y.3: whether the reflector has filed its question list yet.
+   * `questions: []` with `filed: true` means it asked nothing (the gate offers
+   * the close act); with `filed: false` it is still running.
+   */
+  filed?: boolean;
+  /** forge-nk1y.3: the filed question list does not parse — named, and the gate offers no close. */
+  unreadable?: boolean;
 };
 
 export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {
@@ -542,4 +550,28 @@ export async function postReflectionAnswers(input: {
     answers: input.answers,
     freeform: input.freeform,
   });
+}
+
+/**
+ * forge-nk1y.3: close a reflection that asked nothing — the one operator act
+ * the gate offers when the reflector filed an empty question list. The bridge
+ * refuses (409) while any question is unanswered and spends no rerun.
+ */
+export async function postReflectionClose(cycleId: string): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost(`/api/reflect/${encodeURIComponent(cycleId)}/answer`, { close: true });
+}
+
+/** forge-nk1y.3: a reflection waiting on the operator (`GET /api/reflections/pending`). */
+export type PendingReflection = {
+  cycleId: string;
+  initiativeId: string;
+  questions: number;
+  /** awaiting: questions to answer · unasked: the reflector asked nothing · unreadable: a file that does not parse. */
+  status: 'awaiting' | 'unasked' | 'unreadable';
+};
+
+export async function fetchPendingReflections(): Promise<PendingReflection[]> {
+  const body = await bridgeReadOrThrow<{ pending?: PendingReflection[] }>('/api/reflections/pending');
+  if (!Array.isArray(body.pending)) throw new Error('GET /api/reflections/pending: response carries no pending list');
+  return body.pending;
 }

@@ -39,13 +39,15 @@ export const REFLECTION_POLL_INTERVAL_MS = 4000;
  *  `needsReflectionPoll` alone is not a backstop for a cycle that never gets a question. */
 export const REFLECTION_POLL_BOUND_MS = 30 * 60 * 1000;
 
-/** True while the wait for reflection questions isn't over: no questions yet
- *  AND not answered. Exported so the stop/go decision is provable by
+/** True while the wait for reflection questions isn't over: no questions yet,
+ *  not answered, and not filed (forge-nk1y.3: a filed EMPTY list is the
+ *  reflector's final word — the gate offers the close act). Exported so the stop/go decision is provable by
  *  execution without mounting React (mirrors `createDebouncedRefreshRuns`'s
  *  extracted-pure-logic technique in `use-studio-home-data.ts`). */
 export function needsReflectionPoll(data: ReflectionData | null): boolean {
   if (data === null) return true;
   if (data.answered) return false;
+  if (data.filed === true) return false;
   return data.questions.length === 0;
 }
 

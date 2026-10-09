@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-242 files, 1411 sink calls; 168 classified (accidentally-safe 8, guarded 45, not-request-derived 24, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+244 files, 1412 sink calls; 170 classified (accidentally-safe 8, guarded 45, not-request-derived 26, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -18,6 +18,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `apps/forge/bridge-studio-writes.ts` | 10 | unguarded |  | exec | `PUT /api/studio/flows/:id` body `triggers[].target.ref` |
 | `apps/forge/bridge-studio.ts` | 14 | unguarded |  | exec | `GET /api/studio/flows/:id` |
 | `apps/forge/forge-watch.ts` | 16 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `apps/forge/reflection-pending.ts` | 2 | not-request-derived | `resolveGuardedPath` | read | `GET /api/reflections/pending` takes no request field: it lists the host's trusted `logsRoot` (as bridge-cycle-scan.ts does) and reads each listed cycle dir's files only through guardedReadFile/guardedFile |
 | `apps/forge/ui-bridge.ts` | 3 | unguarded |  | read | body `project`, `sessionId` |
 | `packages/agents/_adapters/aider/index.ts` | 6 | unclassified |  |  |  |
 | `packages/agents/_adapters/gemini/index.ts` | 1 | unclassified |  |  |  |
@@ -244,7 +245,8 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/stations/phases/pm-rejected-set.ts` | 6 | not-request-derived | `isContainedWorktreePath` | exec | Not a route: the project-manager PHASE's failure path (`packages/stations/phases/project-manager.ts`) |
 | `packages/stations/phases/project-manager.ts` | 4 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/reflector-brain-writes.ts` | 6 | unclassified |  |  |  |
-| `packages/stations/phases/reflector.ts` | 24 | guarded | `resolveGuardedPath` | read | the reflector rerun fired by `POST /api/reflect/<id>/answer` (`apps/forge/bridge-reflect.ts`), and the post-merge reflector |
+| `packages/stations/phases/reflector-questions.ts` | 3 | not-request-derived |  | read | `user-questions.md`/`.json` under the reflector's own `cycleLogDir`, resolved by runReflector from the cycle id it was dispatched with (moved out of reflector.ts, forge-nk1y.3) |
+| `packages/stations/phases/reflector.ts` | 20 | guarded | `resolveGuardedPath` | read | the reflector rerun fired by `POST /api/reflect/<id>/answer` (`apps/forge/bridge-reflect.ts`), and the post-merge reflector |
 | `packages/stations/phases/release-finalize.ts` | 3 | unclassified |  |  |  |
 | `packages/stations/phases/review-refusal.ts` | 2 | not-request-derived |  | read | Not a route: the adversarial-review phase's findings harvest |
 | `packages/stations/reflect-reconcile.ts` | 8 | unclassified |  |  |  |

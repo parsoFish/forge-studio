@@ -15,14 +15,11 @@ import { RunRail } from '@/components/studio/RunRail';
 import { ServeStatusNotice } from '@/components/studio/ServeStatusNotice';
 import { useServeStatus } from '@/lib/use-serve-status';
 import {
-  buildHomeAttention,
-  buildKbAttention,
-  buildKbDraftAttention,
   buildHomeSessionsStrip,
   gateAttentionStatusDot,
-  type HomeAttentionItem,
 } from '@/lib/home-view';
 import { buildMonitorSummary, deriveSummaryReady } from '@/lib/monitor-view';
+import { buildWaitingOnYou } from '@/lib/reflection-attention';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 
@@ -46,8 +43,9 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 //   - sessions: `HomeSessionsStrip` (+ `buildHomeSessionsStrip`)
 //   - serve status: `ServeStatusNotice` (M7-E row 205 — read-only; there is
 //     no operator control over `forge serve` any more)
-//   - attention: `buildHomeAttention` / `buildKbAttention` /
-//     `buildKbDraftAttention`, the same three builders Home renders
+//   - attention: `buildWaitingOnYou` (lib/reflection-attention.ts) — the
+//     builders Home renders plus pending reflections (forge-nk1y.3, read from
+//     `GET /api/reflections/pending`)
 // No new bridge route, and no route added anywhere: this page's own endpoint
 // (`GET /api/agents/runs/recent`) already existed, reached through its
 // existing typed wrapper; serve status rides the existing `GET /api/health`.
@@ -70,19 +68,16 @@ const MONITOR_LEDGER_PAGE = 25;
 const RUN_RAIL_HEIGHT = 420;
 
 export default function MonitorPage() {
-  const { agents, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
+  const { agents, kbs, runs, attention, reflections, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
   // M7-E row 205 (D-12): the read-only serve status.
   const { status: serveStatus } = useServeStatus();
   const ledger = useEverythingLedger({ agents, runs, sessions, ready });
 
-  // The same three attention builders Home renders, over the same
-  // already-fetched data — Monitor lists them densely in one section rather
-  // than as three named strips, but never re-derives them.
-  const gateItems = buildHomeAttention(attention);
-  const kbItems = buildKbAttention(kbs).filter((i): i is Extract<HomeAttentionItem, { kind: 'kb' }> => i.kind === 'kb');
-  const kbDraftItems = buildKbDraftAttention(sessions).filter((i): i is Extract<HomeAttentionItem, { kind: 'kb-draft' }> => i.kind === 'kb-draft');
-  const attentionItems: HomeAttentionItem[] = [...gateItems, ...kbDraftItems, ...kbItems];
+  // The same attention builders Home renders, over the same already-fetched
+  // data — Monitor lists them densely in one section rather than as named
+  // strips, but never re-derives them (forge-nk1y.3 adds reflections).
+  const attentionItems = buildWaitingOnYou({ attention, reflections, sessions, kbs });
 
   const summary = buildMonitorSummary({
     ledgerRows: ledger.rows,
@@ -144,8 +139,8 @@ export default function MonitorPage() {
         </section>
       )}
 
-      {/* Everything waiting on a human: project gates, parked brain drafts and
-          KB lint, in one dense list. Always mounted — an empty section that
+      {/* Everything waiting on a human: project gates, reflections, parked
+          brain drafts and KB lint, in one dense list. Always mounted — an empty section that
           says so is information; a section that vanishes is not. */}
       <section
         data-section="monitor-attention"

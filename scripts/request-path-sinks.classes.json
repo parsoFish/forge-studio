@@ -53,6 +53,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "apps/forge/reflection-pending.ts": {
+  "class": "not-request-derived",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "`GET /api/reflections/pending` takes no request field: it lists the host's trusted `logsRoot` (as bridge-cycle-scan.ts does) and reads each listed cycle dir's files only through guardedReadFile/guardedFile"
+ },
  "apps/forge/ui-bridge.ts": {
   "class": "unguarded",
   "guard": null,
@@ -994,6 +1000,12 @@
   "guard": null,
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/reflector-questions.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "`user-questions.md`/`.json` under the reflector's own `cycleLogDir`, resolved by runReflector from the cycle id it was dispatched with (moved out of reflector.ts, forge-nk1y.3)"
  },
  "packages/stations/phases/reflector.ts": {
   "class": "guarded",
