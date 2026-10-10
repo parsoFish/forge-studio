@@ -15,6 +15,11 @@ const SHA_RE = /^[0-9a-f]{40}$/;
  *  proposes this; nothing moves until the operator confirms it with these shas. */
 export type SaveRecoveryProposal = { commits: number; subjects: string[]; localHead: string; resetTo: string; base: string; detail: string };
 
+/** forge-mfv5.1.23 — the forge-studio PR's verdict by name, as the bridge serves it. */
+export const PR_STATES = ['merged', 'blocked-no-required-check', 'failing', 'pending', 'green', 'unreadable', 'stale-head', 'blocked-by-ruleset'] as const;
+export type PrState = (typeof PR_STATES)[number];
+export const readPrState = (v: unknown): PrState | undefined => (PR_STATES as readonly unknown[]).includes(v) ? v as PrState : undefined;
+
 /** A PR link the bridge served (repo-status or a Save), or undefined. */
 export function readPrUrl(v: unknown): string | undefined {
   return typeof v === 'string' && PR_URL_RE.test(v) ? v : undefined;
@@ -30,14 +35,15 @@ function readRecovery(v: unknown, detail: string): SaveRecoveryProposal | undefi
 
 export function readSaveRefusal(save: unknown): { error: string; refused: string[]; recovery?: SaveRecoveryProposal } | null {
   if (save === null || typeof save !== 'object') return null;
-  const { refused, detail, merged, pushed, prUrl, recovery } = save as Record<string, unknown>;
+  const { refused, detail, merged, pushed, prUrl, prState, recovery } = save as Record<string, unknown>;
   const files = Array.isArray(refused) ? refused.filter((f): f is string => typeof f === 'string') : [];
   const reason = typeof detail === 'string' ? detail : '';
   if (files.length > 0) return { error: reason || `not saved: ${files.join(', ')}`, refused: files };
   const proposal = readRecovery(recovery, reason);
   if (proposal) return { error: reason, refused: [], recovery: proposal };
-  // A protected default branch took a PR: saved to forge-studio + origin, shown as a link, not a failure.
-  if (pushed === true && readPrUrl(prUrl)) return null;
+  // A protected default branch took a PR: saved to forge-studio + origin, shown as a link, not a failure —
+  // unless GitHub refused the merge Save asked for (forge-mfv5.1.23), which is named as not saved.
+  if (pushed === true && readPrUrl(prUrl) && prState !== 'blocked-by-ruleset') return null;
   if (merged === false && !NO_OP_DETAILS.includes(reason)) return { error: reason || 'not saved', refused: [] };
   return null;
 }

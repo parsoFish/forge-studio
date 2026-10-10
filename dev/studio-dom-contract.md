@@ -4,7 +4,7 @@
 
 The stories drive Studio by reading `data-*` attributes; the convention (what to mirror, how `data-page-ready` is derived, the disabled-reason and boundary rules) lives in `.claude/rules/studio-ui.md`. This page is the generated inventory of attributes and the values source gives them.
 
-It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 719 attributes.
+It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 720 attributes.
 
 | attribute | values | files |
 |---|---|---|
@@ -510,6 +510,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-plan-view-forced` | `true` | apps/studio/components/studio/artifact/ArchitectPlanGate.tsx |
 | `data-planning-count` | (dynamic) | apps/studio/app/templates/page.tsx |
 | `data-poll-state` | `timed-out`, `watching/timed-out/terminal`, (dynamic) | apps/studio/app/agents/[id]/run/[runId]/page.tsx, apps/studio/components/studio/agent-builder/RunPanel.tsx, apps/studio/components/studio/knowledge/KbActionGroup.tsx, apps/studio/components/studio/project-builder/ContractResolutionPanel.tsx, apps/studio/components/studio/project-builder/OnboardWithAgent.tsx |
+| `data-pr-state` | (dynamic) | apps/studio/components/studio/project-builder/SaveRepoState.tsx |
 | `data-pr-url` | (dynamic) | apps/studio/app/artifact/page.tsx |
 | `data-preflight-ok` | (dynamic) | apps/studio/components/studio/project-builder/RebuildContractPanel.tsx |
 | `data-preflight-status` | (dynamic) | apps/studio/components/studio/project-builder/ContractReadiness.tsx |
