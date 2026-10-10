@@ -265,8 +265,8 @@ packages/flows/wi-worktree.ts existsSync 2
 packages/flows/wi-worktree.ts mkdirSync 1
 packages/flows/work-item.ts existsSync 2
 packages/flows/work-item.ts mkdirSync 1
-packages/flows/work-item.ts readdirSync 2
-packages/flows/work-item.ts readFileSync 2
+packages/flows/work-item.ts readdirSync 3
+packages/flows/work-item.ts readFileSync 3
 packages/flows/work-item.ts writeFileSync 2
 packages/flows/worktree.ts execFileSync 10
 packages/flows/worktree.ts existsSync 4

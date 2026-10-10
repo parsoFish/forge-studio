@@ -34,7 +34,8 @@ export function plantStrandedKickoff(forgeRoot: string, built?: StrandedBuilt): 
   mkdirSync(snapshotDir, { recursive: true });
   mkdirSync(join(logDir, 'artifacts'), { recursive: true });
 
-  const repoPath = typeof built === 'object' ? built.branchRepo : join(forgeRoot, 'no-repo');
+  const repoPath = typeof built === 'object' ? built.branchRepo : join(forgeRoot, 'projects', STRANDED_PROJECT);
+  mkdirSync(repoPath, { recursive: true }); // the manifest guard requires it contained under <forgeRoot>/projects
   const manifestPath = join(rfr, `${STRANDED_INIT}.md`);
   writeFileSync(manifestPath, [
     '---',

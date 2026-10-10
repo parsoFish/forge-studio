@@ -733,6 +733,13 @@ function detectCycle(items: WorkItem[]): string[] | null {
  * (`WI-4a.md`, `WI-4b.md`) is not read as empty. The decomposition evidence
  * `enqueue-flow-run.ts` and the flow runner's kickoff outcome both read.
  */
+/** Each WI file's RAW status (forge-mfv5.1.25): one outside the enum, or none, is `unreadable` — never `pending`. */
+export function rawWorkItemStatuses(dir: string): string[] {
+  return readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)).map((f) => {
+    try { const s = matter(readFileSync(join(dir, f), 'utf8')).data.status; return WORK_ITEM_STATUSES.includes(s as WorkItemStatus) ? String(s) : 'unreadable'; } catch { return 'unreadable'; }
+  });
+}
+
 export function hasWorkItemFiles(dir: string): boolean {
   try {
     return readdirSync(dir).some((f) => WORK_ITEM_FILE_PATTERN.test(f));

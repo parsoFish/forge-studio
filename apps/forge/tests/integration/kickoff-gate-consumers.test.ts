@@ -62,7 +62,7 @@ test('stranded shape: all four consumers read the Kickoff gate', async () => {
 });
 
 function branchRepo(root: string): string {
-  const dir = join(root, 'repo');
+  const dir = join(root, 'projects', 'repo');
   const git = (args: string[]) => execFileSync('git', ['-C', dir, ...args], { stdio: 'pipe' });
   execFileSync('git', ['init', '-q', '-b', 'main', dir]);
   git(['config', 'user.email', 't@t']);

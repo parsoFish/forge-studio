@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-245 files, 1414 sink calls; 173 classified (accidentally-safe 8, guarded 46, not-request-derived 28, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+245 files, 1416 sink calls; 173 classified (accidentally-safe 8, guarded 46, not-request-derived 28, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -91,7 +91,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/stale-remote-branch-guard.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/wi-merge-back.ts` | 6 | unclassified |  |  |  |
 | `packages/flows/wi-worktree.ts` | 12 | unclassified |  |  |  |
-| `packages/flows/work-item.ts` | 9 | guarded |  | read | `hasWorkItemFiles` moved here from enqueue-flow-run.ts (forge-mfv5.1.25): the same read of `<queue parent>/_logs/_worktrees/<canonical initiativeId>` WI dirs, id checked by isCanonicalInitiativeId before any path is built. |
+| `packages/flows/work-item.ts` | 11 | guarded |  | read | `hasWorkItemFiles` moved here from enqueue-flow-run.ts and `rawWorkItemStatuses` added (forge-mfv5.1.25): reads WI dirs under `_logs/<cycle_id>`, the manifest worktree and `_worktrees/<initiative_id>`; kickoff-facts.ts checks isCanonicalInitiativeId and validateManifestPathFields (cycle_id segment, worktree/repo containment) before any path is built, and reads nothing when they fail. |
 | `packages/flows/worktree.ts` | 16 | unclassified |  |  |  |
 | `packages/kernel/case-folding-probe.ts` | 4 | not-request-derived |  | read | Not a route: reached from `POST /api/agents/:slug/run` via `packages/agents/materials-staging.ts` and from `POST… |
 | `packages/kernel/checkpoint-command.ts` | 5 | not-request-derived | `resolveDeclaredBin containment + realpath re-check` | exec | checkpoint command head and the claim's worktree; reads the worktree package.json, never a request field |
