@@ -233,11 +233,11 @@ export async function runPmAcceptanceRevise(
   const prompt = [
     '# Acceptance-gate revise (one bounded turn)',
     '',
-    `Your work-item set at \`.forge/work-items/\` does not satisfy the project's ` +
-      `acceptance-gate requirement: ${violation}`,
+    `Your work-item set at \`.forge/work-items/\` does not satisfy the plan's ` +
+      `acceptance requirements: ${violation}`,
     '',
-    'Revise the EXISTING set — add or edit a work item — so at least one ' +
-      'quality_gate_cmd targets that suite. Do not remove valid unrelated work. Then stop.',
+    'Revise the EXISTING set — add or edit work items — so each requirement above is ' +
+      "met by some work item's quality_gate_cmd. Do not remove valid unrelated work. Then stop.",
   ].join('\n');
   const spawn = await runAgent(reviseDef, {
     runId: `${requireCycleId(input, 'runPmAcceptanceRevise')}-pm-acc-revise`,

@@ -36,7 +36,7 @@ import { requireCycleId } from './cycle-id.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents';
-import { checkDecomposeCompleteness } from './decompose-completeness.ts';
+import { acceptanceCriteriaViolation, checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
 import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
@@ -530,6 +530,12 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       accGateViolation = acceptanceGateViolation(items, acceptance, accGate);
     }
   }
+  // D-47 (forge-mfv5.1.26): a runnable initiative AC no WI gate carries is
+  // folded into the same violation, so it earns the same one revise turn.
+  const planViolation = (gate: string | null): string | null =>
+    [gate, items.length > 0 ? acceptanceCriteriaViolation(manifest.acceptance_criteria, items) : null]
+      .filter((v): v is string => v !== null).join(' ') || null;
+  accGateViolation = planViolation(accGateViolation);
 
   // Row 157/1873 part (b) ONE REVISE TURN — fires only when the acceptance
   // gate is the set's SOLE problem (no parse/set/per-item/coupling error
@@ -572,8 +578,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     perItem = revalidated.perItem;
     setErrors = [...revalidated.setErrors, ...secondStage.compileErrors];
     itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
-    const profile = requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class);
-    accGateViolation = acceptanceGateViolation(items, profile.acceptance, accGate!);
+    const profile = accGate ? requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class) : null;
+    accGateViolation = planViolation(profile && accGate ? acceptanceGateViolation(items, profile.acceptance, accGate) : null);
   }
 
   // Operator sanity-check surface: a greppable WI list so a human can eyeball
@@ -693,8 +699,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     // successful pass (a re-decomposition replaces the list).
     persistManifestSpecs(input.manifestPath, items.map((item) => item.work_item_id));
 
-    // R4-05-T4: non-blocking decompose-completeness check (operator decision
-    // 2026-07-17). The delivery gate catches under-*delivery*; this catches
+    // R4-05-T4: the body-text completeness check stays advisory (2026-07-17);
+    // the structured-AC check is blocking above (D-47). The delivery gate catches under-*delivery*; this catches
     // under-*planning* — scope stated in the initiative body but never
     // decomposed into a WI at all. Runs ONLY here, on the pass's own success
     // path, AFTER the WI set is final. It NEVER affects `failed`, the pass
