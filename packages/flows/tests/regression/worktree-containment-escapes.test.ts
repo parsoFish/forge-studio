@@ -18,8 +18,12 @@
  * red; re-adding the projects-root fallback turns the projects rows red.
  *
  * DECISIONS recorded here:
- *   - `<root>/_worktrees/<id>/` and `.../<id>/.` ARE the same directory as
- *     `<id>`; `resolve()` normalises them, so they are ACCEPTED (not an escape).
+ *   - `<root>/_worktrees/<id>/` (ONE trailing slash) is accepted. Any other
+ *     non-canonical spelling of the raw string -- `.`, `..`, `//` -- is REFUSED
+ *     ('non-canonical') even when `resolve()` would normalise it to the own
+ *     worktree: every sink hands the RAW string to the kernel, which resolves
+ *     `..` PHYSICALLY (through a symlink), so text-normalised and physical
+ *     meaning differ (escape-and-return through a symlink).
  *   - A not-yet-existing (or already-removed) `_worktrees/<id>` is ACCEPTED: the
  *     finalize and requeue paths legitimately hold the path after the directory
  *     is gone, and nothing exists there to hit.
@@ -28,12 +32,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import * as kernel from '@forge/kernel';
-import { isContainedWorktreePath, validateManifestPathFields } from '../../manifest-path-guard.ts';
+import { execFileSync } from 'node:child_process';
+
+import { isContainedProjectRepoPath, isContainedWorktreePath, validateManifestPathFields } from '../../manifest-path-guard.ts';
+import { parseManifest, writeManifest } from '../../manifest.ts';
+import { runRequeue } from '../../forge-requeue.ts';
 
 const ID = 'INIT-2026-10-10-alpha';
 const OTHER = 'INIT-2026-10-10-beta';
@@ -137,6 +145,60 @@ const REFUSED: Row[] = [
     },
   },
   {
+    name: 'escape-and-return through a symlink: <other>/lnk/../../<id> text-normalises to the own worktree but the kernel resolves it through lnk',
+    reason: 'non-canonical',
+    plant: (w) => {
+      dir(w.forgeRoot, '_worktrees', OTHER);
+      mkdirSync(join(w.outside, 'a', 'b'), { recursive: true });
+      dir(w.outside, ID); // what the raw string physically reaches
+      symlinkSync(join(w.outside, 'a', 'b'), join(w.forgeRoot, '_worktrees', OTHER, 'lnk'), 'dir');
+      return { p: `${w.forgeRoot}/_worktrees/${OTHER}/lnk/../../${ID}` };
+    },
+  },
+  {
+    name: 'a "." segment in the middle',
+    reason: 'non-canonical',
+    plant: (w) => {
+      dir(w.forgeRoot, '_worktrees', ID);
+      return { p: `${w.forgeRoot}/_worktrees/./${ID}` };
+    },
+  },
+  {
+    name: 'an empty segment (//) in the middle',
+    reason: 'non-canonical',
+    plant: (w) => {
+      dir(w.forgeRoot, '_worktrees', ID);
+      return { p: `${w.forgeRoot}/_worktrees//${ID}` };
+    },
+  },
+  {
+    name: 'a trailing /. (same directory, but a "." segment is never canonical)',
+    reason: 'non-canonical',
+    plant: (w) => ({ p: `${dir(w.forgeRoot, '_worktrees', ID)}/.` }),
+  },
+  {
+    name: 'two trailing slashes',
+    reason: 'non-canonical',
+    plant: (w) => ({ p: `${dir(w.forgeRoot, '_worktrees', ID)}//` }),
+  },
+  {
+    name: '_worktrees is a regular file (lstat ENOTDIR is "indeterminate", not an alias)',
+    reason: 'indeterminate',
+    plant: (w) => {
+      rmSync(join(w.forgeRoot, '_worktrees'), { recursive: true, force: true });
+      writeFileSync(join(w.forgeRoot, '_worktrees'), 'not a directory');
+      return { p: join(w.forgeRoot, '_worktrees', ID), mustExist: false }; // nothing can exist beneath a file
+    },
+  },
+  {
+    name: 'a 300-character initiative id (lstat ENAMETOOLONG is "indeterminate", not an alias)',
+    reason: 'indeterminate',
+    plant: (w) => {
+      const id = 'a'.repeat(300);
+      return { p: join(w.forgeRoot, '_worktrees', id), id, mustExist: false };
+    },
+  },
+  {
     name: 'unsafe initiative id: parent traversal',
     reason: 'unsafe-initiative-id',
     plant: (w) => ({ p: dir(w.forgeRoot, 'x'), id: '../x' }),
@@ -216,12 +278,10 @@ test('worktree_path ACCEPTED: the initiative\'s own real _worktrees/<id>', () =>
   });
 });
 
-test('worktree_path ACCEPTED: trailing-slash and trailing-dot forms are the SAME directory (resolve() normalises them)', () => {
+test('worktree_path ACCEPTED: exactly one trailing slash is the SAME directory and the only non-canonical spelling allowed', () => {
   withWorld((w) => {
     const p = dir(w.forgeRoot, '_worktrees', ID);
-    for (const form of [`${p}/`, `${p}/.`]) {
-      assert.equal(kernel.initiativeWorktreeRefusal(form, { forgeRoot: w.forgeRoot, initiativeId: ID }), null, form);
-    }
+    assert.equal(kernel.initiativeWorktreeRefusal(`${p}/`, { forgeRoot: w.forgeRoot, initiativeId: ID }), null);
   });
 });
 
@@ -239,5 +299,87 @@ test('worktree_path ACCEPTED: a legitimately symlinked forge checkout still work
     const link = join(w.outside, 'forge-link');
     symlinkSync(w.forgeRoot, link, 'dir');
     assert.equal(kernel.initiativeWorktreeRefusal(join(link, '_worktrees', ID), { forgeRoot: link, initiativeId: ID }), null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// project_repo_path: the same raw-string shape (git -C <raw> resolves `..` physically).
+// ---------------------------------------------------------------------------
+
+function withProjects(fn: (w: World, projects: string) => void): void {
+  withWorld((w) => fn(w, join(w.forgeRoot, 'projects')));
+}
+
+test('project_repo_path REFUSED: escape-and-return through a symlink lands git in an OUTSIDE repository', () => {
+  withProjects((w, projects) => {
+    dir(projects, 'demo');
+    mkdirSync(join(w.outside, 'x', 'y'), { recursive: true });
+    const victim = join(w.outside, 'victimrepo');
+    execFileSync('git', ['init', '-q', victim]);
+    symlinkSync(join(w.outside, 'x', 'y'), join(projects, 'demo', 'lnk'), 'dir');
+    const p = `${projects}/demo/lnk/../../victimrepo`;
+
+    // What a sink does with the raw string: git resolves `..` physically.
+    assert.equal(realpathSync(execFileSync('git', ['-C', p, 'rev-parse', '--show-toplevel']).toString().trim()), victim);
+    assert.equal(isContainedProjectRepoPath(p, { forgeRoot: w.forgeRoot, projectsRoot: projects }), false);
+  });
+});
+
+for (const [name, build] of [
+  ['a "." segment in the middle', (projects: string) => `${projects}/./demo`],
+  ['an empty segment (//) in the middle', (projects: string) => `${projects}//demo`],
+  ['a ".." segment, even when it text-normalises back inside (escape-and-return)', (projects: string) => `${projects}/../projects/demo`],
+] as const) {
+  test(`project_repo_path REFUSED: ${name}`, () => {
+    withProjects((w, projects) => {
+      dir(projects, 'demo');
+      assert.equal(isContainedProjectRepoPath(build(projects), { forgeRoot: w.forgeRoot, projectsRoot: projects }), false);
+    });
+  });
+}
+
+test('project_repo_path ACCEPTED: one trailing slash, and a directory literally named "..foo"', () => {
+  withProjects((w, projects) => {
+    const demo = dir(projects, 'demo');
+    const dotted = dir(projects, '..foo');
+    assert.equal(isContainedProjectRepoPath(`${demo}/`, { forgeRoot: w.forgeRoot, projectsRoot: projects }), true);
+    assert.equal(isContainedProjectRepoPath(dotted, { forgeRoot: w.forgeRoot, projectsRoot: projects }), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wire level: the r5 chain. POST /api/initiatives' body (parse + path-field
+// validation + writeManifest) then POST /api/recovery/:id/requeue (runRequeue).
+// ---------------------------------------------------------------------------
+
+function escapeAndReturnManifest(w: World): { body: string; sentinel: string } {
+  for (const s of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) mkdirSync(join(w.forgeRoot, '_queue', s), { recursive: true });
+  dir(w.forgeRoot, '_worktrees', OTHER);
+  mkdirSync(join(w.outside, 'a', 'b'), { recursive: true });
+  dir(w.outside, ID);
+  symlinkSync(join(w.outside, 'a', 'b'), join(w.forgeRoot, '_worktrees', OTHER, 'lnk'), 'dir');
+  const wt = `${w.forgeRoot}/_worktrees/${OTHER}/lnk/../../${ID}`;
+  const body = [
+    '---', `initiative_id: "${ID}"`, 'project: "test-project"', 'created_at: "2026-08-06T00:00:00.000Z"',
+    'iteration_budget: 5', 'cost_budget_usd: 2', 'class: code', `worktree_path: ${JSON.stringify(wt)}`, '---', '', `# ${ID}`, '',
+  ].join('\n');
+  return { body, sentinel: join(w.outside, ID, 'SENTINEL') };
+}
+
+test('wire: an escape-and-return worktree_path is refused at ingest, and again at requeue when planted straight on disk; the outside sentinel survives', () => {
+  withWorld((w) => {
+    const { body, sentinel } = escapeAndReturnManifest(w);
+    const m = parseManifest(body);
+
+    const errors = validateManifestPathFields(m, { forgeRoot: w.forgeRoot });
+    assert.equal(errors.length, 1, JSON.stringify(errors));
+    assert.match(errors[0]!, /worktree_path refused \(non-canonical\)/);
+    assert.throws(() => writeManifest(m, { queueRoot: join(w.forgeRoot, '_queue') }), /non-canonical/);
+
+    // Defence in depth: a manifest that reached disk by some other path.
+    writeFileSync(join(w.forgeRoot, '_queue', 'failed', `${ID}.md`), body);
+    assert.throws(() => runRequeue(ID, { forgeRoot: w.forgeRoot }), /non-canonical|invalid manifest path fields/);
+    assert.ok(existsSync(sentinel), 'the outside sentinel survived');
+    assert.equal(readFileSync(sentinel, 'utf8'), 'real target');
   });
 });

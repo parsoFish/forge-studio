@@ -173,12 +173,12 @@ test('project_repo_path: a literal "<forgeRoot>/projects/../../etc" (raw ".." se
 });
 
 // ---------------------------------------------------------------------------
-// Escape shape 5 (companion, NOT an escape): "escape-and-return" resolves to
-// a genuinely contained real path and MUST be accepted — pinning correct
-// behaviour, not the R2-09 false-positive superstition.
+// Escape shape 5 (REVERSED by forge-nk1y.20): "escape-and-return" text-normalises
+// inside, but sinks resolve ".." PHYSICALLY through a symlink -- so a ".." segment
+// is REFUSED (raw string judged); see worktree-containment-escapes.test.ts.
 // ---------------------------------------------------------------------------
 
-test('project_repo_path: "<forgeRoot>/projects/../projects/legit-escapereturn" resolves to a genuinely contained real path — MUST be ACCEPTED', () => {
+test('project_repo_path: "<forgeRoot>/projects/../projects/legit-escapereturn" text-normalises inside the root but carries a ".." segment — REFUSED (raw string judged)', () => {
   const legitPath = join(forgeRoot, 'projects', 'legit-escapereturn');
   mkdirSync(legitPath, { recursive: true });
   // Raw string with a literal ".." — same reasoning as escape shape 4.
@@ -188,8 +188,8 @@ test('project_repo_path: "<forgeRoot>/projects/../projects/legit-escapereturn" r
     { initiative_id: 'INIT-2026-08-06-x5', project_repo_path: roundtrip },
     { forgeRoot },
   );
-  assert.deepEqual(errors, [], `escape-and-return never actually leaves the root and must be ACCEPTED — got ${JSON.stringify(errors)}`);
-  assert.equal(isContainedProjectRepoPath(roundtrip, { forgeRoot }), true);
+  assert.ok(errors.some((e) => /project_repo_path/.test(e)), `a ".." segment is refused even when it returns inside — got ${JSON.stringify(errors)}`);
+  assert.equal(isContainedProjectRepoPath(roundtrip, { forgeRoot }), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -746,7 +746,7 @@ test('R4-17 pin 7, item 3 (back-compat — GREEN, must stay green): with NO proj
 // R4-17 pin 7, item 4 — SEC-02/SEC-03 property preservation, explicitly.
 // ---------------------------------------------------------------------------
 
-test('R4-17 pin 7, item 4a (SEC-02 preservation, passed-root variant): escape-and-return "<forgeRoot>/projects/../projects/<dir>" resolves to a genuinely contained real path and is ACCEPTED even when projectsRoot is passed explicitly (the no-projectsRoot ACCEPT for this exact shape is already pinned above by "project_repo_path: \\"<forgeRoot>/projects/../projects/legit-escapereturn\\" ... MUST be ACCEPTED" — not duplicated here, only the passed-root variant is new)', () => {
+test('R4-17 pin 7, item 4a (SEC-02 preservation, passed-root variant): escape-and-return "<forgeRoot>/projects/../projects/<dir>" is REFUSED when projectsRoot is passed explicitly too (forge-nk1y.20 reversed the former ACCEPT)', () => {
   const projectsRoot = join(forgeRoot, 'projects');
   const legitPath = join(projectsRoot, 'pin7-escapereturn-passedroot');
   mkdirSync(legitPath, { recursive: true });
@@ -755,8 +755,8 @@ test('R4-17 pin 7, item 4a (SEC-02 preservation, passed-root variant): escape-an
   const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot };
   assert.equal(
     isContainedProjectRepoPath(roundtrip, opts),
-    true,
-    `escape-and-return must remain ACCEPTED with a passed projectsRoot too — got false for "${roundtrip}"`,
+    false,
+    `escape-and-return must be REFUSED with a passed projectsRoot too — "${roundtrip}"`,
   );
 });
 

@@ -32,7 +32,7 @@ import { join } from 'node:path';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { sendJson, pathOnly, allowedOrigin, sanitizeError, decodeUrlPart } from '@forge/kernel';
+import { sendJson, pathOnly, allowedOrigin, sanitizeError, decodeUrlPart, guardedReadFile } from '@forge/kernel';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
 import {
@@ -133,8 +133,8 @@ export function recoveryInspect(initiativeId: string, ctx: RecoveryContext): Rec
     out.commits = git(wt, ['log', '--no-color', '--format=%h %s', '-n', '20', 'main..HEAD'])
       .split('\n').filter((l) => l.length > 0);
     out.diffStat = git(wt, ['diff', '--stat', 'main...HEAD']);
-    const prPath = join(wt, '.forge', 'pr-description.md');
-    out.prDraftChars = existsSync(prPath) ? readFileSync(prPath, 'utf8').length : 0;
+    // Per-segment guarded read: a symlinked `.forge` inside the accepted worktree must not leak an outside file's length.
+    out.prDraftChars = guardedReadFile(wt, ['.forge', 'pr-description.md'])?.length ?? 0;
   } else {
     out.worktreeExists = false;
   }

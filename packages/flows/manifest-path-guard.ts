@@ -66,11 +66,13 @@
  * would otherwise resolve against `process.cwd()`, not `forgeRoot`).
  * Every candidate handed to `isContainedWorktreePath` /
  * `isContainedProjectRepoPath` MUST therefore be absolute — every production
- * writer already emits absolute paths, so nothing legitimate regresses. Two
- * shapes are deliberately NOT escapes and MUST be accepted: "escape-and-return"
- * (`<root>/../projects/legit`, which `resolve()` normalises to a genuinely
- * contained path before comparison), and a directory literally named
- * `..foo` (not `..`, so it never leaves the root).
+ * writer already emits absolute, canonical paths, so nothing legitimate
+ * regresses. The RAW string is judged (`isCanonicalAbsolutePath`): any `.` /
+ * `..` / empty segment (bar ONE trailing slash) is REFUSED, because `resolve()`
+ * text-normalises `a/lnk/../b` to `a/b` while `rmSync` and `git -C` resolve
+ * the `..` physically through the symlink `lnk` -- "escape-and-return" is an
+ * escape as a DECLARED path. A directory literally named `..foo` (not `..`)
+ * is still an ordinary name and is accepted.
  *
  * NOT CLOSED (disclosed honestly, not silently assumed away):
  *   - The same residual check-then-use TOCTOU `studio-path-guard.ts`
@@ -86,7 +88,7 @@
  */
 
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { initiativeWorktreeRefusal, resolveGuardedPath } from '@forge/kernel';
+import { initiativeWorktreeRefusal, isCanonicalAbsolutePath, resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type ManifestPathFields = {
@@ -201,7 +203,8 @@ function projectsRootFor(opts: ProjectsRootOpt): string | null {
  * is the real (identity) containment check on whatever segments remain.
  */
 function containedUnder(root: string, candidate: string): { ok: boolean; segments: string[] } {
-  if (!isAbsolute(candidate)) return { ok: false, segments: [] };
+  // Judge the RAW string: `resolve()` below text-normalises `lnk/..`, but git and rmSync resolve it physically.
+  if (!isAbsolute(candidate) || !isCanonicalAbsolutePath(candidate)) return { ok: false, segments: [] };
   const rel = relative(resolve(root), resolve(candidate));
   if (rel === '') return { ok: false, segments: [] }; // the root itself is not a valid target
   const segments = rel.split(sep);

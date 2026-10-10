@@ -7,8 +7,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { initiativeWorktreeRefusal, readHalt } from '@forge/kernel';
-import { getPaths, recover, type QueuePaths } from './queue.ts';
+import { initiativeWorktreeRefusal, isSafeSegment, readHalt } from '@forge/kernel';
+import { getPaths, recover, type QueuePaths, type RecoveryResult } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
@@ -16,6 +16,7 @@ import type { PhaseWiring } from './phase-wiring.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { syncCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
+import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { notify, type NotifyConfig } from './notify.ts';
 
 /**
@@ -118,20 +119,27 @@ export async function runRecoverySweep(
       staleHeartbeatMs: cfg.staleHeartbeatMs,
       worktreeExists: worktree.exists,
     });
-    for (const r of recoveries) {
-      cleanupRecoveredWorktrees(r.recovered, getPaths(cfg.queueRoot));
-      await notify(
-        {
-          type: 'recovered',
-          title: `Recovered ${r.recovered.length} initiative(s)`,
-          body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}`,
-        },
-        cfg.notify,
-      );
-    }
+    for (const r of recoveries) await announceRecovery(r, getPaths(cfg.queueRoot), cfg.notify);
   } catch {
     /* sweep is best-effort — never throw out of setInterval */
   }
+}
+
+/**
+ * Clean up + announce one `recover()` result. A `worktree-path-refused` result was parked in
+ * failed/ (never re-dispatched), so it is NOT cleaned up and is announced as a failure.
+ */
+export async function announceRecovery(r: RecoveryResult, paths: QueuePaths, cfg: NotifyConfig): Promise<void> {
+  const refused = r.reason === 'worktree-path-refused';
+  if (!refused) cleanupRecoveredWorktrees(r.recovered, paths);
+  await notify(
+    {
+      type: refused ? 'failed' : 'recovered',
+      title: refused ? `Refused ${r.recovered.length} manifest(s): worktree_path not the initiative's own` : `Recovered ${r.recovered.length} initiative(s)`,
+      body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}`,
+    },
+    cfg,
+  );
 }
 
 /**
@@ -159,6 +167,9 @@ export function cleanupRecoveredWorktrees(filenames: string[], paths: QueuePaths
       });
       if (refusal !== null) {
         console.error(`[serve] worktree-path.refused initiative=${m.initiative_id} reason=${refusal} — recovery cleanup skipped`);
+        // The event is keyed by the manifest FILE stem (a directory-entry name), never the manifest's own id text.
+        const stem = filename.replace(/\.md$/, '');
+        if (isSafeSegment(stem)) emitOrchestratorEvent(join(dirname(paths.root), '_logs'), stem, 'error', 'worktree-path.refused', { reason: refusal });
         continue;
       }
       worktree.cleanup({

@@ -225,7 +225,7 @@ export function writeHeartbeat(filename: string, paths = getPaths()): void {
 
 export type RecoveryResult = {
   recovered: string[];
-  reason: 'stale-heartbeat' | 'missing-worktree';
+  reason: 'stale-heartbeat' | 'missing-worktree' | 'worktree-path-refused';
 };
 
 /**
@@ -243,6 +243,7 @@ export function recover(opts: {
 
   const stale: string[] = [];
   const missing: string[] = [];
+  const refused: string[] = [];
 
   for (const filename of listInFlight(paths)) {
     const hbPath = join(paths.inFlight, filename + '.heartbeat');
@@ -261,13 +262,15 @@ export function recover(opts: {
     // Missing-worktree sweep
     const claimed = parseWorktreeClaim(manifestPath);
     if (claimed) {
-      // FAIL CLOSED (forge-nk1y.20): an uncontained `worktree_path` is never probed
-      // and counts as "no live worktree" (a live cycle's is always its own
-      // `_worktrees/<id>`; "exists" would park the manifest in-flight on a path the
-      // manifest chose). It returns to pending; the cleanup sweep refuses it too.
+      // FAIL CLOSED (forge-nk1y.20): an uncontained `worktree_path` is never probed, and the
+      // manifest is PARKED in failed/ under its own reason -- not pending (that would
+      // dispatch it a second time) and not "missing-worktree" (the path was refused).
       const contained =
         initiativeWorktreeRefusal(claimed.worktreePath, { forgeRoot: dirname(paths.root), initiativeId: claimed.initiativeId }) === null;
-      if (!contained || !wtExists(claimed.worktreePath)) {
+      if (!contained) {
+        moveTo(filename, 'failed', paths);
+        refused.push(filename);
+      } else if (!wtExists(claimed.worktreePath)) {
         renameSync(manifestPath, join(paths.pending, filename));
         missing.push(filename);
       }
@@ -277,6 +280,7 @@ export function recover(opts: {
   const out: RecoveryResult[] = [];
   if (stale.length) out.push({ recovered: stale, reason: 'stale-heartbeat' });
   if (missing.length) out.push({ recovered: missing, reason: 'missing-worktree' });
+  if (refused.length) out.push({ recovered: refused, reason: 'worktree-path-refused' });
   return out;
 }
 
