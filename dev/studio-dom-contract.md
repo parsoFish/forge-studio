@@ -4,7 +4,7 @@
 
 The stories drive Studio by reading `data-*` attributes; the convention (what to mirror, how `data-page-ready` is derived, the disabled-reason and boundary rules) lives in `.claude/rules/studio-ui.md`. This page is the generated inventory of attributes and the values source gives them.
 
-It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 722 attributes.
+It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 723 attributes.
 
 | attribute | values | files |
 |---|---|---|
@@ -289,6 +289,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-findings-count` | (dynamic) | apps/studio/components/ReviewFindingsPanel.tsx |
 | `data-findings-state` | `absent`, `error`, `present`, `present/absent/error` | apps/studio/components/ReviewFindingsPanel.tsx |
 | `data-fix-round` | (dynamic) | apps/studio/components/studio/RoadmapCanvas.tsx |
+| `data-fix-round-state` | (dynamic) | apps/studio/components/studio/RoadmapCanvas.tsx |
 | `data-flagged` | (dynamic) | apps/studio/components/studio/LibraryCard.tsx |
 | `data-flow-count` | (dynamic) | apps/studio/app/flows/page.tsx |
 | `data-flow-edge` | `` | apps/studio/components/studio/FlowTopology.tsx |

@@ -4,7 +4,8 @@
  * `resume_from: develop` and `review_rounds: 1`, five delivered WIs plus one
  * pending `origin: gate-fix` WI, a `cycle.dev-close-invariant-ok` recording the
  * delivered branch head, then a red `cycle.merge-gate` and a `cycle.end` that
- * says `ready-for-review`. `withGit` plants the real repo, branch and worktree.
+ * says `ready-for-review`. `withGit` plants the real repo, branch and worktree;
+ * `queueDir: 'in-flight'` plants the manifest where the D-20 drain re-entered it (forge-nk1y.23).
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -38,7 +39,7 @@ function writeWorkItems(dir: string, fixOrigin: string): void {
   writeFileSync(join(dir, 'WI-6.md'), wiFile(6, 'pending', fixOrigin));
 }
 
-export function plantStrandedFixRound(forgeRoot: string, opts: { withGit?: boolean; fixOrigin?: 'gate-fix' | 'review-fix' } = {}): StrandedFixRound {
+export function plantStrandedFixRound(forgeRoot: string, opts: { withGit?: boolean; fixOrigin?: 'gate-fix' | 'review-fix'; queueDir?: 'ready-for-review' | 'in-flight' } = {}): StrandedFixRound {
   const fixOrigin = opts.fixOrigin ?? 'gate-fix';
   for (const d of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
     mkdirSync(join(forgeRoot, '_queue', d), { recursive: true });
@@ -76,7 +77,7 @@ export function plantStrandedFixRound(forgeRoot: string, opts: { withGit?: boole
     event('cycle.end', 'end', '2026-10-10T05:06:16.782Z', { status: 'ready-for-review', reflection_status: 'skipped', lint_status: 'skipped' }),
   ].join('\n') + '\n');
 
-  const manifestPath = join(forgeRoot, '_queue', 'ready-for-review', `${FIX_INIT}.md`);
+  const manifestPath = join(forgeRoot, '_queue', opts.queueDir ?? 'ready-for-review', `${FIX_INIT}.md`);
   writeFileSync(manifestPath, ['---', `initiative_id: ${FIX_INIT}`, `project: ${FIX_PROJECT}`, `project_repo_path: ${repo}`,
     'created_at: 2026-10-10T01:38:09.906Z', 'iteration_budget: 7', 'cost_budget_usd: 5.5', 'phase: pending',
     'origin: architect', 'class: code', `worktree_path: ${worktree}`, `cycle_id: ${FIX_CYCLE}`, 'flow_id: forge-develop',

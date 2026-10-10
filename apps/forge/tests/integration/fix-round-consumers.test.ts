@@ -22,7 +22,7 @@ import { FIX_INIT, FIX_PROJECT, plantStrandedFixRound } from '../../../../packag
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
-type Card = { status: string; fixRound?: number; completedAt?: string; canStartDevelopment: boolean; workItems?: Array<{ status?: string }> };
+type Card = { status: string; fixRound?: number; fixRoundRunning?: true; developRunning?: true; completedAt?: string; canStartDevelopment: boolean; workItems?: Array<{ status?: string }> };
 type RunRow = { initiativeId: string; fixRound?: number; completedAt?: string; awaitingKickoff?: true };
 
 test('stranded fix round: card, merged count, runs and Start agree on fixRound 1', async () => {
@@ -53,5 +53,28 @@ test('stranded fix round: card, merged count, runs and Start agree on fixRound 1
   } finally {
     await close();
     rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// forge-nk1y.23 — the drain re-entered the fix WI: the manifest is in-flight, and the card is served the facts.
+test('re-entered fix round: the in-flight card is served fixRound 1, fixRoundRunning and developRunning; parked serves neither flag', async () => {
+  for (const queueDir of ['in-flight', 'ready-for-review'] as const) {
+    const forgeRoot = mkdtempSync(join(tmpdir(), 'fix-round-in-flight-'));
+    plantStrandedFixRound(forgeRoot, { queueDir });
+    process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+    const { url, close } = await startBridge({ forgeRoot, port: 0 });
+    try {
+      const roadmap = (await (await fetch(`${url}/api/studio/projects/${FIX_PROJECT}/roadmap`)).json()) as { roadmap: { initiatives: Array<Card & { initiativeId: string }> } };
+      const card = roadmap.roadmap.initiatives.find((i) => i.initiativeId === FIX_INIT);
+      assert.ok(card, queueDir);
+      assert.equal(card.status, queueDir);
+      assert.equal(card.fixRound, 1, queueDir);
+      assert.equal(card.fixRoundRunning, queueDir === 'in-flight' ? true : undefined, queueDir);
+      assert.equal(card.developRunning, queueDir === 'in-flight' ? true : undefined, queueDir);
+      assert.equal(card.completedAt, undefined, queueDir);
+    } finally {
+      await close();
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
   }
 });
