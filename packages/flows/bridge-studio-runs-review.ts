@@ -104,9 +104,7 @@ export async function applyReviewVerdict(
     return;
   }
   if (kind === 'send-back' && acs.length === 0) {
-    sendJson(res, 400, {
-      error: 'send-back needs a blocking comment or a typed work item — neither arrived (no acceptanceCriteria from a blocking review comment, none typed)',
-    }, origin);
+    sendJson(res, 400, { error: 'send-back needs a blocking comment or a typed work item — neither arrived (no acceptanceCriteria from a blocking review comment, none typed)' }, origin);
     return;
   }
 
