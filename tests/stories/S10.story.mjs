@@ -553,6 +553,24 @@ export default {
       say: 'The card says the plan waits at the Kickoff gate. The operator opens it to reach the run itself — and the drawer names the cycle that produced it, which is the handle everything downstream is keyed by. The initiative is what was asked for; the cycle is what actually ran.',
     },
     {
+      // forge-nk1y.12 (D-48): at the Kickoff gate the drawer also offers "Add work
+      // item" — operator WIs join the decomposed set before the first build. This
+      // story PRESENCE-checks the control only (T1 ruling, hardening row 5): adding
+      // one here would change what this funded run builds. The add itself is
+      // proven costlessly (packages/flows/tests/integration/kickoff-add-work-item.test.ts,
+      // the route and Studio tests). No `do`: nothing is pressed.
+      act: 'See that work items can still be added before the build',
+      expect: {
+        route: '/projects/gitpulse',
+        data: {
+          page: 'projects', 'project-id': 'gitpulse',
+          component: 'kickoff-add-work-item',
+          'form-state': 'editing',
+        },
+      },
+      say: 'Until the build starts, the plan is still open: the operator can add a work item — its criteria and the command that proves it — and it joins the decomposed set. Nothing is added in this run.',
+    },
+    {
       // `forge-8vfn.7.6.124` — THE BEAT THAT WAS MISSING FOR EIGHTEEN RUNS.
       //
       // Every S10 run to date asserted the developer's output without ever

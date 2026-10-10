@@ -132,6 +132,10 @@ export interface PathGuardOk {
 
 export interface PathGuardReject {
   ok: false;
+  /** Structured cause, for callers that must name WHY without parsing `reason`: the
+   *  root is unusable, a segment is unsafe, a probe could not decide (EACCES, ENOTDIR,
+   *  ENAMETOOLONG ...), or an entry is a real alias/escape (symlink, dangling, hardlink). */
+  kind: 'root' | 'unsafe' | 'indeterminate' | 'alias';
   /** Internal diagnostic only — NEVER forward verbatim to an untrusted
    *  client. It can name which segment failed, which is a fingerprinting
    *  aid for an attacker iterating on the guard; every call site sends a
@@ -349,8 +353,8 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   // (every one passes a fixed or config-derived root, which is this module's
   // CONTRACT), so this is the cheap way to make that contract's guarantee true
   // rather than approximately true.
-  if (typeof root !== 'string') return { ok: false, reason: 'containment root is not a string' };
-  if (segments.length === 0) return { ok: false, reason: 'no path segments given' };
+  if (typeof root !== 'string') return { ok: false, kind: 'root', reason: 'containment root is not a string' };
+  if (segments.length === 0) return { ok: false, kind: 'unsafe', reason: 'no path segments given' };
 
   // Validate EVERY segment up front, before the walk — not lazily as the walk
   // reaches each one (SEC-01 guard-attack round). The walk stops at the first
@@ -380,8 +384,8 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     // inferred from `isSafeSegment`'s return — precisely so this file has no
     // OTHER path that could reach a `${seg}` interpolation with a
     // non-string value.
-    if (typeof seg !== 'string') return { ok: false, reason: 'unsafe path segment (non-string value)' };
-    if (!isSafeSegment(seg)) return { ok: false, reason: `unsafe path segment "${seg}"` };
+    if (typeof seg !== 'string') return { ok: false, kind: 'unsafe', reason: 'unsafe path segment (non-string value)' };
+    if (!isSafeSegment(seg)) return { ok: false, kind: 'unsafe', reason: `unsafe path segment "${seg}"` };
   }
 
   let realRoot: string;
@@ -392,7 +396,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     // folding a caller-supplied id into it.
     realRoot = realpathSync(root);
   } catch {
-    return { ok: false, reason: 'containment root does not exist' };
+    return { ok: false, kind: 'root', reason: 'containment root does not exist' };
   }
 
   let verified = realRoot; // the deepest ancestor verified identical to its expected path so far
@@ -408,7 +412,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
       // means this segment was never actually inspected, and certifying
       // "safe to create" for an uninspected segment is precisely the
       // fail-open shape this module exists to close everywhere else.
-      return { ok: false, reason: `cannot determine existence of segment "${seg}" (lstat failed: ${probe.code})` };
+      return { ok: false, kind: 'indeterminate', reason: `cannot determine existence of segment "${seg}" (lstat failed: ${probe.code})` };
     }
     if (probe.kind === 'absent') break; // deepest existing ancestor is `verified` — stop, create-mode from here
 
@@ -418,7 +422,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     } catch {
       // lstat says it's there but realpath can't resolve it — a dangling
       // symlink. Never a creation opportunity to build on top of; refuse.
-      return { ok: false, reason: `dangling or unresolvable entry at segment "${seg}"` };
+      return { ok: false, kind: 'alias', reason: `dangling or unresolvable entry at segment "${seg}"` };
     }
     if (real !== expected) {
       // The IDENTITY check (not mere containment): a symlink at this
@@ -427,7 +431,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
       // same-root cross-object escape) a DIFFERENT real object's directory
       // that also happens to live under root. "Somewhere under root" is not
       // the guarantee needed; "exactly this expected path" is.
-      return { ok: false, reason: `identity mismatch at segment "${seg}"` };
+      return { ok: false, kind: 'alias', reason: `identity mismatch at segment "${seg}"` };
     }
     verified = expected;
   }
@@ -442,10 +446,10 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     try {
       st = lstatSync(verified);
     } catch {
-      return { ok: false, reason: 'leaf disappeared between the existence check and stat' };
+      return { ok: false, kind: 'indeterminate', reason: 'leaf disappeared between the existence check and stat' };
     }
     if (st.isFile() && st.nlink !== 1) {
-      return { ok: false, reason: 'leaf is hardlinked (nlink != 1) — refusing a write/read through a shared inode' };
+      return { ok: false, kind: 'alias', reason: 'leaf is hardlinked (nlink != 1) — refusing a write/read through a shared inode' };
     }
     return { ok: true, realPath: verified, exists: true };
   }
@@ -495,7 +499,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   const rel = relative(realRoot, realPath);
   const relFirstSegment = rel.split(sep)[0];
   if (rel === '' || relFirstSegment === '..') {
-    return { ok: false, reason: 'reassembled path escapes the containment root' };
+    return { ok: false, kind: 'alias', reason: 'reassembled path escapes the containment root' };
   }
 
   return { ok: true, realPath, exists: false };

@@ -62,6 +62,7 @@ import { bindReleaseFinalize } from './example-hooks.ts';
 import { handleCycleDataRoutes, servedFileHeaders } from './bridge-cycle-data.ts';
 import { handleHaltRoutes, haltStatus } from './bridge-halt.ts';
 import { handleRunTriggerRoutes } from './bridge-run-triggers.ts';
+import { handleKickoffWorkItemRoutes } from './bridge-kickoff-work-items.ts';
 import { handleReviewCommentRoutes } from './bridge-review-comments.ts';
 import {
   handleArchitect,
@@ -750,6 +751,7 @@ async function handleHttp(
   // forge-4zk: the develop/plan/flow run-trigger family carved to
   // `./bridge-run-triggers.ts` (feature move, no behaviour change).
   if (await handleRunTriggerRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot }, url, method)) return;
+  if (await handleKickoffWorkItemRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
   // forge-4zk: the review-comments + verdict family carved to
   // `./bridge-review-comments.ts` (feature move, no behaviour change).

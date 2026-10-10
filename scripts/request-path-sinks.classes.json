@@ -287,6 +287,12 @@
   "verified": "read",
   "note": "no request field"
  },
+ "packages/flows/orchestrator-event.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "best-effort JSONL append under a trusted logs root; the initiative id is the scheduler's own claim-loop id, or the queue directory-entry stem after isSafeSegment (scheduler-sweeps' worktree-path.refused event), never a request-supplied path"
+ },
  "packages/flows/phases/closure.ts": {
   "class": "not-request-derived",
   "guard": null,
@@ -484,6 +490,12 @@
   "guard": null,
   "verified": "read",
   "note": "Not a route: reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s `mintRemote`"
+ },
+ "packages/kernel/served-file.ts": {
+  "class": "guarded",
+  "guard": "guardedFile",
+  "verified": "exec",
+  "note": "forge-mfv5.1.29: `guardedByteReader` stats and streams ONLY the path `guardedFile(root, segments, 'read')` returned (leaf-inclusive identity + containment); reached from `GET /api/artifact/<cycleId>/<filename>` in `apps/forge/bridge-cycle-data.ts`. Pinned by `apps/forge/tests/contract/artifact-media-serving.test.ts` (symlinked leaf and `..` refused) and `packages/kernel/tests/unit/served-file.test.ts`."
  },
  "packages/kernel/studio-object.ts": {
   "class": "other",

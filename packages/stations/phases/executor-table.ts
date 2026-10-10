@@ -252,14 +252,14 @@ const execIntegrate: NodeExecutor = async (ctx) => {
       return;
     }
     if (!gate.ok) {
+      // forge-mfv5.1.27: the failing gate's OWN command, never the per-WI gate (a CI failure runs the LOCAL gate; none ⇒ parks by name).
+      const projectGateCmd = gate.failedGate === 'ci' ? (gate.localCmd ?? []) : gate.cmd;
       const enqueue = enqueueGateFixWorkItems({
         worktreePath: input.worktreePath,
         manifestPath: input.manifestPath,
         initiativeId: input.initiativeId,
         failedGate: gate.failedGate,
-        // forge-mfv5.1.27: the failing gate's OWN command, never the per-WI gate. A CI failure's fix WI runs the
-        // LOCAL gate (a WI cannot carry the CI gate's unset-env/timeout); with no local gate it parks by name.
-        projectGateCmd: gate.failedGate === 'ci' ? (gate.localCmd ?? []) : gate.cmd,
+        projectGateCmd,
       });
       nodeLogger.emit({
         initiative_id: input.initiativeId,
@@ -273,7 +273,7 @@ const execIntegrate: NodeExecutor = async (ctx) => {
           failed_gate: gate.failedGate,
           origin: 'gate-fix',
           ...(enqueue.status === 'compiled'
-            ? { appended_work_items: enqueue.appended, round: enqueue.round, head_sha: worktreeHead(input.worktreePath) }
+            ? { appended_work_items: enqueue.appended, round: enqueue.round, head_sha: worktreeHead(input.worktreePath), gate_cmd: projectGateCmd }
             : { detail: enqueue.detail }),
         },
       });

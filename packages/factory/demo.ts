@@ -38,7 +38,7 @@ import {
   checkpointArtifactStem,
 } from '@forge/stations/demo-types.ts';
 import { isSafeDemoRoute } from '@forge/contracts';
-import { resolveCheckpointHead } from '@forge/kernel';
+import { resolveCheckpointHead, contentTypeByExtension } from '@forge/kernel';
 import { loadProjectConfig } from '@forge/projects';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
@@ -124,11 +124,9 @@ export function cleanupWorktreeAt(handle: WorktreeAtRef): void {
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
 function imageMime(file: string): string {
-  if (file.endsWith('.jpg') || file.endsWith('.jpeg')) return 'image/jpeg';
-  if (file.endsWith('.webp')) return 'image/webp';
-  return 'image/png';
+  // The kernel's one content-type table; IMAGE_EXTS already narrowed the caller.
+  return contentTypeByExtension(file) ?? 'image/png';
 }
-
 
 /** Read an image file into a base64 data URI; null if unreadable or > cap. */
 export function imageToDataUri(file: string): string | null {

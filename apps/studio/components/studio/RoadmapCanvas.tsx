@@ -60,7 +60,7 @@ import {
   type RoadmapTimeLayout,
   type CardPosition,
 } from '@/lib/roadmap-time-layout';
-import { queueStatusToColor, queueStatusLabel, ROADMAP_TONE_COLOR } from '@/lib/roadmap-status-color';
+import { queueStatusToColor, queueStatusLabel, developStateAttr, ROADMAP_TONE_COLOR } from '@/lib/roadmap-status-color';
 import { STATUS_COLOR } from '@/lib/status-colors';
 import { attemptInfoFor, type AttemptInfo } from '@/lib/recovery-attrs';
 import { topoLevels } from '@/lib/dep-layout';
@@ -123,7 +123,7 @@ export type RoadmapCanvasProps = {
   onPlan?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation on a card. */
   onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
-  /** called after a successful requeue/abandon to refetch roadmap + cycle groups. */
+  /** called after a successful requeue/abandon (or a Kickoff-gate work-item add) to refetch roadmap + cycle groups. */
   onRecoveryDone?: () => void | Promise<void>;
   /** W6-B10: routes honestly — resumes the project's in-flight demo session
    *  or opens the kickoff screen, keyed off this initiative for context. */
@@ -558,7 +558,7 @@ function RoadmapCanvasNode({
   dimmed: boolean;
   onSelect: (id: string) => void;
 }) {
-  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId, fixRound } = initiative;
+  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId, fixRound, fixRoundRunning, developRunning } = initiative;
   const colour = ROADMAP_TONE_COLOR[queueStatusToColor(status)];
   const planPhase = workItems !== undefined ? 'planned' : status === 'in-flight' ? 'claimed' : 'pending';
 
@@ -574,12 +574,12 @@ function RoadmapCanvasNode({
       data-roadmap-node
       data-initiative-id={initiativeId} data-action={`open-initiative-${initiativeId}`}
       data-initiative-status={status}
-      data-develop-state={develop.status}
+      data-develop-state={developStateAttr(develop.status, developRunning === true)}
       data-plan-state={planStateAttr(planPhase, plan)}
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')} data-blocked-clauses={(blockedClauses ?? []).join(',')}
       data-initiative-collapsed="true"
-      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})} {...(fixRound !== undefined ? { 'data-fix-round': String(fixRound) } : {})}
+      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})} {...(fixRound !== undefined ? { 'data-fix-round': String(fixRound), 'data-fix-round-state': fixRoundRunning === true ? 'running' : 'parked' } : {})}
       onClick={() => onSelect(initiativeId)}
       style={{
         position: 'absolute', left: position.x, top: position.y, width: position.w, height: position.h,
@@ -604,7 +604,7 @@ function RoadmapCanvasNode({
       <div data-micro-badges style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: colour, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-          {queueStatusLabel(status, fixRound)}
+          {queueStatusLabel(status, fixRound, fixRoundRunning === true ? { done: wiDone, total: wiTotal } : undefined)}
         </span>
         {/* W7-B6 (projects-33): the completion-time badge takes the STATUS
             colour and only earns a ✓ for a successful terminal state — a
@@ -766,7 +766,7 @@ function RoadmapDrawer({
           recoveryNote={recoveryNote}
           onInspectRecovery={inspectRecovery}
           onRecoveryAction={doRecoveryAction}
-          onDepJump={onDepJump}
+          onDepJump={onDepJump} onWorkItemAdded={onRecoveryDone}
         />
       </>
     );

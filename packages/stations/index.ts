@@ -32,3 +32,6 @@ export { rerunReflector } from './reflector-rerun.ts';
 
 // ---- The docs class's merge-boundary verb (apps/forge/factory-cli-wiring.ts, `forge gate docs`) ----
 export { runDocsGate } from './gates/docs-gate.ts';
+
+// ---- D-47 coverage, re-reported when the Kickoff gate adds a work item (forge-nk1y.12) ----
+export { uncoveredAcceptanceCriteria } from './phases/decompose-completeness.ts';

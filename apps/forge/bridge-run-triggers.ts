@@ -272,7 +272,7 @@ export async function handleRunTriggerRoutes(
         result.status === 'not-found' ? 404 :
         result.status === 'already-running' || result.status === 'already-done' ||
           result.status === 'not-planned' || result.status === 'repoint-requires-confirm' ||
-          result.status === 'class-mismatch' || result.status === 'not-at-kickoff' ? 409 :
+          result.status === 'class-mismatch' || result.status === 'not-at-kickoff' || result.status === 'locked' ? 409 :
         500;
       sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
     } catch (err) {

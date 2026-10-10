@@ -179,7 +179,7 @@ test('finalize: [F-09 gap] a merged cycle prunes its cycle worktree (git worktre
 test('finalize: [F-09 gap] a prune failure (cleanupWorktree + pruneWiWorktrees both throw) never changes the finalize outcome — manifest still promoted to done/, failures recorded as events', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-09-25-prune-fail');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-09-25-prune-fail';
     writeManifest(queueRoot, 'ready-for-review', id, wt);

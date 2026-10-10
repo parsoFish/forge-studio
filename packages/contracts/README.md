@@ -23,7 +23,7 @@ be reachable from here or it cannot reach the browser at all.
 | the runnable-source rule — whether enqueueFlowRun may claim a manifest | `DEVELOP_FLOW_ID` · `isRunnableSource` |
 | the ONE project-readiness rule — Studio shows it, the claim gate enforces it (SPEC §6) | `projectReadiness` |
 | the ONE Kickoff-gate rule — the run model derives it, the develop enqueue refuses on it | `KICKOFF_SOURCE_FLOW_ID` · `isAwaitingKickoff` · `kickoffBuiltReason` |
-| the fix-round rule — the run model derives the round of a parked gate-fix, the drain and requeue refuse a moved branch head | `fixRoundOf` · `fixRoundDeliveredHead` · `fixRoundHeadVerdict` |
+| the fix-round rule — the run model derives the round of a parked or running gate-fix and whether develop is running, the drain and requeue refuse a moved branch head | `fixRoundOf` · `developRunningOf` · `fixRoundDeliveredHead` · `fixRoundHeadVerdict` |
 | the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `resolveDeclaredBin` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
 | pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |
