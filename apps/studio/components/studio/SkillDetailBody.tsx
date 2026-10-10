@@ -115,7 +115,7 @@ export function SkillDetailBody({
                 : 'This skill dropped out of the palette (see the reason above) — quarantined and not runnable as an agent until re-approved. Approving re-pins the content hash to what is on disk right now.'}
             </p>
             {detail.scan && (
-              <pre style={{ margin: 0, padding: '12px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>
+              <pre style={{ margin: 0, padding: '12px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 'var(--pane-lg)', overflow: 'auto' }}>
                 <code>{detail.scan.body}</code>
               </pre>
             )}
