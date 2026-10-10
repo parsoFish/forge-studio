@@ -34,6 +34,8 @@ export type DevelopStartItemResult = {
      *  roadmap payload carries no flow id — so the hand-off is refused rather
      *  than performed blind. */
     | 'repoint-requires-confirm'
+    /** forge-nk1y.12: a Kickoff-gate add holds the manifest lock; `detail` names it. */
+    | 'locked'
     | 'error';
   cycleId?: string;
   flowId?: string;

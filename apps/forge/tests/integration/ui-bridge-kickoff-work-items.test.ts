@@ -10,6 +10,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import lockfile from 'proper-lockfile';
+
 import { startBridge } from '../../ui-bridge.ts';
 import { parseManifest, serializeManifest } from '@forge/flows';
 import { STRANDED_INIT } from '../../../../packages/flows/tests/test-fixtures/stranded-kickoff.ts';
@@ -17,6 +19,7 @@ import { RETIRE_GATE, plantKickoffWorktree } from '../../../../packages/flows/te
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 const ROUTE = '/api/kickoff/work-items';
+let bridgeUrl = '';
 const BODY = {
   initiativeId: STRANDED_INIT,
   summary: 'Retire the legacy specs inside I1.',
@@ -32,6 +35,7 @@ async function withBridge(fn: (post: (b: unknown) => Promise<Reply>, root: strin
   plant(forgeRoot);
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const { url, close } = await startBridge({ forgeRoot, port: 0 });
+  bridgeUrl = url;
   const post = async (b: unknown): Promise<Reply> => {
     const res = await fetch(`${url}${ROUTE}`, { method: 'POST', headers: CSRF, body: JSON.stringify(b) });
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
@@ -112,4 +116,17 @@ test('409: an unsafe manifest path field', () => withBridge(async (post) => {
   const { manifestPath } = plantKickoffWorktree(root);
   const m = parseManifest(readFileSync(manifestPath, 'utf8'));
   writeFileSync(manifestPath, serializeManifest({ ...m, worktree_path: join(root, '..', 'elsewhere') }));
+}));
+
+test('Start development while an add holds the manifest lock: the per-id result is the named `locked` refusal, never a silent proceed', () => withBridge(async (_post, root) => {
+  const manifestPath = join(root, '_queue', 'ready-for-review', `${STRANDED_INIT}.md`);
+  const release = await lockfile.lock(manifestPath, { realpath: false });
+  try {
+    const res = await fetch(`${bridgeUrl}/api/develop/start`, { method: 'POST', headers: CSRF, body: JSON.stringify({ initiativeIds: [STRANDED_INIT] }) });
+    const body = (await res.json()) as { ok: boolean; results: Array<{ status: string; ok: boolean; detail?: string }> };
+    assert.equal(body.ok, false);
+    assert.equal(body.results[0]?.status, 'locked');
+    assert.match(body.results[0]?.detail ?? '', /locked by another writer/);
+    assert.ok(existsSync(manifestPath));
+  } finally { await release(); }
 }));

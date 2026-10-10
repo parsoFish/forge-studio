@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
@@ -147,17 +147,43 @@ test('unsafe: a worktree_path outside the forge roots is refused before any read
   assert.match('detail' in r ? r.detail : '', /worktree_path/);
 }));
 
-test('lock: Start development landing while the add waits on the manifest lock is refused not-at-kickoff', () => withRoot(async (root) => {
+test('lock: Start development taking the lock between the add\'s outer check and its lock is refused not-at-kickoff', () => withRoot(async (root) => {
   const { manifestPath, wiDir } = plantKickoffWorktree(root);
-  const release = await lockfile.lock(manifestPath, { realpath: false }); // another writer holds it (the verdict handler's lock)
-  const pending = add(root); // passes the outer check, then waits on the lock
+  await lockfile.lock(manifestPath, { realpath: false }); // another writer holds it (the verdict handler's lock)
+  const pending = add(root); // passes the outer check, then waits on the lock (retry ≥ 50 ms)
   await new Promise((r) => setTimeout(r, 20));
-  const e = enqueueDevelopRun(STRANDED_INIT, { queueRoot: join(root, '_queue') });
+  lockfile.unlockSync(manifestPath, { realpath: false });
+  const e = enqueueDevelopRun(STRANDED_INIT, { queueRoot: join(root, '_queue') }); // synchronous: lands before the add's next retry
   assert.equal(e.status, 'enqueued', e.detail);
-  await release();
   const r = await pending;
   assert.equal(r.status, 'not-at-kickoff');
   assert.ok(!existsSync(join(wiDir, 'WI-6.md')), 'nothing written once development started');
+}));
+
+test('lock: Start development while the manifest lock is held (an add in progress) is refused locked by name, the manifest stays', () => withRoot(async (root) => {
+  const { manifestPath } = plantKickoffWorktree(root);
+  const release = await lockfile.lock(manifestPath, { realpath: false });
+  try {
+    const e = enqueueDevelopRun(STRANDED_INIT, { queueRoot: join(root, '_queue') });
+    assert.equal(e.status, 'locked');
+    assert.match(e.detail ?? '', /locked by another writer/);
+    assert.ok(existsSync(manifestPath), 'never a silent proceed: the manifest is still at the Kickoff gate');
+    assert.ok(!existsSync(join(root, '_queue', 'pending', `${STRANDED_INIT}.md`)));
+  } finally { await release(); }
+  assert.equal(enqueueDevelopRun(STRANDED_INIT, { queueRoot: join(root, '_queue') }).status, 'enqueued', 'released: Start proceeds');
+}));
+
+test('a manifest that cannot record the WI in its specs leaves no stray WI (worktree or snapshot)', () => withRoot(async (root) => {
+  const { manifestPath, wiDir, snapshotDir } = plantKickoffWorktree(root);
+  chmodSync(manifestPath, 0o444); // readable for the gate check, unwritable for the specs append
+  try {
+    const r = await add(root);
+    assert.equal(r.status, 'not-at-kickoff');
+    assert.match('detail' in r ? r.detail : '', /could not record the work item/);
+  } finally { chmodSync(manifestPath, 0o644); }
+  assert.ok(!existsSync(join(wiDir, 'WI-6.md')));
+  assert.ok(!existsSync(join(snapshotDir, 'WI-6.md')));
+  assert.equal(readManifest(manifestPath).specs?.includes('WI-6') ?? false, false);
 }));
 
 test('buildPlanWorkItem (pure, reused by the verdict gate later): plan WI beside the set, or every set error', () => {
