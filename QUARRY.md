@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 142 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 143 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -55,7 +55,7 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 9 | 1,782 | **1,782** | ratified 1,782 — forge-mfv5.1.27: `fixRoundOf` beside `isAwaitingKickoff`, `Run.fixRound`, and the pure delivered-head reader + named head verdict; +43 measured on main 1,739, lane-ratified (≤100, ruling 666). |
-| `kernel` | 39 | 6,743 | **5,609** | ratified 5,609 — forge-nk1y.8: one safe URL decoder (`url-decode.ts`, a named `MalformedUrlEncodingError`) on top of the spend-ceiling derivation; +32 measured on main 5,577, lane-ratified (≤100, ruling 666). |
+| `kernel` | 39 | 6,744 | **5,609** | ratified 5,609 — forge-nk1y.8: one safe URL decoder (`url-decode.ts`, a named `MalformedUrlEncodingError`) on top of the spend-ceiling derivation; +32 measured on main 5,577, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 53 | 11,871 | **10,074** | ratified 10,074 — forge-mfv5.1.23: Save merges its forge-studio PR only on green required checks and GitHub's CLEAN (pure verdict over one graphql read), `--auto` only when allowed; +100 measured on main 9,974, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
@@ -65,10 +65,10 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 48 | 12,646 | **12,646** | ratified 12,646 — forge-nk1y.12: the door exports `uncoveredAcceptanceCriteria` so the Kickoff gate's add re-reports D-47 coverage; +3 measured on main 12,643, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 37 | 8,756 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
+| `apps/forge` | 38 | 8,845 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **513** | **135,142** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **514** | **135,232** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -202,7 +202,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 62 |
-| apps/forge/dry-bridge.ts | kernel | rewritten | 319 |
+| apps/forge/dry-bridge.ts | kernel | rewritten | 320 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 800 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 311 |
@@ -263,11 +263,12 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/contained-read.ts | kernel | verbatim | 34 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| apps/forge/ui-bridge.ts | apps/forge | rewritten | 797 |
+| apps/forge/ui-bridge.ts | apps/forge | rewritten | 799 |
 | apps/forge/bridge-halt.ts | apps/forge | rewritten | 65 **New file, row 207 (forge-8vfn.8.5.57):** `POST /api/halt`, `POST /api/halt/release` and the `serve.halt` health read. |
 | apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 381 |
 | apps/forge/serve-supervisor.ts | apps/forge | rewritten | 395 |
 | apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
+| apps/forge/bridge-kickoff-work-items.ts | apps/forge | rewritten | 87 **New file, forge-nk1y.12:** `POST /api/kickoff/work-items` — add a plan work item at the Kickoff gate (D-48). |
 | apps/forge/bridge-review-comments.ts | apps/forge | rewritten | 203 |
 | apps/forge/bridge-agent-dispatch.ts | apps/forge | rewritten | 522 |
 | apps/forge/bridge-reflect.ts | apps/forge | rewritten | 303 |
