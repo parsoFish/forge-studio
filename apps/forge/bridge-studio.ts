@@ -766,7 +766,7 @@ export async function handleStudioRoutes(
   // ---- /api/studio/projects/:id/roadmap -----------------------------------
   // NOT carved (M4 §4 projects routes carve — same allow-graph blocker) — see the note on
   // `GET /api/studio/projects/attention` above: `buildProjectRoadmap` and its
-  // helper cluster (`scanProjectManifests`, `completedAtByInitiative`,
+  // helper cluster (`scanProjectManifests`, `runFactsByInitiative`,
   // `readWorkItemsForInitiative`, `tryReadWorkItemDir`) read `@forge/flows`
   // (queue/manifest/scheduler/work-item/run-list-cache), a strictly higher
   // package rank than `projects`; carving them would be a new, unbaselinable
@@ -816,7 +816,9 @@ export type RoadmapWorkItem = {
 export type RoadmapInitiative = {
   initiativeId: string;
   title: string;
-  status: QueueState;
+  /** The queue dir, or `awaiting-kickoff` (bead forge-mfv5.1.25) read off the
+   *  run model's `awaitingKickoff` — the file itself stays in ready-for-review/. */
+  status: QueueState | 'awaiting-kickoff';
   dependsOnInitiatives: string[];
   /**
    * plan-everything-before-kickoff: whether this initiative's build deps are
@@ -959,7 +961,8 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
  * Mirrors the queueStatusFor pattern from apps/forge/ui-bridge.ts:195.
  */
 /**
- * W6-RV-2: initiativeId → real cycle-completion instant, sourced from the
+ * W6-RV-2: initiativeId → real cycle-completion instant (and, bead
+ * forge-mfv5.1.25, the run model's `awaitingKickoff`), sourced from the
  * SAME memoized run derivation `GET /api/runs` already uses
  * (`cachedListRuns`, packages/flows/run-list-cache.ts) — reusing it here means the
  * roadmap's completedAt column costs nothing beyond what that route already
@@ -969,10 +972,16 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
  * queue tree (it has no project filter), so this is a superset scan — cheap
  * because it's the memo's job, not a second parse of anything roadmap-local.
  */
-function completedAtByInitiative(forgeRoot: string): Map<string, string> {
-  const byInitiative = new Map<string, string>();
+function runFactsByInitiative(forgeRoot: string): Map<string, { completedAt?: string; awaitingKickoff?: true }> {
+  const byInitiative = new Map<string, { completedAt?: string; awaitingKickoff?: true }>();
   for (const run of cachedListRuns(forgeRoot, Date.now())) {
-    if (run.completedAt !== undefined) byInitiative.set(run.initiativeId, run.completedAt);
+    // Merge, never overwrite: one initiative can have a run per queue dir.
+    const prev = byInitiative.get(run.initiativeId) ?? {};
+    byInitiative.set(run.initiativeId, {
+      ...prev,
+      ...(run.completedAt !== undefined ? { completedAt: run.completedAt } : {}),
+      ...(run.awaitingKickoff ? { awaitingKickoff: true as const } : {}),
+    });
   }
   return byInitiative;
 }
@@ -980,7 +989,7 @@ function completedAtByInitiative(forgeRoot: string): Map<string, string> {
 function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const { entries, unparseable } = scanProjectManifests(projectId, forgeRoot);
-  const completedAtById = completedAtByInitiative(forgeRoot);
+  const runFactsById = runFactsByInitiative(forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest, blockedClauses }) => {
     // W7-A4 (projects-10 / flows-26): the ONE title derivation the run model
@@ -991,12 +1000,12 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     const workItems = items.length > 0 ? items : undefined;
 
     const blockedBy = checkInitiativeDeps(file, queuePaths);
-    const completedAt = completedAtById.get(initId);
+    const { completedAt, awaitingKickoff } = runFactsById.get(initId) ?? {};
 
     return {
       initiativeId: initId,
       title,
-      status,
+      status: awaitingKickoff && status === 'ready-for-review' ? 'awaiting-kickoff' : status,
       dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
       // `forge-8vfn.7.6.18`: ready means the scheduler WOULD claim it. A claim it
       // already refused for a named hard clause is not ready, and saying so is the

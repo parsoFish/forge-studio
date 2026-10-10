@@ -108,7 +108,7 @@ export {
   DEV_WORK_ITEM_ID_PATTERN,
   devWorkItemIdStem,
 } from '@forge/contracts';
-import { WORK_ITEM_ID_PATTERN } from '@forge/contracts';
+import { WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN } from '@forge/contracts';
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 /**
  * Exported (W6-RV-1) so forge-ui's hand-kept `WorkItemStatus` mirror
@@ -725,4 +725,18 @@ function detectCycle(items: WorkItem[]): string[] | null {
     }
   }
   return null;
+}
+
+/**
+ * True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc).
+ * Keyed on `WORK_ITEM_FILE_PATTERN`, so a split-only decomposition
+ * (`WI-4a.md`, `WI-4b.md`) is not read as empty. The decomposition evidence
+ * `enqueue-flow-run.ts` and the flow runner's kickoff outcome both read.
+ */
+export function hasWorkItemFiles(dir: string): boolean {
+  try {
+    return readdirSync(dir).some((f) => WORK_ITEM_FILE_PATTERN.test(f));
+  } catch {
+    return false;
+  }
 }

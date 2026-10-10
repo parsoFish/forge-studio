@@ -22,6 +22,7 @@ import {
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
 import { deriveActionableNow } from '@/lib/roadmap-actionable';
+import { isStartEligible } from '@/lib/start-work-view';
 import { resolveDemoEntryHref } from '@/lib/demo-entry-view';
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
@@ -1003,7 +1004,7 @@ function RoadmapView({
     () =>
       initiatives.filter((i) => {
         const dev = developByInitiative[i.initiativeId]?.status ?? 'idle';
-        return i.status === 'pending' && i.ready && i.workItems !== undefined && dev !== 'starting' && dev !== 'started';
+        return isStartEligible(i) && dev !== 'starting' && dev !== 'started';
       }),
     [initiatives, developByInitiative],
   );

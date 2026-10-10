@@ -191,7 +191,7 @@ function renderHeader(args: {
   const statusEmoji =
     args.status === 'merged'
       ? '🟢'
-      : args.status === 'ready-for-review'
+      : args.status === 'ready-for-review' || args.status === 'awaiting-kickoff'
         ? '🟡'
         : '🔴';
   // M7 findings row 59: forge-architect and forge-develop both terminate at

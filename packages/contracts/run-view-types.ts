@@ -61,6 +61,8 @@ export type Run = {
   artifactsReady: Partial<Record<'plan' | 'work-items' | 'pr' | 'demo' | 'verdict' | 'reflection', 'view' | 'gate'>>;
   gate?: string;
   gateNote?: string;
+  /** Parked at the Kickoff gate — `isAwaitingKickoff` (bead forge-mfv5.1.25), derived once here. */
+  awaitingKickoff?: true;
   failedAt?: string;
   failNote?: string;
   /** A cost-ceiling stop — resumable, distinct from an ordinary crash (ON-7 defect 2). */

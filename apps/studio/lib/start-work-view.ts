@@ -5,9 +5,10 @@
  * Turns the roadmap read model into the four primary actions' enablement:
  *   - Plan               → the first unplanned-but-dependency-ready pending
  *                          initiative (decompose it into work items);
- *   - Start development  → every pending + ready + PLANNED initiative (the
- *                          same eligibility rule RoadmapView's batch button
- *                          uses — a WI-less initiative is never eligible);
+ *   - Start development  → every pending + ready + PLANNED initiative, and
+ *                          every one the bridge serves as `awaiting-kickoff`
+ *                          (`isStartEligible`, shared with RoadmapView's batch
+ *                          button — a WI-less initiative is never eligible);
  *   - Run a flow         → the flows an initiative can be enqueued onto
  *                          (everything except the idea-kickoff — that IS the
  *                          Architect action — and trigger-only flows);
@@ -20,7 +21,7 @@
 export type StartWorkInitiative = {
   initiativeId: string;
   title: string;
-  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
+  status: 'in-flight' | 'ready-for-review' | 'awaiting-kickoff' | 'merged' | 'done' | 'failed' | 'pending';
   ready: boolean;
   workItems?: unknown[];
   /** `forge-8vfn.7.6.18` — failing hard-clause NAMES from a claim the scheduler
@@ -49,6 +50,13 @@ export type StartWorkState = {
   runFlowDisabledReason: string | null;
 };
 
+/** Start development's ONE eligibility rule: planned and either pending + ready
+ *  or at the Kickoff gate. `awaiting-kickoff` is the bridge's served word
+ *  (bead forge-mfv5.1.25) — read, never recomputed here. */
+export function isStartEligible(i: Pick<StartWorkInitiative, 'status' | 'ready' | 'workItems'>): boolean {
+  return i.workItems !== undefined && i.ready && (i.status === 'pending' || i.status === 'awaiting-kickoff');
+}
+
 export function deriveStartWorkState(
   initiatives: StartWorkInitiative[] | null,
   flows: StartWorkFlow[],
@@ -67,7 +75,7 @@ export function deriveStartWorkState(
   const pendingReady = list.filter((i) => i.status === 'pending' && i.ready);
   const unplannedReady = pendingReady.filter((i) => i.workItems === undefined);
   const dispatched = new Set(dispatchedDevelopIds);
-  const eligibleAll = pendingReady.filter((i) => i.workItems !== undefined);
+  const eligibleAll = list.filter(isStartEligible);
   const eligible = eligibleAll.filter((i) => !dispatched.has(i.initiativeId));
   const runnableFlows = flows.filter((f) => {
     const kind = f.kickoff?.kind;

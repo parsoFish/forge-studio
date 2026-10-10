@@ -898,6 +898,7 @@ export function parseRun(raw: unknown): Run {
     // open guard (run-wire-field.ts) — see that file for the full history.
     ...carryWireFieldIfDefined(r.stopOnBudget, 'stopOnBudget'),
     ...carryWireFieldIfDefined(r.operatorStop, 'operatorStop'),
+    ...carryWireFieldIfDefined(r.awaitingKickoff, 'awaitingKickoff'),
     workItems:     r.workItems     ?? [],
     flowLineage:   r.flowLineage   ?? [],
     // R6-01 WI-2: carried through, never defaulted — an absent `trigger` key

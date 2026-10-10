@@ -468,6 +468,7 @@ export async function runOne(
     preserveWorktree =
       result.status === 'pr-open' ||
       result.status === 'ready-for-review' ||
+      result.status === 'awaiting-kickoff' ||
       result.status === 'failed';
     cycleFailed = result.status === 'failed';
     await dispatchTerminalStatus(

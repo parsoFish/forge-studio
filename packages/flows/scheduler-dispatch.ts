@@ -18,7 +18,7 @@ export type DispatchInput = {
   filename: string;
   manifest: { initiativeId: string; project: string };
   result: {
-    status: 'merged' | 'pr-open' | 'ready-for-review' | 'failed';
+    status: 'merged' | 'pr-open' | 'ready-for-review' | 'awaiting-kickoff' | 'failed';
     log_path: string;
   };
 };
@@ -109,6 +109,17 @@ export async function dispatchTerminalStatus(
         type: 'review-ready',
         title: `Ready for review: ${manifest.initiativeId}`,
         body: `${manifest.project} — see ${result.log_path}`,
+      });
+      return { moved, notified: 'review-ready' };
+    }
+    case 'awaiting-kickoff': {
+      // Bead forge-mfv5.1.25: a decomposition-only flow parked at the Kickoff
+      // gate. Same move as above — no new queue dir; the roadmap derives KICKOFF.
+      const moved = moveIfInFlight(filename, 'ready-for-review', paths);
+      await notifyFn({
+        type: 'review-ready',
+        title: `Awaiting kickoff: ${manifest.initiativeId}`,
+        body: `${manifest.project} — work items planned; start development from the roadmap. See ${result.log_path}`,
       });
       return { moved, notified: 'review-ready' };
     }

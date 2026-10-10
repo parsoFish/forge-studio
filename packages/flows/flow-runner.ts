@@ -60,6 +60,7 @@ import { readOperatorStopRequest, OperatorStopError } from './operator-stop.ts';
 import type { PhaseExecutor, ProjectGate } from '@forge/kernel';
 import type { NodeExecContext, NodeRunState } from './flow-node-context.ts';
 import { resolveNodeKind } from './flow-node-kind.ts';
+import { hasWorkItemFiles } from './work-item.ts';
 
 /**
  * `resolveNodeKind` moved to its own module in M2-B so the executor table can
@@ -743,8 +744,13 @@ export async function runFlow({
     },
   });
 
+  // Bead forge-mfv5.1.25: no closure ran, the walk did not stop early, and the
+  // run left work items (the same evidence `enqueue-flow-run.ts` reads) — a
+  // decomposition-only flow parks at the Kickoff gate, not a review.
+  const awaitingKickoff = state.closure === null && !state.terminateEarly
+    && hasWorkItemFiles(resolve(input.worktreePath, '.forge', 'work-items'));
   return {
-    cycleOutcome: state.cycleOutcome,
+    cycleOutcome: awaitingKickoff ? 'awaiting-kickoff' : state.cycleOutcome,
     reflectionStatus: state.reflectionStatus,
     lintStatus: state.lintStatus,
   };

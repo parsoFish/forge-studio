@@ -13,7 +13,7 @@
  * (or mints one if absent), so cost / roadmap / metrics roll up under ONE
  * `_logs/<cycleId>` dir. No sibling cycle is born.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
@@ -24,7 +24,9 @@ import {
   type InitiativeManifest,
 } from './manifest.ts';
 import { getPaths } from './queue.ts';
-import { WORK_ITEM_FILE_PATTERN } from './work-item.ts';
+import { hasWorkItemFiles } from './work-item.ts';
+import { readKickoffFacts, kickoffBuiltReason } from './kickoff-facts.ts';
+import { KICKOFF_SOURCE_FLOW_ID } from '@forge/contracts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';
@@ -70,6 +72,9 @@ export type EnqueueFlowRunStatus =
    * before any spend. Nothing is written; the queued manifest is untouched.
    */
   | 'class-mismatch'
+  /** Bead forge-mfv5.1.25: a forge-architect hand-off whose work items are
+   *  already built is past the Kickoff gate — refused by name, nothing written. */
+  | 'not-at-kickoff'
   | 'error';
 
 export type EnqueueFlowRunResult = {
@@ -267,6 +272,18 @@ export function enqueueFlowRun(
     };
   }
 
+  // Bead forge-mfv5.1.25: the architect hand-off starts only from the Kickoff
+  // gate. Built work items mean a develop run already touched this initiative.
+  if (flowId === DEVELOP_FLOW_ID && sourcePath === reviewParkedPath && manifest.flow_id === KICKOFF_SOURCE_FLOW_ID) {
+    const queueParent = resolve(opts.queueRoot ?? '_queue', '..');
+    const built = kickoffBuiltReason(readKickoffFacts({
+      queueDir: 'ready-for-review', manifest, logsRoot: join(queueParent, '_logs'), forgeRoot: queueParent,
+    }));
+    if (built !== null) {
+      return { status: 'not-at-kickoff', initiativeId, detail: `work items already built — not at the kickoff gate (${built})` };
+    }
+  }
+
   // W8-A3 (`flows-37` / `forge-chm`, S1 — data corruption). Repointing an
   // initiative that is queued under ANOTHER flow takes it away from that flow.
   // Every planned initiative on disk carries the flow that produced it
@@ -357,19 +374,6 @@ function firstExisting(candidates: string[]): string | null {
   return null;
 }
 
-/**
- * True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc).
- * `WORK_ITEM_FILE_PATTERN` is the exported SSOT (packages/flows/work-item.ts) —
- * this used to carry its own narrower `/^WI-\d+\.md$/`, which read a
- * split-only decomposition (`WI-4a.md`, `WI-4b.md`) as an EMPTY directory.
- */
-function hasWorkItemFiles(dir: string): boolean {
-  try {
-    return readdirSync(dir).some((f) => WORK_ITEM_FILE_PATTERN.test(f));
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Decomposition evidence for the develop `not-planned` gate — the SAME sources

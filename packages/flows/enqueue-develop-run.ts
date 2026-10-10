@@ -30,6 +30,8 @@ export type EnqueueDevelopStatus =
   /** Seam F6 half 1 (D-34): forge-develop does not declare
    *  the manifest's `class` in its `accepts` list. */
   | 'class-mismatch'
+  /** Bead forge-mfv5.1.25: built work items — past the Kickoff gate. */
+  | 'not-at-kickoff'
   | 'error';
 
 export type EnqueueDevelopResult = {
