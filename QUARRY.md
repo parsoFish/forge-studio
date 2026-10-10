@@ -55,7 +55,7 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 9 | 1,782 | **1,782** | ratified 1,782 — forge-mfv5.1.27: `fixRoundOf` beside `isAwaitingKickoff`, `Run.fixRound`, and the pure delivered-head reader + named head verdict; +43 measured on main 1,739, lane-ratified (≤100, ruling 666). |
-| `kernel` | 40 | 6,795 | **5,609** | ratified 5,609 — forge-nk1y.8: one safe URL decoder (`url-decode.ts`, a named `MalformedUrlEncodingError`) on top of the spend-ceiling derivation; +32 measured on main 5,577, lane-ratified (≤100, ruling 666). |
+| `kernel` | 40 | 6,795 | **5,661** | ratified 5,661 — forge-nk1y.20: `initiative-worktree.ts`, the one realpath-identity answer to "is this the initiative's own `_worktrees/<id>`" (the projects-root fallback removed), shared by flows and agents; +52 measured on main 5,609, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 53 | 11,871 | **10,074** | ratified 10,074 — forge-mfv5.1.23: Save merges its forge-studio PR only on green required checks and GitHub's CLEAN (pure verdict over one graphql read), `--auto` only when allowed; +100 measured on main 9,974, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
