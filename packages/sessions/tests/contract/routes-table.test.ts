@@ -74,11 +74,12 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  // 30: 36 since forge-mfv5.2.8 closed GET /api/demo-builder/fragment/…,
+  // 31: 36 since forge-mfv5.2.8 closed GET /api/demo-builder/fragment/…,
   // minus 6 for the row 206 sweep (forge-8vfn.8.5.56): no forge-ui caller
   // reaches a bespoke /api/instructions/{brief,answer,verdict} or
-  // /api/demo-builder/{brief,feedback,abandon} table entry.
-  assert.equal(table.length, 30, 'a route added or removed without updating this pin');
+  // /api/demo-builder/{brief,feedback,abandon} table entry; +1 for
+  // /api/project-brain/revise (forge-mfv5.1.15).
+  assert.equal(table.length, 31, 'a route added or removed without updating this pin');
   assert.equal(claimant('GET', '/api/demo-builder/fragment/p/s/e'), null, 'the retired fragment route claims nothing');
   for (const [method, deadUrl] of [
     ['POST', '/api/instructions/brief'],
@@ -158,6 +159,7 @@ const PROJECT_BRAIN_ROUTES = [
   ['POST', '/api/project-brain/start', '/api/project-brain/start'],
   ['POST', '/api/project-brain/brief', '/api/project-brain/brief'],
   ['POST', '/api/project-brain/approve', '/api/project-brain/approve'],
+  ['POST', '/api/project-brain/revise', '/api/project-brain/revise'],
   ['POST', '/api/project-brain/abandon', '/api/project-brain/abandon'],
 ] as const;
 

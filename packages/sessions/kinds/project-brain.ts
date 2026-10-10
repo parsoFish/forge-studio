@@ -21,9 +21,10 @@
  * `interactive-runners-golden.test.ts` against
  * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-project-brain.json`.
  */
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { sessionDirSegments } from '@forge/kernel';
+import { guardedReadFile, sessionDirSegments } from '@forge/kernel';
 
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // architect-session.ts's own module doc — `kinds/registry.ts` needs
@@ -63,6 +64,8 @@ export type ProjectBrainStatus = {
   phase: ProjectBrainPhase;
   /** The operator's focus/guidance for the brain (persisted to prompt.md). */
   prompt: string;
+  /** forge-mfv5.1.15 — the draft round; absent = 1, bumped by `/revise`. */
+  round?: number;
   updated_at: string;
   /**
    * R1-06 WI-2 (F2 hand-off, T1 ruling Q4 option (a)): when this session was
@@ -105,6 +108,27 @@ function stagingThemesDir(sessionDir: string): string {
   return join(sessionDir, 'themes');
 }
 
+/** name -> sha256 of each staged theme's content, for the revise round's
+ *  "did the turn change anything" check — read through the same guard
+ *  `listStagedThemes` lists with. A read the guard refuses throws by name
+ *  (the file was listed a moment ago) rather than hashing as empty. */
+function stagedThemeHashes(logsRoot: string, project: string, sessionId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const dir = [...sessionDirSegments(project, PROJECT_BRAIN_KIND_DIR, sessionId), 'themes'];
+  for (const name of listStagedThemes(logsRoot, project, sessionId)) {
+    const content = guardedReadFile(logsRoot, [...dir, name]);
+    if (content === null) throw new Error(`project-brain runner: staged theme ${name} could not be read for the revise check`);
+    out.set(name, createHash('sha256').update(content).digest('hex'));
+  }
+  return out;
+}
+
+function sameHashes(a: ReadonlyMap<string, string>, b: ReadonlyMap<string, string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [name, hash] of a) if (b.get(name) !== hash) return false;
+  return true;
+}
+
 export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProjectBrainTurnResult> = {
   id: 'project-brain',
   kindDir: PROJECT_BRAIN_KIND_DIR,
@@ -121,51 +145,64 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
       const staging = stagingThemesDir(plumbing.sessionDir);
       mkdirSync(staging, { recursive: true });
 
-      const skillFor = (turnId: string) =>
-        loadSkillTurnPrompt({
-          name: 'project-brain-builder',
-          turnId,
-          skillPromptPath: input.skillPromptPath,
+      // forge-mfv5.1.15 — consume-once feedback.md ("Revise with notes"),
+      // deleted only once the step resolves, so a failed turn's retry keeps it.
+      return await plumbing.withOperatorFeedback(async (feedback) => {
+        const skillFor = (turnId: string) =>
+          loadSkillTurnPrompt({
+            name: 'project-brain-builder',
+            turnId,
+            skillPromptPath: input.skillPromptPath,
+          });
+        const { cwd, prompt } = buildAnalyzePlan(status, plumbing.forgeRoot, staging, skillFor, feedback);
+        // A revise round starts with round N's themes already staged, so the
+        // "no theme files" guard below can never fire; snapshot the staged
+        // content instead, so a turn that applied none of the notes is caught.
+        const before = feedback === null ? null : stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId);
+
+        // forge-mfv5.1.16 — the turn leaves a priced row or an unpriced one (never
+        // both, never neither), the same pair the instructions kind leaves.
+        const rowIdentity = {
+          initiativeId: plumbing.initiativeId, phase: 'project-brain' as const, skill: 'project-brain-builder',
+        };
+        const { costUsd } = await runAgentTurn({
+          queryFn: plumbing.queryFn,
+          maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — the session's remaining, at dispatch
+          prompt,
+          cwd,
+          model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),
+          allowedTools: projectBrainAgentSpec.allowedTools,
+          disallowedTools: projectBrainAgentSpec.disallowedTools,
+          // W8-B6 — hook dispatch comes from the driver already bound to this
+          // turn's logger and initiative id, so no kind can spawn hook-blind.
+          ...plumbing.hooksForSkill(projectBrainAgentSpec.skill),
+          maxTurns: 30,
+          onToolUse: plumbing.onToolUse,
+          onHeartbeat: plumbing.onHeartbeat,
+          onThinking: plumbing.onThinking,
+          onTurnEndedUnpriced: (info: UnpricedTurnInfo) => emitTurnEndedUnpricedRow(plumbing.logger, {
+            ...rowIdentity, message: 'project-brain.analyzing.turn-ended-unpriced',
+          }, info),
+          label: `project-brain-${input.sessionId}`,
         });
-      const { cwd, prompt } = buildAnalyzePlan(status, plumbing.forgeRoot, staging, skillFor);
+        if (costUsd !== null) {
+          emitTurnCostRow(plumbing.logger, { ...rowIdentity, message: 'project-brain.analyzing.turn-cost' }, costUsd);
+        }
 
-      // forge-mfv5.1.16 — the turn leaves a priced row or an unpriced one (never
-      // both, never neither), the same pair the instructions kind leaves.
-      const rowIdentity = {
-        initiativeId: plumbing.initiativeId, phase: 'project-brain' as const, skill: 'project-brain-builder',
-      };
-      const { costUsd } = await runAgentTurn({
-        queryFn: plumbing.queryFn,
-        maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — the session's remaining, at dispatch
-        prompt,
-        cwd,
-        model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),
-        allowedTools: projectBrainAgentSpec.allowedTools,
-        disallowedTools: projectBrainAgentSpec.disallowedTools,
-        // W8-B6 — hook dispatch comes from the driver already bound to this
-        // turn's logger and initiative id, so no kind can spawn hook-blind.
-        ...plumbing.hooksForSkill(projectBrainAgentSpec.skill),
-        maxTurns: 30,
-        onToolUse: plumbing.onToolUse,
-        onHeartbeat: plumbing.onHeartbeat,
-        onThinking: plumbing.onThinking,
-        onTurnEndedUnpriced: (info: UnpricedTurnInfo) => emitTurnEndedUnpricedRow(plumbing.logger, {
-          ...rowIdentity, message: 'project-brain.analyzing.turn-ended-unpriced',
-        }, info),
-        label: `project-brain-${input.sessionId}`,
+        const themes = listStagedThemes(plumbing.logsRoot, input.project, input.sessionId);
+        if (themes.length === 0) {
+          throw new Error(
+            'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
+          );
+        }
+        if (before !== null && sameHashes(before, stagedThemeHashes(plumbing.logsRoot, input.project, input.sessionId))) {
+          throw new Error(
+            "project-brain runner: revise round changed no staged theme — the operator's notes were not applied — re-run to retry; the notes are kept.",
+          );
+        }
+        writeStatus({ ...status, phase: 'awaiting-review' });
+        return { phase: 'awaiting-review', wrote: themes.map((t) => join(staging, t)), themes };
       });
-      if (costUsd !== null) {
-        emitTurnCostRow(plumbing.logger, { ...rowIdentity, message: 'project-brain.analyzing.turn-cost' }, costUsd);
-      }
-
-      const themes = listStagedThemes(plumbing.logsRoot, input.project, input.sessionId);
-      if (themes.length === 0) {
-        throw new Error(
-          'project-brain runner: the agent turn produced no theme files — re-run to retry, or refine the guidance.',
-        );
-      }
-      writeStatus({ ...status, phase: 'awaiting-review' });
-      return { phase: 'awaiting-review', wrote: themes.map((t) => join(staging, t)), themes };
     },
 
     // --- commit: copy staged themes into the central project brain -----------

@@ -3,7 +3,7 @@ title: Knowledge
 description: Create a knowledge base, bind it to a flow, and keep the themes your agents read before acting healthy.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-09
 covers: [apps/studio/app/knowledge/**, packages/knowledge/**]
 sidebar:
   order: 9
@@ -24,7 +24,7 @@ To create a knowledge base, press **+ New KB** on **Knowledge**. Fill in:
 - **Band (optional)**. For a flow binding, scope the knowledge to one band of the flow's guarded agents. Leave it empty and every reader of the flow can read it. A flow with no band-guarded agents offers no bands.
 - **Description**, optional.
 
-Press **Create knowledge base →**. Studio opens the new knowledge base and shows a banner naming its seeding session. Follow **watch the seeding session →**. The session waits for an optional brief (**Start analysis →**), reads the project, and drafts themes. Review the drafts in the artifact pane, then press **Approve + commit** to write them into the knowledge base. **Abandon…** discards them.
+Press **Create knowledge base →**. Studio opens the new knowledge base and shows a banner naming its seeding session. Follow **watch the seeding session →**. The session waits for an optional brief (**Start analysis →**), reads the project, and drafts themes. Review the drafts in the artifact pane, then press **Approve + commit** to write them into the knowledge base. To correct a draft, press **Revise with notes…**, write what is wrong, and press **Send for revision**: the agent revises the staged themes and the review returns as the next draft round. **Abandon…** discards them.
 
 ## Check that agents read it
 

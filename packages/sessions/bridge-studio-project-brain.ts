@@ -2,7 +2,7 @@
  * bridge-studio-project-brain.ts — the project-brain session kind's
  * `/api/project-brain/*` routes, carved out of `apps/forge/ui-bridge.ts`.
  *
- * Six routes, arms VERBATIM. Same rules as the architect and instructions
+ * Seven routes (forge-mfv5.1.15 added `revise`), arms VERBATIM. Same rules as the architect and instructions
  * modules: `readJson(req)` → `ctx.readBody()` (ruling 30), shared helpers from
  * `bridge-studio-session-helpers.ts`, host spawn/serve surface injected.
  *
@@ -15,11 +15,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
-import { allowedOrigin, sendJson, sendIfDispatchRefused, decodeUrlPart } from '@forge/kernel';
+import { allowedOrigin, createLogger, releaseDispatchSlot, sendJson, sendIfDispatchRefused, decodeUrlPart } from '@forge/kernel';
 import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath, sessionDirSegments } from '@forge/kernel';
 import { PROJECT_BRAIN_KIND_DIR } from '@forge/knowledge';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
+import { appendVerdictRecord, readVerdictHistory, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-sessions-affordance-shell.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import { ceilingStatusFields, resolveStartCeilingFor } from './session-start-ceiling.ts';
 import { listProjectBrainSessions } from './bridge-studio-session-index.ts';
@@ -280,12 +281,29 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 409, { error: `session is not awaiting review (phase: ${status.phase})`, sessionId: body.sessionId }, origin);
         return true;
       }
+      // forge-mfv5.1.15 — the decision history (verdicts.json) is PRE-FLIGHTED
+      // like the generic verdict path: an unreadable history refuses an APPROVE
+      // before anything is written, rather than being overwritten. ABANDON is
+      // the escape hatch for a stuck session, so it is never blocked by a
+      // corrupt history: it proceeds, skips its own record, and says so by name.
+      const history = readVerdictHistory(ctx.logsRoot, dirSegs);
+      if (!history.ok && approve) { sendJson(res, 409, { ok: false, error: history.message }, origin); return true; }
       // Row 206 part (a) — claim BEFORE the write, but only on the `approve`
       // path: `abandon` never spawns, so it has no claim to protect.
       if (approve) ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', body.sessionId);
       if (guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs, { ...status, phase: approve ? 'committing' : 'abandoned' }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
+      }
+      if (history.ok) {
+        appendVerdictRecord(ctx.logsRoot, dirSegs, history.prior, approve ? 'approve' : 'abandon', '', '');
+      } else {
+        createLogger(`_${ctx.spawnAgentSpecs['project-brain'].logPrefix}-${body.sessionId}`, ctx.logsRoot).emit({
+          initiative_id: `project-brain-${body.sessionId}`, phase: 'project-brain', skill: 'project-brain-builder',
+          event_type: 'log', input_refs: [], output_refs: [],
+          message: 'project-brain.verdict-history-unreadable',
+          metadata: { session_id: body.sessionId, verdict: 'abandon', reason: history.message },
+        });
       }
       if (approve) ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
@@ -295,7 +313,90 @@ export async function handleProjectBrainRoutes(
       if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
-  }  return false;
+  }
+  if (method === 'POST' && url === '/api/project-brain/revise') {
+    try {
+      await handleProjectBrainRevise(res, ctx, origin);
+    } catch (err) {
+      if (!sendIfDispatchRefused(res, err, origin)) sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+  return false;
+}
+
+/** forge-mfv5.1.15 — the review gate's `revise` verdict: notes -> feedback.md
+ *  (consumed once by the next analyzing turn), back to `analyzing`, round + 1,
+ *  recorded in verdicts.json. Mirrors `handleGenericRevise`'s sequence. */
+async function handleProjectBrainRevise(
+  res: ServerResponse,
+  ctx: ProjectBrainRouteContext,
+  origin: string,
+): Promise<void> {
+  const body = (await ctx.readBody()) as { project?: unknown; sessionId?: unknown; feedback?: unknown; notes?: unknown } | null;
+  const project = typeof body?.project === 'string' ? body.project : '';
+  const sessionId = typeof body?.sessionId === 'string' ? body.sessionId : '';
+  if (!project || !sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return; }
+  const feedback = typeof body?.feedback === 'string' ? body.feedback : '';
+  if (feedback.trim().length === 0) { sendJson(res, 400, { error: 'feedback is required to revise — say what to change' }, origin); return; }
+  const feedbackBytes = Buffer.byteLength(feedback, 'utf8');
+  if (feedbackBytes > MAX_ANSWER_FIELD_BYTES) {
+    sendJson(res, 400, { error: `feedback is ${feedbackBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+    return;
+  }
+  if (body?.notes !== undefined && typeof body.notes !== 'string') {
+    sendJson(res, 400, { error: `notes must be a string when present, got ${JSON.stringify(body.notes)}` }, origin);
+    return;
+  }
+  const notes = typeof body?.notes === 'string' ? body.notes.trim() : '';
+  const notesBytes = Buffer.byteLength(notes, 'utf8');
+  if (notesBytes > MAX_ANSWER_FIELD_BYTES) {
+    sendJson(res, 400, { error: `notes is ${notesBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+    return;
+  }
+
+  const dirSegs = sessionDirSegments(project, PROJECT_BRAIN_KIND_DIR, sessionId);
+  if (!guardedSessionDir(ctx.logsRoot, project, PROJECT_BRAIN_KIND_DIR, sessionId)) {
+    sendJson(res, 404, { error: 'session not found' }, origin);
+    return;
+  }
+  const status = guardedReadSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs);
+  if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return; }
+  if (status.phase !== 'awaiting-review') {
+    sendJson(res, 409, { error: `session is not awaiting review (phase: ${status.phase})`, sessionId }, origin);
+    return;
+  }
+  const history = readVerdictHistory(ctx.logsRoot, dirSegs);
+  if (!history.ok) { sendJson(res, 409, { ok: false, error: history.message }, origin); return; }
+
+  const round = (typeof status.round === 'number' ? status.round : 1) + 1;
+  // Row 206 part (a) — claim BEFORE either write: a refused claim (thrown
+  // DispatchInFlight, mapped to 409 by the caller) leaves feedback.md and
+  // status.json exactly as the operator last saw them.
+  ctx.claimAgentTurnSlot(ctx.forgeRoot, 'project-brain', sessionId);
+  if (
+    guardedWriteFile(ctx.logsRoot, [...dirSegs, 'feedback.md'], feedback) === null ||
+    guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs, { ...status, phase: 'analyzing', round }) === null
+  ) {
+    // No turn will ever start for this claim: release it, or the session's
+    // dispatch slot stays held and every retry 409s as DispatchInFlight.
+    releaseDispatchSlot(ctx.forgeRoot, `_${ctx.spawnAgentSpecs['project-brain'].logPrefix}-${sessionId}`);
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+  const spawn = ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'project-brain', project, sessionId);
+  if (!spawn.ok) {
+    // A failed spawn is REPORTED, not swallowed: the phase rolls back to the
+    // review gate so the session is not stranded in `analyzing` with no turn
+    // to leave it. feedback.md deliberately stays — the retry carries it.
+    guardedWriteSessionStatus<ProjectBrainRow>(ctx.logsRoot, dirSegs, status);
+    ctx.broadcastProjectBrainChanged();
+    sendJson(res, 500, { error: `your notes were saved to this session but no agent turn could be started — ${spawn.error}. The session is back on its review gate; send the revision again once the cause is cleared.` }, origin);
+    return;
+  }
+  appendVerdictRecord(ctx.logsRoot, dirSegs, history.prior, 'revise', notes, feedback);
+  ctx.broadcastProjectBrainChanged();
+  sendJson(res, 200, { ok: true, phase: 'analyzing', round, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/revise', sessionId) }, origin);
 }
 
 /** R1-3b — the staged theme files (name + content) for a session under review.
