@@ -190,6 +190,7 @@ packages/flows/operator-stop.ts existsSync 2
 packages/flows/operator-stop.ts mkdirSync 1
 packages/flows/operator-stop.ts readFileSync 1
 packages/flows/phases/closure.ts execFileSync 1
+packages/flows/phases/closure.ts readFileSync 1
 packages/flows/phases/closure.ts writeFileSync 1
 packages/flows/phases/gitignored-creates.ts spawnSync 1
 packages/flows/phases/orchestrated-capture.ts execFileSync 2
@@ -220,9 +221,9 @@ packages/flows/queue.ts renameSync 5
 packages/flows/queue.ts statSync 1
 packages/flows/queue.ts unlinkSync 2
 packages/flows/queue.ts writeFileSync 1
-packages/flows/requeue-resume.ts execFileSync 1
-packages/flows/requeue-resume.ts existsSync 4
-packages/flows/requeue-resume.ts readFileSync 1
+packages/flows/requeue-resume.ts execFileSync 2
+packages/flows/requeue-resume.ts existsSync 6
+packages/flows/requeue-resume.ts readFileSync 2
 packages/flows/review-comments.ts existsSync 1
 packages/flows/review-comments.ts mkdirSync 1
 packages/flows/review-comments.ts readFileSync 1

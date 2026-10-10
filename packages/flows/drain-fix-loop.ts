@@ -81,6 +81,8 @@ export type FixLoopDrainDeps = {
   /** The installed factory's phase wiring (D-32) — threaded to `runCycle`, never imported. */
   phaseWiring: PhaseWiring;
   notify?: (msg: string) => void;
+  /** forge-mfv5.1.27: drain ONE `ready-for-review/` manifest (its filename) — runOne's immediate re-entry. */
+  only?: string;
 };
 
 async function defaultRunDrainCycle(input: CycleInput, wiring: PhaseWiring): Promise<{ status: string }> {
@@ -112,7 +114,7 @@ export async function drainPendingFixWorkItems(
   if (!existsSync(paths.readyForReview)) return out;
 
   for (const file of readdirSync(paths.readyForReview)) {
-    if (!file.endsWith('.md')) continue;
+    if (!file.endsWith('.md') || (deps.only !== undefined && file !== deps.only)) continue;
     const manifestPath = join(paths.readyForReview, file);
     let initiativeId = file.replace(/\.md$/, '');
     let release: (() => Promise<void>) | null = null;
@@ -251,6 +253,7 @@ export async function drainPendingFixWorkItems(
         worktreePath,
         cycleId,
         resumeFrom: 'develop',
+        ...(deps.logsRoot ? { logsRoot } : {}),
       };
       try {
         const result = await runDrainCycle(input, deps.phaseWiring);

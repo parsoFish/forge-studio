@@ -49,7 +49,9 @@ export function queueStatusToColor(status: QueueState): StatusTone {
   return QUEUE_STATE_TO_TONE[status];
 }
 
-/** The card's status label: the served word, except the Kickoff gate reads KICKOFF. */
-export function queueStatusLabel(status: QueueState): string {
+/** The card's status label: the served word, except the Kickoff gate reads KICKOFF
+ *  and a served fix round (forge-mfv5.1.27) reads FIX ROUND <n>. */
+export function queueStatusLabel(status: QueueState, fixRound?: number): string {
+  if (fixRound !== undefined) return `fix round ${fixRound}`;
   return status === 'awaiting-kickoff' ? 'kickoff' : status;
 }

@@ -117,6 +117,8 @@ export type RoadmapInitiative = {
    * fabricated) for a manifest that carries no `flow_id`.
    */
   flowId?: string;
+  /** forge-mfv5.1.27: the parked fix round — served by the bridge, never derived here. */
+  fixRound?: number;
 };
 
 export type ProjectRoadmap = {

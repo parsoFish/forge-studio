@@ -44,7 +44,7 @@ import { FORGE_ROOT } from '@forge/kernel';
 import { getPaths } from './queue.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, serializeManifest } from './manifest.ts';
-import { inferRequeueResume, readPriorFailureSignal, type RequeueResumeDecision } from './requeue-resume.ts';
+import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, readPriorFailureSignal, type RequeueResumeDecision } from './requeue-resume.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 
 export type RequeueOptions = {
@@ -187,16 +187,19 @@ export function runRequeue(
   // the preserved worktree/branch state (environment failure OR
   // clean-boundary halt with salvageable committed work resumes; everything
   // else re-runs fresh from main — the pre-N7 behaviour).
+  // forge-mfv5.1.27: pending compiled fix WIs win over the integrate override —
+  // jumping to integrate would skip them — and resume develop on the kept branch.
+  const inferred = inferRequeueResume({ forgeRoot, cycleId: manifest.cycle_id, initiativeId, worktreePath, projectRepoPath });
+  const fixRound = inferred.resume && inferred.resume_from === 'develop';
   const resumeDecision: RequeueResumeDecision =
-    opts.resumeFromIntegrate && !priorFailure.cleanBoundaryHalt
+    opts.resumeFromIntegrate && !priorFailure.cleanBoundaryHalt && !fixRound
       ? { resume: true, resume_from: 'integrate', reason: 'operator-requested --resume-from=integrate' }
-      : inferRequeueResume({
-          forgeRoot,
-          cycleId: manifest.cycle_id,
-          initiativeId,
-          worktreePath,
-          projectRepoPath,
-        });
+      : inferred;
+  if (fixRound) {
+    const logPath = join(forgeRoot, '_logs', manifest.cycle_id ?? initiativeId, 'events.jsonl');
+    const refusal = fixRoundHeadRefusal({ logPath, projectRepoPath, branch: `forge/${initiativeId}` });
+    if (refusal !== null) throw new FixRoundRefusedError(`requeue: ${refusal}`);
+  }
 
   // A resume preserves the worktree + branch (the salvaged per-WI work the
   // resumed cycle runs against). Only a full (non-resume) requeue wipes them
@@ -223,7 +226,9 @@ export function runRequeue(
           ? ('plan' as const)
           : resumeDecision.resume && resumeDecision.resume_from === 'pr-open'
             ? ('pr-open' as const)
-            : undefined,
+            : resumeDecision.resume && resumeDecision.resume_from === 'develop'
+              ? ('develop' as const)
+              : undefined,
   };
 
   // 3. Atomic move to pending/ via tmp+rename.

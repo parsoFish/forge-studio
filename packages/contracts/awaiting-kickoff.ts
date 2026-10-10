@@ -22,6 +22,8 @@ export type KickoffFacts = {
   branchHasCommits: () => boolean;
   resumeFrom: string | null;
   reviewRounds: number;
+  /** forge-mfv5.1.27: compiled fix WIs (`origin` set) still pending or in progress. */
+  pendingFixWorkItems: number;
 };
 
 /** Why the work items count as built, or null when nothing is built. */
@@ -39,4 +41,14 @@ export function isAwaitingKickoff(f: KickoffFacts): boolean {
     && f.flowId === KICKOFF_SOURCE_FLOW_ID
     && f.workItemStatuses.length > 0
     && kickoffBuiltReason(f) === null;
+}
+
+/**
+ * forge-mfv5.1.27 — the fix round a red merge gate (or a send-back) parked:
+ * `reviewRounds` while compiled fix WIs wait for the drain to re-enter develop,
+ * else null. ONE derivation, served beside `isAwaitingKickoff`; never a review.
+ */
+export function fixRoundOf(f: KickoffFacts): number | null {
+  const parked = f.queueDir === 'ready-for-review' && f.resumeFrom === 'develop' && f.pendingFixWorkItems > 0;
+  return parked ? f.reviewRounds : null;
 }

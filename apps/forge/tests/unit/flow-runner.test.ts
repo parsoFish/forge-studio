@@ -590,11 +590,11 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       const deps = makeMockDeps(tracker);
       deps.runMergeBoundaryGate = (_input, _logger) => {
         tracker.calls.push('runMergeBoundaryGate');
-        return { ok: false, failedGate: 'local', cmd: ['npm', 'test'], output: 'dead-shared-helper: 1 failing' };
+        return { ok: false, failedGate: 'local', cmd: ['npm', 'run', 'test:full'], output: 'dead-shared-helper: 1 failing' };
       };
       // NOT a dry run (so the gate-fix compiler + closure run); the integrate node's
       // only inbound is wi-branches (git-state — the artifact guard skips it).
-      const input = makeInput({ initiativeId: 'INIT-2026-08-02-mg', worktreePath: wt, projectRepoPath: wt, manifestPath, qualityGateCmd: ['npm', 'test'], dryRun: false });
+      const input = makeInput({ initiativeId: 'INIT-2026-08-02-mg', worktreePath: wt, projectRepoPath: wt, manifestPath, qualityGateCmd: ['true'], dryRun: false }); // forge-mfv5.1.27: the live no-op per-WI gate
       const logger = makeLogger();
 
       await runFlowT({ flow, input, logger, deps });
@@ -607,7 +607,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
 
       // The gate-fix WI is on the queue + the send-back is stamped (drain re-enters).
       const gateFix = readWorkItemsFromDir(join(wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'gate-fix');
-      assert.equal(gateFix.length, 1, 'one gate-fix WI compiled from the red gate');
+      assert.equal(gateFix.length, 1, 'one gate-fix WI compiled from the red gate'); assert.deepEqual(gateFix[0]!.quality_gate_cmd, ['npm', 'run', 'test:full'], "the fix WI's gate is the FAILING merge gate's own cmd, not ['true']");
       assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'develop', 'manifest stamped resume_from:develop');
 
       // The integrate node's terminal 'end' carries status:'failed' so its hex renders

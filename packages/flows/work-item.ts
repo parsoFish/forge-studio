@@ -734,9 +734,9 @@ function detectCycle(items: WorkItem[]): string[] | null {
  * `enqueue-flow-run.ts` and the flow runner's kickoff outcome both read.
  */
 /** Each WI file's RAW status (forge-mfv5.1.25): one outside the enum, or none, is `unreadable` — never `pending`. */
-export function rawWorkItemStatuses(dir: string): string[] {
+export function rawWorkItemFacts(dir: string): Array<{ status: string; compiled: boolean }> {
   return readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)).map((f) => {
-    try { const s = matter(readFileSync(join(dir, f), 'utf8')).data.status; return WORK_ITEM_STATUSES.includes(s as WorkItemStatus) ? String(s) : 'unreadable'; } catch { return 'unreadable'; }
+    try { const d = matter(readFileSync(join(dir, f), 'utf8')).data; return { status: WORK_ITEM_STATUSES.includes(d.status as WorkItemStatus) ? String(d.status) : 'unreadable', compiled: FIX_WI_ORIGINS.includes(d.origin) }; } catch { return { status: 'unreadable', compiled: false }; }
   });
 }
 

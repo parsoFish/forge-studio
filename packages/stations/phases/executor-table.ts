@@ -256,7 +256,7 @@ const execIntegrate: NodeExecutor = async (ctx) => {
         manifestPath: input.manifestPath,
         initiativeId: input.initiativeId,
         failedGate: gate.failedGate,
-        projectGateCmd: input.qualityGateCmd ?? [],
+        projectGateCmd: gate.cmd, // the failing gate's OWN command (forge-mfv5.1.27), never the per-WI gate
       });
       nodeLogger.emit({
         initiative_id: input.initiativeId,

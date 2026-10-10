@@ -46,10 +46,14 @@ export async function runFinalizeSweep(wiring: PhaseWiring): Promise<void> {
  * drain skips merged PRs — a merge always wins). Best-effort — never throws
  * out of the timer.
  */
-export async function runDrainSweep(wiring: PhaseWiring, queueRoot: string): Promise<void> {
+export async function runDrainSweep(
+  wiring: PhaseWiring,
+  queueRoot: string,
+  scope: { only?: string; logsRoot?: string } = {},
+): Promise<void> {
   if (readHalt(queueRoot) !== null) return; // the emergency halt (D-03): re-entry is a claim
   try {
-    for (const r of await drainPendingFixWorkItems({ queueRoot, notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
+    for (const r of await drainPendingFixWorkItems({ queueRoot, ...scope, notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
       if (r.status === 'drained') {
         console.log(`[serve] fix loop ${r.initiativeId} — fix work items run in the same cycle (${r.detail})`);
       } else if (r.status === 'error') {

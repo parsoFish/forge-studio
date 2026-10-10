@@ -418,3 +418,37 @@ test('runClosure N6: unconfirmed merge (pr-open) → CI watch NOT invoked', asyn
     h.cleanup();
   }
 });
+
+// ---------------------------------------------------------------------------
+// forge-mfv5.1.27: closure is never refused, but a park that still owes a
+// compiled fix WI emits `closure-with-pending-fix-wi` (ids + round).
+// ---------------------------------------------------------------------------
+
+test('runClosure: a pending compiled fix WI is named (closure-with-pending-fix-wi), the move still happens', async () => {
+  const h = setup();
+  try {
+    const wiDir = join(h.proj, '.forge', 'work-items');
+    mkdirSync(wiDir, { recursive: true });
+    writeFileSync(join(wiDir, 'WI-1.md'), '---\nwork_item_id: WI-1\ninitiative_id: INIT-x\nstatus: complete\ndepends_on: []\nacceptance_criteria:\n  - given: a\n    when: b\n    then: c\nfiles_in_scope: [a.txt]\nestimated_iterations: 1\n---\n# WI-1\n');
+    writeFileSync(join(wiDir, 'WI-2.md'), '---\nwork_item_id: WI-2\ninitiative_id: INIT-x\nstatus: pending\ndepends_on: []\nacceptance_criteria:\n  - given: a\n    when: b\n    then: c\nfiles_in_scope: [a.txt]\nestimated_iterations: 1\norigin: gate-fix\n---\n# WI-2\n');
+    writeFileSync(h.manifestPath, '---\ninitiative_id: INIT-x\nproject: p\nproject_repo_path: /tmp/x\ncreated_at: 2026-10-10T00:00:00Z\niteration_budget: 1\ncost_budget_usd: 1\nclass: code\nphase: in-flight\nresume_from: develop\nreview_rounds: 1\n---\n');
+    const r = await runClosure(input(h, () => true), h.logger, 'ready-for-review');
+    assert.equal(r.outcome, 'ready-for-review');
+    const ev = h.events().find((e) => e.message === 'closure-with-pending-fix-wi');
+    assert.ok(ev, 'the pending fix round is named');
+    assert.deepEqual(ev.metadata, { pending_work_items: ['WI-2'], round: 1 });
+    assert.ok(existsSync(join(h.paths.readyForReview, 'INIT-x.md')), 'closure is not refused — the manifest still moves');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runClosure: no pending fix WI → no closure-with-pending-fix-wi event', async () => {
+  const h = setup();
+  try {
+    await runClosure(input(h, () => true), h.logger, 'ready-for-review');
+    assert.equal(h.events().some((e) => e.message === 'closure-with-pending-fix-wi'), false);
+  } finally {
+    h.cleanup();
+  }
+});

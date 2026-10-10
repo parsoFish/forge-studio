@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
+import { fixRoundOf, isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
 
 const AT_KICKOFF: KickoffFacts = {
   queueDir: 'ready-for-review',
@@ -14,6 +14,7 @@ const AT_KICKOFF: KickoffFacts = {
   branchHasCommits: () => false,
   resumeFrom: null,
   reviewRounds: 0,
+  pendingFixWorkItems: 0,
 };
 
 test('a decomposed, unbuilt forge-architect manifest in ready-for-review is awaiting kickoff', () => {
@@ -49,4 +50,23 @@ test('the branch probe is not run when a cheaper fact already decides', () => {
   isAwaitingKickoff({ ...AT_KICKOFF, queueDir: 'pending', branchHasCommits: probe });
   isAwaitingKickoff({ ...AT_KICKOFF, workItemStatuses: ['complete'], branchHasCommits: probe });
   assert.equal(probed, false);
+});
+
+// forge-mfv5.1.27 — the live gate-red park: 5 delivered + 1 pending gate-fix WI,
+// review_rounds 1, resume_from develop, in ready-for-review.
+const FIX_ROUND: KickoffFacts = {
+  ...AT_KICKOFF, flowId: 'forge-develop', resumeFrom: 'develop', reviewRounds: 1, pendingFixWorkItems: 1,
+  workItemStatuses: ['complete', 'complete', 'complete', 'complete', 'complete', 'pending'],
+};
+
+test('fixRoundOf: a parked fix round reads its round; it is never a kickoff', () => {
+  assert.equal(fixRoundOf(FIX_ROUND), 1);
+  assert.equal(isAwaitingKickoff(FIX_ROUND), false);
+});
+
+test('fixRoundOf: each fact alone breaks it', () => {
+  assert.equal(fixRoundOf({ ...FIX_ROUND, queueDir: 'in-flight' }), null);
+  assert.equal(fixRoundOf({ ...FIX_ROUND, resumeFrom: null }), null);
+  assert.equal(fixRoundOf({ ...FIX_ROUND, pendingFixWorkItems: 0 }), null);
+  assert.equal(fixRoundOf(AT_KICKOFF), null);
 });

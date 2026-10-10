@@ -49,7 +49,7 @@ import {
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
 import { sumAuthoritativeCostUsd } from '@forge/kernel';
-import { manifestAwaitsKickoff } from './kickoff-facts.ts';
+import { manifestAwaitsKickoff, manifestFixRound } from './kickoff-facts.ts';
 
 // ---------------------------------------------------------------------------
 // Exported types (binding API per M1 design §1)
@@ -290,10 +290,11 @@ function buildRun(args: {
   // --- completedAt (W6-RV-2): the real cycle-end instant, or its
   // crash-tail fallback — see the Run.completedAt doc comment above. ---
   // Bead forge-mfv5.1.25: THE Kickoff-gate derivation; the roadmap reads it off this run.
-  const awaitingKickoff = runStatus === 'gated' && manifestAwaitsKickoff({
-    queueDir: 'ready-for-review', manifest, logsRoot: join(resolve(root), '_logs'), forgeRoot: resolve(root),
-  });
-  const completedAt = findCompletedAt(events, awaitingKickoff);
+  const kickoffSource = { queueDir: 'ready-for-review', manifest, logsRoot: join(resolve(root), '_logs'), forgeRoot: resolve(root) };
+  const awaitingKickoff = runStatus === 'gated' && manifestAwaitsKickoff(kickoffSource);
+  // Bead forge-mfv5.1.27: THE fix-round derivation — a parked fix round is not a completion either.
+  const fixRound = runStatus === 'gated' ? manifestFixRound(kickoffSource) : null;
+  const completedAt = findCompletedAt(events, awaitingKickoff || fixRound !== null);
 
   // --- Origin from cycle.start event or manifest ---
   const origin = findOrigin(events) ?? manifest.origin;
@@ -392,6 +393,7 @@ function buildRun(args: {
     ...(gate !== undefined ? { gate } : {}),
     ...(gateNote !== undefined ? { gateNote } : {}),
     ...(awaitingKickoff ? { awaitingKickoff: true as const } : {}),
+    ...(fixRound !== null ? { fixRound } : {}),
     // W8-A2 (ON-7): `failNote` is NOT gated on `failedAt`. They answer
     // different questions — failedAt is WHERE, failNote is WHY — and coupling
     // them meant an unattributable failure (no flow node resolves) silently
@@ -434,9 +436,9 @@ function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
  * walk into a standalone reflector-rerun event appended to the same log
  * long after the cycle itself finished (or failed to).
  */
-function findCompletedAt(events: readonly EventLogEntry[], awaitingKickoff: boolean): string | undefined {
-  // Bead forge-mfv5.1.25: a kickoff is a plan waiting to be built, not a completion.
-  if (awaitingKickoff) return undefined;
+function findCompletedAt(events: readonly EventLogEntry[], parkedUnbuilt: boolean): string | undefined {
+  // Beads forge-mfv5.1.25 / .27: a kickoff or a parked fix round is work still owed, not a completion.
+  if (parkedUnbuilt) return undefined;
   for (const e of events) {
     // Row 207: a stopped/failed attempt's own cycle.end is never the completion instant.
     if (e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end' && !endMetaIndicatesFailure(e.metadata)) return e.started_at;

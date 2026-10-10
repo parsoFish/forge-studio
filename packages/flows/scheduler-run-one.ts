@@ -18,6 +18,8 @@ import { parseManifest as parseFullManifest, type InitiativeManifest } from './m
 import { defaultConfigPath, FORGE_ROOT, loadConfig, resolveProjectsDir, type EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
+import { runDrainSweep } from './scheduler-sweeps.ts';
+import { pendingFixWorkItems } from './fix-work-items.ts';
 import { endMetaIndicatesFailure } from './run-model-derive-status.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
@@ -482,6 +484,11 @@ export async function runOne(
         notifyFn: (event) => notify(event, cfg.notify),
       },
     );
+    // forge-mfv5.1.27: a fix round parked by a red merge gate re-enters NOW through
+    // the D-20 drain (this manifest only), never waiting on the 5-min sweep timer.
+    if (result.status === 'ready-for-review' && pendingFixWorkItems(wtHandle.path).length > 0) {
+      await runDrainSweep(wiring, cfg.queueRoot, { only: filename, logsRoot });
+    }
   } catch (err) {
     cycleFailed = true;
     if (existsSync(join(paths.inFlight, filename))) {

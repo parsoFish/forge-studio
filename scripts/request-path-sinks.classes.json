@@ -281,6 +281,12 @@
   "verified": "read",
   "note": "no request field"
  },
+ "packages/flows/phases/closure.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "forge-mfv5.1.27: `closure-with-pending-fix-wi` reads `CycleInput.manifestPath`, the scheduler's own `_queue/in-flight/<id>.md`, never a request field; the worktree read is `pendingFixWorkItems` on the cycle's own worktree"
+ },
  "packages/flows/phases/gitignored-creates.ts": {
   "class": "other",
   "guard": null,
@@ -327,7 +333,7 @@
   "class": "other",
   "guard": null,
   "verified": "exec",
-  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`"
+  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed"
  },
  "packages/flows/review-comments.ts": {
   "class": "guarded",

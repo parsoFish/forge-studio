@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-245 files, 1416 sink calls; 173 classified (accidentally-safe 8, guarded 46, not-request-derived 28, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+245 files, 1421 sink calls; 174 classified (accidentally-safe 8, guarded 46, not-request-derived 29, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -67,7 +67,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/mint-triggered-initiative.ts` | 3 | other |  | exec | `PUT /api/studio/flows/:id` body `project` → background flow-trigger sweep → minted manifest's `project` / `project_repo_path` |
 | `packages/flows/notify.ts` | 3 | unclassified |  |  |  |
 | `packages/flows/operator-stop.ts` | 5 | not-request-derived |  | read | no request field |
-| `packages/flows/phases/closure.ts` | 2 | unclassified |  |  |  |
+| `packages/flows/phases/closure.ts` | 3 | not-request-derived |  | read | forge-mfv5.1.27: `closure-with-pending-fix-wi` reads `CycleInput.manifestPath`, the scheduler's own `_queue/in-flight/<id>.md`, never a request field; the worktree read is `pendingFixWorkItems` on the cycle's own worktree |
 | `packages/flows/phases/gitignored-creates.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/phases/orchestrated-capture.ts` | 8 | guarded | `resolveGuardedPath` | read | a filename under `.capture/<side>/` (command-checkpoint-influenced) |
 | `packages/flows/phases/ralph-spec-lint.ts` | 4 | unclassified |  |  |  |
@@ -78,7 +78,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/pr.ts` | 11 | not-request-derived |  | exec | no request field |
 | `packages/flows/promote-manifests.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/queue.ts` | 25 | not-request-derived |  | exec | `GET /api/runs/planned` (the forge-develop kickoff surface) via `listPlannedInitiatives` |
-| `packages/flows/requeue-resume.ts` | 6 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project` |
+| `packages/flows/requeue-resume.ts` | 10 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed |
 | `packages/flows/review-comments.ts` | 4 | guarded |  | read | `/api/review-comments/:cycleId` |
 | `packages/flows/run-list-cache.ts` | 8 | unclassified |  |  |  |
 | `packages/flows/run-model-derive-lineage.ts` | 10 | unclassified |  |  |  |
