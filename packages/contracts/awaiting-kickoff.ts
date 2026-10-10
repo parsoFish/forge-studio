@@ -43,14 +43,26 @@ export function isAwaitingKickoff(f: KickoffFacts): boolean {
     && kickoffBuiltReason(f) === null;
 }
 
+/** A fix round and whether it is being built (`running`) or parked for the drain. */
+export type FixRound = { round: number; running: boolean };
+
 /**
  * forge-mfv5.1.27 — the fix round a red merge gate (or a send-back) parked:
  * `reviewRounds` while compiled fix WIs wait for the drain to re-enter develop,
- * else null. ONE derivation, served beside `isAwaitingKickoff`; never a review.
+ * else null. forge-nk1y.23: the SAME round, once the drain re-entered it
+ * (`in-flight/`, still `resume_from: develop`, a compiled fix WI still open),
+ * reads `running: true`. ONE derivation, served beside `isAwaitingKickoff`;
+ * never a review.
  */
-export function fixRoundOf(f: KickoffFacts): number | null {
-  const parked = f.queueDir === 'ready-for-review' && f.resumeFrom === 'develop' && f.pendingFixWorkItems > 0;
-  return parked ? f.reviewRounds : null;
+export function fixRoundOf(f: KickoffFacts): FixRound | null {
+  if (f.resumeFrom !== 'develop' || f.pendingFixWorkItems <= 0) return null;
+  if (f.queueDir === 'ready-for-review') return { round: f.reviewRounds, running: false };
+  return f.queueDir === 'in-flight' ? { round: f.reviewRounds, running: true } : null;
+}
+
+/** forge-nk1y.23 — develop is building: in-flight with any work item (dev or fix) still pending or in progress. */
+export function developRunningOf(f: KickoffFacts): boolean {
+  return f.queueDir === 'in-flight' && f.workItemStatuses.some((s) => s === 'pending' || s === 'in-progress');
 }
 
 const SHA40 = /^[0-9a-f]{40}$/;

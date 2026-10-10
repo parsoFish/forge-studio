@@ -49,7 +49,7 @@ import {
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
 import { sumAuthoritativeCostUsd } from '@forge/kernel';
-import { manifestAwaitsKickoff, manifestFixRound } from './kickoff-facts.ts';
+import { manifestAwaitsKickoff, manifestDevelopRunning, manifestFixRound } from './kickoff-facts.ts';
 
 // ---------------------------------------------------------------------------
 // Exported types (binding API per M1 design §1)
@@ -242,7 +242,7 @@ function aggregateRunWithMapping(args: {
   const eventsPath = join(logDir, 'events.jsonl');
   const events = existsSync(eventsPath) ? readEventsJsonl(eventsPath) : [];
 
-  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId });
+  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, queueState, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId });
 }
 
 // ---------------------------------------------------------------------------
@@ -256,12 +256,13 @@ function buildRun(args: {
   logDir: string;
   root: string;
   runStatus: RunStatus;
+  queueState: QueueState;
   nowMs: number;
   nodeMapping: Map<string, string | null>;
   flowNodeSets: Map<string, Set<string>>;
   agentSlugToNodeId: Map<string, string>;
 }): Run {
-  const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId } = args;
+  const { manifest, cycleId, events, logDir, root, runStatus, queueState, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId } = args;
 
   // --- Phase status derivation (see packages/flows/run-model-derive.ts) ---
   const phases = deriveNodeStatuses(events, runStatus, nodeMapping, agentSlugToNodeId);
@@ -290,11 +291,13 @@ function buildRun(args: {
   // --- completedAt (W6-RV-2): the real cycle-end instant, or its
   // crash-tail fallback — see the Run.completedAt doc comment above. ---
   // Bead forge-mfv5.1.25: THE Kickoff-gate derivation; the roadmap reads it off this run.
-  const kickoffSource = { queueDir: 'ready-for-review', manifest, logsRoot: join(resolve(root), '_logs'), forgeRoot: resolve(root) };
+  const kickoffSource = { queueDir: queueState, manifest, logsRoot: join(resolve(root), '_logs'), forgeRoot: resolve(root) };
   const awaitingKickoff = runStatus === 'gated' && manifestAwaitsKickoff(kickoffSource);
   // Bead forge-mfv5.1.27: THE fix-round derivation — a parked fix round is not a completion either.
-  const fixRound = runStatus === 'gated' ? manifestFixRound(kickoffSource) : null;
-  const completedAt = findCompletedAt(events, awaitingKickoff || fixRound !== null);
+  // forge-nk1y.23: the same derivation reads the re-entered (in-flight) round, and develop-running beside it.
+  const fix = runStatus === 'gated' || runStatus === 'active' ? manifestFixRound(kickoffSource) : null;
+  const developRunning = runStatus === 'active' && manifestDevelopRunning(kickoffSource);
+  const completedAt = findCompletedAt(events, awaitingKickoff || fix !== null);
 
   // --- Origin from cycle.start event or manifest ---
   const origin = findOrigin(events) ?? manifest.origin;
@@ -393,7 +396,9 @@ function buildRun(args: {
     ...(gate !== undefined ? { gate } : {}),
     ...(gateNote !== undefined ? { gateNote } : {}),
     ...(awaitingKickoff ? { awaitingKickoff: true as const } : {}),
-    ...(fixRound !== null ? { fixRound } : {}),
+    ...(fix !== null ? { fixRound: fix.round } : {}),
+    ...(fix?.running ? { fixRoundRunning: true as const } : {}),
+    ...(developRunning ? { developRunning: true as const } : {}),
     // W8-A2 (ON-7): `failNote` is NOT gated on `failedAt`. They answer
     // different questions — failedAt is WHERE, failNote is WHY — and coupling
     // them meant an unattributable failure (no flow node resolves) silently
