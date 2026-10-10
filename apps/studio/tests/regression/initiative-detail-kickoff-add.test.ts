@@ -3,7 +3,7 @@
  * Kickoff gate (`status === 'awaiting-kickoff'`), and AFTER Start development
  * so the gate's primary act stays first (D-46).
  *
- * RUN: npx vitest run tests/regression/initiative-detail-kickoff-add.test.ts   (from apps/studio/)
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/initiative-detail-kickoff-add.test.ts
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

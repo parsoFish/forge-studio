@@ -4,7 +4,7 @@
  * split on whitespace and refused by name on a quote, files one per line, and
  * ONE nullable reason for the disabled submit.
  *
- * RUN: npx vitest run tests/unit/work-item-authoring.test.ts   (from apps/studio/)
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/unit/work-item-authoring.test.ts
  */
 import { test, expect } from 'vitest';
 

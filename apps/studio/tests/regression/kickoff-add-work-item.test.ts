@@ -6,7 +6,7 @@
  * fields are filled; success names the added WI and the uncovered criteria; a
  * refusal shows the server's detail. Technique: jsdom + react-dom/client + act.
  *
- * RUN: npx vitest run tests/regression/kickoff-add-work-item.test.ts   (from apps/studio/)
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/kickoff-add-work-item.test.ts
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';
