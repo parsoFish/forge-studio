@@ -287,6 +287,12 @@
   "verified": "read",
   "note": "no request field"
  },
+ "packages/flows/orchestrator-event.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "best-effort JSONL append under a trusted logs root; the initiative id is the scheduler's own claim-loop id, or the queue directory-entry stem after isSafeSegment (scheduler-sweeps' worktree-path.refused event), never a request-supplied path"
+ },
  "packages/flows/phases/closure.ts": {
   "class": "not-request-derived",
   "guard": null,

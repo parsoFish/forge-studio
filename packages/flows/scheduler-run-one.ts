@@ -3,7 +3,7 @@
  * end to end (bead forge-8vfn.15 size split — see design.md).
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, appendFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import { defaultConfigPath, FORGE_ROOT, loadConfig, resolveProjectsDir, type Eve
 import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
 import { runDrainSweep } from './scheduler-sweeps.ts';
+import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { readPendingFixWorkItems } from './fix-work-items.ts';
 import { endMetaIndicatesFailure } from './run-model-derive-status.ts';
 import { validateClaimable } from './claim-validator.ts';
@@ -651,39 +652,4 @@ export function annotateManifest(path: string, fields: Record<string, string>): 
   }
   const updated = content.replace(/^---\n[\s\S]*?\n---/, `---\n${fm}\n---`);
   writeFileSync(path, updated);
-}
-
-/**
- * SPEC §2 (M3-6) + bead forge-8vfn.8.1.8: append an event to the
- * initiative's JSONL log. Best-effort — the cycle logger isn't open yet at
- * either call site. Missing dir is created on the fly. `logsRoot` (forge-8vfn.8.1.10) is ALREADY the `_logs` root.
- */
-function emitOrchestratorEvent(
-  logsRoot: string,
-  initiativeId: string,
-  eventType: 'error' | 'log',
-  message: string,
-  metadata: Record<string, unknown>,
-): void {
-  try {
-    const logDir = resolve(logsRoot, initiativeId);
-    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-    const entry = {
-      event_id: `${message}-${Date.now()}`,
-      cycle_id: initiativeId,
-      initiative_id: initiativeId,
-      started_at: new Date().toISOString(),
-      phase: 'orchestrator',
-      skill: 'scheduler',
-      event_type: eventType,
-      input_refs: [] as string[],
-      output_refs: [] as string[],
-      message,
-      metadata,
-    };
-    const logPath = join(logDir, 'events.jsonl');
-    appendFileSync(logPath, JSON.stringify(entry) + '\n');
-  } catch {
-    /* best-effort — never throw from a refusal/hygiene path */
-  }
 }

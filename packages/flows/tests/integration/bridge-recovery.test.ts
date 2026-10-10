@@ -45,7 +45,7 @@ function seed(queueRoot: string, state: string, initiativeId: string, extra: Rec
 function withTmp(fn: (root: string, queueRoot: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'forge-recovery-'));
   // SEC-02: `<forgeRoot>/projects` is the containment root for manifest
-  // `project_repo_path` / in-place `worktree_path`. It must exist for
+  // `project_repo_path`. It must exist for
   // containment to be verifiable at all (a missing root fails CLOSED).
   mkdirSync(join(root, 'projects'), { recursive: true });
   try { fn(root, join(root, '_queue')); }

@@ -167,7 +167,7 @@ test('enqueueDevelopRun: a WI snapshot under _logs/<cycleId> counts as decomposi
 
 test('enqueueDevelopRun: preserved worktree WI files count as decomposition evidence (pre-specs fallback)', () => {
   withTmp((queueRoot) => {
-    const wt = join(queueRoot, '..', 'wt');
+    const wt = join(queueRoot, '..', '_worktrees', 'INIT-2026-06-21-toc');
     mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
     writeFileSync(join(wt, '.forge', 'work-items', 'WI-1.md'), '---\nwork_item_id: WI-1\n---\n');
     const m = manifest({ worktree_path: wt });
