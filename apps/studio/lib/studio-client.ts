@@ -37,8 +37,8 @@ import { parseStandingTriggers, type StandingTrigger } from './standing-triggers
 // its parser (session-client.ts's exported `parseContractStageRow`), never a
 // third client-side mirror. The import is one-way (session-client never imports
 // back from here).
-import { readPrState, readPrUrl, readSaveRefusal, type SaveRecoveryProposal } from './save-refusal';
-import type { RepoStatus } from './save-control';
+import { readSaveRefusal, type SaveRecoveryProposal } from './save-refusal';
+import { readRepoStatus, type RepoStatus } from './save-control';
 import { parseContractStageRow, type ContractStageRow } from './session-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
@@ -1873,14 +1873,7 @@ export async function fetchContractStages(id: string): Promise<ContractStageRow[
 /** Whether the project repo has forge-UI changes accumulated on forge-studio,
  *  pending a merge to main. */
 export async function fetchRepoStatus(projectId: string): Promise<RepoStatus> {
-  const r = await studioRead<{ pending: boolean; branch: string; uncommitted?: unknown; prUrl?: unknown; prState?: unknown; prDetail?: unknown }>(`/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`);
-  const prState = readPrState(r.prState);
-  return {
-    pending: r.pending, branch: r.branch, uncommitted: Array.isArray(r.uncommitted) ? r.uncommitted.filter((f): f is string => typeof f === 'string') : [],
-    ...(readPrUrl(r.prUrl) ? { prUrl: readPrUrl(r.prUrl) } : {}),
-    // forge-mfv5.1.23: the PR's verdict by name and its detail (the checks it names).
-    ...(prState ? { prState } : {}), ...(typeof r.prDetail === 'string' ? { prDetail: r.prDetail } : {}),
-  };
+  return readRepoStatus(await studioRead<Record<string, unknown>>(`/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`));
 }
 
 /** Merge the accumulated forge-studio changes into the project's default branch + push. */
