@@ -26,7 +26,7 @@ forge ships one working factory. It is two flows plus one agent that fires after
 
 1. The architect agent interviews you, one bounded question round at a time, then drafts a plan. Each initiative in it carries a change class (code, docs, config or infra) and acceptance criteria written as given/when/then.
 2. **Plan gate.** You review the plan and approve it, or send it back with feedback. Nothing is queued until you approve.
-3. The project-manager agent splits each initiative into work items: small, ordered units, each with at least one acceptance criterion and a command that checks it. A set that fails validation is set aside whole, never run partially.
+3. The project-manager agent splits each initiative into work items: small, ordered units, each with at least one acceptance criterion and a command that checks it. An initiative criterion that names a test command must be run whole by some work item's command, or the set goes back once with that criterion named. A set that fails validation is set aside whole, never run partially.
 
 **Kickoff gate.** The develop flow does not start by itself. A planned initiative's roadmap card reads KICKOFF until you start it.
 

@@ -614,9 +614,10 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // events.jsonl manually", resumable at the plan (project-manager) node.
     if (pmAcceptanceGateUnresolved) {
       const why =
-        'PM did not compile an acceptance work item even after its one bounded revise turn — ' +
-        'deterministic: the same class profile and project acceptance-gate config re-derive the ' +
-        'same requirement, so no auto-retry. Resume from the plan node to re-decompose.';
+        "PM's work items still miss an acceptance requirement (no acceptance work item, or an " +
+        'initiative acceptance criterion no quality_gate_cmd carries) after its one bounded revise ' +
+        'turn — deterministic: the same manifest, class profile and acceptance-gate config re-derive ' +
+        'the same requirement, so no auto-retry. Resume from the plan node to re-decompose.';
       return T('terminal', why, evidence, false, false, 'plan');
     }
     // Row 159 (ruling 1891): a draft-manifest validation error that survived
