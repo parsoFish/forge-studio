@@ -350,6 +350,21 @@ test('captureFrame: fails every attempt — no throw, one named line, ok:false',
   assert.match(logged[0], /evidence only, the beat's verdict is unaffected/);
 });
 
+test('captureFrame: the frame is the viewport by default, the whole page only when asked (D-42)', async () => {
+  const seen: Array<{ fullPage?: boolean }> = [];
+  const page = { screenshot: async (o: { fullPage?: boolean }) => { seen.push(o); } };
+  await captureFrame(page, '/tmp/frames/01-a.png');
+  await captureFrame(page, '/tmp/frames/02-b.png', { fullPage: true });
+  await captureFrame(page, '/tmp/frames/03-c.png', { fullPage: false });
+  assert.deepEqual(seen.map((o) => o.fullPage), [false, true, false]);
+});
+
+test('the beat loop asks for the whole page only for a beat that declares frame: fullPage', async () => {
+  const { runnerSourceContaining } = await import('./runner-source.mjs');
+  const runner = runnerSourceContaining('await captureFrame(page,');
+  assert.match(runner.source, /fullPage: beat\.frame === 'fullPage'/);
+});
+
 test('the beat loop is wired through captureFrame — no bare page.screenshot left in the runner', async () => {
   const { runnerSourceContaining } = await import('./runner-source.mjs');
   const runner = runnerSourceContaining('await captureFrame(page,');

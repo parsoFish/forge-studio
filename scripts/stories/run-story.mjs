@@ -257,7 +257,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
       verdict = costlessGuard.apply(verdict);
       bindingsStore = recordBindings(bindingsStore, number, verdict.bindings);
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;
-      const capture = await captureFrame(page, join(outDir, frame), { log: console.error }); // row 90 — evidence, never a verdict input
+      const capture = await captureFrame(page, join(outDir, frame), { fullPage: beat.frame === 'fullPage', log: console.error }); // row 90 — evidence, never a verdict input
       beats.push({ ...verdict, ...(capture.ok ? { frame } : { frame: null, frameNote: 'capture failed after retries — evidence only, see the log line above' }) });
       // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,
       // captured while the page still exists. The session dir below says what
