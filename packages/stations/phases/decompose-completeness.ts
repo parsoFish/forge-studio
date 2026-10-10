@@ -1,6 +1,8 @@
 /**
- * Decompose-completeness check — R4-05-T4 (F6), NON-BLOCKING by explicit
- * operator decision (2026-07-17).
+ * Decompose-completeness check — R4-05-T4 (F6). The BODY-text check below is
+ * advisory telemetry (`plan.completeness`). The structured-AC check
+ * (`uncoveredAcceptanceCriteria`, D-47) is NOT advisory: a runnable criterion
+ * no work-item gate carries sends the plan back by name.
  *
  * The delivery gate (elsewhere) catches under-*delivery* (WIs planned but
  * not built); it cannot see under-*planning* — scope stated in the
@@ -9,7 +11,7 @@
  * orchestrator-side check that flags that gap. It is a PURE function with
  * no I/O — `runOnePmPass` (`project-manager.ts`) calls it on the pass's
  * SUCCESS path and emits the `plan.completeness` event; this module never
- * throws and never gates anything.
+ * throws, and only `project-manager.ts` turns the D-47 result into a send-back.
  *
  * ## Body format (verified against the real corpus, not invented)
  *
@@ -194,4 +196,56 @@ function isCovered(unitTokens: Set<string>, wiCorpora: ReadonlyArray<Set<string>
     }
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// D-47 (forge-mfv5.1.26) — structured acceptance criteria carried by a gate
+// ---------------------------------------------------------------------------
+
+/** Test runners, as whole-token prefixes. Small and explicit by design. */
+const TEST_RUNNERS: ReadonlyArray<readonly string[]> = [
+  'python3 -m pytest', 'python -m pytest', 'pytest', 'go test', 'cargo test', 'npm test',
+  'npm run test', 'node --test', 'npx vitest', 'npx jest', 'yamllint', 'ruff',
+].map((r) => r.split(' '));
+
+const words = (s: string): string[] => s.trim().split(/\s+/).filter(Boolean);
+
+/** `needle` occurs in `hay` as a contiguous run of WHOLE tokens. */
+function hasTokenRun(hay: readonly string[], needle: readonly string[]): boolean {
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    if (needle.every((t, j) => hay[i + j] === t)) return true;
+  }
+  return false;
+}
+
+/**
+ * The criteria (named `AC<n>` with their WHEN verbatim) whose WHEN's first
+ * backtick span starts with a test runner and has a `&&`/`;` segment that no
+ * work item's flattened `quality_gate_cmd` carries as a whole-token run.
+ * Prose criteria (no runner span) are never returned. Pure.
+ */
+export function uncoveredAcceptanceCriteria(
+  acs: ReadonlyArray<{ when: string }>,
+  items: ReadonlyArray<WorkItem>,
+): string[] {
+  const gates = items.map((it) => words((it.quality_gate_cmd ?? []).join(' ')));
+  return acs.flatMap((ac, i) => {
+    const span = /`([^`]+)`/.exec(ac.when)?.[1] ?? '';
+    if (!TEST_RUNNERS.some((r) => hasTokenRun(words(span).slice(0, r.length), r))) return [];
+    const uncarried = span.split(/&&|;/).map(words)
+      .filter((seg) => seg.length > 0 && !gates.some((g) => hasTokenRun(g, seg)));
+    if (uncarried.length === 0) return [];
+    return [`AC${i + 1} (uncarried: ${uncarried.map((s) => `\`${s.join(' ')}\``).join(', ')}; when: ${ac.when})`];
+  });
+}
+
+/** The send-back text for `uncoveredAcceptanceCriteria`, or null when none. */
+export function acceptanceCriteriaViolation(
+  acs: ReadonlyArray<{ when: string }>,
+  items: ReadonlyArray<WorkItem>,
+): string | null {
+  const uncovered = uncoveredAcceptanceCriteria(acs, items);
+  if (uncovered.length === 0) return null;
+  return `acceptance criteria not exercised by any work item's quality_gate_cmd: ${uncovered.join('; ')}. ` +
+    'Add or edit a work item whose gate runs each named command as written.';
 }
