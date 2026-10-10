@@ -1,0 +1,47 @@
+/*
+ * Story media (D-42): a generated how-to shows one hero frame per act and the
+ * act's other frames as a captioned thumbnail gallery. Both crop to the top of
+ * the frame, which is where a viewport-bounded screenshot keeps the page's
+ * subject; the thumbnail links the full frame.
+ */
+.sl-markdown-content figure.story-hero {
+  margin: 1rem 0;
+}
+
+.sl-markdown-content figure.story-hero img {
+  display: block;
+  width: 100%;
+  max-height: min(70vh, 560px);
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+}
+
+.sl-markdown-content .story-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.sl-markdown-content .story-gallery figure {
+  margin: 0;
+}
+
+.sl-markdown-content .story-gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+}
+
+.sl-markdown-content .story-gallery figcaption {
+  margin-top: 0.25rem;
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+  text-align: center;
+}
