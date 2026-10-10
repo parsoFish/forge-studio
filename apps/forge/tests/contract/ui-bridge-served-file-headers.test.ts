@@ -172,7 +172,7 @@ const EXPECTED_CSP =
 type RouteCase = {
   name: string;
   path: () => string;
-  wantContentTypeFamily: 'html' | 'plain';
+  wantContentTypeFamily: 'html' | 'markdown';
   wantDispositionFilename: string;
 };
 
@@ -192,7 +192,7 @@ const ROUTES: RouteCase[] = [
   {
     name: 'GET /api/instructions/file/<project>/<sid>/<filename> (.md)',
     path: () => `/api/instructions/file/demo/${encodeURIComponent(INSTR_SID)}/AGENTS.draft.md`,
-    wantContentTypeFamily: 'plain',
+    wantContentTypeFamily: 'markdown',
     wantDispositionFilename: 'AGENTS.draft.md',
   },
   {
@@ -225,7 +225,7 @@ for (const rc of ROUTES) {
     if (rc.wantContentTypeFamily === 'html') {
       assert.match(ct, /^text\/html/, `content-type must stay text/html for an .html artifact (iframe regression) — got "${ct}"`);
     } else {
-      assert.match(ct, /^text\/plain/, `non-.html artifacts must stay text/plain — got "${ct}"`);
+      assert.match(ct, /^text\/markdown/, `an .md artifact is text/markdown (kernel table, forge-mfv5.1.29) — got "${ct}"`);
     }
 
     assert.equal(
@@ -253,11 +253,12 @@ for (const rc of ROUTES) {
 // inferred across different routes.
 // ---------------------------------------------------------------------------
 
-test('GET /api/artifact/ — .md and .json artifacts stay text/plain, not text/html', async () => {
-  for (const filename of ['note.md', 'data.json']) {
+test('GET /api/artifact/ — .md and .json artifacts are never text/html, and carry the same hardening', async () => {
+  const want: Record<string, RegExp> = { 'note.md': /^text\/markdown/, 'data.json': /^application\/json/ };
+  for (const [filename, re] of Object.entries(want)) {
     const res = await fetch(`${url}/api/artifact/${CYCLE_ID}/${filename}`);
     assert.equal(res.status, 200, `expected 200 for ${filename}`);
-    assert.match(res.headers.get('content-type') ?? '', /^text\/plain/, `${filename} must be text/plain, not text/html`);
+    assert.match(res.headers.get('content-type') ?? '', re, `${filename} content-type (kernel table, forge-mfv5.1.29)`);
     // Non-HTML files get the SAME hardening headers — strictly safer, costs nothing.
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(res.headers.get('content-security-policy'), EXPECTED_CSP);
@@ -406,7 +407,10 @@ test('enumeration re-derivation: exactly 6 res.writeHead(200, ...) call sites re
   let total = 0;
   for (const f of FILES) {
     const src = readFileSync(f.path, 'utf8');
-    const matches = [...src.matchAll(/res\.writeHead\(200, (?:ctx\.)?servedFileHeaders\(/g)];
+    // forge-mfv5.1.29: the artifact route also answers 206 for a Range request, so its
+    // call site reads `writeHead(partial ? 206 : 200, { ...servedFileHeaders(` — the same
+    // one site, still carrying the helper's headers; the pattern admits that shape too.
+    const matches = [...src.matchAll(/res\.writeHead\((?:200|partial \? 206 : 200), (?:\{\s*\.\.\.)?(?:ctx\.)?servedFileHeaders\(/g)];
     assert.equal(
       matches.length,
       f.expected,
