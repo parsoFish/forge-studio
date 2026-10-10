@@ -1,50 +1,26 @@
 /**
- * forge-nk1y.22 — a legacy no-op gate on a pending gate-fix work item.
- *
- * Before PR #1172 a merge-gate fix WI was compiled with `quality_gate_cmd:
- * ['true']` — a gate that passes vacuously, so the develop agent "fixed" the
- * round without ever running the failing gate. Such WIs still sit on disk.
- * #1172 compiles the failing gate's OWN command instead; this module rewrites
- * a legacy WI to that command when the cycle's own `events.jsonl` still names
- * it, on both re-entry paths (the fix-loop drain and the requeue), before the
- * cycle re-enters develop.
- *
- * It only ever touches a pending/in-progress `origin: gate-fix` WI whose gate
- * is EXACTLY `['true']`. The command is never guessed: the compiled event's own
- * `gate_cmd` (recorded since this bead), else the `cycle.merge-gate` row the
- * compile followed. A WI whose command cannot be recovered stays as built and
- * is NAMED, with a reason, in the `fix-loop.legacy-gate.normalised` error event.
+ * forge-nk1y.22 — a pre-#1172 gate-fix WI carries the no-op gate `['true']`. On both re-entry paths (drain,
+ * requeue) rewrite a pending/in-progress `origin: gate-fix` WI whose gate is EXACTLY that to the failing gate's
+ * command, recovered from the cycle's events (the compiled event's `gate_cmd`, else the `cycle.merge-gate` row the
+ * compile followed) — never guessed; an unrecoverable WI stays as built and is NAMED in the event.
  */
-
 import { createLogger, guardedReadFile } from '@forge/kernel';
 import { devWorkItemsDir, readPendingFixWorkItems } from './fix-work-items.ts';
 import { writeWorkItem } from './work-item.ts';
-
-/** The legacy per-WI no-op gate every pre-#1172 gate-fix WI carried. */
 const LEGACY_NOOP_GATE: readonly string[] = ['true'];
-
 export const LEGACY_GATE_NORMALISED_MESSAGE = 'fix-loop.legacy-gate.normalised';
-
 export type CycleEvent = { message?: unknown; phase?: unknown; skill?: unknown; metadata?: Record<string, unknown> };
-export type LegacyGateReport = {
-  rewritten: Array<{ work_item_id: string; cmd: string[] }>;
-  unresolved: Array<{ work_item_id: string; reason: string }>;
-};
+export type LegacyGateReport = { rewritten: Array<{ work_item_id: string; cmd: string[] }>; unresolved: Array<{ work_item_id: string; reason: string }> };
 
-const isCmd = (v: unknown): v is string[] =>
-  Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s.length > 0);
-const isNoop = (cmd: readonly string[] | undefined): boolean =>
-  cmd !== undefined && cmd.length === LEGACY_NOOP_GATE.length && cmd.every((s, i) => s === LEGACY_NOOP_GATE[i]);
+const isCmd = (v: unknown): v is string[] => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s.length > 0);
+const isNoop = (cmd: readonly string[] | undefined): boolean => cmd !== undefined && cmd.length === LEGACY_NOOP_GATE.length && cmd.every((s, i) => s === LEGACY_NOOP_GATE[i]);
 
 /** Parse a cycle's `events.jsonl` (path-guarded); a torn line is skipped, an absent/refused file is named. */
 export function readCycleEvents(logsRoot: string, cycleId: string): CycleEvent[] | { unreadable: string } {
   const text = guardedReadFile(logsRoot, [cycleId, 'events.jsonl']);
   if (text === null) return { unreadable: `${cycleId}/events.jsonl is absent or refused by the path guard` };
   const out: CycleEvent[] = [];
-  for (const line of text.split('\n')) {
-    if (!line.trim()) continue;
-    try { out.push(JSON.parse(line) as CycleEvent); } catch { /* a torn line is not evidence */ }
-  }
+  for (const line of text.split('\n')) if (line.trim()) try { out.push(JSON.parse(line) as CycleEvent); } catch { /* a torn line is not evidence */ }
   return out;
 }
 
@@ -75,11 +51,7 @@ function recoverGateCmd(id: string, events: readonly CycleEvent[]): { cmd: strin
   return { reason: failed === 'local' ? 'no red local cycle.merge-gate event precedes the compile' : 'no local cycle.merge-gate event precedes the CI-gate compile (no local gate to run)' };
 }
 
-/**
- * Rewrite every legacy no-op gate-fix WI whose command the events still name.
- * `events` is the parsed `events.jsonl` (or `{ unreadable }` — every candidate
- * is then named unresolved). Never throws; untouched WIs are not reported.
- */
+/** Rewrite each legacy no-op gate-fix WI the events still name; never throws, untouched WIs unreported. */
 export function normaliseLegacyFixGates(a: { worktreePath: string; events: readonly CycleEvent[] | { unreadable: string } }): LegacyGateReport {
   const report: LegacyGateReport = { rewritten: [], unresolved: [] };
   const pending = readPendingFixWorkItems(a.worktreePath);
@@ -100,31 +72,21 @@ export function normaliseLegacyFixGates(a: { worktreePath: string; events: reado
   return report;
 }
 
-/**
- * The re-entry call: read the cycle's events, normalise, and emit ONE
- * `fix-loop.legacy-gate.normalised` event when anything was rewritten or left
- * unresolved (`error` if any is unresolved). Never throws — a fix-loop re-entry
- * is never blocked by this hygiene step.
- */
+/** Re-entry: normalise and emit ONE named event if anything changed (`error` if unresolved); never blocks re-entry. */
 export function normaliseLegacyFixGatesAtReentry(a: { worktreePath: string; initiativeId: string; cycleId: string; logsRoot: string }): LegacyGateReport {
-  const empty: LegacyGateReport = { rewritten: [], unresolved: [] };
   try {
     const report = normaliseLegacyFixGates({ worktreePath: a.worktreePath, events: readCycleEvents(a.logsRoot, a.cycleId) });
     if (report.rewritten.length === 0 && report.unresolved.length === 0) return report;
     createLogger(a.cycleId, a.logsRoot).emit({
-      initiative_id: a.initiativeId,
-      phase: 'review-loop',
-      skill: 'fix-loop-drain',
-      event_type: report.unresolved.length > 0 ? 'error' : 'log',
-      input_refs: [a.worktreePath],
+      initiative_id: a.initiativeId, phase: 'review-loop', skill: 'fix-loop-drain',
+      event_type: report.unresolved.length > 0 ? 'error' : 'log', input_refs: [a.worktreePath],
       output_refs: report.rewritten.map((r) => `.forge/work-items/${r.work_item_id}.md`),
-      message: LEGACY_GATE_NORMALISED_MESSAGE,
-      metadata: { rewritten: report.rewritten, unresolved: report.unresolved },
+      message: LEGACY_GATE_NORMALISED_MESSAGE, metadata: { rewritten: report.rewritten, unresolved: report.unresolved },
     });
     return report;
   } catch (err) {
     // Hygiene, not a gate: a failed emit must not block the re-entry — but it is said, not swallowed.
     console.error(`[fix-loop] legacy-gate normalisation failed for ${a.initiativeId}: ${err instanceof Error ? err.message : String(err)}`);
-    return empty;
+    return { rewritten: [], unresolved: [] };
   }
 }
