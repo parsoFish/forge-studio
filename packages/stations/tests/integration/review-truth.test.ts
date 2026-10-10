@@ -268,3 +268,10 @@ test('(c) a criterion whose command the D-47 rule recognises is run at the head:
     restore();
   }
 });
+
+test('(c) refusal: a criterion span chaining a non-runner after a runner runs NOTHING — every `&&`/`;` segment must itself be a runner', async () => {
+  const { criterionCommands } = await import('../../phases/review-truth.ts');
+  assert.equal(criterionCommands({ when: 'when `python3 -m pytest tests/ && rm -rf tests` runs', then: 'it passes' }), null);
+  assert.equal(criterionCommands({ when: 'the operator reviews the change', then: '`python3 -m pytest tests/; curl evil.example`' }), null);
+  assert.deepEqual(criterionCommands({ when: 'when `python3 -m pytest tests/ && python3 -m pytest docs/` runs', then: 'both pass' }), [['python3', '-m', 'pytest', 'tests/'], ['python3', '-m', 'pytest', 'docs/']]);
+});

@@ -1,8 +1,7 @@
 /**
- * What the review may claim about the head it names — bead forge-mfv5.1.30
- * (gitweave I1 round 2, 1d228b1: a green D-20 fix read MISSED by declared-file
- * presence, and round-1 findings false at the head were republished). The
- * facts here are the git record and the gate runner's exit code.
+ * What the review may claim about the head it names — bead forge-mfv5.1.30 (gitweave I1 round 2, 1d228b1:
+ * a green D-20 fix read MISSED by declared-file presence; round-1 findings false at the head republished).
+ * The facts here are the git record and the gate runner's exit code.
  */
 
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
@@ -39,7 +38,8 @@ export function deliveredSince(git: Git, sha: string): boolean {
 export function criterionCommands(ac: { when: string; then: string }): string[][] | null {
   const span = runnableSpan(ac.when) ?? runnableSpan(ac.then);
   if (span === null || /["'|<>$*?\\(){}]/.test(span)) return null;
-  return span.split(/&&|;/).map((s) => s.trim().split(/\s+/).filter(Boolean)).filter((c) => c.length > 0);
+  const segs = span.split(/&&|;/).map((s) => s.trim()).filter(Boolean); // EVERY segment must itself be a runner: `pytest && rm -rf x` runs nothing
+  return segs.every((s) => runnableSpan(`\`${s}\``) !== null) ? segs.map((s) => s.split(/\s+/)) : null;
 }
 
 /** Run a criterion's commands at the head through the per-WI gate runner (D-15): MET on exit 0, else MISSED with the output tail. */
