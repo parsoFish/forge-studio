@@ -8,7 +8,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, isText, stringList } from '@forge/kernel';
 import { addKickoffWorkItem } from '@forge/flows';
 import { uncoveredAcceptanceCriteria } from '@forge/stations';
 import { readJson } from './bridge-http.ts';
@@ -17,15 +17,6 @@ export type KickoffWorkItemContext = { forgeRoot: string; logsRoot: string };
 
 type Source = Parameters<typeof addKickoffWorkItem>[0]['source'];
 type Parsed = { initiativeId: string; source: Source } | { error: string };
-
-const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
-
-/** The first bad entry's error, or null when `v` is an array of 1..maxLen non-empty strings ≤ maxStr. */
-function stringList(field: string, v: unknown, maxLen: number, maxStr: number): string | null {
-  if (!Array.isArray(v) || v.length === 0 || v.length > maxLen) return `${field} must be an array of 1..${maxLen} strings`;
-  const bad = v.findIndex((s) => !isText(s, maxStr));
-  return bad < 0 ? null : `${field}[${bad}] must be a non-empty string of at most ${maxStr} characters`;
-}
 
 function parseBody(b: Record<string, unknown>): Parsed {
   if (!isText(b.initiativeId, 200)) return { error: 'initiativeId must be a non-empty string' };

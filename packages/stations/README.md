@@ -21,12 +21,13 @@ silently guessing a default profile.
 the integrate band asks it how to show a change and validates the answer by
 name; with none bound the band keeps the checkpoints it derives.
 
-## API (11 values)
+## API (12 values)
 
 | the station executor | `createPhaseExecutor` · `createProjectGate` · `defaultRunClosure` · `registeredBandIds` |
 | bands the assembly binds statically | `reconcileReflectFeedback` · `rerunReflector` · `runAdversarialReview` · `runReflector` · `runReleaseFinalize` |
 | the docs class's merge-boundary verb | `runDocsGate` |
 | D-47 coverage the Kickoff gate re-reports | `uncoveredAcceptanceCriteria` |
+| D-47's runnable span, a verdict comment's gate (D-20) | `firstRunnableSpan` |
 
 ### Types
 

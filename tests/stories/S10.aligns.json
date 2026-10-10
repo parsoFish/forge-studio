@@ -3,8 +3,8 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-20",
-      "digest": "545a4f3626a4691e",
-      "why": "D-20: The review-loop beats (S10.review.mjs): one anchored blocking comment -> fix-WI -> same-branch re-dispatch -> re-review — \"the send-back the whole story is built around\""
+      "digest": "7e04cdfd36b2d889",
+      "why": "D-20: the review-loop beats (S10.review.mjs) drive one anchored blocking comment -> fix-WI -> re-dispatch -> re-review; the mfv5.1.28 amendment keeps that comment path"
     },
     {
       "path": "DECISIONS.md",

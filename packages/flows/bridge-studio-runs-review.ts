@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseManifest, persistManifestSendBack, persistManifestSpecs } from './manifest.ts';
 import { compileFixWorkItems, writeReviewCapExhaustedMarker, hasReviewCapExhaustedMarker, FixLoopCapError, FixConcernInvalidError } from './fix-work-items.ts';
-import { loadConfig, resolveReviewLoopCaps, sendJson, allowedOrigin, type StudioContext } from '@forge/kernel';
+import { loadConfig, resolveReviewLoopCaps, sendJson, allowedOrigin, stringList, type StudioContext } from '@forge/kernel';
 import { notify } from './notify.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
@@ -81,6 +81,7 @@ export async function applyReviewVerdict(
     acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
     concernKind?: 'packaging' | 'code-fix';
     qualityGateCmd?: string[];
+    filesInScope?: string[]; // forge-mfv5.1.28: a typed send-back's scope; absent ⇒ the WI-scope union
   },
 ): Promise<void> {
   const origin = allowedOrigin(req);
@@ -101,8 +102,13 @@ export async function applyReviewVerdict(
     sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
     return;
   }
+  // forge-mfv5.1.28: both send-back doors' one boundary check, before any manifest or worktree access.
+  const gateError = body.qualityGateCmd === undefined ? null : stringList('qualityGateCmd', body.qualityGateCmd, 64, 500);
+  const scopeError = body.filesInScope === undefined ? null : stringList('filesInScope', body.filesInScope, 200, 500);
+  const listError = gateError ?? scopeError;
+  if (listError) { sendJson(res, 400, { error: listError }, origin); return; }
   if (kind === 'send-back' && acs.length === 0) {
-    sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' }, origin);
+    sendJson(res, 400, { error: 'send-back needs a blocking comment or a typed work item — neither arrived (no acceptanceCriteria from a blocking review comment, none typed)' }, origin);
     return;
   }
 
@@ -387,7 +393,7 @@ export async function applyReviewVerdict(
     const { appended } = compileFixWorkItems({
       worktreePath,
       initiativeId,
-      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd },
+      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd, filesInScope: body.filesInScope },
       projectGateCmd,
       estimatedIterations: REVIEW_FIX_DEFAULT_ITERATIONS,
       caps,

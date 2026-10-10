@@ -32,6 +32,7 @@ import { regionDefaultOpen, summarizeReview } from '@/lib/demo-review-view';
 import { effectiveInitiativeId } from '@/lib/initiative-id';
 import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
 import { BeforeAfterSlider, JsonDiffView } from './review/evidence';
+import { ReviewVerdictForm } from './ReviewVerdictForm';
 
 type Region = {
   id: string;
@@ -64,6 +65,9 @@ export function DemoReviewSurface({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<null | 'approve' | 'send-back'>(null);
   const [error, setError] = useState<string | null>(null);
+  // forge-mfv5.1.28 (D-20 amended): with no blocking comment, the operator may
+  // still send back — typed work items through ReviewVerdictForm's send-back.
+  const [composing, setComposing] = useState(false);
 
   // Load comments + the DEMO.md narrative.
   useEffect(() => {
@@ -149,6 +153,8 @@ export function DemoReviewSurface({
               initiativeId: verdictInitiativeId,
               rationale: derived.rationale,
               acceptanceCriteria: derived.acceptanceCriteria,
+              // A blocker's runnable inline command gates the fix WI (forge-mfv5.1.28).
+              ...(derived.qualityGateCmd ? { qualityGateCmd: derived.qualityGateCmd } : {}),
             });
       if (!result.ok) { setError(result.error ?? 'submit failed'); return; }
       setSubmitted(derived.kind);
@@ -225,14 +231,26 @@ export function DemoReviewSurface({
 
       {error && <div style={{ fontSize: 12, color: '#f85149' }}>{error}</div>}
 
-      {/* Derived verdict — preserves the verdict-form data-* contract.
+      {composing && submitted === null ? (
+        // forge-mfv5.1.28: the typed send-back REPLACES the derived bar, so the
+        // page still carries exactly one `verdict-form`. Its approve radio is
+        // the way back to an approve.
+        <div style={{ position: 'sticky', bottom: 12, zIndex: 40 }}>
+          <ReviewVerdictForm
+            initiativeId={verdictInitiativeId}
+            initialKind="send-back"
+            onSubmitted={(kind) => { setSubmitted(kind); onSubmitted?.(kind); }}
+          />
+        </div>
+      ) : (
+      /* Derived verdict — preserves the verdict-form data-* contract.
           W7-B7 (artifact-plan-31): STICKY, like the plan/demo GateBar's fixed
           shell — the verdict control stays reachable while scrolling the
-          regions instead of sitting 14,000px down in normal flow. */}
+          regions instead of sitting 14,000px down in normal flow. */
       <div
         data-component="verdict-form"
         data-form-state={formState}
-        data-form-kind={derived.kind}
+        data-form-kind={submitted ?? derived.kind}
         data-initiative-id={verdictInitiativeId}
         data-ac-count={blockerCount}
         data-submit-error={error ?? ''}
@@ -275,9 +293,15 @@ export function DemoReviewSurface({
             >
               {submitting ? 'submitting…' : derived.kind === 'approve' ? 'approve and merge' : 'send back (add work items)'}
             </button>
+            {derived.kind === 'approve' && (
+              <button data-action="compose-send-back" onClick={() => setComposing(true)} disabled={submitting} style={{ ...miniBtn, marginLeft: 8, fontSize: 13, padding: '7px 16px' }}>
+                send back with typed work items
+              </button>
+            )}
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
