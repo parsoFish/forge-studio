@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { STUDIO_BRANCH } from '../../project-repo-tx.ts';
-import { saveProjectRepo, studioPullRequestUrl } from '../../project-repo-save.ts';
+import { saveProjectRepo, studioPullRequest } from '../../project-repo-save.ts';
 import { GH_URL, PR_URL, fixture, g, ghState, githubMergesPr, hasRef, prRow, sha, stubGh, studioCommit } from '../test-fixtures/save-origin.ts';
 
 const withEnv = <T>(key: string, value: string, fn: () => T): T => {
@@ -39,7 +39,7 @@ test('1. a fork\'s, another base\'s or another repo\'s PR named forge-studio is 
     assert.ok(list.includes('--base') && list[list.indexOf('--base') + 1] === 'main', 'the list asks for the base');
     assert.ok(!gh.calls.some((c) => c[1] === 'merge' && c[2] !== PR_URL), 'auto-merge only ever on our own PR');
     gh.open = [...foreign];
-    assert.equal(studioPullRequestUrl(f.work, stubGh(gh)), undefined, 'repo-status serves no foreign PR');
+    assert.equal(studioPullRequest(f.work, stubGh(gh)), undefined, 'repo-status serves no foreign PR');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -124,11 +124,11 @@ test('3c. repo-status never asks gh under the dry bridge, nor once forge-studio 
     const gh = ghState();
     assert.equal(saveProjectRepo(f.work, { gh: stubGh(gh) }).prUrl, PR_URL);
     gh.calls.length = 0;
-    assert.equal(withEnv('FORGE_DRY_BRIDGE', '1', () => studioPullRequestUrl(f.work, stubGh(gh))), undefined);
+    assert.equal(withEnv('FORGE_DRY_BRIDGE', '1', () => studioPullRequest(f.work, stubGh(gh))), undefined);
     assert.equal(gh.calls.length, 0, 'dry bridge: no gh');
     githubMergesPr(f);
     g(f.work, ['fetch', '-q', 'origin']);
-    assert.equal(studioPullRequestUrl(f.work, stubGh(gh)), undefined);
+    assert.equal(studioPullRequest(f.work, stubGh(gh)), undefined);
     assert.equal(gh.calls.length, 0, 'merged tracking ref: no gh per poll');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

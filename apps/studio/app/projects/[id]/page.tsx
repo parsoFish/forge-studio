@@ -507,7 +507,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       </div>
 
       <SaveRefusal files={saveControl.adoptFiles} busy={saving} onAdopt={() => { adoptNextSave.current = true; void handleSave(); }} />
-      <SaveRepoState prUrl={repo?.prUrl} recovery={recovery} busy={saving} onRecover={() => { recoverNextSave.current = true; void handleSave(); }} />
+      <SaveRepoState prUrl={repo?.prUrl} prState={repo?.prState} prDetail={repo?.prDetail} recovery={recovery} busy={saving} onRecover={() => { recoverNextSave.current = true; void handleSave(); }} />
       {/* Editor | Roadmap tab bar */}
       <ProjectTabs tab={tab} onSelect={setTab} />
 
