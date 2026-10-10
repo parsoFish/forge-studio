@@ -25,8 +25,8 @@ import {
 } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { hasWorkItemFiles } from './work-item.ts';
-import { readKickoffFacts, kickoffBuiltReason } from './kickoff-facts.ts';
-import { KICKOFF_SOURCE_FLOW_ID } from '@forge/contracts';
+import { readKickoffFacts } from './kickoff-facts.ts';
+import { KICKOFF_SOURCE_FLOW_ID, kickoffBuiltReason } from '@forge/contracts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';

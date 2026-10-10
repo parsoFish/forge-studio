@@ -816,9 +816,7 @@ export type RoadmapWorkItem = {
 export type RoadmapInitiative = {
   initiativeId: string;
   title: string;
-  /** The queue dir, or `awaiting-kickoff` (bead forge-mfv5.1.25) read off the
-   *  run model's `awaitingKickoff` — the file itself stays in ready-for-review/. */
-  status: QueueState | 'awaiting-kickoff';
+  status: QueueState | 'awaiting-kickoff'; // forge-mfv5.1.25: read off the run model, file stays in ready-for-review/
   dependsOnInitiatives: string[];
   /**
    * plan-everything-before-kickoff: whether this initiative's build deps are
@@ -961,8 +959,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
  * Mirrors the queueStatusFor pattern from apps/forge/ui-bridge.ts:195.
  */
 /**
- * W6-RV-2: initiativeId → real cycle-completion instant (and, bead
- * forge-mfv5.1.25, the run model's `awaitingKickoff`), sourced from the
+ * W6-RV-2: initiativeId → real cycle-completion instant (+ forge-mfv5.1.25 kickoff ids), from the
  * SAME memoized run derivation `GET /api/runs` already uses
  * (`cachedListRuns`, packages/flows/run-list-cache.ts) — reusing it here means the
  * roadmap's completedAt column costs nothing beyond what that route already
@@ -972,24 +969,18 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
  * queue tree (it has no project filter), so this is a superset scan — cheap
  * because it's the memo's job, not a second parse of anything roadmap-local.
  */
-function runFactsByInitiative(forgeRoot: string): Map<string, { completedAt?: string; awaitingKickoff?: true }> {
-  const byInitiative = new Map<string, { completedAt?: string; awaitingKickoff?: true }>();
+function runFactsByInitiative(forgeRoot: string): { completedAt: Map<string, string>; kickoff: Set<string> } {
+  const completedAt = new Map<string, string>(); const kickoff = new Set<string>();
   for (const run of cachedListRuns(forgeRoot, Date.now())) {
-    // Merge, never overwrite: one initiative can have a run per queue dir.
-    const prev = byInitiative.get(run.initiativeId) ?? {};
-    byInitiative.set(run.initiativeId, {
-      ...prev,
-      ...(run.completedAt !== undefined ? { completedAt: run.completedAt } : {}),
-      ...(run.awaitingKickoff ? { awaitingKickoff: true as const } : {}),
-    });
+    if (run.completedAt !== undefined) completedAt.set(run.initiativeId, run.completedAt); if (run.awaitingKickoff) kickoff.add(run.initiativeId);
   }
-  return byInitiative;
+  return { completedAt, kickoff };
 }
 
 function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const { entries, unparseable } = scanProjectManifests(projectId, forgeRoot);
-  const runFactsById = runFactsByInitiative(forgeRoot);
+  const { completedAt: completedAtById, kickoff: kickoffIds } = runFactsByInitiative(forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest, blockedClauses }) => {
     // W7-A4 (projects-10 / flows-26): the ONE title derivation the run model
@@ -1000,12 +991,12 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     const workItems = items.length > 0 ? items : undefined;
 
     const blockedBy = checkInitiativeDeps(file, queuePaths);
-    const { completedAt, awaitingKickoff } = runFactsById.get(initId) ?? {};
+    const completedAt = completedAtById.get(initId);
 
     return {
       initiativeId: initId,
       title,
-      status: awaitingKickoff && status === 'ready-for-review' ? 'awaiting-kickoff' : status,
+      status: kickoffIds.has(initId) && status === 'ready-for-review' ? 'awaiting-kickoff' : status,
       dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
       // `forge-8vfn.7.6.18`: ready means the scheduler WOULD claim it. A claim it
       // already refused for a named hard clause is not ready, and saying so is the

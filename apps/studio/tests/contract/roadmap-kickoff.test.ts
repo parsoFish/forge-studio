@@ -8,7 +8,7 @@
  *   - the canvas's "N merged" caption excludes it (no completedAt, no ✓);
  *   - the architect committed view headlines "awaiting kickoff".
  *
- * RUN: npx vitest run tests/contract/roadmap-kickoff.test.ts   (from apps/studio/)
+ * RUN (from apps/studio): npx vitest run on this file.
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

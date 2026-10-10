@@ -28,7 +28,7 @@ forge ships one working factory. It is two flows plus one agent that fires after
 2. **Plan gate.** You review the plan and approve it, or send it back with feedback. Nothing is queued until you approve.
 3. The project-manager agent splits each initiative into work items: small, ordered units, each with at least one acceptance criterion and a command that checks it. A set that fails validation is set aside whole, never run partially.
 
-**Kickoff.** The develop flow does not start by itself. When an initiative is planned, you start it from its card on the roadmap.
+**Kickoff gate.** The develop flow does not start by itself. A planned initiative's roadmap card reads KICKOFF until you start it.
 
 **Develop flow.**
 

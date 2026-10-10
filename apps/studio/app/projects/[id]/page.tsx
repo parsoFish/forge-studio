@@ -997,9 +997,8 @@ function RoadmapView({
   // be pending AND ready at once. "Start eligible" kicks all of them off in a
   // single batched POST rather than one click per card. Ids already starting/
   // started this session are excluded so the button can't re-fire them before
-  // the refetched roadmap catches up. R4-11-F2: the batch button honours the
-  // same blocked-until-planned lock as the single-card button — a WI-less
-  // initiative is never eligible, even if the dep gate says `ready`.
+  // the refetched roadmap catches up. `isStartEligible` (R4-11-F2, forge-mfv5.1.25):
+  // a WI-less initiative is never eligible; a served KICKOFF one is.
   const eligible = useMemo(
     () =>
       initiatives.filter((i) => {

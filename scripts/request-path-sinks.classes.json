@@ -365,6 +365,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/flows/work-item.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`hasWorkItemFiles` moved here from enqueue-flow-run.ts (forge-mfv5.1.25): the same read of `<queue parent>/_logs|_worktrees/<canonical initiativeId>` WI dirs, id checked by isCanonicalInitiativeId before any path is built."
+ },
  "packages/kernel/case-folding-probe.ts": {
   "class": "not-request-derived",
   "guard": null,

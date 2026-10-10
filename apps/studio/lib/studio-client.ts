@@ -897,8 +897,7 @@ export function parseRun(raw: unknown): Run {
     // W8-A2 (ON-7 defect 2) / M7 row 150 (ruling 1774): the declared-data-fails-
     // open guard (run-wire-field.ts) — see that file for the full history.
     ...carryWireFieldIfDefined(r.stopOnBudget, 'stopOnBudget'),
-    ...carryWireFieldIfDefined(r.operatorStop, 'operatorStop'),
-    ...carryWireFieldIfDefined(r.awaitingKickoff, 'awaitingKickoff'),
+    ...carryWireFieldIfDefined(r.operatorStop, 'operatorStop'), ...carryWireFieldIfDefined(r.awaitingKickoff, 'awaitingKickoff'),
     workItems:     r.workItems     ?? [],
     flowLineage:   r.flowLineage   ?? [],
     // R6-01 WI-2: carried through, never defaulted — an absent `trigger` key
