@@ -8,10 +8,10 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, isText, stringList } from '@forge/kernel';
 import { addKickoffWorkItem } from '@forge/flows';
 import { uncoveredAcceptanceCriteria } from '@forge/stations';
-import { readJson, isText, stringList } from './bridge-http.ts';
+import { readJson } from './bridge-http.ts';
 
 export type KickoffWorkItemContext = { forgeRoot: string; logsRoot: string };
 

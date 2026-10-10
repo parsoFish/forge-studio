@@ -39,7 +39,7 @@ import {
   applyReviewVerdict,
   type StudioPostContext,
 } from '@forge/flows';
-import { readJson, stringList } from './bridge-http.ts';
+import { readJson } from './bridge-http.ts';
 import { deriveVerdictWithGates, emitCommentGateEvent } from './review-comment-gate.ts';
 
 /** True when `v` is a `{given, when, then}` shape (all string fields present). */
@@ -185,12 +185,8 @@ export async function handleReviewCommentRoutes(
     try {
       const body = await readJson(req);
       const b = (body ?? {}) as Record<string, unknown>;
-      // forge-mfv5.1.28: a typed send-back's gate + scope, validated HERE (the
-      // Kickoff add's rule) — absent means the project gate / the WI-scope union.
-      const listError =
-        (b['qualityGateCmd'] !== undefined ? stringList('qualityGateCmd', b['qualityGateCmd'], 64, 500) : null) ??
-        (b['filesInScope'] !== undefined ? stringList('filesInScope', b['filesInScope'], 200, 500) : null);
-      if (listError) { sendJson(res, 400, { error: listError }, origin); return true; }
+      // forge-mfv5.1.28: qualityGateCmd / filesInScope are validated in
+      // applyReviewVerdict, the one boundary both send-back doors share.
       await applyReviewVerdict(req, res, ctx, {
         initiativeId: typeof b['initiativeId'] === 'string' ? b['initiativeId'] : '',
         kind: (b['kind'] as 'approve' | 'send-back') ?? 'send-back',

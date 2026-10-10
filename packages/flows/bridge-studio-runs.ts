@@ -448,7 +448,7 @@ export async function handleStudioPostRoutes(
           ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
           : undefined,
         concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
-        qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
+        qualityGateCmd: b['qualityGateCmd'] as string[] | undefined, filesInScope: b['filesInScope'] as string[] | undefined, // forge-mfv5.1.28: validated in applyReviewVerdict
       });
       return true;
     }

@@ -365,3 +365,43 @@ test('forge-mfv5.1.28: a send-back with neither a blocking comment nor a typed w
     assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false);
   });
 });
+
+// ---- forge-mfv5.1.28 row-7 follow-up: the run-gate door agrees with /api/verdict ----
+
+async function postGate(url: string, runId: string, body: Record<string, unknown>): Promise<{ status: number; json: unknown }> {
+  const res = await fetch(`${url}/api/runs/${runId}/gates/verdict`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, json: await res.json() };
+}
+
+test('forge-mfv5.1.28: POST /api/runs/:id/gates/verdict passes a typed send-back\'s qualityGateCmd + filesInScope to the compiled fix WI', async () => {
+  await withBridge('gatedoor', async (url, { initiativeId, worktreePath }) => {
+    const { status, json } = await postGate(url, initiativeId, {
+      verdict: 'send-back', rationale: 'AC2 is measured by nothing.', acceptanceCriteria: [TYPED_AC],
+      qualityGateCmd: ['python3', '-m', 'pytest', 'tests/'], filesInScope: ['tests/test_structure.py'],
+    });
+    assert.equal(status, 200, JSON.stringify(json));
+    const wi = parseWorkItem(readFileSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md'), 'utf8'));
+    assert.deepEqual(wi.quality_gate_cmd, ['python3', '-m', 'pytest', 'tests/']);
+    assert.deepEqual(wi.files_in_scope, ['tests/test_structure.py']);
+  });
+});
+
+test('forge-mfv5.1.28: POST /api/runs/:id/gates/verdict refuses malformed lists at the boundary, naming the field, before any write', async () => {
+  await withBridge('gatebad', async (url, { initiativeId, worktreePath }) => {
+    for (const [extra, field] of [
+      [{ qualityGateCmd: ['pytest', ''] }, 'qualityGateCmd'],
+      [{ qualityGateCmd: 'pytest tests/' }, 'qualityGateCmd'],
+      [{ filesInScope: [42] }, 'filesInScope'],
+      [{ filesInScope: [] }, 'filesInScope'],
+    ] as const) {
+      const { status, json } = await postGate(url, initiativeId, { verdict: 'send-back', rationale: 'r', acceptanceCriteria: [TYPED_AC], ...extra });
+      assert.equal(status, 400, JSON.stringify(json));
+      assert.match(String((json as Record<string, unknown>).error), new RegExp(field));
+    }
+    assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false, 'nothing compiled');
+  });
+});
