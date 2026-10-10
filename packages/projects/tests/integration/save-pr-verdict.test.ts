@@ -37,7 +37,7 @@ test('pending + allow_auto_merge=true → --auto requested, no direct merge, sta
     assert.equal(r.merged, false);
     assert.match(r.detail, /pending: build/);
     assert.match(r.detail, /auto-merge requested/);
-    assert.deepEqual(autoMerges(gh), [['pr', 'merge', PR_URL, '--auto', '--merge', '--repo', 'acme/weave']]);
+    assert.deepEqual(autoMerges(gh), [['pr', 'merge', PR_URL, '--auto', '--merge', '--match-head-commit', sha(f.work, STUDIO_BRANCH), '--repo', 'acme/weave']]);
     assert.equal(directMerges(gh).length, 0);
     assert.ok(hasRef(f.work, `refs/heads/${STUDIO_BRANCH}`));
   });
@@ -118,6 +118,22 @@ test('nothing reported yet + allow_auto_merge=true → pending, and --auto is NO
   });
 });
 
+test('a merge that fails for any other reason (auth, timeout) → merge-failed, named, never blocked-by-ruleset', () => {
+  withSave({ checks: GREEN, mergeRefused: 'HTTP 401: Bad credentials (https://api.github.com/graphql)' }, (_f, _gh, r) => {
+    assert.equal(r.prState, 'merge-failed');
+    assert.match(r.detail, /Bad credentials/);
+    assert.ok(!r.detail.includes('merge on GitHub yourself'), r.detail);
+  });
+});
+
+test('--auto pins the pushed head (--match-head-commit), so GitHub never auto-merges a head Save did not judge', () => {
+  withSave({ checks: [checkRun('build', 'IN_PROGRESS', null)], allowAutoMerge: true }, (f, gh) => {
+    const auto = merges(gh).find((c) => c.includes('--auto'));
+    assert.ok(auto, 'auto-merge requested');
+    assert.equal(auto[auto.indexOf('--match-head-commit') + 1], sha(f.work, 'forge-studio'));
+  });
+});
+
 test('the ruleset refuses the merge → blocked-by-ruleset, gh\'s first stderr line named, base untouched', () => {
   const refusal = 'GraphQL: Repository rule violations found\n\nAt least 1 approving review is required by reviewers with write access.';
   withSave({ checks: GREEN, mergeRefused: refusal }, (f, gh, r) => {
@@ -160,5 +176,12 @@ test('repo-status reports the PR state by name and never merges or requests --au
     assert.equal(studioPullRequest(f.work, stubGh(gh))?.prState, 'failing');
     assert.equal(merges(gh).length, 0, 'a GET never merges');
     assert.ok(gh.calls.every((c) => !(c[0] === 'api' && c[1] === 'repos/acme/weave')), 'nor reads allow_auto_merge');
+  });
+});
+
+test('repo-status: gh cannot list the PR → unreadable, named — never a silent "no PR"', () => {
+  withSave({ checks: PENDING }, (f, gh) => {
+    gh.listFails = true;
+    assert.deepEqual(studioPullRequest(f.work, stubGh(gh)), { prState: 'unreadable', prDetail: 'gh pr list failed: HTTP 502: Bad Gateway (https://api.github.com/graphql)' });
   });
 });

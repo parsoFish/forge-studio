@@ -249,7 +249,7 @@ function settlePr(dir: string, base: string, gh: GhRunner, slug: string, url: st
   const open = (prState: PrState, detail: string): SaveResult => ({ merged: false, pushed: true, prUrl: url, prState, detail: `${opened}; ${detail}` });
   if (v.state === 'green') {
     const m = mergeStudioPr(gh, dir, slug, url, ['--merge', '--match-head-commit', pushed]);
-    if (!m.ok) return open('blocked-by-ruleset', `GitHub refused the merge (${m.reason}) — merge on GitHub yourself`);
+    if (!m.ok) return /rule|protect|review|required|not mergeable/i.test(m.reason) ? open('blocked-by-ruleset', `GitHub refused the merge (${m.reason}) — merge on GitHub yourself`) : open('merge-failed', `gh pr merge failed (${m.reason}); Save again`);
   }
   if (v.state === 'green' || v.state === 'merged') {
     const fetched = tryGit(dir, ['fetch', '--quiet', 'origin', `+refs/heads/${base}:${tracking(base)}`]);
@@ -258,11 +258,10 @@ function settlePr(dir: string, base: string, gh: GhRunner, slug: string, url: st
   }
   if (v.state !== 'pending') return open(v.state, v.detail);
   const again = 'Save again once they pass';
-  // No required check has reported yet: GitHub's auto-merge would land on open, so it is never requested.
   if (!v.required) return open('pending', `${v.detail} — Save again once checks report`);
   const allowed = allowsAutoMerge(gh, dir, slug);
   if (allowed !== true) return open('pending', `${v.detail}; ${allowed === false ? 'auto-merge is off for this repository' : 'auto-merge setting not reported'} — ${again}`);
-  const auto = mergeStudioPr(gh, dir, slug, url, ['--auto', '--merge']);
+  const auto = mergeStudioPr(gh, dir, slug, url, ['--auto', '--merge', '--match-head-commit', pushed]);
   return open('pending', `${v.detail}; ${auto.ok ? 'auto-merge requested — GitHub merges it once they pass' : `auto-merge request refused (${auto.reason}) — ${again}`}`);
 }
 
@@ -292,12 +291,13 @@ export function hasPendingStudioChanges(projectDir: string): boolean {
 
 /** The open forge-studio PR and its verdict, for repo-status (polled; READ-ONLY — never merges).
  *  Asks gh only outside the dry bridge, once forge-studio was pushed, and while it is still ahead of origin/<base>. */
-export function studioPullRequest(projectDir: string, gh: GhRunner = defaultGh): { prUrl: string; prState: PrState; prDetail: string } | undefined {
+export function studioPullRequest(projectDir: string, gh: GhRunner = defaultGh): { prUrl?: string; prState: PrState; prDetail: string } | undefined {
   if (isDryBridge() || !isGitRepo(projectDir) || !refExists(projectDir, `refs/remotes/origin/${STUDIO_BRANCH}`) || !branchExists(projectDir, STUDIO_BRANCH)) return undefined;
   const base = defaultBranch(projectDir);
   if (!refExists(projectDir, tracking(base)) || Number(git(projectDir, ['rev-list', '--count', `${tracking(base)}..${STUDIO_BRANCH}`], { allowFail: true }) || 0) === 0) return undefined;
   const slug = originSlug(projectDir);
   const prUrl = slug ? openStudioPr(gh, projectDir, slug, base) : undefined;
+  if (typeof prUrl === 'object') return { prState: 'unreadable', prDetail: prUrl.error };
   if (!slug || !prUrl) return undefined;
   const v = prVerdict(readStudioPr(gh, projectDir, slug, prUrl), sha(projectDir, `refs/remotes/origin/${STUDIO_BRANCH}`));
   return { prUrl, prState: v.state, prDetail: v.detail };

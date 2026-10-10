@@ -81,10 +81,10 @@ function studioPrs(gh: GhRunner, cwd: string, slug: string, base: string, state:
     .map((row) => ({ url: row.url as string, headRefOid: typeof row.headRefOid === 'string' ? row.headRefOid : '' }));
 }
 
-/** The open forge-studio → base PR's URL, or undefined (none, or gh could not say). */
-export function openStudioPr(gh: GhRunner, cwd: string, slug: string, base: string): string | undefined {
+/** The open forge-studio → base PR's URL, undefined when none, or gh's failure by name. */
+export function openStudioPr(gh: GhRunner, cwd: string, slug: string, base: string): string | undefined | { error: string } {
   const rows = studioPrs(gh, cwd, slug, base, 'open');
-  return Array.isArray(rows) ? rows[0]?.url : undefined;
+  return Array.isArray(rows) ? rows[0]?.url : rows;
 }
 
 /** A merged forge-studio → base PR — with `headOid`, only the one whose head was exactly that commit. */
@@ -109,7 +109,7 @@ export function openOrReuseStudioPr(gh: GhRunner, cwd: string, slug: string, bas
   return printed ? { ok: true, url: printed, created: true } : { ok: false, reason: `gh pr create printed no PR URL: ${firstLine(r.stdout)}` };
 }
 
-const PR_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){state merged headRefOid commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} nodes{__typename ...on CheckRun{name status conclusion isRequired(pullRequestNumber:$number)} ...on StatusContext{context state isRequired(pullRequestNumber:$number)}}}}}}}}}}';
+const PR_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){state merged mergeStateStatus headRefOid commits(last:1){nodes{commit{oid statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} nodes{__typename ...on CheckRun{name status conclusion isRequired(pullRequestNumber:$number)} ...on StatusContext{context state isRequired(pullRequestNumber:$number)}}}}}}}}}}';
 
 /** forge-mfv5.1.23 — one graphql read (not `gh pr checks`, which exits non-zero on pending/red). */
 export function readStudioPr(gh: GhRunner, cwd: string, slug: string, url: string): PrRead {

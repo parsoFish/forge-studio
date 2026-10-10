@@ -104,3 +104,18 @@ test('read: a rollup with more contexts than one page is unreadable — a red re
   assert.equal(read.ok, false);
   assert.equal(prVerdict(read, HEAD_OID).state, 'unreadable');
 });
+
+test('verdict: every reported required check green but GitHub says BLOCKED (a required check never reported) → pending, never green', () => {
+  for (const mergeStateStatus of ['BLOCKED', 'UNSTABLE', 'BEHIND', 'UNKNOWN', 'DIRTY', 'DRAFT']) {
+    const v = verdict([checkRun('build', 'COMPLETED', 'SUCCESS')], { mergeStateStatus });
+    assert.equal(v.state, 'pending', mergeStateStatus);
+    assert.match(v.detail, new RegExp(mergeStateStatus));
+  }
+  assert.equal(verdict([checkRun('build', 'COMPLETED', 'SUCCESS')], { mergeStateStatus: 'HAS_HOOKS' }).state, 'green');
+});
+
+test('read: checks read for a commit other than the PR head → unreadable, never judged', () => {
+  const out = JSON.stringify({ data: { repository: { pullRequest: { state: 'OPEN', merged: false, mergeStateStatus: 'CLEAN', headRefOid: HEAD_OID,
+    commits: { nodes: [{ commit: { oid: 'b'.repeat(40), statusCheckRollup: { contexts: { nodes: [checkRun('build', 'COMPLETED', 'SUCCESS')] } } } }] } } } } });
+  assert.equal(prVerdict(parsePrRead(out), HEAD_OID).state, 'unreadable');
+});

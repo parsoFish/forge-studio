@@ -17,6 +17,7 @@ const NEXT: Record<PrState, string> = {
   'blocked-by-ruleset': 'GitHub refused the merge:',
   'stale-head': 'The PR head is not the commit Save pushed; Save to push it again.',
   unreadable: 'Studio could not read the PR state; Save again to retry.',
+  'merge-failed': 'The merge did not go through; Save again to retry:',
 };
 
 /**
@@ -35,13 +36,15 @@ export function SaveRepoState({ prUrl, prState, prDetail, recovery, busy, onReco
 }) {
   return (
     <>
-      {prUrl ? (
+      {prUrl || prState ? (
         <div data-section="save-pr" data-pr-state={prState ?? ''} role="status" style={{ ...panel, border: '1px solid var(--border)' }}>
-          <span>
-            The default branch is protected, so Save opened a pull request:{' '}
-            <a data-link="save-pr" href={prUrl} target="_blank" rel="noreferrer">{prUrl}</a>.
-            Changes stay pending until it merges.
-          </span>
+          {prUrl ? (
+            <span>
+              The default branch is protected, so Save opened a pull request:{' '}
+              <a data-link="save-pr" href={prUrl} target="_blank" rel="noreferrer">{prUrl}</a>.
+              Changes stay pending until it merges.
+            </span>
+          ) : null}
           {prState ? <span>{NEXT[prState]} {prDetail}</span> : null}
         </div>
       ) : null}

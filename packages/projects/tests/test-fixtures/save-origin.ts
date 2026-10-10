@@ -84,7 +84,7 @@ export const prRow = (url: string, over: Partial<PrRow> = {}): PrRow => ({ url, 
 export type GhState = {
   protection: boolean | 'fail'; open: PrRow[]; merged: PrRow[]; autoMerge: boolean; createFails?: boolean; calls: string[][];
   checks: unknown[]; headOid?: string; originDir?: string; graphql?: { fail: true } | { raw: string };
-  allowAutoMerge: boolean | 'missing'; mergeRefused?: string; onMerge?: () => void;
+  allowAutoMerge: boolean | 'missing'; mergeRefused?: string; onMerge?: () => void; listFails?: boolean;
 };
 
 export const HEAD_OID = 'a'.repeat(40);
@@ -92,8 +92,8 @@ export const checkRun = (name: string, status: string, conclusion: string | null
 export const statusContext = (context: string, state: string, isRequired = true) => ({ __typename: 'StatusContext', context, state, isRequired });
 /** What `gh api graphql` prints for the PR read (pullRequest → last commit → statusCheckRollup.contexts). */
 export const graphqlPr = (nodes: unknown[], over: Record<string, unknown> = {}): string => JSON.stringify({ data: { repository: { pullRequest: {
-  state: 'OPEN', merged: false, headRefOid: HEAD_OID, ...over,
-  commits: { nodes: [{ commit: { statusCheckRollup: nodes.length ? { contexts: { nodes } } : null } }] },
+  state: 'OPEN', merged: false, mergeStateStatus: 'CLEAN', headRefOid: HEAD_OID, ...over,
+  commits: { nodes: [{ commit: { oid: over.headRefOid ?? HEAD_OID, statusCheckRollup: nodes.length ? { contexts: { nodes } } : null } }] },
 } } } });
 
 /** A stub gh: prints what gh prints (JSON for `--json`/`api`, the URL for `pr create`, gh's stderr on failure).
@@ -106,6 +106,7 @@ export function stubGh(state: GhState): GhRunner {
       if (state.protection === 'fail') return { ok: false, stderr: 'gh: Not Found (HTTP 404)\n' };
       return { ok: true, stdout: JSON.stringify({ name: 'main', commit: { sha: 'x' }, protected: state.protection, protection_url: 'https://api.github.com/repos/acme/weave/branches/main/protection' }) };
     }
+    if (a.startsWith('pr list') && state.listFails) return { ok: false, stderr: 'HTTP 502: Bad Gateway (https://api.github.com/graphql)\n' };
     if (a.startsWith('pr list') && a.includes('--state open')) return { ok: true, stdout: JSON.stringify(state.open) };
     if (a.startsWith('pr list') && a.includes('--state merged')) return { ok: true, stdout: JSON.stringify(state.merged) };
     if (a.startsWith('pr create')) {

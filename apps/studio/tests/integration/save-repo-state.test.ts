@@ -100,6 +100,7 @@ test('the PR panel carries data-pr-state and state-appropriate text for every ve
     ['blocked-no-required-check', NO_REQ, new RegExp(NO_REQ)],
     ['stale-head', 'PR head fffffff is not the pushed aaaaaaa', /fffffff/],
     ['unreadable', 'PR state unreadable: gh api graphql failed: HTTP 502', /HTTP 502/],
+    ['merge-failed', 'gh pr merge failed (HTTP 401: Bad credentials); Save again', /Bad credentials/],
   ];
   for (const [state, detail, text] of cases) {
     const html = panel(state, detail);
@@ -127,4 +128,13 @@ test('a Save whose merge GitHub refused (blocked-by-ruleset) reports not saved, 
   const r = await saveProject('weave', { name: 'weave' });
   expect(r.ok).toBe(false);
   expect(r.error).toContain('merge on GitHub yourself');
+});
+
+test('repo-status could not list the PR (gh failed): the panel still names it, with no link', () => {
+  const html = renderToStaticMarkup(React.createElement(SaveRepoState, {
+    prUrl: undefined, prState: 'unreadable', prDetail: 'gh pr list failed: HTTP 502', recovery: null, busy: false, onRecover: () => {},
+  }));
+  expect(html).toContain('data-pr-state="unreadable"');
+  expect(html).toMatch(/HTTP 502/);
+  expect(html).not.toContain('data-link="save-pr"');
 });

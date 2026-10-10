@@ -1,10 +1,11 @@
-/** forge-mfv5.1.23 — the forge-studio PR's merge verdict, pure over one `gh api graphql` read. Never merge on
- *  absence of red: no required check is never green, red wins over pending, unreadable is named. */
-export type PrState = 'merged' | 'blocked-no-required-check' | 'failing' | 'pending' | 'green' | 'unreadable' | 'stale-head' | 'blocked-by-ruleset';
+/** forge-mfv5.1.23 — the forge-studio PR's merge verdict, pure over one `gh api graphql` read. Never merge on absence
+ *  of red: no required check is never green, red wins over pending, unreadable (or truncated) is named, nothing reported
+ *  yet is pending (an unreported required check is absent from the rollup), and green also needs GitHub's own CLEAN. */
+export type PrState = 'merged' | 'blocked-no-required-check' | 'failing' | 'pending' | 'green' | 'unreadable' | 'stale-head' | 'blocked-by-ruleset' | 'merge-failed';
 /** `required` counts the required checks that reported; `--auto` is never requested with none. */
 export type PrVerdict = { state: PrState; detail: string; required?: number };
 type Check = { name: string; required: boolean; status: 'green' | 'red' | 'pending' };
-export type PrRead = { ok: true; merged: boolean; headOid: string; checks: Check[] } | { ok: false; reason: string };
+export type PrRead = { ok: true; merged: boolean; headOid: string; mergeState: string; checks: Check[] } | { ok: false; reason: string };
 
 export const NO_REQUIRED_CHECK = 'no required check reports on this branch — merge on GitHub yourself or add a required check';
 const GREEN_CONCLUSIONS = ['SUCCESS', 'NEUTRAL', 'SKIPPED'];
@@ -24,11 +25,12 @@ export function parsePrRead(stdout: string): PrRead {
   try {
     const pr = JSON.parse(stdout)?.data?.repository?.pullRequest;
     if (!pr || typeof pr.headRefOid !== 'string') return { ok: false, reason: 'gh api graphql returned no pull request' };
-    const contexts = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts;
-    // A required red check past the first page must never read as green: a truncated read is unreadable.
+    const commit = pr.commits?.nodes?.[0]?.commit;
+    if (commit?.oid !== undefined && commit.oid !== pr.headRefOid) return { ok: false, reason: `checks read for ${String(commit.oid).slice(0, 7)}, not the PR head` };
+    const contexts = commit?.statusCheckRollup?.contexts;
     if (contexts?.pageInfo?.hasNextPage === true) return { ok: false, reason: 'more checks than one read returns (over 100) — not judged' };
     const nodes = contexts?.nodes ?? [];
-    return { ok: true, merged: pr.merged === true || pr.state === 'MERGED', headOid: pr.headRefOid, checks: (nodes as Array<Record<string, unknown>>).map(check) };
+    return { ok: true, merged: pr.merged === true || pr.state === 'MERGED', headOid: pr.headRefOid, mergeState: String(pr.mergeStateStatus), checks: (nodes as Array<Record<string, unknown>>).map(check) };
   } catch {
     return { ok: false, reason: 'gh api graphql returned unparseable output' };
   }
@@ -43,10 +45,10 @@ export function prVerdict(read: PrRead, pushed: string): PrVerdict {
   const names = (cs: Check[]): string => cs.map((c) => c.name).join(', ');
   const red = required.filter((c) => c.status === 'red');
   const pending = required.filter((c) => c.status === 'pending');
-  // A required check that has not reported yet is absent from the rollup: nothing reported is pending, never the hand-off.
   if (read.checks.length === 0) return { state: 'pending', detail: 'no check has reported on this head yet' };
   if (required.length === 0) return { state: 'blocked-no-required-check', detail: NO_REQUIRED_CHECK };
   if (red.length > 0) return { state: 'failing', detail: `checks failing: ${names(red)}` };
   if (pending.length > 0) return { state: 'pending', detail: `checks pending: ${names(pending)}`, required: required.length };
+  if (read.mergeState !== 'CLEAN' && read.mergeState !== 'HAS_HOOKS') return { state: 'pending', detail: `reported required checks green, but GitHub says ${read.mergeState}`, required: required.length };
   return { state: 'green', detail: `required checks green: ${names(required)}` };
 }

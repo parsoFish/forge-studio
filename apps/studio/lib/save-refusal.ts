@@ -16,7 +16,7 @@ const SHA_RE = /^[0-9a-f]{40}$/;
 export type SaveRecoveryProposal = { commits: number; subjects: string[]; localHead: string; resetTo: string; base: string; detail: string };
 
 /** forge-mfv5.1.23 — the forge-studio PR's verdict by name, as the bridge serves it. */
-export const PR_STATES = ['merged', 'blocked-no-required-check', 'failing', 'pending', 'green', 'unreadable', 'stale-head', 'blocked-by-ruleset'] as const;
+export const PR_STATES = ['merged', 'blocked-no-required-check', 'failing', 'pending', 'green', 'unreadable', 'stale-head', 'blocked-by-ruleset', 'merge-failed'] as const;
 export type PrState = (typeof PR_STATES)[number];
 export const readPrState = (v: unknown): PrState | undefined => (PR_STATES as readonly unknown[]).includes(v) ? v as PrState : undefined;
 
@@ -43,7 +43,7 @@ export function readSaveRefusal(save: unknown): { error: string; refused: string
   if (proposal) return { error: reason, refused: [], recovery: proposal };
   // A protected default branch took a PR: saved to forge-studio + origin, shown as a link, not a failure —
   // unless GitHub refused the merge Save asked for (forge-mfv5.1.23), which is named as not saved.
-  if (pushed === true && readPrUrl(prUrl) && prState !== 'blocked-by-ruleset') return null;
+  if (pushed === true && readPrUrl(prUrl) && prState !== 'blocked-by-ruleset' && prState !== 'merge-failed') return null;
   if (merged === false && !NO_OP_DETAILS.includes(reason)) return { error: reason || 'not saved', refused: [] };
   return null;
 }
