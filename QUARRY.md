@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 141 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 142 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,504 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 65 | 21,283 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
-| `flows` | 90 | 25,427 | **25,228** | ratified 25,228 — forge-mfv5.1.27: immediate fix-round re-entry through the D-20 drain, `closure-with-pending-fix-wi`, the fix-round fact, the head-checked develop resume and drain, a never-throwing fix-WI reader; +98 measured on main 25,130, lane-ratified (≤100, ruling 666). |
+| `flows` | 91 | 25,564 | **25,228** | ratified 25,228 — forge-mfv5.1.27: immediate fix-round re-entry through the D-20 drain, `closure-with-pending-fix-wi`, the fix-round fact, the head-checked develop resume and drain, a never-throwing fix-WI reader; +98 measured on main 25,130, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 48 | 12,643 | **12,643** | ratified 12,643 — forge-mfv5.1.27: a gate-fix WI runs the failing gate (a CI failure its local gate) and its compile event records the parked head; +8 measured on main 12,635, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 37 | 8,756 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **512** | **135,041** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **513** | **135,178** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -139,6 +139,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/bridge-recovery.ts | flows | verbatim | 394 |
 | packages/flows/halt-watch.ts | flows | rewritten | 38 **New file, row 207 (forge-8vfn.8.5.57):** the serve tick's view of the emergency halt — logs on transition and at most every `HALT_REMINDER_MS`. |
 | packages/flows/kickoff-facts.ts | flows | rewritten | 56 **New file, forge-mfv5.1.25:** the one reader of the Kickoff-gate facts. |
+| packages/flows/legacy-fix-gate.ts | flows | rewritten | 130 **New file, forge-nk1y.22:** re-entry rewrites a legacy no-op gate-fix WI gate to the failing gate's command. |
 | packages/flows/operator-stop.ts | flows | rewritten | 205 |
 | packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 385 |
 | packages/sessions/bridge-studio-sessions-affordances.ts | sessions | rewritten | 458 |
@@ -204,7 +205,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/dry-bridge.ts | kernel | rewritten | 319 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 800 |
-| packages/flows/forge-requeue.ts | flows | verbatim | 311 |
+| packages/flows/forge-requeue.ts | flows | verbatim | 314 |
 | apps/forge/forge-watch.ts | apps/forge | verbatim | 800 |
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 742 |
 | packages/knowledge/brain-write-lease.ts | knowledge | verbatim | 137 |
@@ -332,7 +333,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 152 |
 | packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 392 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's SPEC §1 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 77 |
-| packages/flows/drain-fix-loop.ts | flows | verbatim | 301 |
+| packages/flows/drain-fix-loop.ts | flows | verbatim | 305 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 82 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 415 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
