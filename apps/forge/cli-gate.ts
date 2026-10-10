@@ -11,7 +11,9 @@
  * that judges them.
  *
  * Usage:
- *   forge gate docs [--sections A,B] [--forbid x,y] [--no-links] <path...>
+ *   forge gate docs [--sections A,B] [--forbid x,y] [--no-links] [--] <path...>
+ *
+ * `--` ends options: every argument after it is a path.
  *
  * Exit 0 = no findings. Exit 1 = findings, each printed `path:line [check] detail`.
  * Exit 2 = usage error, so a mis-typed gate invocation FAILS LOUD instead of
@@ -27,16 +29,20 @@ export async function cmdGate(rest: string[]): Promise<void> {
   const sub = rest[0];
   if (sub !== 'docs') {
     console.error('forge gate: subcommands: docs');
-    console.error('  forge gate docs [--sections A,B] [--forbid x,y] [--no-links] <path...>');
+    console.error('  forge gate docs [--sections A,B] [--forbid x,y] [--no-links] [--] <path...>');
     process.exitCode = 2;
     return;
   }
 
   const spec: DocsGateSpec = {};
   const paths: string[] = [];
+  let endOfOptions = false;
   for (let i = 1; i < rest.length; i++) {
     const a = rest[i];
-    if (a === '--sections') spec.sections = splitList(rest[++i]);
+    if (endOfOptions) {
+      if (a !== undefined) paths.push(a);
+    } else if (a === '--') endOfOptions = true;
+    else if (a === '--sections') spec.sections = splitList(rest[++i]);
     else if (a === '--forbid') spec.forbidden = splitList(rest[++i]);
     else if (a === '--no-links') spec.links = false;
     else if (a !== undefined && a.startsWith('-')) {

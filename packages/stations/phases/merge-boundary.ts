@@ -52,7 +52,8 @@ export function runClassMergeBoundary(
   if (!gate.ok || profile.mergeBoundaryVerb === null) return gate;
 
   const paths = deps.changedMarkdown(input.worktreePath);
-  const cmd = ['forge', 'gate', 'docs', ...paths];
+  // `--` hard-separates the operands: a path can never be read as a flag.
+  const cmd = ['forge', 'gate', 'docs', '--', ...paths];
   const emit = (ok: boolean, detail: string): void => {
     logger.emit({
       initiative_id: input.initiativeId,
