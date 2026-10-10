@@ -12,16 +12,17 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { STUDIO_BRANCH } from '../../project-repo-tx.ts';
-import { hasPendingStudioChanges, parseRecoverConfirmation, saveProjectRepo, studioPullRequestUrl } from '../../project-repo-save.ts';
-import { PR_URL, fixture, g, ghState, githubMergesPr, hasRef, prRow, sha, stranded, stubGh, studioCommit } from '../test-fixtures/save-origin.ts';
+import { hasPendingStudioChanges, parseRecoverConfirmation, saveProjectRepo, studioPullRequest } from '../../project-repo-save.ts';
+import { PR_URL, fixture, g, ghState, githubMergesPr, hasRef, prRow, sha, stranded, stubGh, studioCommit, checkRun } from '../test-fixtures/save-origin.ts';
 
-test('(a) protected main → forge-studio pushed as a branch, PR opened with auto-merge, base untouched, still pending', () => {
+test('(a) protected main → forge-studio pushed as a branch, PR opened, base untouched, still pending; no required check → no merge, no --auto', () => {
   const f = fixture();
   try {
     studioCommit(f.work);
     const mainBefore = sha(f.work, 'main');
     const studio = sha(f.work, STUDIO_BRANCH);
-    const gh = ghState();
+    // A check reported and none is required (the gitweave ruleset): refused by name, never merged.
+    const gh = ghState({ originDir: f.origin, allowAutoMerge: true, checks: [checkRun('lint', 'COMPLETED', 'SUCCESS', false)] });
     const r = saveProjectRepo(f.work, { gh: stubGh(gh) });
     assert.equal(r.merged, false);
     assert.equal(r.pushed, true);
@@ -31,22 +32,23 @@ test('(a) protected main → forge-studio pushed as a branch, PR opened with aut
     assert.equal(sha(f.origin, 'main'), mainBefore, 'origin main untouched');
     assert.equal(sha(f.work, 'main'), mainBefore, 'local main untouched');
     assert.equal(sha(f.work, STUDIO_BRANCH), studio, 'forge-studio kept');
-    assert.ok(gh.calls.some((c) => c.join(' ').startsWith(`pr merge ${PR_URL} --auto --merge`)), 'merge-on-green requested');
+    assert.equal(gh.calls.some((c) => c[0] === 'pr' && c[1] === 'merge'), false, 'never merge on absence of red (forge-mfv5.1.23)');
+    assert.equal(r.prState, 'blocked-no-required-check');
     assert.equal(hasPendingStudioChanges(f.work), true);
-    assert.equal(studioPullRequestUrl(f.work, stubGh(gh)), PR_URL, 'repo-status serves the open PR');
+    assert.equal(studioPullRequest(f.work, stubGh(gh))?.prUrl, PR_URL, 'repo-status serves the open PR');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test('(a2) an already-open PR is reused; auto-merge not allowed leaves it open and says so — not an error', () => {
+test('(a2) an already-open PR is reused; a refused --auto request leaves it open and says so — not an error', () => {
   const f = fixture();
   try {
     studioCommit(f.work);
-    const gh = ghState({ open: [prRow(PR_URL)], autoMerge: false });
+    const gh = ghState({ open: [prRow(PR_URL)], autoMerge: false, allowAutoMerge: true, checks: [{ __typename: 'CheckRun', name: 'ci', status: 'QUEUED', conclusion: null, isRequired: true }], headOid: sha(f.work, STUDIO_BRANCH) });
     const r = saveProjectRepo(f.work, { gh: stubGh(gh) });
     assert.equal(r.pushed, true);
     assert.equal(r.prUrl, PR_URL);
     assert.equal(gh.calls.some((c) => c[0] === 'pr' && c[1] === 'create'), false, 'no second PR');
-    assert.match(r.detail, /auto-merge not enabled/);
+    assert.match(r.detail, /auto-merge request refused \(GraphQL: Auto merge is not allowed/);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
