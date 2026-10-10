@@ -66,10 +66,10 @@ test('runBandAgentStandalone with the PRODUCTION deps: the standalone review pip
   try {
     // A real post-develop worktree (bare origin + clone + feature branch), the
     // same shape the flow's demo band derives from — placed UNDER the forge
-    // `_worktrees` root so the standalone bounds-check accepts it.
+    // initiative's own `_worktrees/<id>` so the standalone check accepts it (forge-nk1y.20).
     const bare = join(root, 'origin.git');
     execFileSync('git', ['init', '--bare', '-b', 'main', bare], { stdio: 'pipe' });
-    const wt = join(root, '_worktrees', 'wt');
+    const wt = join(root, '_worktrees', INIT);
     mkdirSync(join(root, '_worktrees'), { recursive: true });
     execFileSync('git', ['clone', bare, wt], { stdio: 'pipe' });
     const git = (args: string[]) => execFileSync('git', args, { cwd: wt, stdio: 'pipe', encoding: 'utf8' });

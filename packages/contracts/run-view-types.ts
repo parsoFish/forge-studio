@@ -65,6 +65,10 @@ export type Run = {
   awaitingKickoff?: true;
   /** Parked mid fix round — `fixRoundOf` (bead forge-mfv5.1.27); never a completion. */
   fixRound?: number;
+  /** forge-nk1y.23: that fix round has been re-entered and is building (`fixRoundOf`), not parked. */
+  fixRoundRunning?: true;
+  /** forge-nk1y.23: in-flight with a work item pending or in progress — `developRunningOf`. */
+  developRunning?: true;
   failedAt?: string;
   failNote?: string;
   /** A cost-ceiling stop — resumable, distinct from an ordinary crash (ON-7 defect 2). */
