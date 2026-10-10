@@ -112,7 +112,6 @@ export function ArchitectPlanGate({
       {session && showGate && (
         <PlanGate
           key={planGateKey(session.round, session.completenessCritic)}
-          fullPage
           project={session.project}
           sessionId={session.sessionId}
           planUrl={session.planUrl}
