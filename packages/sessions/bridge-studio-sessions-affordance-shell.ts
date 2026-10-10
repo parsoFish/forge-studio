@@ -7,7 +7,7 @@
 import type { AuthoringSessionPort } from '@forge/library';
 import type { ServerResponse } from 'node:http';
 
-import { sendJson, guardedWriteFile, type StudioContext } from '@forge/kernel';
+import { sendJson, guardedReadFile, guardedWriteFile, type StudioContext } from '@forge/kernel';
 import type { approveKbCleanup } from '@forge/knowledge';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 import type { SessionAffordance, SessionAffordanceKind } from './studio/session-kinds-affordances.ts';
@@ -143,6 +143,55 @@ export function safeParseJson<T>(raw: string): T | null {
     return JSON.parse(raw) as T;
   } catch {
     return null;
+  }
+}
+
+// The durable verdict record (verdicts.json): the generic dispatcher and
+// project-brain's bespoke arms (forge-mfv5.1.15) share this ONE writer. Lives
+// here, not in the dispatcher, which imports the kinds.
+
+const VERDICTS_FILENAME = 'verdicts.json';
+
+export type VerdictHistory =
+  | { readonly ok: true; readonly prior: readonly unknown[] }
+  | { readonly ok: false; readonly message: string };
+
+/** Parse the session's existing verdicts.json. An ABSENT file is an empty
+ *  history (the ordinary first-verdict case); a present-but-unparseable one
+ *  is an explicit refusal — never silently reset to []. */
+export function readVerdictHistory(logsRoot: string, dirSegs: readonly string[]): VerdictHistory {
+  const priorRaw = guardedReadFile(logsRoot, [...dirSegs, VERDICTS_FILENAME]);
+  if (priorRaw === null) return { ok: true, prior: [] };
+  const parsed = safeParseJson<unknown>(priorRaw);
+  if (!Array.isArray(parsed)) {
+    return {
+      ok: false,
+      message: `${VERDICTS_FILENAME} is present but is not a JSON array of verdict records — refusing to append (the existing decision history would be destroyed). Repair or remove the file to record further verdicts.`,
+    };
+  }
+  return { ok: true, prior: parsed };
+}
+
+export function appendVerdictRecord(
+  logsRoot: string,
+  dirSegs: readonly string[],
+  prior: readonly unknown[],
+  verdict: string,
+  notes: string,
+  feedback: string,
+): void {
+  const record = {
+    at: new Date().toISOString(),
+    verdict,
+    ...(notes.length > 0 ? { notes } : {}),
+    ...(feedback.length > 0 ? { feedback } : {}),
+  };
+  if (guardedWriteFile(logsRoot, [...dirSegs, VERDICTS_FILENAME], JSON.stringify([...prior, record], null, 2)) === null) {
+    // Never swallowed: the verdict itself already landed (the phase write IS
+    // the source of truth, and the response is already sent), but a lost
+    // record is a real gap in the audit trail and says so on the bridge's
+    // stderr rather than vanishing.
+    console.error(`appendVerdictRecord: failed to write ${VERDICTS_FILENAME} for session ${dirSegs.join('/')} — the "${verdict}" decision was applied but is NOT recorded.`);
   }
 }
 
