@@ -120,6 +120,7 @@ const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
  */
 export { WORK_ITEM_STATUSES } from '@forge/contracts';
 import { WORK_ITEM_STATUSES } from '@forge/contracts';
+import { docsGateArgvErrors } from './docs-gate-argv.ts';
 
 export function parseWorkItem(content: string): WorkItem {
   const parsed = matter(content);
@@ -382,6 +383,10 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
     errors.push(
       'quality_gate_cmd must be ONE runnable command whose exit code is the verdict — NOT a shell pipeline or chain. Drop the `bash -c "… | grep/awk/… "` / `&&` / `;` wrapper and invoke the runner directly (e.g. `["go","test","-tags","all","-run","<Prefix>","<pkg>"]`); scope with the runner\'s own `-run`/path flags, never a post-filter.',
     );
+  } else {
+    // forge-nk1y.21: a `forge gate docs` argv is parsed by cli-gate, which exits 2
+    // on any unknown `-` argument — refuse that at plan time, naming the operand.
+    errors.push(...docsGateArgvErrors(w.quality_gate_cmd));
   }
   if (w.non_goals !== undefined) {
     if (!Array.isArray(w.non_goals)) {

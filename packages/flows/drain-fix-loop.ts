@@ -45,6 +45,7 @@ import {
 } from './fix-work-items.ts';
 import type { CycleInput } from './cycle-context.ts';
 import { fixRoundHeadRefusal } from './requeue-resume.ts';
+import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
 
 /** Keep the claimed manifest's heartbeat fresh during a (possibly long) drain so
  *  a crashed daemon leaves a STALE heartbeat the recovery sweep can reclaim. */
@@ -253,6 +254,9 @@ export async function drainPendingFixWorkItems(
       // (the send-back stamped resume_from:'develop' on the manifest).
       writeHeartbeat(file, paths);
       const heartbeat = setInterval(() => { try { writeHeartbeat(file, paths); } catch { /* best-effort */ } }, DRAIN_HEARTBEAT_MS);
+
+      // forge-nk1y.22: a pre-#1172 gate-fix WI carries the no-op gate ['true'] — give it the failing gate's own command.
+      normaliseLegacyFixGatesAtReentry({ worktreePath, initiativeId, cycleId, logsRoot });
 
       const input: CycleInput = {
         initiativeId,

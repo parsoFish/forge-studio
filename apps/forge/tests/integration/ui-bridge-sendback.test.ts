@@ -65,9 +65,11 @@ async function postVerdict(
 /** Fresh forgeRoot + worktree + ready-for-review manifest for one initiative. */
 function setup(slug: string): { forgeRoot: string; worktreePath: string; initiativeId: string; cycleId: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), `bv-sendback-${slug}-`));
-  const worktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', slug);
-  mkdirSync(worktreePath, { recursive: true });
   const initiativeId = `INIT-2026-01-01-${slug}`;
+  // The initiative's own forge worktree; project_repo_path (projects/test-project) must exist too.
+  const worktreePath = join(forgeRoot, '_worktrees', initiativeId);
+  mkdirSync(worktreePath, { recursive: true });
+  mkdirSync(join(forgeRoot, 'projects', 'test-project'), { recursive: true });
   const cycleId = `${initiativeId}-20260101T000000`;
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });

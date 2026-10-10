@@ -19,7 +19,7 @@ import type { PhaseWiring } from './phase-wiring.ts';
 import { stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
-import { notify, type NotifyConfig } from './notify.ts';
+import type { NotifyConfig } from './notify.ts';
 import { defaultConfigPath, forgeQueueRoot, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isNonTerminalRefused } from './claim-validator.ts';
 import { runOne, makeProgressTee } from './scheduler-run-one.ts';
@@ -29,7 +29,7 @@ import {
   runFlowTriggerSweep,
   runCronSync,
   runRecoverySweep,
-  cleanupRecoveredWorktrees,
+  announceRecovery,
 } from './scheduler-sweeps.ts';
 import { createHaltWatch } from './halt-watch.ts';
 
@@ -101,22 +101,9 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
     staleHeartbeatMs: cfg.staleHeartbeatMs,
     worktreeExists: worktree.exists,
   });
-  for (const r of recoveries) {
-    // F-09: clean up any orphaned worktrees + scratch branches the
-    // recovered initiatives left behind. The recover() call moved the
-    // manifest back to pending/; we read it from there to learn the
-    // worktree_path and project_repo_path (annotated by the scheduler at
-    // claim time).
-    cleanupRecoveredWorktrees(r.recovered, getPaths(cfg.queueRoot));
-    await notify(
-      {
-        type: 'recovered',
-        title: `Recovered ${r.recovered.length} initiative(s)`,
-        body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}`,
-      },
-      cfg.notify,
-    );
-  }
+  // F-09: each result's orphaned worktrees + scratch branches are cleaned (the manifests are
+  // back in pending/ where the cleanup reads worktree_path + project_repo_path).
+  for (const r of recoveries) await announceRecovery(r, getPaths(cfg.queueRoot), cfg.notify);
 
   // F-W5-7: at startup, finalize any ready-for-review cycle whose PR was merged
   // while the daemon was down (operator merged, nothing re-confirmed it).
@@ -341,7 +328,7 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
 
 function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }, projectsRoot: string): void {
   // SEC-02: the projects root is a containment root for manifest
-  // `project_repo_path` / in-place `worktree_path`, and a containment root
+  // `project_repo_path`, and a containment root
   // that does not exist fails CLOSED. `forge init`'s `layoutDirs` creates the
   // default one, but the DAEMON has its own layout bootstrap and an install that
   // predates this change never had it — so create it here too. The caller
