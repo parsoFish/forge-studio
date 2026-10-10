@@ -302,6 +302,13 @@ export function validateStory(raw) {
       fail(`${at}.costless`, `expected a boolean, got ${JSON.stringify(b.costless)}`);
     }
 
+    // D-42 (amended under D-46) — a frame captures the viewport; a beat that
+    // needs the whole page says `frame: 'fullPage'`. The one accepted string,
+    // fail-closed: any other value would silently fall back to the viewport.
+    if (b.frame !== undefined && b.frame !== 'fullPage') {
+      fail(`${at}.frame`, `expected 'fullPage' (or omit it for a viewport frame), got ${JSON.stringify(b.frame)}`);
+    }
+
     const e = b.expect;
     if (e === null || typeof e !== 'object') fail(`${at}.expect`, 'expected an object');
     if (typeof e.route !== 'string' || !e.route.startsWith('/')) {
@@ -405,6 +412,8 @@ export function validateStory(raw) {
       // validated-and-discarded, so a story that declared `costless: true`
       // would silently run with no enforcement of it at all.
       ...(b.costless === undefined ? {} : { costless: b.costless }),
+      // `frame` rides the frozen beat for the same reason: the runner reads it.
+      ...(b.frame === undefined ? {} : { frame: b.frame }),
       ...(fork === undefined ? {} : { fork }),
       expect: Object.freeze({
         route: e.route,

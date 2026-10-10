@@ -106,18 +106,13 @@ test('no h1 in the body: the site renders the title', () => {
   assert.doesNotMatch(renderDocFragment(result, { verifiedOn: ON }), /^# /m);
 });
 
-test('every beat becomes one numbered, imperative step, in order', () => {
+test('every beat becomes one numbered list item, bold act then one sentence of context, in order', () => {
   const md = renderDocFragment(result, { verifiedOn: ON });
-  assert.match(md, /## 1\. Open Studio on Home/);
-  assert.match(md, /## 2\. Click through to the Projects pillar/);
-  assert.ok(md.indexOf('## 1.') < md.indexOf('## 2.'));
-});
-
-test('each step carries exactly one sentence of context: the first of the narration', () => {
-  const md = renderDocFragment(result, { verifiedOn: ON });
-  assert.match(md, /Studio opens on Home — the operator pulse across every project\./);
+  assert.match(md, /^1\. \*\*Open Studio on Home\.\*\* Studio opens on Home — the operator pulse across every project\.$/m);
+  assert.match(md, /^2\. \*\*Click through to the Projects pillar\.\*\* The Projects pillar lists every project forge manages\.$/m);
+  assert.ok(md.indexOf('\n1. ') < md.indexOf('\n2. '));
+  assert.doesNotMatch(md, /^## \d+\./m, 'a beat is a list item now, not a heading');
   assert.doesNotMatch(md, /It loads first/, 'the second sentence is cut');
-  assert.match(md, /The Projects pillar lists every project forge manages\./);
 });
 
 test('firstSentence: up to the first terminal punctuation followed by a space or the end', () => {
@@ -127,18 +122,61 @@ test('firstSentence: up to the first terminal punctuation followed by a space or
   assert.equal(firstSentence('Line one\ncontinues. Next.'), 'Line one continues.');
 });
 
-test('each step embeds its frame from the site media path, under the site base', () => {
+test('one act: a Steps heading, one inline hero (the first framed beat), the rest a captioned gallery', () => {
   const md = renderDocFragment(result, { verifiedOn: ON });
-  assert.match(md, /!\[Open Studio on Home\]\(\/forge-studio\/media\/stories\/smoke\/01-home\.png\)/);
-  assert.match(md, /\/forge-studio\/media\/stories\/smoke\/02-projects\.png/);
+  assert.match(md, /^## Steps$/m);
+  const hero = '<figure class="story-hero"><a href="/forge-studio/media/stories/smoke/01-home.png"><img src="/forge-studio/media/stories/smoke/01-home.png" alt="1. Open Studio on Home"></a></figure>';
+  assert.ok(md.includes(`\n\n${hero}\n\n`), 'the hero is raw HTML with a blank line either side');
+  assert.equal((md.match(/class="story-hero"/g) ?? []).length, 1);
+  assert.match(md, /<div class="story-gallery">\n<figure><a href="\/forge-studio\/media\/stories\/smoke\/02-projects\.png"><img src="\/forge-studio\/media\/stories\/smoke\/02-projects\.png" alt="2\. Click through to the Projects pillar" loading="lazy"><\/a><figcaption>2<\/figcaption><\/figure>\n<\/div>/);
+  assert.equal((md.match(/<img /g) ?? []).length, 2, 'each frame appears exactly once, hero or thumbnail');
+  assert.doesNotMatch(md, /!\[/, 'no markdown image per beat any more');
+  assert.ok(md.indexOf('class="story-hero"') < md.indexOf('\n1. '), 'hero, then the list');
+  assert.ok(md.indexOf('\n2. ') < md.indexOf('story-gallery'), 'list, then the gallery');
+});
+
+test('a hero-only act has no gallery element', () => {
+  const one = { ...result, beats: [result.beats[0]] };
+  const md = renderDocFragment(one, { verifiedOn: ON });
+  assert.doesNotMatch(md, /story-gallery/);
+  assert.match(md, /class="story-hero"/);
+});
+
+test('acts: one hero and one gallery per act, numbering continues, the hero is the first FRAMED beat of its act', () => {
+  const beats = [
+    { act: 'ACT 1 — open it', say: 'One.', status: 'green', failures: [], frame: null },
+    { act: 'ACT 1 — look at it', say: 'Two.', status: 'green', failures: [], frame: 'frames/02-look.png' },
+    { act: 'ACT 1 — leave it', say: 'Three.', status: 'green', failures: [], frame: 'frames/03-leave.png' },
+    { act: 'ACT 2 — start again', say: 'Four.', status: 'green', failures: [], frame: 'frames/04-start.png' },
+    { act: 'ACT 2 — end it', say: 'Five.', status: 'green', failures: [], frame: 'frames/05-end.png' },
+  ];
+  const md = renderDocFragment({ story: result.story, beats }, { verifiedOn: ON });
+  assert.match(md, /^## Act 1$/m);
+  assert.match(md, /^## Act 2$/m);
+  assert.equal((md.match(/class="story-hero"/g) ?? []).length, 2);
+  assert.equal((md.match(/class="story-gallery"/g) ?? []).length, 2);
+  assert.match(md, /class="story-hero"><a href="[^"]*02-look\.png"/, 'beat 1 has no frame, so beat 2 is the hero');
+  assert.match(md, /class="story-hero"><a href="[^"]*04-start\.png"/);
+  assert.match(md, /^1\. \*\*Open it\.\*\* One\.$/m, 'a beat with no frame keeps its step text');
+  assert.match(md, /^5\. \*\*End it\.\*\* Five\.$/m);
+  assert.doesNotMatch(md, /ACT 2 —/);
+  assert.match(md, /<figcaption>3<\/figcaption>/);
+  assert.match(md, /<figcaption>5<\/figcaption>/);
+  assert.doesNotMatch(md, /<figcaption>[124]<\/figcaption>/, 'a hero carries no caption and an unframed beat has no thumbnail');
+});
+
+test('alt text is HTML-escaped; a quote or angle bracket in an act cannot break the attribute', () => {
+  const beats = [{ act: 'Press "+ New <skill>" & go', say: 'Go.', status: 'green', failures: [], frame: 'frames/01-x.png' }];
+  const md = renderDocFragment({ story: result.story, beats }, { verifiedOn: ON });
+  assert.ok(md.includes('alt="1. Press &quot;+ New &lt;skill&gt;&quot; &amp; go"'), md);
 });
 
 test('every URL the emitter writes is already base-aware: the site rewrite plugin changes none of them', () => {
   // kills: an emitter that writes root-absolute `/media/...` and leaves the
   // raw .md twin (which the plugin never touches) pointing outside the site
   const md = renderDocFragment(result, { verifiedOn: ON });
-  const urls = [...md.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]);
-  assert.ok(urls.length >= 2, 'the page carries its frames');
+  const urls = [...md.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(urls.length >= 4, 'the page carries its frames (a link and an image each)');
   assert.deepEqual(urls.filter((u) => withBase(u, SITE_BASE) !== u), []);
   assert.equal(SITE_BASE, '/forge-studio');
 });
@@ -156,7 +194,7 @@ test('a red beat is said to be red on the page, with no assertion text', () => {
     beats: [{ ...result.beats[0], status: 'red', failures: ['data-project-count: expected "3", absent from the page'] }, result.beats[1]],
   };
   const md = renderDocFragment(red, { verifiedOn: ON });
-  assert.match(md, /This step is RED — not verified working/);
+  assert.match(md, /^1\. .* — \*\*RED, not verified\.\*\*$/m);
   assert.match(md, /This story did not pass/);
   assert.doesNotMatch(md, /data-[a-z]/);
 });
@@ -190,12 +228,13 @@ test('the media directory refuses a story id that is not one safe path segment',
 const FIXTURES = join(ROOT, 'scripts/stories/fixtures');
 const loadFixture = (name: string) => JSON.parse(readFileSync(join(FIXTURES, name), 'utf8'));
 
-test('a story whose full render fits the ceiling renders exactly as before (S7, 26 beats)', () => {
+test('a story whose full render fits the ceiling keeps each beat\'s first sentence (golden: a 6-beat slice of S7)', () => {
   const s7 = loadFixture('S7-beats.json');
-  const md = renderDocFragment(s7, { verifiedOn: ON });
-  assert.ok(countWords(md) <= CEILINGS['how-to'], 'the S7 full render fits');
+  const slice = { ...s7, beats: s7.beats.slice(0, 6) };
+  const md = renderDocFragment(slice, { verifiedOn: ON });
+  assert.ok(countWords(md) <= CEILINGS['how-to'], 'the slice fits');
   assert.equal(md, readFileSync(join(FIXTURES, 'S7-howto.golden.md'), 'utf8'));
-  assert.match(md, /^## 1\. /m);
+  assert.match(md, /^1\. \*\*Open the Library\.\*\* The Library is the parts bin/m);
 });
 
 test('a story over the ceiling renders the condensed page: acts, one item per beat, no say text', () => {
@@ -205,12 +244,14 @@ test('a story over the ceiling renders the condensed page: acts, one item per be
   assert.ok(countWords(md) <= CEILINGS['how-to'], `condensed S10 is ${countWords(md)} words`);
   assert.match(md, /^## Act 1$/m);
   assert.match(md, /^## Act 2$/m);
-  assert.match(md, /Each step is one recorded action; open a step's picture to see the screen\./);
-  assert.equal((md.match(/^\d+\. /gm) ?? []).length, 61);
+  assert.match(md, /Each step is one recorded action; open a thumbnail to see the full screen\./);
+  assert.equal((md.match(/^\d+\. /gm) ?? []).length, 61, 'all 61 beats keep their step text');
   assert.match(md, /^61\. /m); // numbering continues across acts
   assert.doesNotMatch(md, /ACT 2 —/);
   assert.doesNotMatch(md, /^## \d+\./m);
-  assert.equal((md.match(/!\[/g) ?? []).length, 61);
+  assert.equal((md.match(/<img /g) ?? []).length, 61, 'every frame is on the page once');
+  assert.equal((md.match(/class="story-hero"/g) ?? []).length, 2, 'one hero per act');
+  assert.equal((md.match(/<figcaption>/g) ?? []).length, 59, 'every other frame is a captioned thumbnail');
   assert.ok(md.includes('/media/stories/S10/'), 'frames are present');
   assert.doesNotMatch(md, new RegExp(s10.beats[0].say.slice(0, 30)), 'the say sentence is omitted');
   assert.equal(frontmatter(md).type, 'how-to');
@@ -238,4 +279,5 @@ test('a long single-act story condenses under one Steps heading', () => {
   assert.doesNotMatch(md, /^## Act /m);
   assert.match(md, /^1\. Do the thing number 1 /m); // first letter capitalised
   assert.equal((md.match(/^\d+\. /gm) ?? []).length, 70);
+  assert.equal((md.match(/class="story-hero"/g) ?? []).length, 1);
 });

@@ -6,14 +6,15 @@
  * docs cannot drift from each other. A doc hand-written beside a test goes
  * stale silently; a doc derived from the passing run cannot.
  *
- * Shape: a how-to page of the published site. Each beat is one numbered step —
- * the `act` is the (imperative) heading, the first sentence of `say` is the
- * one line of context, and the captured frame is the picture. The asserted
- * `data-*` state stays in the story: it is the test's contract, not the
- * reader's.
+ * Shape: a how-to page of the published site (D-42). Per act: one hero frame
+ * inline, an ordered list with every beat's step text (the `act` in bold, the
+ * first sentence of `say` as the one line of context), then a gallery of the
+ * act's other frames as captioned thumbnails linking the full frame. The
+ * asserted `data-*` state stays in the story: it is the test's contract, not
+ * the reader's.
  *
- * A story whose full page exceeds the how-to word ceiling renders the condensed
- * page instead (`renderCondensed`): the acts as headings, one line per beat.
+ * A story whose full page exceeds the how-to word ceiling drops the narration
+ * and keeps the act text, so every step stays and the page fits.
  *
  * A RED beat is marked red, and a story with any red beat says so at the top.
  * A story that failed must never emit a confident how-to telling an operator
@@ -66,22 +67,23 @@ export function firstSentence(text) {
   return m ? m[0] : flat;
 }
 
-function renderBeat(storyId, beat, index) {
-  const lines = [`## ${index + 1}. ${beat.act}`, '', firstSentence(beat.say), ''];
-  if (beat.status === 'red') {
-    lines.push('> **This step is RED — not verified working.** The run did not see the page this step describes.', '');
-  }
-  if (beat.frame) lines.push(`![${beat.act}](${frameUrl(storyId, beat.frame)})`, '');
-  return lines.join('\n');
-}
-
 const ACT_PREFIX = /^ACT (\d+) — /;
-const CONDENSED_INTRO = "Each step is one recorded action; open a step's picture to see the screen.";
+const CONDENSED_INTRO = "Each step is one recorded action; open a thumbnail to see the full screen.";
+const RED_MARK = ' — **RED, not verified.**';
 
 /** The act text without its `ACT n — ` prefix, first letter capitalised. */
-function condensedAct(act) {
+function actText(act) {
   const text = String(act).replace(ACT_PREFIX, '');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Escape a string for a double-quoted HTML attribute. */
+export function escapeAttr(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /** Split beats into acts by the `ACT n — ` prefix; beats before the first marker are act 1. */
@@ -99,20 +101,41 @@ function groupByAct(beats) {
   return groups;
 }
 
-function condensedItem(storyId, beat, index) {
-  const text = condensedAct(beat.act);
-  const mark = beat.status === 'red' ? ' — **RED, not verified.**' : '';
-  const lines = [`${index + 1}. ${text}${mark}`];
-  if (beat.frame) lines.push(`   ![${text}](${frameUrl(storyId, beat.frame)})`);
-  return lines.join('\n');
+/** One list item: full mode keeps the first sentence of the narration, condensed drops it. */
+function stepItem(beat, index, condensed) {
+  const text = actText(beat.act);
+  const mark = beat.status === 'red' ? RED_MARK : '';
+  if (condensed) return `${index + 1}. ${text}${mark}`;
+  const bold = /[.!?:]$/.test(text) ? text : `${text}.`;
+  return `${index + 1}. **${bold}** ${firstSentence(beat.say)}${mark}`;
 }
 
-function renderCondensed(head, storyId, beats) {
+const frameAlt = (beat, index) => escapeAttr(`${index + 1}. ${actText(beat.act)}`);
+
+/** The act's one inline picture: raw HTML, so the page is not a tower of full-size images. */
+function heroFigure(storyId, beat, index) {
+  const url = frameUrl(storyId, beat.frame);
+  return `<figure class="story-hero"><a href="${url}"><img src="${url}" alt="${frameAlt(beat, index)}"></a></figure>`;
+}
+
+/** Every other framed beat of the act: a captioned thumbnail linking the full frame. */
+function galleryBlock(storyId, items) {
+  const figures = items.map(({ beat, index }) => {
+    const url = frameUrl(storyId, beat.frame);
+    return `<figure><a href="${url}"><img src="${url}" alt="${frameAlt(beat, index)}" loading="lazy"></a><figcaption>${index + 1}</figcaption></figure>`;
+  });
+  return ['<div class="story-gallery">', ...figures, '</div>'].join('\n');
+}
+
+function renderBody(storyId, beats, condensed) {
   const groups = groupByAct(beats);
-  const out = [head, CONDENSED_INTRO, ''];
+  const out = [];
   for (const g of groups) {
     out.push(groups.length >= 2 ? `## Act ${g.n}` : '## Steps', '');
-    out.push(g.items.map(({ beat, index }) => condensedItem(storyId, beat, index)).join('\n'), '');
+    const framed = g.items.filter(({ beat }) => beat.frame);
+    if (framed.length > 0) out.push(heroFigure(storyId, framed[0].beat, framed[0].index), '');
+    out.push(g.items.map(({ beat, index }) => stepItem(beat, index, condensed)).join('\n'), '');
+    if (framed.length > 1) out.push(galleryBlock(storyId, framed.slice(1)), '');
   }
   return out.join('\n');
 }
@@ -150,9 +173,9 @@ export function renderDocFragment(result, { verifiedOn } = {}) {
     );
   }
   const headText = head.join('\n');
-  const full = `${headText}\n${beats.map((b, i) => renderBeat(story.id, b, i)).join('\n')}`;
+  const full = `${headText}\n${renderBody(story.id, beats, false)}`;
   // The ceiling and the count are check-docs-budget's: one source. Over it, the page condenses.
-  return countWords(full) > CEILINGS['how-to'] ? renderCondensed(headText, story.id, beats) : full;
+  return countWords(full) > CEILINGS['how-to'] ? `${headText}\n${CONDENSED_INTRO}\n\n${renderBody(story.id, beats, true)}` : full;
 }
 
 /**
