@@ -32,6 +32,7 @@ export type EnqueueDevelopStatus =
   | 'class-mismatch'
   /** Bead forge-mfv5.1.25: built work items — past the Kickoff gate. */
   | 'not-at-kickoff'
+  | 'locked' // forge-nk1y.12: a Kickoff-gate add holds the manifest lock
   | 'error';
 
 export type EnqueueDevelopResult = {

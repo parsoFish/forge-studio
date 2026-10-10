@@ -14,6 +14,8 @@
  * `_logs/<cycleId>` dir. No sibling cycle is born.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import lockfile from 'proper-lockfile';
+import { guardedFile } from '@forge/kernel';
 import { join, resolve } from 'node:path';
 
 import {
@@ -75,6 +77,7 @@ export type EnqueueFlowRunStatus =
   /** Bead forge-mfv5.1.25: a forge-architect hand-off whose work items are
    *  already built is past the Kickoff gate — refused by name, nothing written. */
   | 'not-at-kickoff'
+  | 'locked' // forge-nk1y.12: a Kickoff-gate add holds the manifest lock
   | 'error';
 
 export type EnqueueFlowRunResult = {
@@ -118,10 +121,19 @@ export type EnqueueFlowRunResult = {
  * Never throws — defence in depth; callers (the trigger drain, the bridge)
  * report per-item.
  */
-export function enqueueFlowRun(
-  initiativeId: string,
-  flowId: string,
-  opts: {
+export function enqueueFlowRun(initiativeId: string, flowId: string, opts: EnqueueFlowRunOpts = {}): EnqueueFlowRunResult {
+  // forge-nk1y.12: a move OUT of ready-for-review holds the manifest lock (Kickoff-gate add, verdict); held → named refusal.
+  const parked = isCanonicalInitiativeId(initiativeId) ? guardedFile(resolve(opts.queueRoot ?? '_queue'), ['ready-for-review', `${initiativeId}.md`], 'read') : null;
+  if (parked === null) return enqueueFlowRunUnlocked(initiativeId, flowId, opts);
+  let release: () => void;
+  try { release = lockfile.lockSync(parked, { realpath: false }); } catch (err) {
+    const locked = (err as NodeJS.ErrnoException).code === 'ELOCKED';
+    return { status: locked ? 'locked' : 'error', initiativeId, detail: locked ? 'the manifest is locked by another writer (a Kickoff-gate work-item add) — retry' : String(err) };
+  }
+  try { return enqueueFlowRunUnlocked(initiativeId, flowId, opts); } finally { release(); }
+}
+
+type EnqueueFlowRunOpts = {
     queueRoot?: string;
     allowFinishedSource?: boolean;
     /**
@@ -161,8 +173,9 @@ export function enqueueFlowRun(
      *  location (two levels up), the same convention
      *  `mint-triggered-initiative.ts` uses. */
     forgeRoot?: string;
-  } = {},
-): EnqueueFlowRunResult {
+};
+
+function enqueueFlowRunUnlocked(initiativeId: string, flowId: string, opts: EnqueueFlowRunOpts): EnqueueFlowRunResult {
   if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
   }

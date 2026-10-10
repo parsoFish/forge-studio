@@ -43,6 +43,7 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
 import { RepointGate } from '@/components/studio/RepointGate';
+import { KickoffAddWorkItem } from './KickoffAddWorkItem';
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -94,6 +95,8 @@ export type InitiativeDetailProps = {
   /** W6-RV-2: when present, each dependency id in the "Depends on" line
    *  becomes a `[data-dep-jump]` click target instead of plain text. */
   onDepJump?: (initiativeId: string) => void;
+  /** forge-nk1y.12: refetch the roadmap after a work item is added at the Kickoff gate. */
+  onWorkItemAdded?: () => void | Promise<void>;
 };
 
 export function InitiativeDetail({
@@ -120,6 +123,7 @@ export function InitiativeDetail({
   onInspectRecovery,
   onRecoveryAction,
   onDepJump,
+  onWorkItemAdded,
   initialPendingRecovery = null,
 }: InitiativeDetailProps) {
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
@@ -338,6 +342,8 @@ export function InitiativeDetail({
       {develop.status === 'error' && develop.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
       )}
+      {/* forge-nk1y.12 (D-48): add a plan work item at the Kickoff gate — below Start development (D-46). */}
+      {status === 'awaiting-kickoff' && develop.status !== 'started' && <KickoffAddWorkItem initiativeId={initiativeId} onAdded={onWorkItemAdded} />}
       {/* W7-A3 (projects-16/17/32): no more "the unifier will open a PR" —
           the develop flow does; and the claim + run link are real. */}
       {develop.status === 'started' && (
