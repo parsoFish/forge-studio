@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fixRoundDeliveredHead, fixRoundHeadVerdict, fixRoundOf, isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
+import { developRunningOf, fixRoundDeliveredHead, fixRoundHeadVerdict, fixRoundOf, isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
 
 const AT_KICKOFF: KickoffFacts = {
   queueDir: 'ready-for-review',
@@ -59,16 +59,45 @@ const FIX_ROUND: KickoffFacts = {
   workItemStatuses: ['complete', 'complete', 'complete', 'complete', 'complete', 'pending'],
 };
 
-test('fixRoundOf: a parked fix round reads its round; it is never a kickoff', () => {
-  assert.equal(fixRoundOf(FIX_ROUND), 1);
+test('fixRoundOf: a parked fix round reads its round, not running; it is never a kickoff', () => {
+  assert.deepEqual(fixRoundOf(FIX_ROUND), { round: 1, running: false });
   assert.equal(isAwaitingKickoff(FIX_ROUND), false);
 });
 
 test('fixRoundOf: each fact alone breaks it', () => {
-  assert.equal(fixRoundOf({ ...FIX_ROUND, queueDir: 'in-flight' }), null);
+  assert.equal(fixRoundOf({ ...FIX_ROUND, queueDir: 'pending' }), null);
   assert.equal(fixRoundOf({ ...FIX_ROUND, resumeFrom: null }), null);
   assert.equal(fixRoundOf({ ...FIX_ROUND, pendingFixWorkItems: 0 }), null);
   assert.equal(fixRoundOf(AT_KICKOFF), null);
+});
+
+// forge-nk1y.23 — the drain re-entered the fix WI: manifest back in `in-flight/`, still resume_from develop.
+const FIX_RUNNING: KickoffFacts = { ...FIX_ROUND, queueDir: 'in-flight' };
+
+test('fixRoundOf: the same fix round re-entered in-flight reads its round AND says it is running', () => {
+  assert.deepEqual(fixRoundOf(FIX_RUNNING), { round: 1, running: true });
+  assert.deepEqual(fixRoundOf({ ...FIX_RUNNING, workItemStatuses: [...FIX_RUNNING.workItemStatuses.slice(0, 5), 'in-progress'] }), { round: 1, running: true });
+});
+
+test('fixRoundOf: an in-flight run that is not a fix round reads null (each fact alone)', () => {
+  assert.equal(fixRoundOf({ ...FIX_RUNNING, resumeFrom: null }), null);
+  assert.equal(fixRoundOf({ ...FIX_RUNNING, resumeFrom: 'plan' }), null);
+  assert.equal(fixRoundOf({ ...FIX_RUNNING, pendingFixWorkItems: 0 }), null);
+});
+
+test('developRunningOf: in-flight with any pending or in-progress work item is running', () => {
+  assert.equal(developRunningOf(FIX_RUNNING), true);
+  assert.equal(developRunningOf({ ...AT_KICKOFF, queueDir: 'in-flight', resumeFrom: null, workItemStatuses: ['complete', 'in-progress'] }), true);
+  assert.equal(developRunningOf({ ...AT_KICKOFF, queueDir: 'in-flight', workItemStatuses: ['complete', 'pending'] }), true, 'a plain dev WI counts too');
+});
+
+test('developRunningOf: not running when parked, not in-flight, or nothing left to build', () => {
+  assert.equal(developRunningOf(FIX_ROUND), false, 'parked in ready-for-review');
+  assert.equal(developRunningOf({ ...FIX_RUNNING, queueDir: 'pending' }), false);
+  assert.equal(developRunningOf({ ...FIX_RUNNING, queueDir: 'done' }), false);
+  assert.equal(developRunningOf({ ...FIX_RUNNING, workItemStatuses: ['complete', 'complete'], pendingFixWorkItems: 0 }), false);
+  assert.equal(developRunningOf({ ...FIX_RUNNING, workItemStatuses: [], pendingFixWorkItems: 0 }), false, 'no work items at all');
+  assert.equal(developRunningOf({ ...FIX_RUNNING, workItemStatuses: ['complete', 'unreadable'], pendingFixWorkItems: 0 }), false, 'unreadable is not running');
 });
 
 // forge-mfv5.1.27 security review (items 1–2): the delivered head is read from exact, parsed events only.
