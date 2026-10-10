@@ -172,7 +172,7 @@ const EXPECTED_CSP =
 type RouteCase = {
   name: string;
   path: () => string;
-  wantContentTypeFamily: 'html' | 'markdown';
+  wantContentTypeFamily: 'html' | 'plain';
   wantDispositionFilename: string;
 };
 
@@ -192,7 +192,7 @@ const ROUTES: RouteCase[] = [
   {
     name: 'GET /api/instructions/file/<project>/<sid>/<filename> (.md)',
     path: () => `/api/instructions/file/demo/${encodeURIComponent(INSTR_SID)}/AGENTS.draft.md`,
-    wantContentTypeFamily: 'markdown',
+    wantContentTypeFamily: 'plain',
     wantDispositionFilename: 'AGENTS.draft.md',
   },
   {
@@ -225,7 +225,7 @@ for (const rc of ROUTES) {
     if (rc.wantContentTypeFamily === 'html') {
       assert.match(ct, /^text\/html/, `content-type must stay text/html for an .html artifact (iframe regression) — got "${ct}"`);
     } else {
-      assert.match(ct, /^text\/markdown/, `an .md artifact is text/markdown (kernel table, forge-mfv5.1.29) — got "${ct}"`);
+      assert.match(ct, /^text\/plain/, `an .md artifact stays text/plain so a raw link displays it (kernel table, forge-mfv5.1.29) — got "${ct}"`);
     }
 
     assert.equal(
@@ -254,7 +254,7 @@ for (const rc of ROUTES) {
 // ---------------------------------------------------------------------------
 
 test('GET /api/artifact/ — .md and .json artifacts are never text/html, and carry the same hardening', async () => {
-  const want: Record<string, RegExp> = { 'note.md': /^text\/markdown/, 'data.json': /^application\/json/ };
+  const want: Record<string, RegExp> = { 'note.md': /^text\/plain/, 'data.json': /^application\/json/ };
   for (const [filename, re] of Object.entries(want)) {
     const res = await fetch(`${url}/api/artifact/${CYCLE_ID}/${filename}`);
     assert.equal(res.status, 200, `expected 200 for ${filename}`);

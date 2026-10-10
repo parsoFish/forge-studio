@@ -38,7 +38,7 @@ const TABLE: ReadonlyArray<readonly [string, string]> = [
   ['logo.svg', 'image/svg+xml'],
   ['shot.webp', 'image/webp'],
   ['data.json', 'application/json'],
-  ['note.md', 'text/markdown; charset=utf-8'],
+  ['note.md', 'text/plain; charset=utf-8'],
   ['PLAN.html', 'text/html; charset=utf-8'],
   ['note.txt', 'text/plain; charset=utf-8'],
   ['run.log', 'text/plain; charset=utf-8'],

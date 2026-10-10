@@ -27,7 +27,7 @@ export const CONTENT_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.json': 'application/json',
-  '.md': `text/markdown; ${TEXT}`,
+  '.md': `text/plain; ${TEXT}`, // displayed inline by a raw link (Studio's artifact page); text/markdown downloads
   '.html': `text/html; ${TEXT}`,
   '.txt': `text/plain; ${TEXT}`,
   '.log': `text/plain; ${TEXT}`,
