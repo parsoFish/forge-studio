@@ -50,9 +50,9 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
-import { createLogger, guardedFile, errorEndMetadata, type EventLogger } from '@forge/kernel';
+import { createLogger, guardedFile, errorEndMetadata, initiativeWorktreeRefusal, type EventLogger } from '@forge/kernel';
 import { loadAgentDefinition } from './studio/agent-registry.ts';
 import { skillPath } from './skill-path.ts';
 import { resolveBandGuard } from './agent-bands.ts';
@@ -163,15 +163,15 @@ export function isStandaloneBandAgent(slug: string): boolean {
   return slug in STANDALONE_BAND_SLUGS;
 }
 
-/** worktree_path must resolve INSIDE the forge project/worktree roots — a tampered
- *  manifest cannot redirect the spawn cwd + git operations to an arbitrary path. */
-function assertWorktreeInBounds(worktreePath: string, forgeRoot: string): void {
-  const resolved = resolve(worktreePath);
-  const roots = [resolve(forgeRoot, 'projects'), resolve(forgeRoot, '_worktrees')];
-  if (!roots.some((r) => resolved === r || resolved.startsWith(r + sep))) {
+/** worktree_path must be this initiative's own `<forgeRoot>/_worktrees/<id>` (the one kernel
+ *  predicate, realpath identity) — a tampered manifest cannot redirect the spawn cwd + git
+ *  operations to another project, another initiative's worktree, or an arbitrary path. */
+function assertWorktreeInBounds(worktreePath: string, forgeRoot: string, initiativeId: string): void {
+  const refusal = initiativeWorktreeRefusal(worktreePath, { forgeRoot, initiativeId });
+  if (refusal !== null) {
     throw new Error(
-      `runBandAgentStandalone: worktree_path ${JSON.stringify(worktreePath)} is outside the forge roots ` +
-        `(${roots.join(', ')}) — refusing to run against it`,
+      `runBandAgentStandalone: worktree_path refused (${refusal}): it must be the initiative's own forge worktree ` +
+        `_worktrees/${initiativeId} — refusing to run against it`,
     );
   }
 }
@@ -222,13 +222,15 @@ function resolveInitiativeContext(
   }
   const m = deps.parseInitiativeManifest(readFileSync(manifestPath, 'utf8'));
   const worktreePath = m.worktree_path ?? '';
-  if (!worktreePath || !existsSync(worktreePath)) {
-    throw new Error(
+  const noLiveWorktree = (): Error =>
+    new Error(
       `runBandAgentStandalone: initiative "${initiativeId}" has no live worktree (worktree_path=${JSON.stringify(m.worktree_path)}) — ` +
         `its develop phase must have produced a branch to demo/review`,
     );
-  }
-  assertWorktreeInBounds(worktreePath, forgeRoot);
+  if (!worktreePath) throw noLiveWorktree();
+  // Containment BEFORE the existence probe: an out-of-bounds path is never stat'd.
+  assertWorktreeInBounds(worktreePath, forgeRoot, initiativeId);
+  if (!existsSync(worktreePath)) throw noLiveWorktree();
   return {
     worktreePath,
     projectRepoPath: m.project_repo_path ?? '',

@@ -7,7 +7,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readHalt } from '@forge/kernel';
+import { initiativeWorktreeRefusal, readHalt } from '@forge/kernel';
 import { getPaths, recover, type QueuePaths } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
@@ -151,6 +151,16 @@ export function cleanupRecoveredWorktrees(filenames: string[], paths: QueuePaths
     try {
       const m = parseManifestFile(recoveredPath);
       if (!m || !m.worktree_path) continue;
+      // forge-nk1y.20: cleanup is `git worktree remove --force` + `branch -D` on what the
+      // manifest names; only the initiative's own `_worktrees/<id>` is cleaned.
+      const refusal = initiativeWorktreeRefusal(m.worktree_path, {
+        forgeRoot: dirname(paths.root),
+        initiativeId: m.initiative_id,
+      });
+      if (refusal !== null) {
+        console.error(`[serve] worktree-path.refused initiative=${m.initiative_id} reason=${refusal} — recovery cleanup skipped`);
+        continue;
+      }
       worktree.cleanup({
         path: m.worktree_path,
         branch: `forge/${m.initiative_id}`,

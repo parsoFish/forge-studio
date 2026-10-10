@@ -17,16 +17,18 @@ import { join } from 'node:path';
 
 import { gitIgnoredPaths } from './gitignored-creates.ts';
 
-function repoWithGitignore(body: string): { dir: string; guard: { forgeRoot: string; projectsRoot: string; initiativeId: string } } {
-  // The guard accepts a worktree under the PROJECTS root, so the fixture builds
-  // exactly that shape: <root>/projects/<name> with a real repository in it.
+const INITIATIVE = 'INIT-2026-09-05-x';
+
+function repoWithGitignore(body: string): { dir: string; guard: { forgeRoot: string; initiativeId: string } } {
+  // The guard accepts exactly the initiative's own forge worktree, so the
+  // fixture builds that shape: <root>/_worktrees/<initiativeId> with a real
+  // repository in it (forge-nk1y.20 removed the projects-root alternative).
   const root = mkdtempSync(join(tmpdir(), 'forge-ignored-creates-'));
-  const projectsRoot = join(root, 'projects');
-  const dir = join(projectsRoot, 'demo');
+  const dir = join(root, '_worktrees', INITIATIVE);
   mkdirSync(dir, { recursive: true });
   execFileSync('git', ['-C', dir, 'init', '-q']);
   writeFileSync(join(dir, '.gitignore'), body);
-  return { dir, guard: { forgeRoot: root, projectsRoot, initiativeId: 'INIT-2026-09-05-x' } };
+  return { dir, guard: { forgeRoot: root, initiativeId: INITIATIVE } };
 }
 
 test('D-34: a creates path under a gitignored directory is reported ignored — kills "the check-ignore call is decorative"', () => {
@@ -58,13 +60,12 @@ test('D-34: the whole set costs ONE git call — the answer is the same for 1 pa
   }
 });
 
-test('D-34: inside the projects root but NOT a repository, the set is EMPTY — the rule declines rather than accusing', () => {
+test('D-34: inside the own worktree but NOT a repository, the set is EMPTY — the rule declines rather than accusing', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-ignored-creates-norepo-'));
-  const projectsRoot = join(root, 'projects');
-  const dir = join(projectsRoot, 'demo');
+  const dir = join(root, '_worktrees', INITIATIVE);
   mkdirSync(join(dir, 'src'), { recursive: true });
   try {
-    const guard = { forgeRoot: root, projectsRoot, initiativeId: 'INIT-2026-09-05-x' };
+    const guard = { forgeRoot: root, initiativeId: INITIATIVE };
     assert.deepEqual([...gitIgnoredPaths(dir, ['src/index.ts', 'anything.md'], guard)], []);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -72,8 +73,8 @@ test('D-34: inside the projects root but NOT a repository, the set is EMPTY — 
 });
 
 test('D-34: an UNCONTAINED worktree root spawns nothing — the containment guard decides whether git runs at all', () => {
-  // The subject is the sink's own guard, not git: a root outside the projects
-  // root (and outside <forgeRoot>/_worktrees/<initiativeId>) must yield the
+  // The subject is the sink's own guard, not git: a root outside
+  // <forgeRoot>/_worktrees/<initiativeId> must yield the
   // empty set even though it IS a real repository whose .gitignore would
   // otherwise match. A caller-side-only check would pass this test by accident;
   // this one calls the module directly with a root the guard must refuse.
@@ -82,9 +83,16 @@ test('D-34: an UNCONTAINED worktree root spawns nothing — the containment guar
   try {
     execFileSync('git', ['-C', outside, 'init', '-q']);
     writeFileSync(join(outside, '.gitignore'), 'build/\n');
-    const guard = { forgeRoot: sanctioned, projectsRoot: join(sanctioned, 'projects'), initiativeId: 'INIT-2026-09-05-x' };
+    const guard = { forgeRoot: sanctioned, initiativeId: INITIATIVE };
     assert.deepEqual([...gitIgnoredPaths(outside, ['build/out.js'], guard)], [],
       'a repository outside the sanctioned roots must not be consulted');
+    // A real repository UNDER projects/ was sanctioned by the old fallback; it is not any more.
+    const inProjects = join(sanctioned, 'projects', 'demo');
+    mkdirSync(inProjects, { recursive: true });
+    execFileSync('git', ['-C', inProjects, 'init', '-q']);
+    writeFileSync(join(inProjects, '.gitignore'), 'build/\n');
+    assert.deepEqual([...gitIgnoredPaths(inProjects, ['build/out.js'], guard)], [],
+      'a project directory is not the initiative worktree and must not be consulted either');
   } finally {
     rmSync(outside, { recursive: true, force: true });
     rmSync(sanctioned, { recursive: true, force: true });

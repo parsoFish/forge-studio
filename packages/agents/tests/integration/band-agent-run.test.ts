@@ -153,7 +153,7 @@ test('runBandAgentStandalone: an in-flight initiative is refused (a live cycle o
   const root = mkdtempSync(join(tmpdir(), 'band-run-inflight-'));
   try {
     // A bounds-valid worktree so the refusal is proven to come from the state, not bounds.
-    const wt = join(root, '_worktrees', 'wt');
+    const wt = join(root, '_worktrees', INIT);
     mkdirSync(wt, { recursive: true });
     writeManifest(join(root, '_queue', 'in-flight'), wt);
     await assert.rejects(
@@ -165,7 +165,7 @@ test('runBandAgentStandalone: an in-flight initiative is refused (a live cycle o
   }
 });
 
-test('runBandAgentStandalone: a worktree outside the forge roots is refused', async () => {
+test('runBandAgentStandalone: a worktree outside the initiative\'s own _worktrees/<id> is refused', async () => {
   const root = mkdtempSync(join(tmpdir(), 'band-run-oob-'));
   try {
     const outside = mkdtempSync(join(tmpdir(), 'band-run-oob-elsewhere-'));
@@ -173,7 +173,7 @@ test('runBandAgentStandalone: a worktree outside the forge roots is refused', as
       writeManifest(join(root, '_queue', 'ready-for-review'), outside);
       await assert.rejects(
         runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
-        /is outside the forge roots/,
+        /worktree_path refused \(not-under-forge-worktrees\)/,
       );
     } finally {
       rmSync(outside, { recursive: true, force: true });
@@ -182,6 +182,42 @@ test('runBandAgentStandalone: a worktree outside the forge roots is refused', as
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// forge-nk1y.20: the old bounds check was a LEXICAL startsWith over projects/ and
+// _worktrees/, so another project's directory, another initiative's worktree and a
+// symlink at _worktrees/<id> all passed. The kernel predicate refuses them; the
+// recorder proves the pipeline (spawn cwd + git) is never reached.
+for (const [label, reason, plant] of [
+  ['another project directory under projects/', 'not-under-forge-worktrees', (root: string) => {
+    const d = join(root, 'projects', 'other'); mkdirSync(d, { recursive: true }); return d;
+  }],
+  ["another initiative's worktree", 'not-this-initiative', (root: string) => {
+    const d = join(root, '_worktrees', 'INIT-2026-08-02-someone-else'); mkdirSync(d, { recursive: true }); return d;
+  }],
+  ['a symlink at _worktrees/<id> pointing outside', 'symlink-or-alias', (root: string) => {
+    const outside = join(root, 'victim'); mkdirSync(outside, { recursive: true });
+    mkdirSync(join(root, '_worktrees'), { recursive: true });
+    symlinkSync(outside, join(root, '_worktrees', INIT), 'dir');
+    return join(root, '_worktrees', INIT);
+  }],
+] as const) {
+  test(`runBandAgentStandalone: worktree_path naming ${label} is refused (${reason}) and the pipeline never runs`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'band-run-contain-'));
+    try {
+      const wt = plant(root);
+      assert.ok(statSync(wt).isDirectory(), 'the target is a REAL directory');
+      writeManifest(join(root, '_queue', 'ready-for-review'), wt);
+      const { deps, calls } = depsWithRecorder();
+      await assert.rejects(
+        runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, deps),
+        new RegExp(`worktree_path refused \\(${reason}\\)`),
+      );
+      assert.equal(calls.length, 0, 'the pipeline was never invoked');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test('runBandAgentStandalone: a manifest reached only via a symlink escaping the queue dir is refused, not followed (bead 8vfn.6.7)', async () => {
   // `resolveInitiativeContext` guards the initiative id's CHARSET
@@ -196,7 +232,7 @@ test('runBandAgentStandalone: a manifest reached only via a symlink escaping the
     // A well-formed, in-bounds-worktree manifest — but its FILE lives entirely
     // outside the queue root, so a rejection can only be attributed to the
     // symlink escape, never to a malformed or out-of-bounds worktree.
-    const wt = join(root, '_worktrees', 'wt');
+    const wt = join(root, '_worktrees', INIT);
     mkdirSync(wt, { recursive: true });
     writeManifest(outside, wt);
 
@@ -225,7 +261,7 @@ test('runBandAgentStandalone: a manifest reached only via a symlink escaping the
 test('runBandAgentStandalone: the review arm runs to completion against an injected runner that imports no phase — events land under the runId, the initiative cycle_id log is untouched, and a terminal `end` marks the run done', async () => {
   const root = mkdtempSync(join(tmpdir(), 'band-run-port-'));
   try {
-    const wt = join(root, '_worktrees', 'wt');
+    const wt = join(root, '_worktrees', INIT);
     mkdirSync(wt, { recursive: true });
     writeManifest(join(root, '_queue', 'ready-for-review'), wt);
 
@@ -266,7 +302,7 @@ test('runBandAgentStandalone: the review arm runs to completion against an injec
 test('runBandAgentStandalone: the review arm passes projectName from the manifest and reports a failed pipeline status without throwing', async () => {
   const root = mkdtempSync(join(tmpdir(), 'band-run-review-'));
   try {
-    const wt = join(root, '_worktrees', 'wt');
+    const wt = join(root, '_worktrees', INIT);
     mkdirSync(wt, { recursive: true });
     writeManifest(join(root, 'projects', 'fix'), wt); // unused dir, keeps the shape honest
     writeManifest(join(root, '_queue', 'failed'), wt);
@@ -279,7 +315,7 @@ test('runBandAgentStandalone: the review arm passes projectName from the manifes
     assert.equal(out.kind, 'review');
     assert.equal(out.result.status, 'failed');
     assert.equal(calls[0]!.kind, 'review');
-    assert.equal(calls[0]!.input.projectName, 'wt', 'basename(project_repo_path) reached the review pipeline');
+    assert.equal(calls[0]!.input.projectName, INIT, 'basename(project_repo_path) reached the review pipeline');
 
     const parsed = readFileSync(join(root, '_logs', RUN, 'events.jsonl'), 'utf8')
       .trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
@@ -292,7 +328,7 @@ test('runBandAgentStandalone: the review arm passes projectName from the manifes
 test('runBandAgentStandalone: a throwing pipeline still terminates the run-level log with exactly one end, naming the error, then rethrows (MEDIUM-4, row 206 follow-up)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'band-run-throw-'));
   try {
-    const wt = join(root, '_worktrees', 'wt');
+    const wt = join(root, '_worktrees', INIT);
     mkdirSync(wt, { recursive: true });
     writeManifest(join(root, '_queue', 'ready-for-review'), wt);
 

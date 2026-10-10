@@ -30,8 +30,8 @@ import {
   readFileSync,
   unlinkSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { readHalt } from '@forge/kernel';
+import { dirname, join, resolve } from 'node:path';
+import { initiativeWorktreeRefusal, readHalt } from '@forge/kernel';
 import { parseManifest } from './manifest.ts';
 import { operatorStopPath } from './operator-stop.ts';
 
@@ -259,10 +259,18 @@ export function recover(opts: {
     }
 
     // Missing-worktree sweep
-    const worktreePath = parseWorktreePath(manifestPath);
-    if (worktreePath && !wtExists(worktreePath)) {
-      renameSync(manifestPath, join(paths.pending, filename));
-      missing.push(filename);
+    const claimed = parseWorktreeClaim(manifestPath);
+    if (claimed) {
+      // FAIL CLOSED (forge-nk1y.20): an uncontained `worktree_path` is never probed
+      // and counts as "no live worktree" (a live cycle's is always its own
+      // `_worktrees/<id>`; "exists" would park the manifest in-flight on a path the
+      // manifest chose). It returns to pending; the cleanup sweep refuses it too.
+      const contained =
+        initiativeWorktreeRefusal(claimed.worktreePath, { forgeRoot: dirname(paths.root), initiativeId: claimed.initiativeId }) === null;
+      if (!contained || !wtExists(claimed.worktreePath)) {
+        renameSync(manifestPath, join(paths.pending, filename));
+        missing.push(filename);
+      }
     }
   }
 
@@ -272,15 +280,12 @@ export function recover(opts: {
   return out;
 }
 
-/**
- * Parse the `worktree_path` field from a manifest using the canonical parser.
- * Returns null if the file is missing, malformed, or has no worktree_path.
- */
-function parseWorktreePath(manifestPath: string): string | null {
+/** The manifest's `worktree_path` + the initiative id it is judged against; null if missing, malformed or absent. */
+function parseWorktreeClaim(manifestPath: string): { worktreePath: string; initiativeId: string } | null {
   if (!existsSync(manifestPath)) return null;
   try {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    return m.worktree_path ?? null;
+    return m.worktree_path ? { worktreePath: m.worktree_path, initiativeId: m.initiative_id } : null;
   } catch {
     return null;
   }

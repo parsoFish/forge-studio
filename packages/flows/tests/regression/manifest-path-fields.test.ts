@@ -9,9 +9,10 @@
  *
  * Pins the containment semantics derived from REAL on-disk manifest values
  * (verified by T2):
- *   - `worktree_path` legitimate iff EITHER (a) identity-bound to exactly
- *     `<forgeRoot>/_worktrees/<initiative_id>`, OR (b) genuinely contained
- *     under `<forgeRoot>/projects/` (in-place worktrees, H2).
+ *   - `worktree_path` legitimate iff identity-bound to exactly
+ *     `<forgeRoot>/_worktrees/<initiative_id>` (forge-nk1y.20 removed the
+ *     former "(b) anywhere under `<forgeRoot>/projects/`" in-place branch: no
+ *     producer, and it admitted any project directory).
  *   - `project_repo_path` legitimate iff genuinely contained under
  *     `<forgeRoot>/projects/` at depth >= 1.
  *   - `cycle_id` legitimate iff a single safe path segment.
@@ -664,22 +665,19 @@ test('R4-17 pin 7, item 1 (RED — round-4 divergence defect): isContainedProjec
   }
 });
 
-test('R4-17 pin 7, item 1b (RED — same round-4 divergence defect, isContainedWorktreePath\'s in-place-worktree fallback branch, manifest-path-guard.ts:166-167): isContainedWorktreePath must ACCEPT an in-place worktree path contained under a projectsRoot the caller passed explicitly, even after forge.config.json is mutated to name a different root', () => {
+test('R4-17 pin 7, item 1b (converted by forge-nk1y.20): isContainedWorktreePath no longer has an in-place/projects-root branch, so a projectsRoot — passed or config-mutated — can never make an in-place worktree acceptable', () => {
   const initiativeId = 'INIT-2026-08-06-pin7-wt';
   const originalProjectsRoot = join(forgeRoot, 'projects');
-  // An "in-place worktree" (H2) — genuinely contained under projects/, NOT
-  // under _worktrees/<initiativeId> — exercises isContainedWorktreePath's
-  // FALLBACK branch, which shares the exact same resolveConfiguredProjectsRoot()
-  // re-derivation as isContainedProjectRepoPath. No existing test in this file
-  // drives that fallback branch directly (the worktree_path tests above all
-  // use the identity-bound _worktrees/<id> branch instead).
-  const legitInPlaceWt = join(originalProjectsRoot, 'pin7-wt-project', 'worktrees', initiativeId);
-  mkdirSync(legitInPlaceWt, { recursive: true });
+  // An "in-place worktree" — genuinely contained under projects/, NOT under
+  // _worktrees/<initiativeId>. No production code writes one, and accepting it
+  // let a manifest name any project dir (forge-nk1y.20).
+  const inPlaceWt = join(originalProjectsRoot, 'pin7-wt-project', 'worktrees', initiativeId);
+  mkdirSync(inPlaceWt, { recursive: true });
 
   assert.equal(
-    isContainedWorktreePath(legitInPlaceWt, { forgeRoot, initiativeId }),
-    true,
-    'precondition: an in-place worktree path must be accepted under the DEFAULT root before any config mutation',
+    isContainedWorktreePath(inPlaceWt, { forgeRoot, initiativeId }),
+    false,
+    'an in-place worktree under the default projects root is refused',
   );
 
   const newRoot = newOutsideDir('mpf-pin7-wt-divergent-newroot-');
@@ -687,16 +685,16 @@ test('R4-17 pin 7, item 1b (RED — same round-4 divergence defect, isContainedW
   writeFileSync(configPath, JSON.stringify({ projectsDir: newRoot }), 'utf8');
 
   try {
+    // A caller still handing a projectsRoot (extra property through a typed local) changes nothing.
     const opts: { forgeRoot: string; initiativeId: string; projectsRoot?: string } = {
       forgeRoot,
       initiativeId,
       projectsRoot: originalProjectsRoot,
     };
-    assert.equal(
-      isContainedWorktreePath(legitInPlaceWt, opts),
-      true,
-      `isContainedWorktreePath's in-place-worktree fallback branch must honour a passed projectsRoot VERBATIM too — today it ignores it and re-derives via resolveConfiguredProjectsRoot(forgeRoot), which now resolves to the mutated root ${newRoot}, wrongly REJECTING this genuinely-contained path`,
-    );
+    assert.equal(isContainedWorktreePath(inPlaceWt, opts), false, 'still refused with a projectsRoot that names its parent');
+    const underNewRoot = join(newRoot, 'pin7-wt-project', 'worktrees', initiativeId);
+    mkdirSync(underNewRoot, { recursive: true });
+    assert.equal(isContainedWorktreePath(underNewRoot, { forgeRoot, initiativeId }), false, 'and refused under the configured root too');
   } finally {
     rmSync(configPath, { force: true });
   }
@@ -830,12 +828,11 @@ test("R4-17 pin 7, item 4c (SEC-02/SEC-03 preservation — scripts/verify-cycle.
 // ANY plausible root) would pass under a fallback implementation too — that
 // is characterization, not acceptance, and is deliberately avoided here.
 //
-// Covered on BOTH containment predicates: `isContainedProjectRepoPath`, and
-// `isContainedWorktreePath`'s in-place-worktree FALLBACK branch (the branch
-// pin 7 item 1b first named, manifest-path-guard.ts:228-230 — reached by a
-// candidate genuinely contained under the projects root but NOT under
-// `<forgeRoot>/_worktrees/<initiativeId>`, so it falls through the identity
-// branch into the same `projectsRootFor` call project_repo_path uses).
+// Covered on `isContainedProjectRepoPath`. `isContainedWorktreePath` used to
+// share this `projectsRootFor` call through an in-place-worktree FALLBACK
+// branch; forge-nk1y.20 removed that branch, so items 1b/2b/3b/4b now pin that
+// the worktree predicate IGNORES projectsRoot entirely (refuses in-place
+// worktrees for every value, accepts the own `_worktrees/<id>` for every value).
 // ---------------------------------------------------------------------------
 
 type WorktreeOptsWithRoot = { forgeRoot: string; initiativeId: string; projectsRoot?: string };
@@ -862,25 +859,20 @@ test("R4-17 pin 8, item 1a (project_repo_path — falsifiable refusal, not mere 
   );
 });
 
-test("R4-17 pin 8, item 1b (isContainedWorktreePath in-place-worktree FALLBACK branch — falsifiable refusal): isContainedWorktreePath REFUSES a supplied projectsRoot of '' and does NOT fall back to self-resolution", () => {
-  const initiativeId = 'INIT-2026-08-06-pin8-empty-wt';
-  // Genuinely contained under projects/, NOT under _worktrees/<initiativeId>
-  // — exercises the FALLBACK branch, same as pin 7 item 1b.
-  const candidate = join(forgeRoot, 'projects', 'pin8-empty-wt-project', 'worktrees', initiativeId);
+test('R4-17 pin 8, item 1b/2b/3b (converted by forge-nk1y.20): isContainedWorktreePath has no projectsRoot dependence — an in-place worktree is refused for EVERY projectsRoot value (omitted, explicit undefined, empty, relative, non-string, even the correct root)', () => {
+  const initiativeId = 'INIT-2026-08-06-pin8-refuse-wt';
+  const candidate = join(forgeRoot, 'projects', 'pin8-refuse-wt-project', 'worktrees', initiativeId);
   mkdirSync(candidate, { recursive: true });
 
-  assert.equal(
-    isContainedWorktreePath(candidate, { forgeRoot, initiativeId }),
-    true,
-    'precondition: candidate must be accepted under self-resolution (no projectsRoot) before testing the empty-string refusal — this is the in-place-worktree FALLBACK branch, not the _worktrees/<id> identity branch',
-  );
-
-  const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: '' };
-  assert.equal(
-    isContainedWorktreePath(candidate, opts),
-    false,
-    "a supplied projectsRoot of '' must REFUSE outright on the fallback branch too — a fallback-to-self-resolution implementation would resolve the SAME default root and wrongly ACCEPT this candidate",
-  );
+  const values: unknown[] = [undefined, '', 'projects', join(forgeRoot, 'projects'), null, 42, {}, [], true];
+  for (const value of values) {
+    const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: value as unknown as string };
+    let result: boolean | undefined;
+    assert.doesNotThrow(() => {
+      result = isContainedWorktreePath(candidate, opts);
+    }, `projectsRoot=${JSON.stringify(value)} must not throw`);
+    assert.equal(result, false, `projectsRoot=${JSON.stringify(value)} must not make an in-place worktree acceptable`);
+  }
 });
 
 test('R4-17 pin 8, item 2a (project_repo_path — falsifiable refusal): isContainedProjectRepoPath REFUSES a supplied RELATIVE projectsRoot ("projects") and does NOT fall back to self-resolution, using the same would-be-accepted-under-fallback shape as item 1a', () => {
@@ -911,19 +903,6 @@ test("R4-17 pin 8, item 2a-proof (cwd-independence — the shape that made a rel
   } finally {
     process.chdir(originalCwd);
   }
-});
-
-test('R4-17 pin 8, item 2b (isContainedWorktreePath FALLBACK branch — falsifiable refusal): isContainedWorktreePath REFUSES a supplied RELATIVE projectsRoot ("projects") on the in-place-worktree fallback branch too — the cwd-independence proof above (item 2a-proof) exercises the same projectsRootFor() call this branch shares, so it is not duplicated per-branch here', () => {
-  const initiativeId = 'INIT-2026-08-06-pin8-relative-wt';
-  const candidate = join(forgeRoot, 'projects', 'pin8-relative-wt-project', 'worktrees', initiativeId);
-  mkdirSync(candidate, { recursive: true });
-
-  const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: 'projects' };
-  assert.equal(
-    isContainedWorktreePath(candidate, opts),
-    false,
-    'a supplied RELATIVE projectsRoot must REFUSE on the fallback branch too — a fallback implementation would ignore it and wrongly ACCEPT via self-resolution',
-  );
 });
 
 test("R4-17 pin 8, item 3a (project_repo_path — runtime-reachable non-string values): isContainedProjectRepoPath REFUSES every runtime-reachable non-string projectsRoot (null, a number, an object, an array, boolean true) rather than throwing a raw TypeError or silently self-resolving — ProjectsRootOpt types projectsRoot as string | undefined, but this module compiles to plain JS at runtime and nothing enforces that boundary against a caller assembling opts from parsed JSON/request data", () => {
@@ -959,35 +938,6 @@ test("R4-17 pin 8, item 3a (project_repo_path — runtime-reachable non-string v
   }
 });
 
-test("R4-17 pin 8, item 3b (isContainedWorktreePath FALLBACK branch — runtime-reachable non-string values): isContainedWorktreePath REFUSES every runtime-reachable non-string projectsRoot on the in-place-worktree fallback branch too, rather than throwing or silently self-resolving", () => {
-  const badValues: Array<{ label: string; value: unknown }> = [
-    { label: 'null', value: null },
-    { label: 'number', value: 42 },
-    { label: 'object', value: {} },
-    { label: 'array', value: [] },
-    { label: 'boolean-true', value: true },
-  ];
-
-  for (const { label, value } of badValues) {
-    const initiativeId = `INIT-2026-08-06-pin8-nonstring-${label}`;
-    const candidate = join(forgeRoot, 'projects', `pin8-nonstring-wt-${label}`, 'worktrees', initiativeId);
-    mkdirSync(candidate, { recursive: true });
-
-    const badProjectsRoot = value as unknown as string;
-    const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: badProjectsRoot };
-
-    let result: boolean | undefined;
-    assert.doesNotThrow(() => {
-      result = isContainedWorktreePath(candidate, opts);
-    }, `a non-string projectsRoot (${label}) must not throw a raw TypeError out of isContainedWorktreePath's fallback branch`);
-    assert.equal(
-      result,
-      false,
-      `a non-string projectsRoot (${label}) must REFUSE (false) on the fallback branch too`,
-    );
-  }
-});
-
 // Item 4 — the back-compat control that stops a fix for items 1-3 from
 // making the parameter mandatory. Pin 7 item 3 already pins the plainest
 // shape of this for isContainedProjectRepoPath (projectsRoot KEY OMITTED
@@ -998,10 +948,8 @@ test("R4-17 pin 8, item 3b (isContainedWorktreePath FALLBACK branch — runtime-
 //       spread (`{ forgeRoot, projectsRoot: possiblyUndefinedVar }`)
 //       produces, distinct at the object-shape level from key-omission even
 //       though `opts.projectsRoot` reads `undefined` either way in JS; and
-//   (b) a DEDICATED control for isContainedWorktreePath's fallback branch —
-//       pin 7 item 1b only asserts this as a PRECONDITION inside a test
-//       whose real subject is the divergence defect, not as its own named
-//       back-compat control.
+//   (b) a DEDICATED control that the worktree predicate accepts its own
+//       `_worktrees/<id>` whatever projectsRoot rides along (item 4b).
 
 test('R4-17 pin 8, item 4a (back-compat control, genuinely new vs pin 7 item 3 — key PRESENT with value undefined, not key-omitted): isContainedProjectRepoPath ACCEPTS when projectsRoot is explicitly present in the options object with value undefined', () => {
   const legitUnderDefault = join(forgeRoot, 'projects', 'pin8-undefined-backcompat');
@@ -1016,16 +964,14 @@ test('R4-17 pin 8, item 4a (back-compat control, genuinely new vs pin 7 item 3 �
   );
 });
 
-test('R4-17 pin 8, item 4b (back-compat control, DEDICATED to the worktree fallback branch — no existing test names this as its own control; pin 7 item 1b only asserts it as a PRECONDITION inside a different test): isContainedWorktreePath\'s in-place-worktree fallback branch ACCEPTS when projectsRoot is explicitly present with value undefined', () => {
-  const initiativeId = 'INIT-2026-08-06-pin8-undefined-wt';
-  const legitInPlaceWt = join(forgeRoot, 'projects', 'pin8-undefined-wt-project', 'worktrees', initiativeId);
-  mkdirSync(legitInPlaceWt, { recursive: true });
+test('R4-17 pin 8, item 4b (converted by forge-nk1y.20): the initiative\'s own _worktrees/<id> is ACCEPTED whatever projectsRoot shape rides along (the worktree predicate does not read it)', () => {
+  const initiativeId = 'INIT-2026-08-06-pin8-own-wt';
+  const own = join(forgeRoot, '_worktrees', initiativeId);
+  mkdirSync(own, { recursive: true });
 
-  const explicitUndefined: string | undefined = undefined;
-  const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: explicitUndefined };
-  assert.equal(
-    isContainedWorktreePath(legitInPlaceWt, opts),
-    true,
-    'projectsRoot explicitly present with value undefined must still self-resolve and ACCEPT on the fallback branch too',
-  );
+  const values: unknown[] = [undefined, '', 'projects', null, 42];
+  for (const value of values) {
+    const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: value as unknown as string };
+    assert.equal(isContainedWorktreePath(own, opts), true, `projectsRoot=${JSON.stringify(value)}`);
+  }
 });

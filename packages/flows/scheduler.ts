@@ -341,7 +341,7 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
 
 function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }, projectsRoot: string): void {
   // SEC-02: the projects root is a containment root for manifest
-  // `project_repo_path` / in-place `worktree_path`, and a containment root
+  // `project_repo_path`, and a containment root
   // that does not exist fails CLOSED. `forge init`'s `layoutDirs` creates the
   // default one, but the DAEMON has its own layout bootstrap and an install that
   // predates this change never had it — so create it here too. The caller

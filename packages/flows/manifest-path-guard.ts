@@ -39,6 +39,11 @@
  * to call `writeManifest`, or direct corruption) is still caught immediately
  * before the destructive call, not merely at the original ingest.
  *
+ * WORKTREE_PATH IS ONE VALUE (forge-nk1y.20): exactly
+ * `<forgeRoot>/_worktrees/<initiative_id>` (kernel `initiativeWorktreeRefusal`).
+ * The former "in-place worktree anywhere under the projects root" alternative
+ * had no producer and admitted any project directory into `rmSync` / `git -C`.
+ *
  * CONTAINMENT TECHNIQUE: reuses `resolveGuardedPath`
  * (`cli/studio-path-guard.ts`) rather than forking it. Per that module's
  * CONTRACT section, the untrusted candidate path is decomposed into
@@ -80,8 +85,8 @@
  *     can verify that a future caller upholds that.
  */
 
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath } from '@forge/kernel';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { initiativeWorktreeRefusal, resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type ManifestPathFields = {
@@ -103,7 +108,8 @@ const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
  * `writeSessionTerminalPhase` (`apps/forge/agent-run.ts`) already resolve through,
  * fed a FORGE-ROOT-ANCHORED config path (`defaultConfigPath`) rather than
  * `loadConfig`'s cwd-relative default. Before this fix, `isContainedProjectRepoPath`
- * (and `isContainedWorktreePath`'s projects-root fallback branch) hardcoded
+ * (and, until forge-nk1y.20, `isContainedWorktreePath`'s projects-root fallback
+ * branch) hardcoded
  * `join(forgeRoot, 'projects')` — a THIRD, independent disagreement with the
  * producers, on top of the two round-2 fixed already. Under a configured
  * `FORGE_PROJECTS_DIR`/`projectsDir`, a legitimately-produced session's write
@@ -117,7 +123,7 @@ function resolveConfiguredProjectsRoot(forgeRoot: string): string {
 }
 
 /**
- * Options shared by both containment predicates. `projectsRoot` is OPTIONAL
+ * Options of the PROJECT-REPO containment predicate. `projectsRoot` is OPTIONAL
  * and, when supplied, is used VERBATIM — no config is read.
  *
  * R4-17 round-4 BLOCKER (pin 7): `resolveConfiguredProjectsRoot` re-reads
@@ -205,29 +211,15 @@ function containedUnder(root: string, candidate: string): { ok: boolean; segment
 }
 
 /**
- * `worktree_path` is legitimate iff EITHER it is identity-bound to exactly
- * `<forgeRoot>/_worktrees/<initiativeId>` (the forge-managed worktree for
- * THIS initiative — not merely "somewhere under `_worktrees`", which would
- * let one initiative's manifest name another's worktree), OR it is
- * genuinely contained anywhere under the PROJECTS ROOT (in-place worktrees,
- * e.g. `<projectsRoot>/<name>/worktrees/<id>`) — `opts.projectsRoot` when the
- * caller passes its own resolved root, otherwise this module's
- * config-aware self-resolution. See `ProjectsRootOpt`.
+ * `worktree_path` is legitimate iff it is exactly `<forgeRoot>/_worktrees/<initiativeId>`
+ * — THIS initiative's forge worktree, not merely "somewhere under `_worktrees`".
+ * The boolean wrapper over `initiativeWorktreeRefusal` (`@forge/kernel`), the one
+ * answer every reader of a manifest `worktree_path` consults. It takes NO
+ * `projectsRoot`: no production code writes an in-place worktree, and that
+ * fallback admitted another project's directory or the repo itself.
  */
-export function isContainedWorktreePath(
-  p: string,
-  opts: ProjectsRootOpt & { initiativeId: string },
-): boolean {
-  // The `_worktrees` branch is forge-root-anchored, never config-derived, so
-  // it has no producer/guard divergence to fix and takes no `projectsRoot`.
-  const worktreesRoot = join(opts.forgeRoot, '_worktrees');
-  const identity = containedUnder(worktreesRoot, p);
-  if (identity.ok && identity.segments.length === 1 && identity.segments[0] === opts.initiativeId) {
-    return true;
-  }
-  const projectsRoot = projectsRootFor(opts);
-  if (projectsRoot === null) return false;
-  return containedUnder(projectsRoot, p).ok;
+export function isContainedWorktreePath(p: string, opts: { forgeRoot: string; initiativeId: string }): boolean {
+  return initiativeWorktreeRefusal(p, opts) === null;
 }
 
 /**
@@ -320,16 +312,14 @@ export function validateManifestPathFields(m: ManifestPathFields, opts: Projects
     errors.push('project_repo_path must be contained under the forge projects root');
   }
 
-  if (
-    m.worktree_path !== undefined &&
-    m.worktree_path !== '' &&
-    !isContainedWorktreePath(m.worktree_path, {
-      forgeRoot: opts.forgeRoot,
-      projectsRoot: opts.projectsRoot,
-      initiativeId: m.initiative_id,
-    })
-  ) {
-    errors.push('worktree_path must be contained under the forge worktrees or projects root');
+  if (m.worktree_path !== undefined && m.worktree_path !== '') {
+    // Names the rule and the fixed reason, never the path (see this function's docstring).
+    const refusal = initiativeWorktreeRefusal(m.worktree_path, { forgeRoot: opts.forgeRoot, initiativeId: m.initiative_id });
+    if (refusal !== null) {
+      errors.push(
+        `worktree_path refused (${refusal}): must be the initiative's own forge worktree _worktrees/<initiative_id>`,
+      );
+    }
   }
 
   return errors;

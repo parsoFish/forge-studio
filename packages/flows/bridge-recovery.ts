@@ -127,7 +127,7 @@ export function recoveryInspect(initiativeId: string, ctx: RecoveryContext): Rec
   // reading `<wt>/.forge/pr-description.md` would leak an arbitrary file's
   // length (prDraftChars). Falls into the SAME existing shape the "no
   // worktree" case already uses (worktreeExists:false) rather than a new one.
-  const wtContained = wt !== null && isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId });
+  const wtContained = wt !== null && isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, initiativeId });
   if (wt && wtContained && existsSync(wt)) {
     out.worktreeExists = true;
     out.commits = git(wt, ['log', '--no-color', '--format=%h %s', '-n', '20', 'main..HEAD'])
@@ -153,7 +153,7 @@ export function recoveryAbandon(initiativeId: string, ctx: RecoveryContext): { o
   // --delete` against an out-of-bounds path. Reuses the SAME error shape this
   // function already returns for "no manifest found" rather than inventing a
   // new one, and never echoes the offending path back to the caller.
-  if (wt && !isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId })) {
+  if (wt && !isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, initiativeId })) {
     return { ok: false, detail: 'no manifest found' };
   }
   if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
