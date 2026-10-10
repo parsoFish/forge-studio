@@ -81,6 +81,8 @@ export async function applyReviewVerdict(
     acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
     concernKind?: 'packaging' | 'code-fix';
     qualityGateCmd?: string[];
+    /** forge-mfv5.1.28: a typed send-back's scope; absent ⇒ the WI-scope union. */
+    filesInScope?: string[];
   },
 ): Promise<void> {
   const origin = allowedOrigin(req);
@@ -102,7 +104,9 @@ export async function applyReviewVerdict(
     return;
   }
   if (kind === 'send-back' && acs.length === 0) {
-    sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' }, origin);
+    sendJson(res, 400, {
+      error: 'send-back needs a blocking comment or a typed work item — neither arrived (no acceptanceCriteria from a blocking review comment, none typed)',
+    }, origin);
     return;
   }
 
@@ -388,7 +392,7 @@ export async function applyReviewVerdict(
     const { appended } = compileFixWorkItems({
       worktreePath,
       initiativeId,
-      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd },
+      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd, filesInScope: body.filesInScope },
       projectGateCmd,
       estimatedIterations: REVIEW_FIX_DEFAULT_ITERATIONS,
       caps,

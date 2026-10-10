@@ -308,3 +308,60 @@ test('send-back with empty acceptanceCriteria → 400 (validated before the comp
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+/** forge-mfv5.1.28 — one bridge per case, every side effect a throw. */
+async function withBridge(slug: string, fn: (url: string, s: ReturnType<typeof setup>) => Promise<void>): Promise<void> {
+  const s = setup(slug);
+  const { url, close } = await startBridge({
+    forgeRoot: s.forgeRoot,
+    port: 0,
+    mergePr: () => { throw new Error('mergePr must not be called on send-back'); },
+    finalizeAfterMerge: async () => { throw new Error('finalizeAfterMerge must not be called on send-back'); },
+  });
+  try { await fn(url, s); } finally { await close(); rmSync(s.forgeRoot, { recursive: true, force: true }); }
+}
+
+const TYPED_AC = { given: 'the whole tests/ directory', when: '`python3 -m pytest tests/` runs', then: 'zero tests fail' };
+
+test('forge-mfv5.1.28: a typed send-back\'s qualityGateCmd + filesInScope reach the compiled fix WI', async () => {
+  await withBridge('typed', async (url, { initiativeId, worktreePath }) => {
+    const { status, json } = await postVerdict(url, {
+      initiativeId, kind: 'send-back', rationale: 'AC2 is measured by nothing — gate the fix on it.',
+      acceptanceCriteria: [TYPED_AC],
+      qualityGateCmd: ['python3', '-m', 'pytest', 'tests/'],
+      filesInScope: ['tests/test_structure.py', 'pytest.ini'],
+    });
+    assert.equal(status, 200, JSON.stringify(json));
+    const wi = parseWorkItem(readFileSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md'), 'utf8'));
+    assert.deepEqual(wi.quality_gate_cmd, ['python3', '-m', 'pytest', 'tests/']);
+    assert.deepEqual(wi.files_in_scope, ['tests/test_structure.py', 'pytest.ini']);
+    assert.deepEqual(wi.acceptance_criteria, [TYPED_AC]);
+  });
+});
+
+test('forge-mfv5.1.28: malformed qualityGateCmd / filesInScope are refused at the boundary, naming the field, before any write', async () => {
+  await withBridge('badlists', async (url, { initiativeId, worktreePath }) => {
+    for (const [extra, field] of [
+      [{ qualityGateCmd: ['pytest', ''] }, 'qualityGateCmd'],
+      [{ qualityGateCmd: 'pytest tests/' }, 'qualityGateCmd'],
+      [{ filesInScope: Array.from({ length: 201 }, (_, i) => `f${i}.py`) }, 'filesInScope'],
+      [{ filesInScope: [42] }, 'filesInScope'],
+    ] as const) {
+      const { status, json } = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'r', acceptanceCriteria: [TYPED_AC], ...extra });
+      assert.equal(status, 400, JSON.stringify(json));
+      assert.match(String((json as Record<string, unknown>).error), new RegExp(field));
+    }
+    assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false, 'nothing compiled');
+  });
+});
+
+test('forge-mfv5.1.28: a send-back with neither a blocking comment nor a typed work item is refused naming both', async () => {
+  await withBridge('neither', async (url, { initiativeId, worktreePath }) => {
+    const { status, json } = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'just a feeling' });
+    assert.equal(status, 400);
+    const error = String((json as Record<string, unknown>).error);
+    assert.match(error, /blocking comment/);
+    assert.match(error, /typed work item/);
+    assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false);
+  });
+});

@@ -34,13 +34,13 @@ import {
   resolveComment,
   editComment,
   deleteComment,
-  deriveVerdictFromComments,
   type ReviewCommentsSidecar,
   isSafeCycleId,
   applyReviewVerdict,
   type StudioPostContext,
 } from '@forge/flows';
-import { readJson } from './bridge-http.ts';
+import { readJson, stringList } from './bridge-http.ts';
+import { deriveVerdictWithGates, emitCommentGateEvent } from './review-comment-gate.ts';
 
 /** True when `v` is a `{given, when, then}` shape (all string fields present). */
 function isAcShape(v: unknown): boolean {
@@ -100,7 +100,7 @@ export async function handleReviewCommentRoutes(
     const cycleId = decodeUrlPart(url.slice('/api/review-comments/'.length));
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return true; }
     const sidecar = readReviewComments(ctx.logsRoot, cycleId);
-    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictWithGates(sidecar.comments) }, origin);
     return true;
   }
   // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
@@ -120,7 +120,8 @@ export async function handleReviewCommentRoutes(
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
         editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
       );
-      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+      emitCommentGateEvent(ctx.logsRoot, cycleId, result.comments.find((c) => c.id === commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictWithGates(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -133,7 +134,7 @@ export async function handleReviewCommentRoutes(
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return true; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => deleteComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictWithGates(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -146,7 +147,7 @@ export async function handleReviewCommentRoutes(
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return true; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => resolveComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictWithGates(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -167,10 +168,11 @@ export async function handleReviewCommentRoutes(
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
         appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
       );
+      emitCommentGateEvent(ctx.logsRoot, cycleId, result.comments[result.comments.length - 1]);
       sendJson(res, 200, {
         ...result,
         comment: result.comments[result.comments.length - 1],
-        derivedVerdict: deriveVerdictFromComments(result.comments),
+        derivedVerdict: deriveVerdictWithGates(result.comments),
       }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -182,7 +184,13 @@ export async function handleReviewCommentRoutes(
   if (method === 'POST' && url === '/api/verdict') {
     try {
       const body = await readJson(req);
-      const b = body as Record<string, unknown>;
+      const b = (body ?? {}) as Record<string, unknown>;
+      // forge-mfv5.1.28: a typed send-back's gate + scope, validated HERE (the
+      // Kickoff add's rule) — absent means the project gate / the WI-scope union.
+      const listError =
+        (b['qualityGateCmd'] !== undefined ? stringList('qualityGateCmd', b['qualityGateCmd'], 64, 500) : null) ??
+        (b['filesInScope'] !== undefined ? stringList('filesInScope', b['filesInScope'], 200, 500) : null);
+      if (listError) { sendJson(res, 400, { error: listError }, origin); return true; }
       await applyReviewVerdict(req, res, ctx, {
         initiativeId: typeof b['initiativeId'] === 'string' ? b['initiativeId'] : '',
         kind: (b['kind'] as 'approve' | 'send-back') ?? 'send-back',
@@ -191,7 +199,8 @@ export async function handleReviewCommentRoutes(
           ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
           : undefined,
         concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
-        qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
+        qualityGateCmd: b['qualityGateCmd'] as string[] | undefined,
+        filesInScope: b['filesInScope'] as string[] | undefined,
       });
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

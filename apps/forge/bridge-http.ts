@@ -58,3 +58,18 @@ export function readJson(req: IncomingMessage): Promise<unknown> {
     req.on('error', rejectJson);
   });
 }
+
+/** A non-empty string of at most `max` characters. */
+export const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
+
+/**
+ * The first bad entry's error, or null when `v` is an array of 1..maxLen
+ * non-empty strings ≤ maxStr — the boundary rule for a work item's
+ * `qualityGateCmd` / `filesInScope` on every route that takes one
+ * (forge-nk1y.12's Kickoff add, forge-mfv5.1.28's verdict send-back).
+ */
+export function stringList(field: string, v: unknown, maxLen: number, maxStr: number): string | null {
+  if (!Array.isArray(v) || v.length === 0 || v.length > maxLen) return `${field} must be an array of 1..${maxLen} strings`;
+  const bad = v.findIndex((s) => !isText(s, maxStr));
+  return bad < 0 ? null : `${field}[${bad}] must be a non-empty string of at most ${maxStr} characters`;
+}
