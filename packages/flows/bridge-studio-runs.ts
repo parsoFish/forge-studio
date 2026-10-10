@@ -18,6 +18,7 @@ import { planGateClassRefusals } from './plan-gate-class-check.ts';
 import { getPaths } from './queue.ts';
 import { PROJECT_ID_RE, decodeUrlPart } from '@forge/kernel';
 import { runRequeue } from './forge-requeue.ts';
+import { FixRoundRefusedError } from './requeue-resume.ts';
 import { resolveGuardedPath, guardedReadDir, guardedReadFile, guardedWriteFile, sessionDirSegments, ARCHITECT_KIND_DIR } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { sendJson, allowedOrigin, sanitizeError, SAFE_ID_RE, pathOnly } from '@forge/kernel';
@@ -404,7 +405,7 @@ export async function handleStudioPostRoutes(
       runRequeue(runId, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, resumeFromIntegrate: true });
       sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendJson(res, err instanceof FixRoundRefusedError ? 409 : 500, { error: sanitizeError(err) }, origin); // forge-mfv5.1.27
     }
     return true;
   }

@@ -139,7 +139,7 @@ export function enqueueGateFixWorkItems(input: EnqueueGateFixInput): GateFixEnqu
     ({ appended } = compileFixWorkItems({
       worktreePath,
       initiativeId,
-      source: gateFixConcern(failedGate, failureDetail),
+      source: { ...gateFixConcern(failedGate, failureDetail), qualityGateCmd: projectGateCmd }, // a pipeline gate parks by name
       projectGateCmd,
       estimatedIterations: DEFAULT_FIX_WI_ITERATIONS,
       caps,

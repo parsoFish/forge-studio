@@ -163,3 +163,15 @@ test('enqueue: a missing last-gate-failure.md still compiles (terse fallback rat
     fx.cleanup();
   }
 });
+
+test('enqueue (forge-mfv5.1.27 sec 6): a pipeline gate cmd parks BY NAME — never compiles, never throws a plain Error', () => {
+  const fx = setup({ reviewRounds: 0 });
+  try {
+    const result = enqueueGateFixWorkItems({ worktreePath: fx.wt, manifestPath: fx.manifestPath, initiativeId: ID, failedGate: 'local', projectGateCmd: ['bash', '-c', 'npm test | tee out.log'] });
+    assert.equal(result.status, 'cap-parked');
+    if (result.status === 'cap-parked') assert.match(result.detail, /pipeline/);
+    assert.equal(readWorkItemsFromDir(join(fx.wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'gate-fix').length, 0);
+  } finally {
+    fx.cleanup();
+  }
+});

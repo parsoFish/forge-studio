@@ -180,6 +180,8 @@ function readyForReviewArrival(initiativeId, cycleDir) {
   if (kickoff !== null) {
     return { state: 'awaiting-kickoff', atMs: kickoff.atMs, slackMs: 0, detail: `the product's cycle.end said awaiting-kickoff for ${initiativeId}` };
   }
+  const fixRound = fixRoundPark(raw.split('\n'));
+  if (fixRound !== null) return { unknown: true, detail: `${initiativeId} parked fix round ${fixRound.round} for the drain — not the review terminal` };
   let atMs = null;
   for (const line of raw.split('\n')) {
     if (line.trim() === '') continue;
@@ -213,6 +215,25 @@ function kickoffEnd(rows) {
     if (ev?.message !== 'cycle.end') continue;
     const atMs = Date.parse(ev.started_at);
     return ev.metadata?.status === 'awaiting-kickoff' && !Number.isNaN(atMs) ? { atMs } : null;
+  }
+  return null;
+}
+
+/**
+ * Bead forge-mfv5.1.27 — a red merge gate parks a FIX ROUND in
+ * `ready-for-review/` that the drain re-enters at once; it is not the review
+ * terminal. Closure names it (`closure-with-pending-fix-wi`) just before its
+ * move, so the LAST move is a fix-round park when that event sits between it
+ * and its own `closure.start`. `{round}`, else null.
+ */
+function fixRoundPark(rows) {
+  let moved = false;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    let ev;
+    try { ev = JSON.parse(rows[i]); } catch { continue; }
+    if (!moved) { moved = ev?.message === 'closure.manifest-moved-to-ready-for-review'; continue; }
+    if (ev?.message === 'closure-with-pending-fix-wi') return { round: ev.metadata?.round ?? '?' };
+    if (ev?.message === 'closure.start') return null;
   }
   return null;
 }
@@ -298,6 +319,7 @@ export function channelTerminalState(forgeRoot, dir) {
   let published = null;
   let runEnd = null;
   let kickoff = null;
+  let fixRound = null;
   let eventsReadable = false;
   let eventsRealError = null;
   try {
@@ -318,6 +340,7 @@ export function channelTerminalState(forgeRoot, dir) {
     published = turnPublishedPhase(rows);
     runEnd = runOwnEnd(rows, name);
     kickoff = kickoffEnd(rows);
+    fixRound = fixRoundPark(rows);
   } catch (err) {
     if (err?.code !== 'ENOENT') eventsRealError = `could not read ${join(dir, 'events.jsonl')}: ${err?.code ?? err?.message}`;
   }
@@ -329,6 +352,9 @@ export function channelTerminalState(forgeRoot, dir) {
   const OPEN_STATES = new Set(['pending', 'in-flight']);
   if (queueSaw === 'ready-for-review' && kickoff !== null) {
     return { state: 'awaiting-kickoff', detail: `the product parked ${initiative} at the Kickoff gate (_queue/ready-for-review/, cycle.end awaiting-kickoff)` };
+  }
+  if (queueSaw === 'ready-for-review' && fixRound !== null) {
+    return { unknown: true, detail: `${initiative} parked fix round ${fixRound.round} for the drain — not the review terminal` };
   }
   if (queueSaw !== null && !OPEN_STATES.has(queueSaw)) {
     return {

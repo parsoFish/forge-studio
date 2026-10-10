@@ -558,7 +558,7 @@ function RoadmapCanvasNode({
   dimmed: boolean;
   onSelect: (id: string) => void;
 }) {
-  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId } = initiative;
+  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId, fixRound } = initiative;
   const colour = ROADMAP_TONE_COLOR[queueStatusToColor(status)];
   const planPhase = workItems !== undefined ? 'planned' : status === 'in-flight' ? 'claimed' : 'pending';
 
@@ -579,7 +579,7 @@ function RoadmapCanvasNode({
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')} data-blocked-clauses={(blockedClauses ?? []).join(',')}
       data-initiative-collapsed="true"
-      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})}
+      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})} {...(fixRound !== undefined ? { 'data-fix-round': String(fixRound) } : {})}
       onClick={() => onSelect(initiativeId)}
       style={{
         position: 'absolute', left: position.x, top: position.y, width: position.w, height: position.h,
@@ -604,7 +604,7 @@ function RoadmapCanvasNode({
       <div data-micro-badges style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: colour, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-          {queueStatusLabel(status)}
+          {queueStatusLabel(status, fixRound)}
         </span>
         {/* W7-B6 (projects-33): the completion-time badge takes the STATUS
             colour and only earns a ✓ for a successful terminal state — a

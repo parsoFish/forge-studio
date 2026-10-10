@@ -15,6 +15,7 @@
  * sweeps arbitrate on, and the loud cap-exhausted park marker.
  */
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { guardedFile, guardedWriteFile } from '@forge/kernel';
@@ -230,6 +231,17 @@ export function pendingFixWorkItems(worktreePath: string): WorkItem[] {
     (w) => w.status === 'pending' || w.status === 'in-progress',
   );
   return topologicalOrder(open);
+}
+
+/**
+ * forge-mfv5.1.27 — `pendingFixWorkItems` that never throws (a dependency cycle,
+ * ENOTDIR) and never follows a symlinked `.forge`/`work-items` (the path guard).
+ */
+export function readPendingFixWorkItems(worktreePath: string): WorkItem[] | { unreadable: string } {
+  try {
+    if (guardedFile(worktreePath, ['.forge', 'work-items'], 'readdir') !== null) return pendingFixWorkItems(worktreePath);
+    return existsSync(devWorkItemsDir(worktreePath)) ? { unreadable: 'the work-items dir failed the path guard (a symlink is never followed)' } : [];
+  } catch (err) { return { unreadable: err instanceof Error ? err.message : String(err) }; }
 }
 
 /** True if any fix WI is `failed` — the drain parks needs-operator, never retries. */

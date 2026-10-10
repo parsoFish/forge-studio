@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
+import { fixRoundDeliveredHead, fixRoundHeadVerdict, fixRoundOf, isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
 
 const AT_KICKOFF: KickoffFacts = {
   queueDir: 'ready-for-review',
@@ -14,6 +14,7 @@ const AT_KICKOFF: KickoffFacts = {
   branchHasCommits: () => false,
   resumeFrom: null,
   reviewRounds: 0,
+  pendingFixWorkItems: 0,
 };
 
 test('a decomposed, unbuilt forge-architect manifest in ready-for-review is awaiting kickoff', () => {
@@ -49,4 +50,49 @@ test('the branch probe is not run when a cheaper fact already decides', () => {
   isAwaitingKickoff({ ...AT_KICKOFF, queueDir: 'pending', branchHasCommits: probe });
   isAwaitingKickoff({ ...AT_KICKOFF, workItemStatuses: ['complete'], branchHasCommits: probe });
   assert.equal(probed, false);
+});
+
+// forge-mfv5.1.27 — the live gate-red park: 5 delivered + 1 pending gate-fix WI,
+// review_rounds 1, resume_from develop, in ready-for-review.
+const FIX_ROUND: KickoffFacts = {
+  ...AT_KICKOFF, flowId: 'forge-develop', resumeFrom: 'develop', reviewRounds: 1, pendingFixWorkItems: 1,
+  workItemStatuses: ['complete', 'complete', 'complete', 'complete', 'complete', 'pending'],
+};
+
+test('fixRoundOf: a parked fix round reads its round; it is never a kickoff', () => {
+  assert.equal(fixRoundOf(FIX_ROUND), 1);
+  assert.equal(isAwaitingKickoff(FIX_ROUND), false);
+});
+
+test('fixRoundOf: each fact alone breaks it', () => {
+  assert.equal(fixRoundOf({ ...FIX_ROUND, queueDir: 'in-flight' }), null);
+  assert.equal(fixRoundOf({ ...FIX_ROUND, resumeFrom: null }), null);
+  assert.equal(fixRoundOf({ ...FIX_ROUND, pendingFixWorkItems: 0 }), null);
+  assert.equal(fixRoundOf(AT_KICKOFF), null);
+});
+
+// forge-mfv5.1.27 security review (items 1–2): the delivered head is read from exact, parsed events only.
+const SHA_A = 'a'.repeat(40);
+const SHA_B = 'b'.repeat(40);
+const ev = (message: string, metadata: Record<string, unknown>, extra: Record<string, unknown> = {}) => JSON.stringify({ phase: 'orchestrator', skill: 'cycle', message, metadata, ...extra });
+
+test('fixRoundDeliveredHead: the last exact delivered-head event wins; text mentions, other emitters and torn rows do not', () => {
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A })]), SHA_A);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('merge-gate.fix-loop.compiled', { head_sha: SHA_B })]), SHA_B);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('cycle.note', { text: 'cycle.dev-close-invariant-ok', local_head: SHA_B })]), SHA_A);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('cycle.dev-close-invariant-ok', { local_head: SHA_B }, { skill: 'developer-ralph' })]), SHA_A);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), '{torn']), SHA_A);
+});
+
+test('fixRoundDeliveredHead: a non-40-hex head on the last event fails closed (null); a compile without head_sha keeps the prior head', () => {
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('cycle.dev-close-invariant-ok', { local_head: 'HEAD' })]), null);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A.slice(0, 7) })]), null);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('merge-gate.fix-loop.compiled', { round: 1 })]), SHA_A);
+});
+
+test('fixRoundHeadVerdict: null only when the found head IS the delivered head; every refusal is named', () => {
+  assert.equal(fixRoundHeadVerdict(SHA_A, SHA_A), null);
+  assert.match(fixRoundHeadVerdict(SHA_A, SHA_B) ?? '', /expected aaaaaaa, found bbbbbbb\) — not resuming/);
+  assert.match(fixRoundHeadVerdict(null, SHA_A) ?? '', /no 40-hex delivered head recorded/);
+  assert.match(fixRoundHeadVerdict(SHA_A, null) ?? '', /found \(no branch\)/);
 });

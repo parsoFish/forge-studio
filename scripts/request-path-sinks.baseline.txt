@@ -150,6 +150,7 @@ packages/flows/finalize-merged.ts readFileSync 2
 packages/flows/finalize-merged.ts renameSync 1
 packages/flows/finalize-merged.ts rmdirSync 1
 packages/flows/finalize-merged.ts statSync 1
+packages/flows/fix-work-items.ts existsSync 1
 packages/flows/flow-artifacts.ts existsSync 3
 packages/flows/flow-artifacts.ts mkdirSync 3
 packages/flows/flow-artifacts.ts readdirSync 1
@@ -190,6 +191,7 @@ packages/flows/operator-stop.ts existsSync 2
 packages/flows/operator-stop.ts mkdirSync 1
 packages/flows/operator-stop.ts readFileSync 1
 packages/flows/phases/closure.ts execFileSync 1
+packages/flows/phases/closure.ts readFileSync 1
 packages/flows/phases/closure.ts writeFileSync 1
 packages/flows/phases/gitignored-creates.ts spawnSync 1
 packages/flows/phases/orchestrated-capture.ts execFileSync 2
@@ -220,9 +222,9 @@ packages/flows/queue.ts renameSync 5
 packages/flows/queue.ts statSync 1
 packages/flows/queue.ts unlinkSync 2
 packages/flows/queue.ts writeFileSync 1
-packages/flows/requeue-resume.ts execFileSync 1
-packages/flows/requeue-resume.ts existsSync 4
-packages/flows/requeue-resume.ts readFileSync 1
+packages/flows/requeue-resume.ts execFileSync 2
+packages/flows/requeue-resume.ts existsSync 5
+packages/flows/requeue-resume.ts readFileSync 2
 packages/flows/review-comments.ts existsSync 1
 packages/flows/review-comments.ts mkdirSync 1
 packages/flows/review-comments.ts readFileSync 1
@@ -688,6 +690,7 @@ packages/stations/phases/developer-loop.ts readFileSync 1
 packages/stations/phases/developer-loop.ts unlinkSync 2
 packages/stations/phases/developer-loop.ts writeFileSync 2
 packages/stations/phases/executor-deps.ts readFileSync 1
+packages/stations/phases/executor-table.ts execFileSync 1
 packages/stations/phases/executor-table.ts existsSync 1
 packages/stations/phases/executor-table.ts readFileSync 3
 packages/stations/phases/integrate.ts execFileSync 1

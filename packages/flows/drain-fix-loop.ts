@@ -44,6 +44,7 @@ import {
   pendingFixWorkItems,
 } from './fix-work-items.ts';
 import type { CycleInput } from './cycle-context.ts';
+import { fixRoundHeadRefusal } from './requeue-resume.ts';
 
 /** Keep the claimed manifest's heartbeat fresh during a (possibly long) drain so
  *  a crashed daemon leaves a STALE heartbeat the recovery sweep can reclaim. */
@@ -81,6 +82,8 @@ export type FixLoopDrainDeps = {
   /** The installed factory's phase wiring (D-32) — threaded to `runCycle`, never imported. */
   phaseWiring: PhaseWiring;
   notify?: (msg: string) => void;
+  /** forge-mfv5.1.27: drain ONE `ready-for-review/` manifest (its filename) — runOne's immediate re-entry. */
+  only?: string;
 };
 
 async function defaultRunDrainCycle(input: CycleInput, wiring: PhaseWiring): Promise<{ status: string }> {
@@ -112,7 +115,7 @@ export async function drainPendingFixWorkItems(
   if (!existsSync(paths.readyForReview)) return out;
 
   for (const file of readdirSync(paths.readyForReview)) {
-    if (!file.endsWith('.md')) continue;
+    if (!file.endsWith('.md') || (deps.only !== undefined && file !== deps.only)) continue;
     const manifestPath = join(paths.readyForReview, file);
     let initiativeId = file.replace(/\.md$/, '');
     let release: (() => Promise<void>) | null = null;
@@ -200,6 +203,13 @@ export async function drainPendingFixWorkItems(
         out.push({ initiativeId, status: 'no-pending' });
         continue;
       }
+      // forge-mfv5.1.27: a gate-fix round re-enters only on the head it was parked on — checked BEFORE the claim.
+      const headRefusal = fixRoundHeadRefusal({ worktreePath, logPath: join(logsRoot, cycleId, 'events.jsonl'), projectRepoPath, branch: `forge/${initiativeId}` });
+      if (headRefusal !== null) {
+        createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'fix-round.head-moved', metadata: { detail: headRefusal } });
+        out.push({ initiativeId, status: 'needs-operator', detail: headRefusal });
+        continue;
+      }
 
       // Merge-vs-loop (D-20): a MERGED PR is finalize-merged's domain — the
       // merge always wins; finalize surfaces the dropped fix WIs non-silently.
@@ -251,6 +261,7 @@ export async function drainPendingFixWorkItems(
         worktreePath,
         cycleId,
         resumeFrom: 'develop',
+        ...(deps.logsRoot ? { logsRoot } : {}),
       };
       try {
         const result = await runDrainCycle(input, deps.phaseWiring);

@@ -186,7 +186,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
       // Capture the filename for the closure so a later loop iteration's
       // reassignment of `claimedFilename` can't shadow this entry's cleanup.
       const fn: string = claimedFilename;
-      const promise = runOne(claimed, fn, cfg, tee, opts.phaseWiring).finally(() => {
+      const promise = runOne(claimed, fn, cfg, tee, opts.phaseWiring, () => stop).finally(() => {
         inFlight.delete(fn);
       });
       inFlight.set(fn, promise);

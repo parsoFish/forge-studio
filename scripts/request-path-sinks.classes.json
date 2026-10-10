@@ -221,6 +221,12 @@
   "verified": "exec",
   "note": "`POST /api/verdict` approve → `finalizeAfterMerge` → `pruneMergedWorktrees`: manifest `worktree_path` + `initiative_id`"
  },
+ "packages/flows/fix-work-items.ts": {
+  "class": "other",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "forge-mfv5.1.27 `readPendingFixWorkItems`: the manifest `worktree_path` (contained by every caller: the drain's `isContainedWorktreePath`, `runRequeue`'s `assertManifestPathFields`, the scheduler's own worktree) is read only after `guardedFile(worktree, ['.forge','work-items'], 'readdir')` passes; the one `existsSync` only names a guard rejection"
+ },
  "packages/flows/flow-artifacts.ts": {
   "class": "other",
   "guard": "isSafeCycleId",
@@ -281,6 +287,12 @@
   "verified": "read",
   "note": "no request field"
  },
+ "packages/flows/phases/closure.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "forge-mfv5.1.27: `closure-with-pending-fix-wi` reads `CycleInput.manifestPath`, the scheduler's own `_queue/in-flight/<id>.md`, never a request field; the worktree read is `pendingFixWorkItems` on the cycle's own worktree"
+ },
  "packages/flows/phases/gitignored-creates.ts": {
   "class": "other",
   "guard": null,
@@ -327,7 +339,7 @@
   "class": "other",
   "guard": null,
   "verified": "exec",
-  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`"
+  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed"
  },
  "packages/flows/review-comments.ts": {
   "class": "guarded",
@@ -970,6 +982,12 @@
   "guard": null,
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/executor-table.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "forge-mfv5.1.27 `worktreeHead`: `git rev-parse HEAD` with cwd = the cycle's own scheduler-created worktree (`CycleInput.worktreePath`), never a request field"
  },
  "packages/stations/phases/integrate.ts": {
   "class": "guarded",

@@ -63,6 +63,8 @@ export type Run = {
   gateNote?: string;
   /** Parked at the Kickoff gate — `isAwaitingKickoff` (bead forge-mfv5.1.25), derived once here. */
   awaitingKickoff?: true;
+  /** Parked mid fix round — `fixRoundOf` (bead forge-mfv5.1.27); never a completion. */
+  fixRound?: number;
   failedAt?: string;
   failNote?: string;
   /** A cost-ceiling stop — resumable, distinct from an ordinary crash (ON-7 defect 2). */

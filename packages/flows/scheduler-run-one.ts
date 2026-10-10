@@ -18,6 +18,8 @@ import { parseManifest as parseFullManifest, type InitiativeManifest } from './m
 import { defaultConfigPath, FORGE_ROOT, loadConfig, resolveProjectsDir, type EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
+import { runDrainSweep } from './scheduler-sweeps.ts';
+import { readPendingFixWorkItems } from './fix-work-items.ts';
 import { endMetaIndicatesFailure } from './run-model-derive-status.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
@@ -215,6 +217,7 @@ export async function runOne(
   cfg: Required<Omit<SchedulerConfig, 'notify' | 'logsRoot'>> & { notify: NotifyConfig; logsRoot?: string },
   tee: ((entry: EventLogEntry) => void) | undefined,
   wiring: PhaseWiring,
+  isStopping: () => boolean = () => false, // forge-mfv5.1.27: the scheduler's SIGTERM stop flag
 ): Promise<void> {
   const paths = getPaths(cfg.queueRoot);
   const heartbeat = setInterval(() => {
@@ -482,6 +485,13 @@ export async function runOne(
         notifyFn: (event) => notify(event, cfg.notify),
       },
     );
+    // forge-mfv5.1.27: a fix round parked by a red merge gate re-enters NOW through
+    // the D-20 drain (this manifest only), never waiting on the 5-min sweep timer.
+    // Never while serve is stopping (SIGTERM); an unreadable fix-WI queue skips it, never failing the attempt.
+    const fixPending = result.status === 'ready-for-review' && !isStopping() ? readPendingFixWorkItems(wtHandle.path) : [];
+    if (Array.isArray(fixPending) && fixPending.length > 0) {
+      await runDrainSweep(wiring, cfg.queueRoot, { only: filename, logsRoot });
+    }
   } catch (err) {
     cycleFailed = true;
     if (existsSync(join(paths.inFlight, filename))) {
@@ -524,6 +534,7 @@ export async function runOne(
         worktreePresent: wtHandle !== null && existsSync(wtHandle.path),
         branchHasWork: branchHasCommittedWork(projectRepoPath, branch),
         workItems: wtHandle !== null ? summarizeWorkItemStatuses(wtHandle.path) : null,
+        pendingFixWorkItems: wtHandle === null ? 0 : [readPendingFixWorkItems(wtHandle.path)].map((p) => (Array.isArray(p) ? p.length : 1))[0], // unreadable keeps the branch
       });
       resumableHalt = resumeDecision.resume;
       if (resumableHalt) {

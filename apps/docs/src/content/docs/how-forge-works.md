@@ -3,7 +3,7 @@ title: How forge works
 description: The parts of a forge factory and how a piece of work moves through one.
 type: explanation
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-10
 covers: [packages/flows/**, packages/stations/**, packages/factory/**, packages/knowledge/**, studio/flows/**, skills/**]
 ---
 
@@ -33,7 +33,7 @@ forge ships one working factory. It is two flows plus one agent that fires after
 **Develop flow.**
 
 1. **Build.** The developer agent works through the work items in dependency order, one loop per item, each in its own git worktree. A loop repeats until the checks pass or its iteration budget runs out.
-2. **Integrate.** A planner agent picks how to show the change; the factory checks the plan, captures the evidence, and opens the pull request.
+2. **Integrate.** A planner agent picks how to show the change; the factory checks the plan, captures the evidence, and opens the pull request. First the full test suite runs on the branch. If it fails, no pull request opens: the factory adds a fix work item that must pass that same suite, and the build step re-runs at once. The roadmap card reads FIX ROUND while the fix is owed.
 3. **Review.** A read-only agent critiques the diff against each acceptance criterion. It cannot change anything but its findings file.
 4. **Verdict gate.** You read the findings and approve, which merges, or send back, which re-runs the build.
 

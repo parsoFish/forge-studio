@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-245 files, 1416 sink calls; 173 classified (accidentally-safe 8, guarded 46, not-request-derived 28, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+246 files, 1422 sink calls; 176 classified (accidentally-safe 8, guarded 46, not-request-derived 30, other 79, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -55,6 +55,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/enqueue-flow-run.ts` | 10 | guarded |  | read | body `initiativeId` / `initiativeIds[]` |
 | `packages/flows/enqueue-plan-run.ts` | 9 | guarded |  | read | body `initiativeId` / `initiativeIds[]` |
 | `packages/flows/finalize-merged.ts` | 11 | guarded | `isContainedWorktreePath` | exec | `POST /api/verdict` approve → `finalizeAfterMerge` → `pruneMergedWorktrees`: manifest `worktree_path` + `initiative_id` |
+| `packages/flows/fix-work-items.ts` | 1 | other | `resolveGuardedPath` | read | forge-mfv5.1.27 `readPendingFixWorkItems`: the manifest `worktree_path` (contained by every caller: the drain's `isContainedWorktreePath`, `runRequeue`'s `assertManifestPathFields`, the scheduler's own worktree) is read only after `guardedFile(worktree, ['.forge','work-items'], 'readdir')` passes; the one `existsSync` only names a guard rejection |
 | `packages/flows/flow-artifacts.ts` | 10 | other | `isSafeCycleId` | exec | `manifest.cycle_id` |
 | `packages/flows/flow-run-requests.ts` | 13 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/flow-runner.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
@@ -67,7 +68,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/mint-triggered-initiative.ts` | 3 | other |  | exec | `PUT /api/studio/flows/:id` body `project` → background flow-trigger sweep → minted manifest's `project` / `project_repo_path` |
 | `packages/flows/notify.ts` | 3 | unclassified |  |  |  |
 | `packages/flows/operator-stop.ts` | 5 | not-request-derived |  | read | no request field |
-| `packages/flows/phases/closure.ts` | 2 | unclassified |  |  |  |
+| `packages/flows/phases/closure.ts` | 3 | not-request-derived |  | read | forge-mfv5.1.27: `closure-with-pending-fix-wi` reads `CycleInput.manifestPath`, the scheduler's own `_queue/in-flight/<id>.md`, never a request field; the worktree read is `pendingFixWorkItems` on the cycle's own worktree |
 | `packages/flows/phases/gitignored-creates.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/phases/orchestrated-capture.ts` | 8 | guarded | `resolveGuardedPath` | read | a filename under `.capture/<side>/` (command-checkpoint-influenced) |
 | `packages/flows/phases/ralph-spec-lint.ts` | 4 | unclassified |  |  |  |
@@ -78,7 +79,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/pr.ts` | 11 | not-request-derived |  | exec | no request field |
 | `packages/flows/promote-manifests.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/queue.ts` | 25 | not-request-derived |  | exec | `GET /api/runs/planned` (the forge-develop kickoff surface) via `listPlannedInitiatives` |
-| `packages/flows/requeue-resume.ts` | 6 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project` |
+| `packages/flows/requeue-resume.ts` | 9 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed |
 | `packages/flows/review-comments.ts` | 4 | guarded |  | read | `/api/review-comments/:cycleId` |
 | `packages/flows/run-list-cache.ts` | 8 | unclassified |  |  |  |
 | `packages/flows/run-model-derive-lineage.ts` | 10 | unclassified |  |  |  |
@@ -237,7 +238,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/stations/phases/dev-binding.ts` | 7 | unclassified |  |  |  |
 | `packages/stations/phases/developer-loop.ts` | 13 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/executor-deps.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
-| `packages/stations/phases/executor-table.ts` | 4 | unclassified |  |  |  |
+| `packages/stations/phases/executor-table.ts` | 5 | not-request-derived |  | exec | forge-mfv5.1.27 `worktreeHead`: `git rev-parse HEAD` with cwd = the cycle's own scheduler-created worktree (`CycleInput.worktreePath`), never a request field |
 | `packages/stations/phases/integrate.ts` | 12 | guarded |  | read | `demoJsonAbs` |
 | `packages/stations/phases/merge-boundary.ts` | 1 | guarded |  | exec | `input.worktreePath` as `cwd` |
 | `packages/stations/phases/pm-acceptance-gate.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

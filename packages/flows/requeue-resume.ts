@@ -41,6 +41,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
+import { readPendingFixWorkItems } from './fix-work-items.ts';
+import { fixRoundDeliveredHead, fixRoundHeadVerdict } from '@forge/contracts';
 
 export type RequeueResumeDecision =
   | { resume: false; reason: string }
@@ -55,7 +57,7 @@ export type RequeueResumeDecision =
        * `null` → preserve the worktree with NO marker; the scheduler's
        * preserved work-items reuse path re-runs the dev-loop in place.
        */
-      resume_from: 'integrate' | 'plan' | 'pr-open' | null;
+      resume_from: 'integrate' | 'plan' | 'pr-open' | 'develop' | null;
       reason: string;
     };
 
@@ -227,12 +229,19 @@ export function decideRequeueResume(args: {
   worktreePresent: boolean;
   branchHasWork: boolean;
   workItems: WorkItemStatusSummary | null;
+  /** forge-mfv5.1.27: compiled fix WIs still owed on the preserved worktree. */
+  pendingFixWorkItems?: number;
 }): RequeueResumeDecision {
   if (args.resumeFromPlan) {
     const reason =
       'prior failure was a PM-phase acceptance-gate violation, deterministic after its one ' +
       'bounded revise turn — resume at the plan node to re-decompose';
     return { resume: true, resume_from: 'plan', reason };
+  }
+  if ((args.pendingFixWorkItems ?? 0) > 0 && args.worktreePresent && args.branchHasWork) {
+    const reason = `${args.pendingFixWorkItems} compiled fix work item(s) pending on the preserved branch — ` +
+      'resume the fix round at develop; delivered work items stay complete';
+    return { resume: true, resume_from: 'develop', reason };
   }
   if (args.resumeFromPrOpen) {
     if (!args.worktreePresent) {
@@ -301,5 +310,22 @@ export function inferRequeueResume(args: {
       existsSync(args.projectRepoPath) &&
       branchHasCommittedWork(args.projectRepoPath, `forge/${args.initiativeId}`),
     workItems: summarizeWorkItemStatuses(args.worktreePath),
+    pendingFixWorkItems: [readPendingFixWorkItems(args.worktreePath)].map((p) => (Array.isArray(p) ? p.length : 1))[0],
   });
+}
+
+/**
+ * forge-mfv5.1.27 — a GATE-FIX round resumes only on the branch head it was
+ * parked on (`fixRoundDeliveredHead`, read off `refs/heads/<branch>`, never a
+ * same-named tag); the requeue and the drain both ask here. Review send-back
+ * rounds may follow CI-fixer commits and are not checked. Null = proceed.
+ */
+export class FixRoundRefusedError extends Error {}
+
+export function fixRoundHeadRefusal(a: { worktreePath: string; logPath: string; projectRepoPath: string; branch: string }): string | null {
+  const pending = readPendingFixWorkItems(a.worktreePath); // unreadable fails toward checking
+  if (Array.isArray(pending) && !pending.some((w) => w.origin === 'gate-fix')) return null;
+  let found: string | null = null;
+  try { found = execFileSync('git', ['-C', a.projectRepoPath, 'rev-parse', '--verify', '--quiet', `refs/heads/${a.branch}`], { stdio: 'pipe', encoding: 'utf8' }).trim(); } catch { /* no branch: refused by name */ }
+  return fixRoundHeadVerdict(fixRoundDeliveredHead(existsSync(a.logPath) ? readFileSync(a.logPath, 'utf8').split('\n') : []), found);
 }
