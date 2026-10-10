@@ -251,7 +251,9 @@ export async function captureBeatDom(page, root, storyId, index, act, runStamp) 
  *
  * @param {{screenshot: (opts: object) => Promise<unknown>}} page
  * @param {string} path where the frame is written
- * @param {{attempts?: number, timeoutMs?: number, log?: (line: string) => void}} [opts]
+ * @param {{attempts?: number, timeoutMs?: number, fullPage?: boolean, log?: (line: string) => void}} [opts]
+ *   `fullPage` defaults to false: a frame is the viewport (D-42, amended under D-46), and only
+ *   a beat that declares `frame: 'fullPage'` captures the whole page.
  * @returns {Promise<{ok: boolean}>}
  */
 export async function captureFrame(page, path, opts = {}) {
@@ -261,7 +263,7 @@ export async function captureFrame(page, path, opts = {}) {
   for (let n = 0; n < attempts; n += 1) {
     try {
       await page.screenshot({
-        path, fullPage: true, ...(opts.timeoutMs === undefined ? {} : { timeout: opts.timeoutMs }),
+        path, fullPage: opts.fullPage === true, ...(opts.timeoutMs === undefined ? {} : { timeout: opts.timeoutMs }),
       });
       return { ok: true };
     } catch (err) {

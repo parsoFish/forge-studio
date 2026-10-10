@@ -49,6 +49,7 @@ import {
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
 import { sumAuthoritativeCostUsd } from '@forge/kernel';
+import { manifestAwaitsKickoff } from './kickoff-facts.ts';
 
 // ---------------------------------------------------------------------------
 // Exported types (binding API per M1 design §1)
@@ -288,7 +289,11 @@ function buildRun(args: {
 
   // --- completedAt (W6-RV-2): the real cycle-end instant, or its
   // crash-tail fallback — see the Run.completedAt doc comment above. ---
-  const completedAt = findCompletedAt(events);
+  // Bead forge-mfv5.1.25: THE Kickoff-gate derivation; the roadmap reads it off this run.
+  const awaitingKickoff = runStatus === 'gated' && manifestAwaitsKickoff({
+    queueDir: 'ready-for-review', manifest, logsRoot: join(resolve(root), '_logs'), forgeRoot: resolve(root),
+  });
+  const completedAt = findCompletedAt(events, awaitingKickoff);
 
   // --- Origin from cycle.start event or manifest ---
   const origin = findOrigin(events) ?? manifest.origin;
@@ -299,7 +304,7 @@ function buildRun(args: {
   // user-authored flow can name its gate node anything; some flows have no
   // review node at all).
   const gate = runStatus === 'gated' ? findGateNodeId(events, nodeMapping, agentSlugToNodeId) : undefined;
-  const gateNote = gate ? findGateNote(logDir) : undefined;
+  const gateNote = awaitingKickoff || gate ? findGateNote(logDir, awaitingKickoff) : undefined;
 
   // --- Failure ---
   const { failedAt, failNote } = findFailure(events, nodeMapping, agentSlugToNodeId);
@@ -384,7 +389,9 @@ function buildRun(args: {
     // S9: surface the run under every flow whose nodes it executed (the threaded
     // spine shows under forge-architect + forge-develop).
     flowLineage: computeFlowLineage(Object.keys(phases), manifest.flow_id ?? FALLBACK_FLOW_ID, flowNodeSets),
-    ...(gate !== undefined ? { gate, gateNote } : {}),
+    ...(gate !== undefined ? { gate } : {}),
+    ...(gateNote !== undefined ? { gateNote } : {}),
+    ...(awaitingKickoff ? { awaitingKickoff: true as const } : {}),
     // W8-A2 (ON-7): `failNote` is NOT gated on `failedAt`. They answer
     // different questions — failedAt is WHERE, failNote is WHY — and coupling
     // them meant an unattributable failure (no flow node resolves) silently
@@ -427,7 +434,9 @@ function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
  * walk into a standalone reflector-rerun event appended to the same log
  * long after the cycle itself finished (or failed to).
  */
-function findCompletedAt(events: readonly EventLogEntry[]): string | undefined {
+function findCompletedAt(events: readonly EventLogEntry[], awaitingKickoff: boolean): string | undefined {
+  // Bead forge-mfv5.1.25: a kickoff is a plan waiting to be built, not a completion.
+  if (awaitingKickoff) return undefined;
   for (const e of events) {
     // Row 207: a stopped/failed attempt's own cycle.end is never the completion instant.
     if (e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end' && !endMetaIndicatesFailure(e.metadata)) return e.started_at;

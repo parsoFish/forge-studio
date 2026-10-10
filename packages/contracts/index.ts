@@ -29,6 +29,8 @@ export * from './runnable-source.ts';
 /** `projectReadiness` — the ONE readiness rule Studio shows and the claim gate
  *  enforces (SPEC §6, bead forge-8vfn.30.4). */
 export * from './project-readiness.ts';
+/** `isAwaitingKickoff` — the ONE Kickoff-gate rule (bead forge-mfv5.1.25). */
+export * from './awaiting-kickoff.ts';
 
 /** The run view's shape (SPEC §2) — moved from `packages/flows`, forge-8vfn.5.17. */
 export * from './run-view-types.ts';
@@ -229,13 +231,14 @@ export type MaterialKind = (typeof MATERIAL_KINDS)[number];
  * Final cycle outcome after the closure step folds in the operator-merge
  * confirmation. `merged` is reachable ONLY there (never from the reviewer)
  * and ONLY when `gh pr view --json state` == MERGED. `failed` is not a member:
- * a failure throws.
+ * a failure throws. `awaiting-kickoff`: a decomposition-only flow ran no
+ * closure and left work items (bead forge-mfv5.1.25).
  *
  * It lives here because it is the return type of the `PhaseExecutor` port
  * (SPEC.md §2 Station), and kernel — which declares that port — may import
  * contracts and nothing else.
  */
-export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review';
+export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review' | 'awaiting-kickoff';
 
 // ── Failure signatures (M7 row 150, ruling 1794 round 3) ──
 

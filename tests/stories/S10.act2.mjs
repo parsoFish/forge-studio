@@ -308,7 +308,8 @@ export const ACT_2 = [
       do: [],
       wait: {
         for: 'agent', anchor: 'approve-plan',
-        terminal: 'ready-for-review',
+        // forge-mfv5.1.25: the architect cycle ends at the Kickoff gate.
+        terminal: 'awaiting-kickoff',
         upTo: CYCLE_BOUND.ms,
         boundBasis: CYCLE_BOUND.label,
       },
@@ -316,13 +317,13 @@ export const ACT_2 = [
         route: '/projects/gitpulse',
         data: {
           page: 'projects', 'project-id': 'gitpulse',
-          'initiative-status': 'ready-for-review', 'plan-state': 'planned',
+          'initiative-status': 'awaiting-kickoff', 'plan-state': 'planned',
           'initiative-id': '<runId2>',
         },
       },
       say:
-        'The second initiative is smaller, but it is planned and built the same unattended way ' +
-        'the first one was.',
+        'The second initiative is smaller, but it is planned the same unattended way the first ' +
+        'one was, and waits at the same Kickoff gate.',
     },
     {
       // VERIFIED shape — same `pressBound` as the story's own "open the

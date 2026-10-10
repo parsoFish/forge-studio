@@ -11,7 +11,7 @@ Rank 0: it imports no other forge package, and it is the ONE package
 `apps/studio` may import — anything a browser-bundled component needs has to
 be reachable from here or it cannot reach the browser at all.
 
-## API (48 values)
+## API (51 values)
 
 | agent fanout isolation kinds | `FANOUT_ISOLATION_KINDS` |
 | flow trigger & kickoff vocabulary | `TRIGGER_MODES` · `FLOW_KICKOFF_KINDS` |
@@ -22,6 +22,7 @@ be reachable from here or it cannot reach the browser at all.
 | demo & release-process vocabulary | `DEMO_STEP_KINDS` · `RELEASE_STEP_KINDS` · `RELEASE_STEP_PHASES` |
 | the runnable-source rule — whether enqueueFlowRun may claim a manifest | `DEVELOP_FLOW_ID` · `isRunnableSource` |
 | the ONE project-readiness rule — Studio shows it, the claim gate enforces it (SPEC §6) | `projectReadiness` |
+| the ONE Kickoff-gate rule — the run model derives it, the develop enqueue refuses on it | `KICKOFF_SOURCE_FLOW_ID` · `isAwaitingKickoff` · `kickoffBuiltReason` |
 | the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `resolveDeclaredBin` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
 | pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |

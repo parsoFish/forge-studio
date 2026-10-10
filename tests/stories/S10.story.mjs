@@ -411,7 +411,9 @@ export default {
         // The product's own word for "this cycle is done", read from the queue
         // rather than from the card: run 17 reached it at 22:46:55 while this
         // beat had already given up at 22:44:59 asserting the card alone.
-        terminal: 'ready-for-review',
+        // forge-mfv5.1.25: the architect cycle now ends `awaiting-kickoff` (the
+        // manifest stays in `_queue/ready-for-review/`; `cycle.end` names it).
+        terminal: 'awaiting-kickoff',
         upTo: CYCLE_BOUND.ms,
         boundBasis: CYCLE_BOUND.label,
       },
@@ -504,11 +506,13 @@ export default {
         // missing run the binding is the first suspect rather than the product.
         data: {
           page: 'projects', 'project-id': 'gitpulse',
-          'initiative-status': 'ready-for-review', 'plan-state': 'planned',
+          // forge-mfv5.1.25: the bridge serves `awaiting-kickoff` (card: KICKOFF)
+          // for a decomposed, unbuilt forge-architect manifest in ready-for-review/.
+          'initiative-status': 'awaiting-kickoff', 'plan-state': 'planned',
           'initiative-id': '<runId>',
         },
       },
-      say: 'Approving the plan was the operator\'s last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.',
+      say: 'Approving the plan was the operator\'s last act for a while. The factory claims the initiative, decomposes it into work items and stops at the Kickoff gate — unattended. The card reads KICKOFF: the plan is built into work items, and nothing is built yet.',
     },
     {
       // 7.6.54 / ruling 795 — THE BEAT THAT MAKES THE RUN REACHABLE.
@@ -546,7 +550,7 @@ export default {
           'run-cycle-id': '<cycleId>',
         },
       },
-      say: 'The card says the work is ready for review. The operator opens it to reach the run itself — and the drawer names the cycle that produced it, which is the handle everything downstream is keyed by. The initiative is what was asked for; the cycle is what actually ran.',
+      say: 'The card says the plan waits at the Kickoff gate. The operator opens it to reach the run itself — and the drawer names the cycle that produced it, which is the handle everything downstream is keyed by. The initiative is what was asked for; the cycle is what actually ran.',
     },
     {
       // `forge-8vfn.7.6.124` — THE BEAT THAT WAS MISSING FOR EIGHTEEN RUNS.

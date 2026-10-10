@@ -94,7 +94,8 @@ export function architectPlanArtifactHref(sessionId: string, mode?: 'gate' | 'vi
 
 // ---- session → initiative → run linkage ------------------------------------
 
-export type InitiativeQueueState = 'queued' | 'building' | 'gated' | 'complete' | 'failed' | 'unknown';
+/** `kickoff` = the run's served `awaitingKickoff` (bead forge-mfv5.1.25), never recomputed here. */
+export type InitiativeQueueState = 'queued' | 'building' | 'gated' | 'kickoff' | 'complete' | 'failed' | 'unknown';
 
 export type InitiativeLinkage = {
   initiativeId: string;
@@ -147,7 +148,7 @@ export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[], kn
       runId: run.id,
       flowId: run.flowId,
       runStatus: run.status,
-      queueState: QUEUE_STATE_FOR_RUN[run.status] ?? 'unknown',
+      queueState: run.awaitingKickoff ? 'kickoff' : QUEUE_STATE_FOR_RUN[run.status] ?? 'unknown',
       // The INITIATIVE id is the stable run handle (the bridge's findRun
       // matches it in every queue state); a run's own `id` flips from the
       // initiative id to the cycle id the moment forge serve claims it.
@@ -166,6 +167,7 @@ export type PostCommitTone =
   | 'queued-not-running'
   | 'queued-unknown'
   | 'gated'
+  | 'kickoff'
   | 'done'
   | 'failed'
   | 'unknown';
@@ -179,7 +181,7 @@ function idsIn(linkage: InitiativeLinkage[], state: InitiativeQueueState): strin
   return linkage.filter((l) => l.queueState === state).map((l) => l.initiativeId).join(', ');
 }
 
-/** The honest post-approve headline. Precedence: gated > building > queued >
+/** The honest post-approve headline. Precedence: gated > kickoff > building > queued >
  *  failed > done > unknown; whether `forge serve` is actually running decides
  *  whether "queued" / "claimed" can progress. There is no pause/stop state an
  *  operator can put serve into any more (M7-E row 205) — only confirmed-running
@@ -193,6 +195,7 @@ export function describePostCommit(linkage: InitiativeLinkage[], serve: ServeSta
   const unconfirmed = 'could not confirm forge serve is running.';
 
   if (has('gated')) return { tone: 'gated', headline: `${idsIn(linkage, 'gated')} is waiting on your verdict.`, serveNotReady: false };
+  if (has('kickoff')) return { tone: 'kickoff', headline: `${idsIn(linkage, 'kickoff')} is awaiting kickoff — Start development on the roadmap.`, serveNotReady: false };
   if (has('building')) {
     const ids = idsIn(linkage, 'building');
     if (unknown) return { tone: 'claimed-unknown', headline: `${ids} is claimed — ${unconfirmed}`, serveNotReady: true };

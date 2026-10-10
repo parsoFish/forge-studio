@@ -365,6 +365,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/flows/work-item.ts": {
+  "class": "guarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`hasWorkItemFiles` moved here from enqueue-flow-run.ts and `rawWorkItemStatuses` added (forge-mfv5.1.25): reads WI dirs under `_logs/<cycle_id>`, the manifest worktree and `_worktrees/<initiative_id>`; kickoff-facts.ts checks isCanonicalInitiativeId and validateManifestPathFields (cycle_id segment, worktree/repo containment) before any path is built, and reads nothing when they fail."
+ },
  "packages/kernel/case-folding-probe.ts": {
   "class": "not-request-derived",
   "guard": null,

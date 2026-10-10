@@ -64,7 +64,8 @@ test('7.6.118: S10 beat 8\'s `terminal` and `boundBasis` survive validateStory',
   const parsed = validateStory(story);
   const beat8 = parsed.beats[7];
 
-  assert.equal(beat8.wait.terminal, 'ready-for-review', 'the watch would never run');
+  // forge-mfv5.1.25: the architect cycle now ends at the Kickoff gate.
+  assert.equal(beat8.wait.terminal, 'awaiting-kickoff', 'the watch would never run');
   assert.ok(typeof beat8.wait.boundBasis === 'string' && beat8.wait.boundBasis !== '', 'the verdict would print a bare integer again');
   assert.match(beat8.wait.boundBasis, /ground\.budget_usd/, beat8.wait.boundBasis);
   assert.equal(beat8.wait.anchor, 'approve-plan', 'and the anchor 7.6.27 wired is still there');

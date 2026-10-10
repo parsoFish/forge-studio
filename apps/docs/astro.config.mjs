@@ -22,6 +22,7 @@ export default defineConfig({
       title: 'forge',
       description: 'Build and run agentic software factories.',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/parsoFish/forge-studio' }],
+      customCss: ['./src/styles/story-media.css'],
       routeMiddleware: './src/route-data.ts',
       components: { LastUpdated: './src/components/LastUpdated.astro' },
       plugins: [

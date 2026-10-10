@@ -89,7 +89,8 @@ export type RoadmapInitiative = {
   title: string;
   // R4-11-F1: `merged` — brief pass-through between a confirmed merge and its
   // promotion to `done/` in the same sweep.
-  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
+  /** `awaiting-kickoff` (bead forge-mfv5.1.25) is served by the bridge, never derived here. */
+  status: 'in-flight' | 'ready-for-review' | 'awaiting-kickoff' | 'merged' | 'done' | 'failed' | 'pending';
   dependsOnInitiatives: string[];
   /** plan-everything-before-kickoff: dependency-gate eligibility (meaningful while status==='pending'). */
   ready: boolean;

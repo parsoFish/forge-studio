@@ -60,7 +60,7 @@ import {
   type RoadmapTimeLayout,
   type CardPosition,
 } from '@/lib/roadmap-time-layout';
-import { queueStatusToColor } from '@/lib/roadmap-status-color';
+import { queueStatusToColor, queueStatusLabel, ROADMAP_TONE_COLOR } from '@/lib/roadmap-status-color';
 import { STATUS_COLOR } from '@/lib/status-colors';
 import { attemptInfoFor, type AttemptInfo } from '@/lib/recovery-attrs';
 import { topoLevels } from '@/lib/dep-layout';
@@ -559,7 +559,7 @@ function RoadmapCanvasNode({
   onSelect: (id: string) => void;
 }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId } = initiative;
-  const colour = STATUS_COLOR[queueStatusToColor(status)];
+  const colour = ROADMAP_TONE_COLOR[queueStatusToColor(status)];
   const planPhase = workItems !== undefined ? 'planned' : status === 'in-flight' ? 'claimed' : 'pending';
 
   const depsCount = dependsOnInitiatives.length;
@@ -604,7 +604,7 @@ function RoadmapCanvasNode({
       <div data-micro-badges style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: colour, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-          {status}
+          {queueStatusLabel(status)}
         </span>
         {/* W7-B6 (projects-33): the completion-time badge takes the STATUS
             colour and only earns a ✓ for a successful terminal state — a
@@ -846,7 +846,7 @@ function RoadmapMinimap({
       {initiatives.map((init) => {
         const p = layout.positions.get(init.initiativeId);
         if (!p) return null;
-        const colour = STATUS_COLOR[queueStatusToColor(init.status)];
+        const colour = ROADMAP_TONE_COLOR[queueStatusToColor(init.status)];
         return (
           <div
             key={init.initiativeId}
