@@ -610,7 +610,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       // The gate-fix WI is on the queue + the send-back is stamped (drain re-enters).
       const gateFix = readWorkItemsFromDir(join(wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'gate-fix');
       if (wantGate === null) assert.ok(gateFix.length === 0 && (logger.events as Array<{ message?: string }>).some((e) => e.message === 'merge-gate.fix-loop.cap-parked'), 'parked by name');
-      else assert.deepEqual([gateFix.length, gateFix[0]!.quality_gate_cmd, parseManifest(readFileSync(manifestPath, 'utf8')).resume_from], [1, wantGate, 'develop'], "one fix WI on the failing gate's local cmd (never ['true']), send-back stamped");
+      else assert.deepEqual([gateFix.length, gateFix[0]!.quality_gate_cmd, parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, (logger.events as Array<{ message?: string; metadata?: { gate_cmd?: string[] } }>).find((e) => e.message === 'merge-gate.fix-loop.compiled')?.metadata?.gate_cmd], [1, wantGate, 'develop', wantGate], "one fix WI on the failing gate's local cmd (never ['true']), send-back stamped, gate_cmd recorded on the compiled event (forge-nk1y.22)");
 
       // The integrate node's terminal 'end' carries status:'failed' so its hex renders
       // failed/blocked, NOT the green 'complete' of a real integrate run (it never ran).
