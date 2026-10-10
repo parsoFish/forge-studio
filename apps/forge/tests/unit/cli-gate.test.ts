@@ -76,3 +76,17 @@ test('--no-links turns the link check off without turning the others off', async
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('`--` ends options: what follows is a path, even one starting with `-`', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-cli-gate-'));
+  try {
+    writeFileSync(join(dir, 'a.md'), '# T\n\nprose\n');
+    assert.equal(await run(['docs', '--', join(dir, 'a.md')]), 0, 'a path after -- parses');
+    // A leading-dash path is a path (a missing file is a finding -> 1), NOT an unknown flag (-> 2).
+    assert.notEqual(await run(['docs', '--', '--weird.md']), 2);
+    assert.equal(await run(['docs', '--weird.md']), 2, 'without -- it is still an unknown flag');
+    assert.equal(await run(['docs', '--']), 2, '-- with no paths is still no documents');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
