@@ -46,6 +46,7 @@ import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, serializeManifest } from './manifest.ts';
 import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, readPriorFailureSignal, type RequeueResumeDecision } from './requeue-resume.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
+import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
 
 export type RequeueOptions = {
   /** Forge root (parent of _queue/). Defaults to cwd. */
@@ -199,6 +200,8 @@ export function runRequeue(
     const logPath = join(forgeRoot, '_logs', manifest.cycle_id ?? initiativeId, 'events.jsonl');
     const refusal = fixRoundHeadRefusal({ worktreePath, logPath, projectRepoPath, branch: `forge/${initiativeId}` });
     if (refusal !== null) throw new FixRoundRefusedError(`requeue: ${refusal}`);
+    // forge-nk1y.22: a pre-#1172 gate-fix WI carries the no-op gate ['true'] — give it the failing gate's own command.
+    normaliseLegacyFixGatesAtReentry({ worktreePath, initiativeId, cycleId: manifest.cycle_id ?? initiativeId, logsRoot: join(forgeRoot, '_logs') });
   }
 
   // A resume preserves the worktree + branch (the salvaged per-WI work the
