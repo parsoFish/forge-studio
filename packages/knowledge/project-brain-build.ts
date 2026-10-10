@@ -91,8 +91,10 @@ export function buildAnalyzePlan(
   forgeRoot: string,
   staging: string,
   skillFor: (turnId: string) => string,
+  feedback?: string | null,
 ): { cwd: string; prompt: string } {
   const binding = status.kb_binding;
+  const revision = revisionSection(feedback, staging);
   if (binding?.kind === 'flow' && binding.band) {
     const cwd = cyclesRawDir(forgeRoot);
     const prompt = [
@@ -107,6 +109,7 @@ export function buildAnalyzePlan(
       '',
       `Evidence flow: ${binding.ref}`,
       `Evidence band: ${binding.band}`,
+      ...revision,
     ].join('\n');
     return { cwd, prompt };
   }
@@ -121,8 +124,23 @@ export function buildAnalyzePlan(
     '',
     'Operator focus / guidance:',
     status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
+    ...revision,
   ].join('\n');
   return { cwd, prompt };
+}
+
+/** forge-mfv5.1.15 — "Revise with notes": no feedback adds NO lines (the first
+ *  round's prompt stays byte-identical, pinned by the golden spawn capture). */
+function revisionSection(feedback: string | null | undefined, staging: string): string[] {
+  const notes = feedback?.trim();
+  if (!notes) return [];
+  return [
+    '',
+    'Revision notes from the operator (apply every one):',
+    notes,
+    '',
+    `This is a revision round. The themes you drafted earlier are already staged in ${staging}. REVISE the themes already staged in the staging directory in place: edit the existing files to correct them per the notes above, and rewrite profile.md if a note touches it. Add or remove a theme only if a note asks for it; do not start from scratch.`,
+  ];
 }
 
 /** SEC-04 leaf: the staged-themes readdir routed through the guard (leaf dir

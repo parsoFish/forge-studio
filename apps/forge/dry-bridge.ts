@@ -172,6 +172,8 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawnProjectBrainTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/project-brain/approve', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnProjectBrainTurn — marker on approve (the shared abandon branch never spawns)' },
+  { method: 'POST', route: '/api/project-brain/revise', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnProjectBrainTurn — the revise verdict re-spawns the analyzing turn; marker + event, bookkeeping (feedback.md, round, verdicts.json) proceeds' },
   { method: 'POST', route: '/api/demo-builder/lock', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-agent', classification: 'stub-actions', guard: 'spawn-helper',
