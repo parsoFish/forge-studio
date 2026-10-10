@@ -218,6 +218,19 @@ function hasTokenRun(hay: readonly string[], needle: readonly string[]): boolean
   return false;
 }
 
+/** The span's leading tokens are a test runner. */
+const isRunnerSpan = (span: string): boolean => TEST_RUNNERS.some((r) => hasTokenRun(words(span).slice(0, r.length), r));
+
+/**
+ * forge-mfv5.1.28 — the first inline-code span in `text` led by a test runner,
+ * verbatim, or null. A verdict-gate comment's command becomes its fix work
+ * item's gate through this, so D-47 and the comment path read one rule. Pure.
+ */
+export function firstRunnableSpan(text: string): string | null {
+  for (const m of text.matchAll(/`([^`]+)`/g)) if (isRunnerSpan(m[1]!)) return m[1]!;
+  return null;
+}
+
 /**
  * The criteria (named `AC<n>` with their WHEN verbatim) whose WHEN's first
  * backtick span starts with a test runner and has a `&&`/`;` segment that no
@@ -231,7 +244,7 @@ export function uncoveredAcceptanceCriteria(
   const gates = items.map((it) => words((it.quality_gate_cmd ?? []).join(' ')));
   return acs.flatMap((ac, i) => {
     const span = /`([^`]+)`/.exec(ac.when)?.[1] ?? '';
-    if (!TEST_RUNNERS.some((r) => hasTokenRun(words(span).slice(0, r.length), r))) return [];
+    if (!isRunnerSpan(span)) return [];
     const uncarried = span.split(/&&|;/).map(words)
       .filter((seg) => seg.length > 0 && !gates.some((g) => hasTokenRun(g, seg)));
     if (uncarried.length === 0) return [];
