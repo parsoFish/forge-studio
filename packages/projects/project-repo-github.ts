@@ -1,13 +1,14 @@
 /**
  * The GitHub side of a project-repo Save (forge-mfv5.1.22): is the default branch
- * protected, and the forge-studio pull request (open it, find it, request
- * merge-on-green, see it merged). gh is the only GitHub client (D-02); it runs
+ * protected, and the forge-studio pull request (open it, find it, read its checks
+ * — forge-mfv5.1.23 —, see it merged). gh is the only GitHub client (D-02); it runs
  * through an injectable runner so tests answer with gh's real output shapes and
  * never reach the network. Calls stay synchronous, like the git ones around them,
  * each bounded by GH_TIMEOUT_MS so a hung gh fails the Save by name.
  */
 import { execFileSync } from 'node:child_process';
 
+import { parsePrRead, type PrRead } from './project-pr-verdict.ts';
 import { STUDIO_BRANCH } from './project-repo-tx.ts';
 
 export type GhResult = { ok: true; stdout: string } | { ok: false; stderr: string };
@@ -93,25 +94,41 @@ export function mergedStudioPr(gh: GhRunner, cwd: string, slug: string, base: st
   return rows.find((row) => headOid === undefined || row.headRefOid === headOid)?.url;
 }
 
-export type PrOpened = { ok: true; url: string; created: boolean; autoMerge: string } | { ok: false; reason: string };
+export type PrOpened = { ok: true; url: string; created: boolean } | { ok: false; reason: string };
 
-/** Reuse the open forge-studio PR or open one, then request merge-on-green. A
- *  repo without auto-merge leaves the PR open — said, never an error. */
-export function openStudioPrWithAutoMerge(gh: GhRunner, cwd: string, slug: string, base: string): PrOpened {
+/** Reuse the open forge-studio PR or open one. Merging is Save's verdict, never requested here. */
+export function openOrReuseStudioPr(gh: GhRunner, cwd: string, slug: string, base: string): PrOpened {
   const open = studioPrs(gh, cwd, slug, base, 'open');
   if (!Array.isArray(open)) return { ok: false, reason: open.error };
-  let url = open[0]?.url;
-  const created = url === undefined;
-  if (url === undefined) {
-    const r = gh(['pr', 'create', '--repo', slug, '--base', base, '--head', STUDIO_BRANCH,
-      '--title', 'forge-studio: apply project configuration',
-      '--body', 'Project configuration written from Forge Studio. The default branch is protected, so Studio opened this pull request instead of pushing it.'], cwd);
-    if (!r.ok) return { ok: false, reason: `gh pr create failed: ${firstLine(r.stderr)}` };
-    const printed = r.stdout.trim().split('\n').map((l) => l.trim()).find((l) => prUrlRe(slug).test(l));
-    if (!printed) return { ok: false, reason: `gh pr create printed no PR URL: ${firstLine(r.stdout)}` };
-    url = printed;
-  }
-  const m = gh(['pr', 'merge', url, '--auto', '--merge', '--repo', slug], cwd);
-  const autoMerge = m.ok ? 'auto-merge requested' : `auto-merge not enabled (${firstLine(m.stderr)}) — PR left open, merge it on GitHub`;
-  return { ok: true, url, created, autoMerge };
+  if (open[0]) return { ok: true, url: open[0].url, created: false };
+  const r = gh(['pr', 'create', '--repo', slug, '--base', base, '--head', STUDIO_BRANCH,
+    '--title', 'forge-studio: apply project configuration',
+    '--body', 'Project configuration written from Forge Studio. The default branch is protected, so Studio opened this pull request instead of pushing it.'], cwd);
+  if (!r.ok) return { ok: false, reason: `gh pr create failed: ${firstLine(r.stderr)}` };
+  const printed = r.stdout.trim().split('\n').map((l) => l.trim()).find((l) => prUrlRe(slug).test(l));
+  return printed ? { ok: true, url: printed, created: true } : { ok: false, reason: `gh pr create printed no PR URL: ${firstLine(r.stdout)}` };
+}
+
+const PR_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){state merged headRefOid commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ...on CheckRun{name status conclusion isRequired(pullRequestNumber:$number)} ...on StatusContext{context state isRequired(pullRequestNumber:$number)}}}}}}}}}}';
+
+/** forge-mfv5.1.23 — one graphql read (not `gh pr checks`, which exits non-zero on pending/red). */
+export function readStudioPr(gh: GhRunner, cwd: string, slug: string, url: string): PrRead {
+  const [owner, name] = slug.split('/');
+  const r = gh(['api', 'graphql', '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${/\/pull\/(\d+)$/.exec(url)?.[1]}`, '-f', `query=${PR_QUERY}`], cwd);
+  return r.ok ? parsePrRead(r.stdout) : { ok: false, reason: `gh api graphql failed: ${firstLine(r.stderr)}` };
+}
+
+/** The repo's `allow_auto_merge`: true, false, or undefined when unreadable or missing — never assumed. */
+export function allowsAutoMerge(gh: GhRunner, cwd: string, slug: string): boolean | undefined {
+  const r = gh(['api', `repos/${slug}`], cwd);
+  try {
+    const v = r.ok ? (JSON.parse(r.stdout) as { allow_auto_merge?: unknown }).allow_auto_merge : undefined;
+    return typeof v === 'boolean' ? v : undefined;
+  } catch { return undefined; }
+}
+
+/** `gh pr merge <url> <how> --repo <slug>`; a refusal carries gh's first stderr line. */
+export function mergeStudioPr(gh: GhRunner, cwd: string, slug: string, url: string, how: readonly string[]): { ok: true } | { ok: false; reason: string } {
+  const r = gh(['pr', 'merge', url, ...how, '--repo', slug], cwd);
+  return r.ok ? { ok: true } : { ok: false, reason: firstLine(r.stderr) || 'gh pr merge failed' };
 }

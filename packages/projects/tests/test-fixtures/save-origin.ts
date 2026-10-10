@@ -79,7 +79,22 @@ export function githubMergesPr(f: Fixture): string {
 export type PrRow = { url: string; isCrossRepository: boolean; baseRefName: string; headRefName: string; headRefOid: string; headRepositoryOwner: { login: string } };
 export const prRow = (url: string, over: Partial<PrRow> = {}): PrRow => ({ url, isCrossRepository: false, baseRefName: 'main', headRefName: 'forge-studio', headRefOid: '0'.repeat(40), headRepositoryOwner: { login: 'acme' }, ...over });
 
-export type GhState = { protection: boolean | 'fail'; open: PrRow[]; merged: PrRow[]; autoMerge: boolean; createFails?: boolean; calls: string[][] };
+/** forge-mfv5.1.23 — the PR read: `checks` are graphql statusCheckRollup context nodes; the head is
+ *  `headOid`, else origin's forge-studio (`originDir`); `allowAutoMerge` is the repo field ('missing' omits it). */
+export type GhState = {
+  protection: boolean | 'fail'; open: PrRow[]; merged: PrRow[]; autoMerge: boolean; createFails?: boolean; calls: string[][];
+  checks: unknown[]; headOid?: string; originDir?: string; graphql?: { fail: true } | { raw: string };
+  allowAutoMerge: boolean | 'missing'; mergeRefused?: string; onMerge?: () => void;
+};
+
+export const HEAD_OID = 'a'.repeat(40);
+export const checkRun = (name: string, status: string, conclusion: string | null, isRequired = true) => ({ __typename: 'CheckRun', name, status, conclusion, isRequired });
+export const statusContext = (context: string, state: string, isRequired = true) => ({ __typename: 'StatusContext', context, state, isRequired });
+/** What `gh api graphql` prints for the PR read (pullRequest → last commit → statusCheckRollup.contexts). */
+export const graphqlPr = (nodes: unknown[], over: Record<string, unknown> = {}): string => JSON.stringify({ data: { repository: { pullRequest: {
+  state: 'OPEN', merged: false, headRefOid: HEAD_OID, ...over,
+  commits: { nodes: [{ commit: { statusCheckRollup: nodes.length ? { contexts: { nodes } } : null } }] },
+} } } });
 
 /** A stub gh: prints what gh prints (JSON for `--json`/`api`, the URL for `pr create`, gh's stderr on failure).
  *  `pr list` returns every row of the asked state — the filter under test is forge's, not gh's. */
@@ -98,14 +113,29 @@ export function stubGh(state: GhState): GhRunner {
       state.open.push(prRow(PR_URL));
       return { ok: true, stdout: `${PR_URL}\n` };
     }
-    if (a.startsWith('pr merge')) {
+    if (a === 'api repos/acme/weave') {
+      return { ok: true, stdout: JSON.stringify({ full_name: 'acme/weave', ...(state.allowAutoMerge === 'missing' ? {} : { allow_auto_merge: state.allowAutoMerge }) }) };
+    }
+    if (args[0] === 'api' && args[1] === 'graphql') {
+      if (state.graphql && 'fail' in state.graphql) return { ok: false, stderr: 'gh: HTTP 502: Bad Gateway (https://api.github.com/graphql)\n' };
+      if (state.graphql) return { ok: true, stdout: state.graphql.raw };
+      const head = state.headOid ?? (state.originDir ? sha(state.originDir, 'refs/heads/forge-studio') : HEAD_OID);
+      return { ok: true, stdout: graphqlPr(state.checks, { headRefOid: head }) };
+    }
+    if (a.startsWith('pr merge') && args.includes('--auto')) {
       if (!state.autoMerge) return { ok: false, stderr: 'GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)\n' };
+      return { ok: true, stdout: '' };
+    }
+    if (a.startsWith('pr merge')) {
+      if (state.mergeRefused) return { ok: false, stderr: `${state.mergeRefused}\n` };
+      state.onMerge?.();
+      state.merged.push(...state.open.splice(0));
       return { ok: true, stdout: '' };
     }
     return { ok: false, stderr: `unknown command "${args[0]}" for "gh"\n` };
   };
 }
-export const ghState = (over: Partial<GhState> = {}): GhState => ({ protection: true, open: [], merged: [], autoMerge: true, calls: [], ...over });
+export const ghState = (over: Partial<GhState> = {}): GhState => ({ protection: true, open: [], merged: [], autoMerge: true, calls: [], checks: [], allowAutoMerge: false, ...over });
 
 export function studioCommit(work: string, file = 'AGENTS.md'): void {
   writeFileSync(join(work, file), `# ${file}\n`);
