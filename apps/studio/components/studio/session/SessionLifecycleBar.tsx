@@ -127,7 +127,7 @@ export function SessionLifecycleBar({
             data-lifecycle-error
             style={{
               margin: '6px 0 0', fontSize: 11.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              color: 'var(--text)', fontFamily: 'ui-monospace, Menlo, monospace', maxHeight: 160, overflow: 'auto',
+              color: 'var(--text)', fontFamily: 'ui-monospace, Menlo, monospace', maxHeight: 'var(--pane-sm)', overflow: 'auto',
             }}
           >
             {error ?? 'the agent turn threw (see stderr.log)'}

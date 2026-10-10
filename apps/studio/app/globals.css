@@ -82,6 +82,26 @@
 
   --radius: 10px;
   --radius-sm: 6px;
+
+  /* density scale — dev/UI-CONSTRAINTS.md §2 (D-46). Pinned, values and
+     use, by apps/studio/tests/contract/density-tokens.test.ts. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --pane-xs: 80px;
+  --pane-sm: 160px;
+  --pane-md: 240px;
+  --pane-lg: 320px;
+  --pane-xl: 480px;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   --hex-clip: polygon(25% 3%, 75% 3%, 98% 50%, 75% 97%, 25% 97%, 2% 50%);
 }
@@ -1148,7 +1168,7 @@ html { scroll-behavior: smooth; }
   background: var(--bg-2);
   overflow: hidden;
 }
-.tpl-preview-lg { height: 160px; }
+.tpl-preview-lg { height: var(--pane-sm); }
 .tpl-preview-glyph { position: absolute; }
 
 /* html — browser chrome: a 3-dot title bar over stacked content blocks */

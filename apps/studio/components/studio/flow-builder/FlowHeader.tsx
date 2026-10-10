@@ -477,7 +477,7 @@ export function FlowHeader({
             padding: '8px 11px',
                         resize: 'none',
             minHeight: 36,
-            maxHeight: 80,
+            maxHeight: 'var(--pane-xs)',
             transition: 'border-color 0.12s',
           }}
           onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = 'var(--ember)'; }}

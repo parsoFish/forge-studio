@@ -80,7 +80,7 @@ export function EventTail({ events, activeRunId, runStatus }: EventTailProps) {
       data-component="event-tail"
       data-tail-state={tailState}
       style={{
-        height: 160,
+        height: 'var(--pane-sm)',
         flexShrink: 0,
         borderTop: '1px solid var(--line)',
         display: 'flex',

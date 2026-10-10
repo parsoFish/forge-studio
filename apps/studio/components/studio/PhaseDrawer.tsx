@@ -859,7 +859,7 @@ function LogRow({ line }: { line: PhaseLogLine }) {
         style={{
           margin: '2px 0 6px 70px', padding: '8px 10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 5,
-          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--dim)', maxHeight: 320, overflow: 'auto',
+          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--dim)', maxHeight: 'var(--pane-lg)', overflow: 'auto',
         }}
       >
         {line.detail}

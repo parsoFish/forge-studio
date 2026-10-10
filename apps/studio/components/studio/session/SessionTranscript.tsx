@@ -60,7 +60,7 @@ export function SessionTranscript({
         flexDirection: 'column',
         gap: 14,
         padding: 16,
-        minHeight: 240,
+        minHeight: 'var(--pane-md)',
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
