@@ -109,7 +109,7 @@ export function openOrReuseStudioPr(gh: GhRunner, cwd: string, slug: string, bas
   return printed ? { ok: true, url: printed, created: true } : { ok: false, reason: `gh pr create printed no PR URL: ${firstLine(r.stdout)}` };
 }
 
-const PR_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){state merged headRefOid commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ...on CheckRun{name status conclusion isRequired(pullRequestNumber:$number)} ...on StatusContext{context state isRequired(pullRequestNumber:$number)}}}}}}}}}}';
+const PR_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){state merged headRefOid commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} nodes{__typename ...on CheckRun{name status conclusion isRequired(pullRequestNumber:$number)} ...on StatusContext{context state isRequired(pullRequestNumber:$number)}}}}}}}}}}';
 
 /** forge-mfv5.1.23 — one graphql read (not `gh pr checks`, which exits non-zero on pending/red). */
 export function readStudioPr(gh: GhRunner, cwd: string, slug: string, url: string): PrRead {

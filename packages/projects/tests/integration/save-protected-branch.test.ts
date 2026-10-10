@@ -13,7 +13,7 @@ import { join } from 'node:path';
 
 import { STUDIO_BRANCH } from '../../project-repo-tx.ts';
 import { hasPendingStudioChanges, parseRecoverConfirmation, saveProjectRepo, studioPullRequest } from '../../project-repo-save.ts';
-import { PR_URL, fixture, g, ghState, githubMergesPr, hasRef, prRow, sha, stranded, stubGh, studioCommit } from '../test-fixtures/save-origin.ts';
+import { PR_URL, fixture, g, ghState, githubMergesPr, hasRef, prRow, sha, stranded, stubGh, studioCommit, checkRun } from '../test-fixtures/save-origin.ts';
 
 test('(a) protected main → forge-studio pushed as a branch, PR opened, base untouched, still pending; no required check → no merge, no --auto', () => {
   const f = fixture();
@@ -21,7 +21,8 @@ test('(a) protected main → forge-studio pushed as a branch, PR opened, base un
     studioCommit(f.work);
     const mainBefore = sha(f.work, 'main');
     const studio = sha(f.work, STUDIO_BRANCH);
-    const gh = ghState({ originDir: f.origin, allowAutoMerge: true });
+    // A check reported and none is required (the gitweave ruleset): refused by name, never merged.
+    const gh = ghState({ originDir: f.origin, allowAutoMerge: true, checks: [checkRun('lint', 'COMPLETED', 'SUCCESS', false)] });
     const r = saveProjectRepo(f.work, { gh: stubGh(gh) });
     assert.equal(r.merged, false);
     assert.equal(r.pushed, true);

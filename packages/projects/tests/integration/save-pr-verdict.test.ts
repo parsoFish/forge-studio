@@ -110,6 +110,14 @@ test('no required checks → refused with the exact hand-off text; neither merge
   });
 });
 
+test('nothing reported yet + allow_auto_merge=true → pending, and --auto is NOT requested (GitHub would merge on open)', () => {
+  withSave({ checks: [], allowAutoMerge: true }, (_f, gh, r) => {
+    assert.equal(r.prState, 'pending');
+    assert.ok(!r.detail.includes(NO_REQUIRED_CHECK), r.detail);
+    assert.equal(merges(gh).length, 0);
+  });
+});
+
 test('the ruleset refuses the merge → blocked-by-ruleset, gh\'s first stderr line named, base untouched', () => {
   const refusal = 'GraphQL: Repository rule violations found\n\nAt least 1 approving review is required by reviewers with write access.';
   withSave({ checks: GREEN, mergeRefused: refusal }, (f, gh, r) => {

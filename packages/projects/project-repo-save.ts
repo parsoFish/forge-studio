@@ -257,8 +257,10 @@ function settlePr(dir: string, base: string, gh: GhRunner, slug: string, url: st
     return { ...finishMergedPr(dir, base, url), prUrl: url, prState: 'merged' };
   }
   if (v.state !== 'pending') return open(v.state, v.detail);
-  const allowed = allowsAutoMerge(gh, dir, slug);
   const again = 'Save again once they pass';
+  // No required check has reported yet: GitHub's auto-merge would land on open, so it is never requested.
+  if (!v.required) return open('pending', `${v.detail} — Save again once checks report`);
+  const allowed = allowsAutoMerge(gh, dir, slug);
   if (allowed !== true) return open('pending', `${v.detail}; ${allowed === false ? 'auto-merge is off for this repository' : 'auto-merge setting not reported'} — ${again}`);
   const auto = mergeStudioPr(gh, dir, slug, url, ['--auto', '--merge']);
   return open('pending', `${v.detail}; ${auto.ok ? 'auto-merge requested — GitHub merges it once they pass' : `auto-merge request refused (${auto.reason}) — ${again}`}`);

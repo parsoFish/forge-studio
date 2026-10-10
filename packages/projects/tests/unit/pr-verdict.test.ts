@@ -16,7 +16,7 @@ test('verdict: merged PR → merged', () => {
 });
 
 test('verdict: no context is required → blocked-no-required-check with the exact hand-off text', () => {
-  for (const nodes of [[], [checkRun('lint', 'COMPLETED', 'SUCCESS', false)], [statusContext('ci/x', 'FAILURE', false)]]) {
+  for (const nodes of [[checkRun('lint', 'COMPLETED', 'SUCCESS', false)], [statusContext('ci/x', 'FAILURE', false)]]) {
     const v = verdict(nodes);
     assert.equal(v.state, 'blocked-no-required-check');
     assert.equal(v.detail, 'no required check reports on this branch — merge on GitHub yourself or add a required check');
@@ -81,4 +81,26 @@ test('verdict: unparseable or shapeless graphql output → unreadable with the r
   const failed = prVerdict({ ok: false, reason: 'gh api graphql failed: HTTP 502' }, HEAD_OID);
   assert.equal(failed.state, 'unreadable');
   assert.match(failed.detail, /HTTP 502/);
+});
+
+test('verdict: nothing has reported yet (a fresh PR, CI not started) → pending with no known required check, never the hand-off', () => {
+  // A required check that has not reported is ABSENT from the rollup; reading that as "none required"
+  // would tell the operator to merge on GitHub before CI ran.
+  const v = verdict([]);
+  assert.equal(v.state, 'pending');
+  assert.equal(v.required ?? 0, 0);
+  assert.notEqual(v.detail, NO_REQUIRED_CHECK);
+});
+
+test('verdict: a pending required check carries the reported required count', () => {
+  assert.equal(verdict([checkRun('build', 'IN_PROGRESS', null), checkRun('lint', 'COMPLETED', 'SUCCESS', false)]).required, 1);
+});
+
+test('read: a rollup with more contexts than one page is unreadable — a red required check past page one is never green', () => {
+  const page = { pageInfo: { hasNextPage: true }, nodes: [checkRun('build', 'COMPLETED', 'SUCCESS')] };
+  const out = JSON.stringify({ data: { repository: { pullRequest: { state: 'OPEN', merged: false, headRefOid: HEAD_OID,
+    commits: { nodes: [{ commit: { statusCheckRollup: { contexts: page } } }] } } } } });
+  const read = parsePrRead(out);
+  assert.equal(read.ok, false);
+  assert.equal(prVerdict(read, HEAD_OID).state, 'unreadable');
 });
