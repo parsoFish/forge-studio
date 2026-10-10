@@ -3,7 +3,7 @@ title: Sessions & gates
 description: Run an interactive agent conversation, answer its questions, and approve or send back a plan or verdict at a gate.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-09
+last_verified: 2026-10-10
 covers: [apps/studio/app/sessions/**, apps/studio/app/architect/**, apps/studio/app/artifact/**, packages/sessions/**]
 sidebar:
   order: 10
@@ -44,7 +44,7 @@ A session whose state reads "Needs you" is waiting for an answer or a decision. 
 
 To approve a plan, open the plan from the planning session (**Review the plan →**). Choose **Approve**, **Send back** or **Reject**. To send back with instructions, type them in the note box before you press **Send back**. Approve queues the plan and starts planning its work items; building starts when you kick it off from the project's roadmap.
 
-To decide on a cycle's verdict, press **Decide the verdict gate →** on its run page. Comment on the demo with **+ comment**; any **blocking** comment turns the verdict into **send back (add work items)**, which runs in the same cycle. With no blocking comments, press **approve and merge**. A run that filed no demo shows a plain form instead: choose **approve** or **add work items**, write a rationale, and for a send-back fill in at least one acceptance criterion with GIVEN, WHEN and THEN.
+To decide on a cycle's verdict, press **Decide the verdict gate →** on its run page. The decision sits at the top, beside the change's narrative and its measured facts. The reviewer's verdict on each acceptance criterion and its findings come next, then the demo, one checkpoint at a time, with before and after side by side. Press either side to enlarge it. Open a criterion or checkpoint to comment on it. Any **blocking** comment turns the verdict into **Send back (add work items)**, which runs in the same cycle. With no blocking comments, press **Approve and merge**, or **Send back with work items** to type them yourself. After the merge, **Reflect on this cycle →** opens the reflection. A run that filed no demo shows a plain form instead: choose **approve** or **add work items**, write a rationale, and for a send-back fill in at least one acceptance criterion with GIVEN, WHEN and THEN.
 
 Sessions of other kinds can end with **Approve**, **Request changes** or **Reject** on the session page. **Send for revision** needs a description of what should change.
 

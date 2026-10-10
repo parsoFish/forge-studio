@@ -81,11 +81,12 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
           </ul>
           {(model.summary.prUrl || model.summary.branch || model.summary.commitSha) && (
             <div style={{ marginTop: 8, fontSize: 12, color: '#8b949e', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-              {model.summary.prUrl && (
+              {/* Agent-authored data: only an http(s) URL becomes a link (a javascript: href would run on click). */}
+              {model.summary.prUrl && (/^https?:\/\//i.test(model.summary.prUrl) ? (
                 <a href={model.summary.prUrl} target="_blank" rel="noreferrer" style={{ color: '#58a6ff' }}>
                   PR: {model.summary.prUrl}
                 </a>
-              )}
+              ) : <span>PR: {model.summary.prUrl}</span>)}
               {model.summary.branch && <span>Branch: <code style={{ background: '#161b22', padding: '1px 4px', borderRadius: 3 }}>{model.summary.branch}</code></span>}
               {model.summary.commitSha && <span>Commit: <code style={{ background: '#161b22', padding: '1px 4px', borderRadius: 3 }}>{model.summary.commitSha.slice(0, 8)}</code></span>}
             </div>
