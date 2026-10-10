@@ -228,7 +228,7 @@ export type ResumeRebaseResult = {
  * whole resumed run. Rebase the preserved branch onto current main at the START
  * of the resume instead:
  *   - no divergence (base is an ancestor of HEAD) → no-op, ok.
- *   - clean rebase → replay the branch's commits onto main + force-with-lease
+ *   - clean rebase → replay the branch's commits, merges kept, onto main + force-with-lease
  *     push (the initiative branch only — never main); fully unattended.
  *   - conflict → abort and return ok:false with a clear "rebase needed" reason
  *     the caller surfaces as the `resume-needs-rebase` action (operator rebases
@@ -259,7 +259,7 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
   } catch { /* diverged → attempt a clean rebase */ }
 
   try {
-    git(['rebase', target]);
+    git(['rebase', '--rebase-merges', target]); // keeps each `wi(<id>): merge`, the review's delivery record (forge-mfv5.1.30)
   } catch (err) {
     try { git(['rebase', '--abort']); } catch { /* leave it; surfaced below */ }
     const e = err as { stderr?: Buffer | string; message?: string };

@@ -117,8 +117,12 @@ export type RoadmapInitiative = {
    * fabricated) for a manifest that carries no `flow_id`.
    */
   flowId?: string;
-  /** forge-mfv5.1.27: the parked fix round — served by the bridge, never derived here. */
+  /** forge-mfv5.1.27: the fix round (parked, or running once the drain re-entered it) — served by the bridge, never derived here. */
   fixRound?: number;
+  /** forge-nk1y.23: that fix round is being built (in-flight), not parked — served (`fixRoundOf`). */
+  fixRoundRunning?: true;
+  /** forge-nk1y.23: develop is building now (in-flight, a work item pending or in progress) — served (`developRunningOf`). */
+  developRunning?: true;
 };
 
 export type ProjectRoadmap = {

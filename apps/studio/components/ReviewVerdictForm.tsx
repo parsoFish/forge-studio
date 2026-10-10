@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { submitVerdict, type AcceptanceCriterion } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { AcceptanceCriteriaRows, acButtonStyle as buttonStyle, acInputStyle as inputStyle, acLabelStyle as labelStyle } from './AcceptanceCriteriaRows';
 
 /**
  * The review human moment — approve or add work items to a cycle's PR
@@ -133,27 +134,7 @@ export function ReviewVerdictForm({
       </label>
 
       {kind === 'send-back' && (
-        <div style={{ marginTop: 12 }} data-section="acceptance-criteria" data-ac-row-count={acs.length}>
-          <div style={labelStyle}>acceptance criteria</div>
-          {acs.map((a, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 6, marginBottom: 6 }}>
-              <input data-field={`verdict-ac-given-${i + 1}`} placeholder="GIVEN ..." value={a.given} onChange={(e) => setAcs(acs.map((x, j) => (j === i ? { ...x, given: e.target.value } : x)))} style={inputStyle} />
-              <input data-field={`verdict-ac-when-${i + 1}`} placeholder="WHEN ..." value={a.when} onChange={(e) => setAcs(acs.map((x, j) => (j === i ? { ...x, when: e.target.value } : x)))} style={inputStyle} />
-              <input data-field={`verdict-ac-then-${i + 1}`} placeholder="THEN ..." value={a.then} onChange={(e) => setAcs(acs.map((x, j) => (j === i ? { ...x, then: e.target.value } : x)))} style={inputStyle} />
-              <button
-                data-action={`remove-criterion-${i + 1}`}
-                onClick={() => setAcs(acs.filter((_, j) => j !== i))}
-                {...disabledAttrs(acs.length === 1 ? 'a send-back needs at least one acceptance criterion' : null)}
-                style={{ ...buttonStyle, background: '#21262d', borderColor: '#30363d' }}
-              >
-                −
-              </button>
-            </div>
-          ))}
-          <button data-action="add-criterion" onClick={() => setAcs([...acs, { given: '', when: '', then: '' }])} style={{ ...buttonStyle, background: '#21262d', borderColor: '#30363d', fontSize: 11 }}>
-            + add criterion
-          </button>
-        </div>
+        <AcceptanceCriteriaRows acs={acs} onChange={setAcs} fieldPrefix="verdict" lastRowReason="a send-back needs at least one acceptance criterion" />
       )}
 
       {error && <div style={{ marginTop: 10, fontSize: 12, color: '#f85149' }}>{error}</div>}
@@ -187,24 +168,4 @@ const panelStyle: React.CSSProperties = {
   border: '1px solid #30363d',
   borderRadius: 10,
   padding: 16,
-};
-const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, color: '#8b949e', marginBottom: 6 };
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  background: '#010409',
-  color: '#e6edf3',
-  border: '1px solid #30363d',
-  borderRadius: 6,
-  padding: '8px 10px',
-  fontSize: 13,
-  fontFamily: 'inherit',
-};
-const buttonStyle: React.CSSProperties = {
-  color: '#fff',
-  border: '1px solid #30363d',
-  borderRadius: 6,
-  padding: '6px 14px',
-  fontSize: 13,
-  cursor: 'pointer',
 };

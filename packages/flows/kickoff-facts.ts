@@ -6,7 +6,7 @@
  */
 import { join } from 'node:path';
 
-import { fixRoundOf, isAwaitingKickoff, type KickoffFacts } from '@forge/contracts';
+import { developRunningOf, fixRoundOf, isAwaitingKickoff, type FixRound, type KickoffFacts } from '@forge/contracts';
 import type { InitiativeManifest } from './manifest.ts';
 import { hasWorkItemFiles, rawWorkItemFacts } from './work-item.ts';
 import { isCanonicalInitiativeId } from './initiative-id.ts';
@@ -50,7 +50,12 @@ export function manifestAwaitsKickoff(s: KickoffSource): boolean {
   return s.queueDir === 'ready-for-review' && isAwaitingKickoff(readKickoffFacts(s)); // no disk read otherwise
 }
 
-/** forge-mfv5.1.27 — the parked fix round (`fixRoundOf`), or null; no disk read outside ready-for-review. */
-export function manifestFixRound(s: KickoffSource): number | null {
-  return s.queueDir === 'ready-for-review' ? fixRoundOf(readKickoffFacts(s)) : null;
+/** forge-mfv5.1.27 / forge-nk1y.23 — the fix round (`fixRoundOf`) parked or running, or null; no disk read outside ready-for-review and in-flight. */
+export function manifestFixRound(s: KickoffSource): FixRound | null {
+  return s.queueDir === 'ready-for-review' || s.queueDir === 'in-flight' ? fixRoundOf(readKickoffFacts(s)) : null;
+}
+
+/** forge-nk1y.23 — develop is building (`developRunningOf`); no disk read outside in-flight. */
+export function manifestDevelopRunning(s: KickoffSource): boolean {
+  return s.queueDir === 'in-flight' && developRunningOf(readKickoffFacts(s));
 }

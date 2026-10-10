@@ -854,7 +854,7 @@ export type RoadmapInitiative = {
    * `canStartDevelopment` derives from below) — never fabricated, absent
    * when the manifest carries no `flow_id` (a legacy/hand-authored one).
    */
-  flowId?: string; fixRound?: number; // forge-mfv5.1.27: `Run.fixRound`; status stays `ready-for-review`
+  flowId?: string; fixRound?: number; fixRoundRunning?: true; developRunning?: true; // `Run.*`: forge-mfv5.1.27 fixRound (ready-for-review parked, in-flight running); forge-nk1y.23 the flags
 };
 
 export type ProjectRoadmap = {
@@ -969,10 +969,10 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
  * queue tree (it has no project filter), so this is a superset scan — cheap
  * because it's the memo's job, not a second parse of anything roadmap-local.
  */
-function runFactsByInitiative(forgeRoot: string): Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound'>> {
-  const facts = new Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound'>>(); // + forge-mfv5.1.27 fixRound
+function runFactsByInitiative(forgeRoot: string): Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning'>> {
+  const facts = new Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning'>>(); // + forge-mfv5.1.27 fixRound
   for (const r of cachedListRuns(forgeRoot, Date.now())) { // a defined fact is never overwritten by another run's absent one
-    const f = facts.get(r.initiativeId); facts.set(r.initiativeId, { completedAt: r.completedAt ?? f?.completedAt, awaitingKickoff: r.awaitingKickoff ?? f?.awaitingKickoff, fixRound: r.fixRound ?? f?.fixRound });
+    const f = facts.get(r.initiativeId); facts.set(r.initiativeId, { completedAt: r.completedAt ?? f?.completedAt, awaitingKickoff: r.awaitingKickoff ?? f?.awaitingKickoff, fixRound: r.fixRound ?? f?.fixRound, fixRoundRunning: r.fixRoundRunning ?? f?.fixRoundRunning, developRunning: r.developRunning ?? f?.developRunning });
   }
   return facts;
 }
@@ -991,7 +991,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     const workItems = items.length > 0 ? items : undefined;
 
     const blockedBy = checkInitiativeDeps(file, queuePaths);
-    const { completedAt, awaitingKickoff, fixRound } = runById.get(initId) ?? {};
+    const { completedAt, awaitingKickoff, fixRound, fixRoundRunning, developRunning } = runById.get(initId) ?? {};
 
     return {
       initiativeId: initId,
@@ -1015,7 +1015,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
         && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
-      ...(completedAt !== undefined ? { completedAt } : {}), ...(fixRound !== undefined && status === 'ready-for-review' ? { fixRound } : {}),
+      ...(completedAt !== undefined ? { completedAt } : {}), ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
       ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
   });

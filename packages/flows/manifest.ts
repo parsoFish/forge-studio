@@ -517,15 +517,16 @@ export function persistManifestCostCeiling(manifestPath: string, costCeilingUsd:
  * work_item_ids it produced. Unlike `persistManifestCycleId` this is NOT
  * one-shot: a re-decomposition overwrites the list on every call (the
  * initiative's spec set is whatever the latest pass produced). Best-effort:
- * if the manifest is missing/unparseable this is a no-op and never throws.
+ * if the manifest is missing/unparseable this is a no-op (returns false) and never throws.
  */
-export function persistManifestSpecs(manifestPath: string, specs: string[]): void {
+export function persistManifestSpecs(manifestPath: string, specs: string[]): boolean {
   try {
-    if (!existsSync(manifestPath)) return;
+    if (!existsSync(manifestPath)) return false;
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
     writeFileSync(manifestPath, serializeManifest({ ...m, specs }));
+    return true;
   } catch {
-    /* best-effort — a manifest write failure must not fail the cycle */
+    return false; // best-effort for the cycle; forge-nk1y.12's Kickoff-gate add treats false as a refusal
   }
 }
 

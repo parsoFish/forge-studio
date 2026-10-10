@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-247 files, 1424 sink calls; 177 classified (accidentally-safe 8, guarded 47, not-request-derived 30, other 79, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+248 files, 1421 sink calls; 178 classified (accidentally-safe 8, guarded 47, not-request-derived 31, other 79, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -39,7 +39,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/agents/spawn-marker.ts` | 6 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/factory/class-profiles.ts` | 1 | not-request-derived | `isContainedProjectRepoPath` | exec | Not a route: the phase executor's dependency wiring (`packages/stations/phases/executor-deps.ts`) and the dev-loop… |
 | `packages/factory/demo-planner.ts` | 1 | not-request-derived |  | read | `def.path` — the executing agent def's own SKILL.md, resolved by the agent registry, as agent-skill-text.ts reads it |
-| `packages/flows/bridge-recovery.ts` | 22 | guarded |  | exec | `initiativeId` (route param, `INIT_ID_RE`-gated) |
+| `packages/flows/bridge-recovery.ts` | 20 | guarded |  | exec | `initiativeId` (route param, `INIT_ID_RE`-gated) |
 | `packages/flows/bridge-studio-runs-review.ts` | 8 | unclassified |  |  |  |
 | `packages/flows/bridge-studio-runs.ts` | 11 | unguarded |  | read | `POST /api/plan-verdict` body `project`, `sessionId` |
 | `packages/flows/ci-gate.ts` | 1 | unclassified |  |  |  |
@@ -52,7 +52,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/cycle.ts` | 14 | unclassified |  |  |  |
 | `packages/flows/daemon.ts` | 16 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/drain-fix-loop.ts` | 7 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
-| `packages/flows/enqueue-flow-run.ts` | 10 | guarded |  | read | body `initiativeId` / `initiativeIds[]` |
+| `packages/flows/enqueue-flow-run.ts` | 9 | guarded |  | read | body `initiativeId` / `initiativeIds[]` |
 | `packages/flows/enqueue-plan-run.ts` | 9 | guarded |  | read | body `initiativeId` / `initiativeIds[]` |
 | `packages/flows/finalize-merged.ts` | 11 | guarded | `isContainedWorktreePath` | exec | `POST /api/verdict` approve → `finalizeAfterMerge` → `pruneMergedWorktrees`: manifest `worktree_path` + `initiative_id` |
 | `packages/flows/fix-work-items.ts` | 1 | other | `resolveGuardedPath` | read | forge-mfv5.1.27 `readPendingFixWorkItems`: the manifest `worktree_path` (contained by every caller: the drain's `isContainedWorktreePath`, `runRequeue`'s `assertManifestPathFields`, the scheduler's own worktree) is read only after `guardedFile(worktree, ['.forge','work-items'], 'readdir')` passes; the one `existsSync` only names a guard rejection |
@@ -68,6 +68,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/mint-triggered-initiative.ts` | 3 | other |  | exec | `PUT /api/studio/flows/:id` body `project` → background flow-trigger sweep → minted manifest's `project` / `project_repo_path` |
 | `packages/flows/notify.ts` | 3 | unclassified |  |  |  |
 | `packages/flows/operator-stop.ts` | 5 | not-request-derived |  | read | no request field |
+| `packages/flows/orchestrator-event.ts` | 3 | not-request-derived |  | read | best-effort JSONL append under a trusted logs root; the initiative id is the scheduler's own claim-loop id, or the queue directory-entry stem after isSafeSegment (scheduler-sweeps' worktree-path.refused event), never a request-supplied path |
 | `packages/flows/phases/closure.ts` | 3 | not-request-derived |  | read | forge-mfv5.1.27: `closure-with-pending-fix-wi` reads `CycleInput.manifestPath`, the scheduler's own `_queue/in-flight/<id>.md`, never a request field; the worktree read is `pendingFixWorkItems` on the cycle's own worktree |
 | `packages/flows/phases/gitignored-creates.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/phases/orchestrated-capture.ts` | 8 | guarded | `resolveGuardedPath` | read | a filename under `.capture/<side>/` (command-checkpoint-influenced) |
@@ -86,7 +87,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/run-model-flow-graph.ts` | 3 | unclassified |  |  |  |
 | `packages/flows/run-model.ts` | 9 | not-request-derived | `isSafeCycleId` | read | `GET /api/runs` and `GET /api/runs/<id>` through `cachedListRuns`, plus the daemon's own run listing |
 | `packages/flows/scheduler-dispatch.ts` | 7 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
-| `packages/flows/scheduler-run-one.ts` | 19 | not-request-derived |  | exec | the dirname of git's own `rev-parse --git-path info/exclude` answer for a forge-created worktree |
+| `packages/flows/scheduler-run-one.ts` | 16 | not-request-derived |  | exec | the dirname of git's own `rev-parse --git-path info/exclude` answer for a forge-created worktree |
 | `packages/flows/scheduler-sweeps.ts` | 2 | unclassified |  |  |  |
 | `packages/flows/scheduler.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/stale-remote-branch-guard.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

@@ -218,6 +218,12 @@ function hasTokenRun(hay: readonly string[], needle: readonly string[]): boolean
   return false;
 }
 
+/** The D-47 rule: `text`'s first backtick span when it starts with a test runner, else null. Pure. */
+export function runnableSpan(text: string): string | null {
+  const span = /`([^`]+)`/.exec(text)?.[1] ?? '';
+  return TEST_RUNNERS.some((r) => hasTokenRun(words(span).slice(0, r.length), r)) ? span : null;
+}
+
 /**
  * The criteria (named `AC<n>` with their WHEN verbatim) whose WHEN's first
  * backtick span starts with a test runner and has a `&&`/`;` segment that no
@@ -230,8 +236,8 @@ export function uncoveredAcceptanceCriteria(
 ): string[] {
   const gates = items.map((it) => words((it.quality_gate_cmd ?? []).join(' ')));
   return acs.flatMap((ac, i) => {
-    const span = /`([^`]+)`/.exec(ac.when)?.[1] ?? '';
-    if (!TEST_RUNNERS.some((r) => hasTokenRun(words(span).slice(0, r.length), r))) return [];
+    const span = runnableSpan(ac.when);
+    if (span === null) return [];
     const uncarried = span.split(/&&|;/).map(words)
       .filter((seg) => seg.length > 0 && !gates.some((g) => hasTokenRun(g, seg)));
     if (uncarried.length === 0) return [];

@@ -90,3 +90,21 @@ test('a clean docs gate appends its OWN evidence row — a reader can tell "no f
   assert.deepEqual(evidence.map((e) => e.gate), ['local', 'docs']);
   assert.ok(evidence.every((e) => e.ok));
 });
+
+test('kills "operands are not hard-separated": the docs verb argv is `forge gate docs -- <paths>` and a compiled fix WI carrying it validates', async () => {
+  // Mutation: build `['forge','gate','docs', ...paths]` (drop the `--`) -> deepEqual fails.
+  const abs = '/home/x/forge/_worktrees/INIT-2026-10-10-x/docs/a.md';
+  const res = runClassMergeBoundary(TEST_CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({
+    changedMarkdown: () => [abs, '.forge/pr-description.md'],
+    docsGate: () => [{ path: abs, line: 1, check: 'links', detail: 'x' }],
+  }));
+  const cmd = (res as { cmd: string[] }).cmd;
+  assert.deepEqual(cmd, ['forge', 'gate', 'docs', '--', abs, '.forge/pr-description.md']);
+  const { validateWorkItem } = await import('@forge/flows');
+  const errors = validateWorkItem({
+    work_item_id: 'WI-9', initiative_id: 'INIT-2026-10-10-x', status: 'pending', depends_on: [],
+    acceptance_criteria: [{ given: 'g', when: 'w', then: 't' }], files_in_scope: ['docs/a.md'],
+    estimated_iterations: 1, quality_gate_cmd: cmd, body: 'b',
+  } as never);
+  assert.deepEqual(errors, []);
+});

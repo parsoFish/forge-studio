@@ -51,6 +51,7 @@ import type { AgentDefinition } from '@forge/contracts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile, mergeSplitRecords, diffSha, readChunkRecord, writeChunkRecord,
 } from './review-chunks.ts';
+import { criterionCommands, deliveredSince, recordedDeliveries, runCriterion } from './review-truth.ts';
 import {
   buildAdversarialReviewSystemPrompt,
   renderAdversarialReviewUserPrompt,
@@ -335,8 +336,27 @@ export async function runAdversarialReview(
     const displayOf = (wi: WorkItem): { id: string; title: string; status: string } => ({
       id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status,
     });
-    const criteriaOf = (wi: WorkItem): string[] =>
-      wi.acceptance_criteria.map((ac) => `(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
+    const criterionOf = (wi: WorkItem, ac: WorkItem['acceptance_criteria'][number]): string =>
+      `(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`;
+    const criteriaOf = (wi: WorkItem): string[] => wi.acceptance_criteria.map((ac) => criterionOf(wi, ac));
+    // forge-mfv5.1.30: recorded deliveries, and every runnable criterion RUN at this head (D-15).
+    const git = (args: string[]): { ok: boolean; out: string } => gitCapture(input.worktreePath, args);
+    const delivered = recordedDeliveries(git, BASE_REF);
+    if (delivered === null) {
+      emit('review.input.derive-error', { detail: 'could not read the recorded work-item merges' }, { event_type: 'error' });
+      return { status: 'failed', reason: 'derive-failed', detail: `could not read the wi(<id>): merge commits on ${BASE_REF}..HEAD` };
+    }
+    const ran = new Map<string, { workItemId: string; verdict: 'met' | 'missed'; evidence: string }>();
+    const byCommand = new Map<string, { verdict: 'met' | 'missed'; evidence: string }>();
+    for (const w of wiRecords) for (const ac of w.acceptance_criteria) {
+      const cmds = criterionCommands(ac);
+      if (cmds === null) continue;
+      const k = JSON.stringify(cmds);
+      if (!byCommand.has(k)) byCommand.set(k, runCriterion(input.worktreePath, input.initiativeId, headSha, cmds));
+      ran.set(criterionOf(w, ac), { workItemId: w.work_item_id, ...byCommand.get(k)! });
+    }
+    emit('review.criteria.run', { criteria: ran.size, commands: byCommand.size, missed: [...ran.values()].filter((r) => r.verdict === 'missed').length });
+    const agentCriteriaOf = (wi: WorkItem): string[] => criteriaOf(wi).filter((c) => !ran.has(c));
     const acceptanceCriteria = wiRecords.flatMap(criteriaOf);
     const brainContext: Array<{ path: string; content: string }> = [];
     if (input.projectName) {
@@ -360,7 +380,8 @@ export async function runAdversarialReview(
     // item, which introduces NO NEW NUMBER: the PM already bounded it, one agent
     // authored it, and its gate already ran over it. Files no work item claims
     // become one `unattributed` chunk, so nothing in the diff escapes review.
-    const planned = partitionChangedFiles(changedFiles, wiRecords);
+    const planned = partitionChangedFiles(changedFiles, wiRecords.map((w) =>
+      (w.origin === undefined ? w : { ...w, delivered: delivered.get(w.work_item_id) ?? [] })));
     // An empty diff keeps the pre-chunking shape — one chunk of nothing, which
     // the prompt renderer already words as "empty diff — say so in the summary".
     const chunks: ReviewChunk[] = planned.length > 0 ? planned : [{ workItemId: null, files: [] }];
@@ -372,13 +393,16 @@ export async function runAdversarialReview(
       unattributed_files: chunks.find((c) => c.workItemId === null)?.files.length ?? 0,
     });
 
-    // Work items whose declared files are absent from this diff produce no
-    // chunk, so no agent is ever shown their criteria. They are judged by the
-    // orchestrator at merge time — see `mergeChunkRecords`.
+    // Criteria no agent is shown — a work item with no chunk, or one RUN above —
+    // carry the orchestrator's verdict into the merge (`mergeChunkRecords`).
     const chunked = new Set(chunks.map((c) => c.workItemId).filter((id): id is string => id !== null));
-    const unjudgedCriteria = wiRecords
-      .filter((w) => !chunked.has(w.work_item_id))
-      .flatMap((w) => criteriaOf(w).map((criterion) => ({ criterion, workItemId: w.work_item_id })));
+    const unjudgedCriteria = [
+      ...wiRecords.filter((w) => !chunked.has(w.work_item_id)).flatMap((w) => agentCriteriaOf(w).map((criterion) => ({
+        criterion, workItemId: w.work_item_id,
+        ...(w.origin === undefined ? {} : { evidence: `no \`wi(${w.work_item_id}): merge\` commit on ${BASE_REF}..HEAD changed a file in this diff — the dev loop recorded no delivery for this fix work item (verdict authored by the orchestrator, not by a review agent)` }),
+      }))),
+      ...[...ran].map(([criterion, r]) => ({ criterion, ...r })),
+    ];
 
     /**
      * One chunk's review: the same spawn, the same write fence, the same class
@@ -411,7 +435,14 @@ export async function runAdversarialReview(
      *  `mergeChunkRecords` takes it from the first record and would otherwise
      *  publish a review of a head nobody is merging. */
     const runIdentity = { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha };
-    const restamp = (record: ReviewFindingsRecord): ReviewFindingsRecord => ({ ...record, ...runIdentity });
+    const restamp = (record: ReviewFindingsRecord): ReviewFindingsRecord =>
+      ({ ...record, ...runIdentity, summary: `(judged at ${record.headSha.slice(0, 12)}; no work item delivered since) ${record.summary}` });
+    /** forge-mfv5.1.30: a stored record is reused only while no work item has delivered since the head it judged. */
+    const fresh = (record: ReviewFindingsRecord | null, label: string): ReviewFindingsRecord | null => {
+      if (record === null || !deliveredSince(git, record.headSha)) return record;
+      emit('review.chunk.reuse-refused', { chunk: label, judged_at: record.headSha, head_sha: headSha });
+      return null;
+    };
 
     const reviewChunk = async (
       chunk: ReviewChunk,
@@ -424,7 +455,7 @@ export async function runAdversarialReview(
     ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
       const label = labelOverride ?? chunkLabel(chunk);
       const wi = chunk.workItemId === null ? undefined : byId.get(chunk.workItemId);
-      const criteria = wi ? criteriaOf(wi) : [];
+      const criteria = wi ? agentCriteriaOf(wi) : [];
 
       // This chunk's evidence, written where the whole diff used to be. Scrubbed
       // with the rest of `.forge/review-input/` in the `finally` below.
@@ -596,7 +627,7 @@ export async function runAdversarialReview(
         const subDerived = deriveChunkDiff(sub, subLabel);
         if (!subDerived.ok) return { ok: false, failure: subDerived.failure };
         const subDiffSha = diffSha(subDerived.diff);
-        const cached = readChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, diffSha: subDiffSha });
+        const cached = fresh(readChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, diffSha: subDiffSha }), subLabel);
         if (cached !== null) {
           emit('review.chunk.reused', { chunk: subLabel, index: subKey });
           subs.push({ label: subLabel, record: restamp(cached) });
@@ -627,7 +658,7 @@ export async function runAdversarialReview(
       // is not bought again. Every not-an-exact-match reads as a miss, so the
       // worst case is the cost the review already had. Re-stamped, because the
       // record carries the identity it was authored under.
-      const reused = readChunkRecord(input.logsRoot, input.cycleId, key, { label, diffSha: chunkDiffSha });
+      const reused = fresh(readChunkRecord(input.logsRoot, input.cycleId, key, { label, diffSha: chunkDiffSha }), label);
       if (reused !== null) {
         emit('review.chunk.reused', { chunk: label, index: key });
         chunkRecords.push({ label, record: restamp(reused) });

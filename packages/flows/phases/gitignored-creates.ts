@@ -19,7 +19,7 @@ import { spawnSync } from 'node:child_process';
 import { isContainedWorktreePath } from '../manifest-path-guard.ts';
 
 /** What `isContainedWorktreePath` needs to judge the root this module spawns in. */
-export type WorktreeGuard = { forgeRoot: string; projectsRoot?: string; initiativeId: string };
+export type WorktreeGuard = { forgeRoot: string; initiativeId: string };
 
 /**
  * The set of paths git ignores, from ONE `git check-ignore` call.

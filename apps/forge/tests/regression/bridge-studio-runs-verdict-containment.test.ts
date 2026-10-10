@@ -246,7 +246,7 @@ test('(RED) [Finding 2, headline] send-back with a traversing cycle_id: no file 
     const id = 'INIT-2026-01-01-finding2-sendback';
     const repo = join(forgeRoot, 'projects', 'test-project');
     mkdirSync(repo, { recursive: true });
-    const wt = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'sb'); // in-place worktree shape, contained under projects/
+    const wt = join(forgeRoot, '_worktrees', id); // the initiative's own worktree — isolates the escape to cycle_id only
     mkdirSync(wt, { recursive: true });
 
     writeFileSync(
@@ -341,7 +341,7 @@ test('non-regression [Finding 2]: send-back with a LEGITIMATE cycle_id still wri
     const cycleId = '2026-08-06T00-00-01_INIT-2026-08-06-y';
     const repo = join(forgeRoot, 'projects', 'test-project');
     mkdirSync(repo, { recursive: true });
-    const wt = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'sb-legit');
+    const wt = join(forgeRoot, '_worktrees', id);
     mkdirSync(wt, { recursive: true });
 
     writeFileSync(

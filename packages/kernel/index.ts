@@ -30,6 +30,8 @@ export * from './init.ts';
 export * from './halt.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+/** The one answer to "is this the initiative's own `_worktrees/<id>`?" (forge-nk1y.20). */
+export * from './initiative-worktree.ts';
 /** Where a session dir lives: `<logsRoot>/_sessions/<project>/<kindDir>/<sid>`, never in the ground. */
 export * from './session-dir.ts';
 export { safeReadFileInSession } from './contained-read.ts';
