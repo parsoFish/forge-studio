@@ -18,7 +18,7 @@ export type DispatchInput = {
   filename: string;
   manifest: { initiativeId: string; project: string };
   result: {
-    status: 'merged' | 'pr-open' | 'ready-for-review' | 'failed';
+    status: 'merged' | 'pr-open' | 'ready-for-review' | 'awaiting-kickoff' | 'failed';
     log_path: string;
   };
 };
@@ -96,6 +96,8 @@ export async function dispatchTerminalStatus(
       });
       return { moved: null, notified: 'review-ready' };
     }
+    // Bead forge-mfv5.1.25: the Kickoff gate makes the same move — no new queue dir.
+    case 'awaiting-kickoff':
     case 'ready-for-review': {
       // Most flows reach here AFTER their closure node already moved the manifest
       // in-flight → ready-for-review (closure.ts owns that success move). But a flow
@@ -107,7 +109,7 @@ export async function dispatchTerminalStatus(
       const moved = moveIfInFlight(filename, 'ready-for-review', paths);
       await notifyFn({
         type: 'review-ready',
-        title: `Ready for review: ${manifest.initiativeId}`,
+        title: `${result.status === 'awaiting-kickoff' ? 'Awaiting kickoff' : 'Ready for review'}: ${manifest.initiativeId}`,
         body: `${manifest.project} — see ${result.log_path}`,
       });
       return { moved, notified: 'review-ready' };

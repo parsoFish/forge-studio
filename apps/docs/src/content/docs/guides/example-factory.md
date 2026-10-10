@@ -25,7 +25,7 @@ After the merge, the reflector runs. Its reflection appears under **Waiting on y
 | Gate | You decide | Controls |
 |---|---|---|
 | Plan | Whether the plan is the work you want built | **Approve**, **Send back**, **Reject** |
-| Kickoff | When a planned initiative starts building; nothing is built until you press this | **Start development** on the initiative's roadmap card |
+| Kickoff | When a planned initiative starts building; its card reads KICKOFF and nothing is built until you press this | **Start development** on the card, or **Start eligible** |
 | Verdict | Whether the reviewed change merges | **approve and merge**, or **add work items** |
 | Reflection | What the cycle taught | **Submit reflection** |
 

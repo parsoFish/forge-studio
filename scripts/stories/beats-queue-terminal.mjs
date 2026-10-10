@@ -176,6 +176,10 @@ function readyForReviewArrival(initiativeId, cycleDir) {
     }
     raw = ''; // no events logged yet — not a real error, and not an arrival either
   }
+  const kickoff = kickoffEnd(raw.split('\n'));
+  if (kickoff !== null) {
+    return { state: 'awaiting-kickoff', atMs: kickoff.atMs, slackMs: 0, detail: `the product's cycle.end said awaiting-kickoff for ${initiativeId}` };
+  }
   let atMs = null;
   for (const line of raw.split('\n')) {
     if (line.trim() === '') continue;
@@ -193,6 +197,24 @@ function readyForReviewArrival(initiativeId, cycleDir) {
   }
   const detail = `the product's ${wantMessage} event fired for ${initiativeId}`;
   return { state, atMs, slackMs: 0, detail };
+}
+
+/**
+ * Bead forge-mfv5.1.25 — the Kickoff gate. A decomposition-only cycle ends
+ * `cycle.end {status:'awaiting-kickoff'}` and its manifest STAYS in
+ * `_queue/ready-for-review/`, so the queue dir alone cannot tell it from a
+ * review. The cycle's LAST `cycle.end` can: `{atMs}` when it says
+ * awaiting-kickoff, else null (a later develop end supersedes it).
+ */
+function kickoffEnd(rows) {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    let ev;
+    try { ev = JSON.parse(rows[i]); } catch { continue; }
+    if (ev?.message !== 'cycle.end') continue;
+    const atMs = Date.parse(ev.started_at);
+    return ev.metadata?.status === 'awaiting-kickoff' && !Number.isNaN(atMs) ? { atMs } : null;
+  }
+  return null;
 }
 
 /**
@@ -275,6 +297,7 @@ export function channelTerminalState(forgeRoot, dir) {
   let lastEventAtMs = null;
   let published = null;
   let runEnd = null;
+  let kickoff = null;
   let eventsReadable = false;
   let eventsRealError = null;
   try {
@@ -294,6 +317,7 @@ export function channelTerminalState(forgeRoot, dir) {
     }
     published = turnPublishedPhase(rows);
     runEnd = runOwnEnd(rows, name);
+    kickoff = kickoffEnd(rows);
   } catch (err) {
     if (err?.code !== 'ENOENT') eventsRealError = `could not read ${join(dir, 'events.jsonl')}: ${err?.code ?? err?.message}`;
   }
@@ -303,6 +327,9 @@ export function channelTerminalState(forgeRoot, dir) {
   // read failure. `pending`/`in-flight` are still-open states; anything else
   // the product moved it INTO is its own terminal word.
   const OPEN_STATES = new Set(['pending', 'in-flight']);
+  if (queueSaw === 'ready-for-review' && kickoff !== null) {
+    return { state: 'awaiting-kickoff', detail: `the product parked ${initiative} at the Kickoff gate (_queue/ready-for-review/, cycle.end awaiting-kickoff)` };
+  }
   if (queueSaw !== null && !OPEN_STATES.has(queueSaw)) {
     return {
       state: queueSaw,

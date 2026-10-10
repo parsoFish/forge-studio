@@ -6,13 +6,15 @@
  * the canvas, with the SAME actions the per-node drawer offers:
  *
  *   - plan   → pending + dependency-ready + NOT decomposed (Plan);
- *   - start  → pending + dependency-ready + decomposed (Start development);
+ *   - start  → `isStartEligible`: decomposed and pending + ready, or at the
+ *              Kickoff gate (Start development);
  *   - failed → failed initiatives, each with its latest cycle's run link
  *              (recovery itself stays in the drawer — one implementation).
  */
 
 import type { RoadmapInitiative } from './bridge-client';
 import type { InitiativeGroup } from './cycle-grouping';
+import { isStartEligible } from './start-work-view';
 
 export type ActionableRow =
   | { kind: 'plan'; initiativeId: string; title: string }
@@ -28,7 +30,7 @@ export function deriveActionableNow(
   for (const i of initiatives) {
     if (i.status === 'pending' && i.ready && i.workItems === undefined) {
       rows.push({ kind: 'plan', initiativeId: i.initiativeId, title: i.title });
-    } else if (i.status === 'pending' && i.ready && i.workItems !== undefined) {
+    } else if (isStartEligible(i)) {
       rows.push({ kind: 'start', initiativeId: i.initiativeId, title: i.title });
     } else if (i.status === 'failed') {
       const group = groupByInitiative.get(i.initiativeId);

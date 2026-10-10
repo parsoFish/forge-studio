@@ -260,9 +260,12 @@ export type CycleResult = {
    *                              terminal state until the operator merges.
    * - `ready-for-review`       — review did not fully converge / PR not
    *                              produced; operator picks up the worktree.
+   * - `awaiting-kickoff`       — a decomposition-only flow left work items;
+   *                              manifest in `_queue/ready-for-review/`, the
+   *                              operator's Start development is next.
    * - `failed`                 — a phase threw.
    */
-  status: 'merged' | 'pr-open' | 'ready-for-review' | 'failed';
+  status: CycleOutcome | 'failed';
   /**
    * Outcome of the reflection phase. Reflection runs after a successful merge
    * and is log-and-continue: a failed reflector does not change the merge

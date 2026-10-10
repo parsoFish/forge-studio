@@ -23,13 +23,19 @@ import { STATUS_COLOR } from '@/lib/status-colors';
  */
 export type QueueState = RoadmapInitiative['status'];
 
-/** A semantic tone name — a key of the shared 5-tone palette. */
-export type StatusTone = keyof typeof STATUS_COLOR;
+/** A semantic tone name — a key of the shared 5-tone palette, plus the
+ *  roadmap-only `kickoff` tone (bead forge-mfv5.1.25). */
+export type StatusTone = keyof typeof STATUS_COLOR | 'kickoff';
+
+/** The roadmap's palette: the shared five tones plus the Kickoff gate's own
+ *  violet, so a plan waiting on Start development never reads as a review. */
+export const ROADMAP_TONE_COLOR: Record<StatusTone, string> = { ...STATUS_COLOR, kickoff: '#a371f7' };
 
 const QUEUE_STATE_TO_TONE: Record<QueueState, StatusTone> = {
   pending: 'idle',
   'in-flight': 'active',
   'ready-for-review': 'attention',
+  'awaiting-kickoff': 'kickoff',
   merged: 'complete',
   done: 'complete',
   failed: 'failed',
@@ -41,4 +47,9 @@ const QUEUE_STATE_TO_TONE: Record<QueueState, StatusTone> = {
  */
 export function queueStatusToColor(status: QueueState): StatusTone {
   return QUEUE_STATE_TO_TONE[status];
+}
+
+/** The card's status label: the served word, except the Kickoff gate reads KICKOFF. */
+export function queueStatusLabel(status: QueueState): string {
+  return status === 'awaiting-kickoff' ? 'kickoff' : status;
 }

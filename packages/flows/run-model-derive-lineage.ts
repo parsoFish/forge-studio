@@ -121,7 +121,8 @@ export function findReviewRound(events: readonly EventLogEntry[]): number {
 // Gate note
 // ---------------------------------------------------------------------------
 
-export function findGateNote(logDir: string): string {
+export function findGateNote(logDir: string, awaitingKickoff = false): string {
+  if (awaitingKickoff) return 'Awaiting kickoff';
   const prPath = join(logDir, 'pr-description.md');
   if (existsSync(prPath)) {
     try {
