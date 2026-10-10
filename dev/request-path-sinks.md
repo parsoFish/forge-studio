@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-247 files, 1419 sink calls; 177 classified (accidentally-safe 8, guarded 46, not-request-derived 31, other 79, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+248 files, 1421 sink calls; 178 classified (accidentally-safe 8, guarded 47, not-request-derived 31, other 79, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -112,6 +112,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/kernel/path-guard.ts` | 13 | unguarded |  | exec | any caller with a multi-segment tail |
 | `packages/kernel/process-liveness.ts` | 5 | other |  | read | no request field |
 | `packages/kernel/project-layout.ts` | 6 | not-request-derived |  | read | Not a route: reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s `mintRemote` |
+| `packages/kernel/served-file.ts` | 2 | guarded | `guardedFile` | exec | forge-mfv5.1.29: `guardedByteReader` stats and streams ONLY the path `guardedFile(root, segments, 'read')` returned (leaf-inclusive identity + containment); reached from `GET /api/artifact/<cycleId>/<filename>` in `apps/forge/bridge-cycle-data.ts`. Pinned by `apps/forge/tests/contract/artifact-media-serving.test.ts` (symlinked leaf and `..` refused) and `packages/kernel/tests/unit/served-file.test.ts`. |
 | `packages/kernel/studio-object.ts` | 2 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/kernel/studio/yaml-fields.ts` | 1 | unclassified |  |  |  |
 | `packages/knowledge/brain-fix-auto.ts` | 14 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 148 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 149 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -55,20 +55,20 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 9 | 1,798 | **1,798** | ratified 1,798 — forge-nk1y.23: `fixRoundOf` reads the re-entered (in-flight) round as `{ round, running }`, `developRunningOf`, and the two `Run` flags; +16 measured on main 1,782, lane-ratified (≤100, ruling 666). |
-| `kernel` | 40 | 6,824 | **5,689** | ratified 5,689 — forge-nk1y.20: `initiative-worktree.ts` (realpath-identity + raw-canonical worktree_path answer) and `PathGuardReject.kind`; +80 measured on main 5,609, lane-ratified (≤100, ruling 666). |
+| `kernel` | 41 | 6,923 | **5,788** | ratified 5,788 — forge-mfv5.1.29: `served-file.ts`, the one content-type-by-extension table, Range resolution and the guarded byte reader the artifact route serves media through; +99 measured on main 5,689, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 53 | 11,871 | **10,074** | ratified 10,074 — forge-mfv5.1.23: Save merges its forge-studio PR only on green required checks and GitHub's CLEAN (pure verdict over one graphql read), `--auto` only when allowed; +100 measured on main 9,974, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,506 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 65 | 21,283 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
 | `flows` | 94 | 25,721 | **25,522** | ratified 25,522 — forge-nk1y.12: add a plan work item at the Kickoff gate (D-48), validated as a set, D-47 coverage re-reported, under the manifest lock the develop enqueue now also takes; +97 measured on main 25,425, lane-ratified (≤100, ruling 666). |
-| `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `factory` | 17 | 3,071 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 49 | 12,747 | **12,747** | ratified 12,747 — forge-mfv5.1.30: the review judges a fix WI by its recorded `wi(<id>): merge` delivery, reuses a chunk only while no WI delivered since its head, and runs runnable criteria at the head (D-15); +100 measured on main 12,647, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 38 | 8,851 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
+| `apps/forge` | 38 | 8,882 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **519** | **135,633** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **520** | **135,761** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -267,7 +267,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | apps/forge/ui-bridge.ts | apps/forge | rewritten | 799 |
 | apps/forge/bridge-halt.ts | apps/forge | rewritten | 65 **New file, row 207 (forge-8vfn.8.5.57):** `POST /api/halt`, `POST /api/halt/release` and the `serve.halt` health read. |
-| apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 381 |
+| apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 412 |
 | apps/forge/serve-supervisor.ts | apps/forge | rewritten | 395 |
 | apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
 | apps/forge/bridge-kickoff-work-items.ts | apps/forge | rewritten | 87 **New file, forge-nk1y.12:** `POST /api/kickoff/work-items` — add a plan work item at the Kickoff gate (D-48). |
@@ -583,7 +583,7 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 194 |
 | packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/factory/demo.ts | factory | verbatim | 454 |
+| packages/factory/demo.ts | factory | verbatim | 452 |
 | packages/factory/demo-api-capture.ts | factory | rewritten | 42 |
 | packages/factory/demo-planner.ts | factory | rewritten | 83 |
 | packages/flows/index.ts | flows | verbatim | 133 |
@@ -593,11 +593,12 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/pr-media.ts | flows | rewritten | 157 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
 | packages/kernel/url-decode.ts | kernel | rewritten | 30 |
+| packages/kernel/served-file.ts | kernel | rewritten | 97 |
 | packages/kernel/run-ceiling.ts | kernel | rewritten | 71 |
 | packages/kernel/gh-identity.ts | kernel | verbatim | 111 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 158 |
-| packages/kernel/index.ts | kernel | verbatim | 114 |
+| packages/kernel/index.ts | kernel | verbatim | 116 |
 | packages/kernel/checkpoint-command.ts | kernel | rewritten | 88 **New file, forge-8vfn.30.9: the one checkpoint-command head resolver (PATH, then a contained package.json bin) shared by the pre-claim check and the capture spawn.** |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 336 |

@@ -329,6 +329,8 @@ packages/kernel/project-layout.ts mkdirSync 1
 packages/kernel/project-layout.ts readdirSync 1
 packages/kernel/project-layout.ts readFileSync 1
 packages/kernel/project-layout.ts writeFileSync 1
+packages/kernel/served-file.ts createReadStream 1
+packages/kernel/served-file.ts statSync 1
 packages/kernel/studio-object.ts readFileSync 2
 packages/kernel/studio/yaml-fields.ts readFileSync 1
 packages/knowledge/brain-fix-auto.ts execFileSync 2

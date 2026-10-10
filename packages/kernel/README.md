@@ -28,6 +28,7 @@ directly.
 | GitHub host identity for outward gh actions | `ghTokenFor` · `assertGhOwner` · `ghRunnerFor` |
 | first-run scaffolding (`forge init`) | `QUEUE_SUBDIRS` · `layoutDirs` · `defaultConfigJson` · `ghAuthed` · `ensureLayoutDirs` · `ensureDefaultConfig` · `runInit` |
 | the path-containment guard + guarded fs primitives | `PathGuardContainmentError` · `isSafeSegment` · `isSafeSubPath` · `resolveGuardedPath` · `guardedFile` · `guardedReadFile` · `guardedWriteFile` · `guardedWriteFileExclusive` · `guardedUnlink` · `guardedReadDir` · `guardedRename` |
+| serving a file: the one content-type-by-extension table, Range-header resolution, and the guarded byte reader | `CONTENT_TYPE_BY_EXTENSION` · `contentTypeByExtension` · `resolveByteRange` · `guardedByteReader` |
 | whether a manifest worktree path is the initiative's own forge worktree (forge-nk1y.20): null, or a fixed refusal name; plus the raw-path canonical-form check it shares with the project-repo guard | `initiativeWorktreeRefusal` · `isCanonicalAbsolutePath` |
 | where a session dir lives: under the logs root, never in the ground | `SESSIONS_DIRNAME` · `ARCHITECT_KIND_DIR` · `sessionDirSegments` · `sessionKindSegments` · `resolveSessionDir` |
 | the session/project-dir realpath-guarded single-file read | `safeReadFileInSession` |
@@ -57,7 +58,7 @@ directly.
 
 ### Types (46)
 
-`BandExecutor` · `BandRegistry` · `CanUseTool` · `CaseFoldingProbe` ·
+`BandExecutor` · `BandRegistry` · `ByteRange` · `CanUseTool` · `CaseFoldingProbe` ·
 `ClauseId` · `ClauseResult` · `ConfigResult` · `CostStreamFacts` ·
 `DiscoveredProject` · `DryBridgeAction` · `DryBridgeRefusalInput` ·
 `DryBridgeStubAction` · `DryClassification` · `EnvAssertionMode` ·
