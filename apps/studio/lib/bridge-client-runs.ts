@@ -6,6 +6,7 @@
  * run + gate write endpoints.
  */
 import { bridgeFetch, bridgePost, bridgeReadOr404 } from './bridge-client-core.ts';
+import type { WorkItemSource } from './work-item-authoring.ts';
 
 export type AcceptanceCriterion = { given: string; when: string; then: string };
 
@@ -79,6 +80,22 @@ export async function startDevelopment(
     error: r.error,
     results: r.data?.results as DevelopStartItemResult[] | undefined,
   };
+}
+
+// ---- Kickoff gate: add a plan work item (forge-nk1y.12, D-48) -------------
+
+export type KickoffWorkItemInput = { initiativeId: string } & WorkItemSource;
+export type AddKickoffWorkItemResult =
+  | { ok: true; workItemId: string; uncoveredAcceptanceCriteria: string[] }
+  | { ok: false; error: string };
+
+/** Add a plan work item to a decomposed, unbuilt initiative at the Kickoff gate.
+ *  A refusal (400/404/409) carries the server's detail as `error`. */
+export async function addKickoffWorkItem(input: KickoffWorkItemInput): Promise<AddKickoffWorkItemResult> {
+  const r = await bridgePost('/api/kickoff/work-items', input);
+  if (!r.ok || typeof r.data?.workItemId !== 'string') return { ok: false, error: r.error ?? 'the work item was not added' };
+  const uncovered = r.data.uncoveredAcceptanceCriteria;
+  return { ok: true, workItemId: r.data.workItemId, uncoveredAcceptanceCriteria: Array.isArray(uncovered) ? uncovered.map(String) : [] };
 }
 
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------

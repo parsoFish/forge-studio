@@ -123,7 +123,7 @@ export type RoadmapCanvasProps = {
   onPlan?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation on a card. */
   onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
-  /** called after a successful requeue/abandon to refetch roadmap + cycle groups. */
+  /** called after a successful requeue/abandon (or a Kickoff-gate work-item add) to refetch roadmap + cycle groups. */
   onRecoveryDone?: () => void | Promise<void>;
   /** W6-B10: routes honestly — resumes the project's in-flight demo session
    *  or opens the kickoff screen, keyed off this initiative for context. */
@@ -766,7 +766,7 @@ function RoadmapDrawer({
           recoveryNote={recoveryNote}
           onInspectRecovery={inspectRecovery}
           onRecoveryAction={doRecoveryAction}
-          onDepJump={onDepJump}
+          onDepJump={onDepJump} onWorkItemAdded={onRecoveryDone}
         />
       </>
     );
