@@ -23,7 +23,7 @@ import { join, resolve, sep } from 'node:path';
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
 import { STUDIO_BRANCH, uncommittedContractPaths } from './project-repo-tx.ts';
-import { hasPendingStudioChanges, studioPullRequestUrl } from './project-repo-save.ts';
+import { hasPendingStudioChanges, studioPullRequest } from './project-repo-save.ts';
 import {
   discoverProjects,
   defaultConfigPath,
@@ -173,9 +173,9 @@ export async function handleProjectRepoStatus(
         return true;
       }
       // forge-mfv5.1.20: the uncommitted contract files are what a Save would refuse on / adopt.
-      // forge-mfv5.1.22: an open forge-studio PR (protected default branch) is served beside `pending`.
-      const prUrl = studioPullRequestUrl(projectRef.absPath) ?? null; // null under the dry bridge too
-      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath), prUrl }, origin);
+      // forge-mfv5.1.22/.23: an open forge-studio PR and its verdict by name (read-only) are served beside `pending`.
+      const pr = studioPullRequest(projectRef.absPath); // undefined under the dry bridge too
+      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH, uncommitted: uncommittedContractPaths(projectRef.absPath), prUrl: pr?.prUrl ?? null, prState: pr?.prState ?? null, prDetail: pr?.prDetail ?? null }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -79,7 +79,62 @@ test('the panel links the PR and lists the stranded commits with a confirm contr
 
 test('the page re-sends Save with the proposal\'s two shas when the operator confirms', () => {
   const page = readFileSync(resolve(__dirname, '../../app/projects/[id]/page.tsx'), 'utf8');
-  expect(page).toMatch(/<SaveRepoState prUrl=\{repo\?\.prUrl\} recovery=\{recovery\}/);
+  expect(page).toMatch(/<SaveRepoState prUrl=\{repo\?\.prUrl\} prState=\{repo\?\.prState\} prDetail=\{repo\?\.prDetail\} recovery=\{recovery\}/);
   expect(page).toMatch(/localHead: recovery\.localHead, resetTo: recovery\.resetTo/);
   expect(page).toMatch(/setRecovery\(result\.recovery \?\? null\)/);
+});
+
+// forge-mfv5.1.23 — the PR panel names the verdict Save acts on; "Save again after it merges" is gone.
+const NO_REQ = 'no required check reports on this branch — merge on GitHub yourself or add a required check';
+const panel = (prState: string | undefined, prDetail: string | undefined) => renderToStaticMarkup(React.createElement(SaveRepoState, {
+  prUrl: PR, prState: prState as never, prDetail, recovery: null, busy: false, onRecover: () => {},
+}));
+
+test('the PR panel carries data-pr-state and state-appropriate text for every verdict', () => {
+  const cases: Array<[string, string, RegExp]> = [
+    ['pending', 'checks pending: build, ci/legacy', /checks pending: build, ci\/legacy/],
+    ['failing', 'checks failing: build', /checks failing: build/],
+    ['green', 'required checks green: build', /Save to merge it/],
+    ['merged', 'PR merged', /merged/i],
+    ['blocked-by-ruleset', 'GitHub refused the merge (GraphQL: Repository rule violations found) — merge on GitHub yourself', /Repository rule violations found/],
+    ['blocked-no-required-check', NO_REQ, new RegExp(NO_REQ)],
+    ['stale-head', 'PR head fffffff is not the pushed aaaaaaa', /fffffff/],
+    ['unreadable', 'PR state unreadable: gh api graphql failed: HTTP 502', /HTTP 502/],
+    ['merge-failed', 'gh pr merge failed (HTTP 401: Bad credentials); Save again', /Bad credentials/],
+  ];
+  for (const [state, detail, text] of cases) {
+    const html = panel(state, detail);
+    expect(html).toContain(`data-pr-state="${state}"`);
+    expect(html).toMatch(text);
+    expect(html).not.toContain('Save again after it merges');
+  }
+  expect(panel(undefined, undefined)).toContain('data-pr-state=""');
+});
+
+test('repo-status carries the PR state by name and its detail; an unknown state is dropped', async () => {
+  vi.stubGlobal('fetch', json({ pending: true, branch: 'forge-studio', uncommitted: [], prUrl: PR, prState: 'failing', prDetail: 'checks failing: build' }));
+  const r = await fetchRepoStatus('weave');
+  expect(r.prState).toBe('failing');
+  expect(r.prDetail).toBe('checks failing: build');
+  vi.stubGlobal('fetch', json({ pending: true, branch: 'forge-studio', uncommitted: [], prUrl: PR, prState: 'lgtm', prDetail: 7 }));
+  const bad = await fetchRepoStatus('weave');
+  expect(bad.prState).toBeUndefined();
+  expect(bad.prDetail).toBeUndefined();
+});
+
+test('a Save whose merge GitHub refused (blocked-by-ruleset) reports not saved, naming why', async () => {
+  const detail = `updated open PR ${PR} (default branch protected) — forge-studio → main; GitHub refused the merge (GraphQL: Repository rule violations found) — merge on GitHub yourself`;
+  vi.stubGlobal('fetch', json({ ok: true, id: 'weave', save: { merged: false, pushed: true, prUrl: PR, prState: 'blocked-by-ruleset', detail } }));
+  const r = await saveProject('weave', { name: 'weave' });
+  expect(r.ok).toBe(false);
+  expect(r.error).toContain('merge on GitHub yourself');
+});
+
+test('repo-status could not list the PR (gh failed): the panel still names it, with no link', () => {
+  const html = renderToStaticMarkup(React.createElement(SaveRepoState, {
+    prUrl: undefined, prState: 'unreadable', prDetail: 'gh pr list failed: HTTP 502', recovery: null, busy: false, onRecover: () => {},
+  }));
+  expect(html).toContain('data-pr-state="unreadable"');
+  expect(html).toMatch(/HTTP 502/);
+  expect(html).not.toContain('data-link="save-pr"');
 });
