@@ -79,7 +79,7 @@ export function FilePackage({ files }: { files: PackageFile[] }) {
           );
         })}
       </div>
-      <div style={{ background: 'var(--bg)', maxHeight: 480, overflow: 'auto' }}>
+      <div style={{ background: 'var(--bg)', maxHeight: 'var(--pane-xl)', overflow: 'auto' }}>
         {active ? (
           <pre
             data-file-language={fileLanguage(active.path)}

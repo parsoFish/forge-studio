@@ -374,7 +374,7 @@ function ShowcaseEmptyState({ projectId, reason }: { projectId: string; reason: 
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: 320,
+        minHeight: 'var(--pane-lg)',
         gap: 16,
         textAlign: 'center',
         padding: 40,
