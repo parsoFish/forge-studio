@@ -64,7 +64,7 @@ import {
   type PostMergeCiOutcome,
 } from '../pr.ts';
 import { resolvePostMergeCiConfig } from '@forge/kernel';
-import { pendingFixWorkItems } from '../fix-work-items.ts';
+import { readPendingFixWorkItems } from '../fix-work-items.ts';
 import { parseManifest } from '../manifest.ts';
 import type { ClosureResult, CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 
@@ -175,14 +175,14 @@ export function promoteMergedToDone(
  * compiled fix work item is NAMED: the drain re-enters it, nothing reviews it.
  */
 function emitPendingFixRound(input: CycleInput, logger: EventLogger, parentEventId: string): void {
-  const pending = pendingFixWorkItems(input.worktreePath);
-  if (pending.length === 0) return;
+  const pending = readPendingFixWorkItems(input.worktreePath); // never throws, never follows a symlink
+  if (Array.isArray(pending) && pending.length === 0) return;
   let round: number | string; // an unreadable manifest names its reason, never a guessed round
   try { round = parseManifest(readFileSync(input.manifestPath, 'utf8')).review_rounds ?? 0; } catch (err) { round = `unreadable: ${err instanceof Error ? err.message : String(err)}`; }
   logger.emit({
     initiative_id: input.initiativeId, parent_event_id: parentEventId, phase: 'closure', skill: 'cycle', event_type: 'log',
     input_refs: [input.worktreePath], output_refs: [], message: 'closure-with-pending-fix-wi',
-    metadata: { pending_work_items: pending.map((w) => w.work_item_id), round },
+    metadata: { pending_work_items: Array.isArray(pending) ? pending.map((w) => w.work_item_id) : `unreadable: ${pending.unreadable}`, round },
   });
 }
 

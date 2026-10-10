@@ -41,7 +41,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
-import { pendingFixWorkItems } from './fix-work-items.ts';
+import { readPendingFixWorkItems } from './fix-work-items.ts';
+import { fixRoundDeliveredHead, fixRoundHeadVerdict } from '@forge/contracts';
 
 export type RequeueResumeDecision =
   | { resume: false; reason: string }
@@ -231,16 +232,16 @@ export function decideRequeueResume(args: {
   /** forge-mfv5.1.27: compiled fix WIs still owed on the preserved worktree. */
   pendingFixWorkItems?: number;
 }): RequeueResumeDecision {
-  if ((args.pendingFixWorkItems ?? 0) > 0 && args.worktreePresent && args.branchHasWork) {
-    const reason = `${args.pendingFixWorkItems} compiled fix work item(s) pending on the preserved branch — ` +
-      'resume the fix round at develop; delivered work items stay complete';
-    return { resume: true, resume_from: 'develop', reason };
-  }
   if (args.resumeFromPlan) {
     const reason =
       'prior failure was a PM-phase acceptance-gate violation, deterministic after its one ' +
       'bounded revise turn — resume at the plan node to re-decompose';
     return { resume: true, resume_from: 'plan', reason };
+  }
+  if ((args.pendingFixWorkItems ?? 0) > 0 && args.worktreePresent && args.branchHasWork) {
+    const reason = `${args.pendingFixWorkItems} compiled fix work item(s) pending on the preserved branch — ` +
+      'resume the fix round at develop; delivered work items stay complete';
+    return { resume: true, resume_from: 'develop', reason };
   }
   if (args.resumeFromPrOpen) {
     if (!args.worktreePresent) {
@@ -309,27 +310,22 @@ export function inferRequeueResume(args: {
       existsSync(args.projectRepoPath) &&
       branchHasCommittedWork(args.projectRepoPath, `forge/${args.initiativeId}`),
     workItems: summarizeWorkItemStatuses(args.worktreePath),
-    pendingFixWorkItems: existsSync(args.worktreePath) ? pendingFixWorkItems(args.worktreePath).length : 0,
+    pendingFixWorkItems: [readPendingFixWorkItems(args.worktreePath)].map((p) => (Array.isArray(p) ? p.length : 1))[0],
   });
 }
 
 /**
- * forge-mfv5.1.27 — a fix-round resume keeps the delivered branch, so it is
- * refused BY NAME when that branch moved since the last delivered work item
- * (`cycle.dev-close-invariant-ok`'s `local_head`). Null = the head is the one delivered.
+ * forge-mfv5.1.27 — a GATE-FIX round resumes only on the branch head it was
+ * parked on (`fixRoundDeliveredHead`, read off `refs/heads/<branch>`, never a
+ * same-named tag); the requeue and the drain both ask here. Review send-back
+ * rounds may follow CI-fixer commits and are not checked. Null = proceed.
  */
 export class FixRoundRefusedError extends Error {}
 
-export function fixRoundHeadRefusal(args: { logPath: string; projectRepoPath: string; branch: string }): string | null {
-  let expected: string | null = null;
-  if (existsSync(args.logPath)) {
-    for (const line of readFileSync(args.logPath, 'utf8').split('\n')) {
-      if (!line.includes('cycle.dev-close-invariant-ok')) continue;
-      try { const head = (JSON.parse(line) as { metadata?: { local_head?: unknown } }).metadata?.local_head; if (typeof head === 'string') expected = head; } catch { /* a torn row is not a head */ }
-    }
-  }
-  let found = '(none)';
-  try { found = execFileSync('git', ['-C', args.projectRepoPath, 'rev-parse', '--verify', '--quiet', args.branch], { stdio: 'pipe', encoding: 'utf8' }).trim(); } catch { /* absent branch is refused below */ }
-  if (expected !== null && found === expected) return null;
-  return `branch head moved since the last delivered work item (expected ${expected?.slice(0, 7) ?? '(none recorded)'}, found ${found.slice(0, 7)}) — not resuming`;
+export function fixRoundHeadRefusal(a: { worktreePath: string; logPath: string; projectRepoPath: string; branch: string }): string | null {
+  const pending = readPendingFixWorkItems(a.worktreePath); // unreadable fails toward checking
+  if (Array.isArray(pending) && !pending.some((w) => w.origin === 'gate-fix')) return null;
+  let found: string | null = null;
+  try { found = execFileSync('git', ['-C', a.projectRepoPath, 'rev-parse', '--verify', '--quiet', `refs/heads/${a.branch}`], { stdio: 'pipe', encoding: 'utf8' }).trim(); } catch { /* no branch: refused by name */ }
+  return fixRoundHeadVerdict(fixRoundDeliveredHead(existsSync(a.logPath) ? readFileSync(a.logPath, 'utf8').split('\n') : []), found);
 }

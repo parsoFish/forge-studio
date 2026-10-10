@@ -28,6 +28,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -448,6 +449,44 @@ test('runClosure: no pending fix WI → no closure-with-pending-fix-wi event', a
   try {
     await runClosure(input(h, () => true), h.logger, 'ready-for-review');
     assert.equal(h.events().some((e) => e.message === 'closure-with-pending-fix-wi'), false);
+  } finally {
+    h.cleanup();
+  }
+});
+
+// forge-mfv5.1.27 security review, item 5: an unreadable fix-WI queue never breaks closure.
+function fixWi(id: string, dependsOn: string): string {
+  return `---\nwork_item_id: ${id}\ninitiative_id: INIT-x\nstatus: pending\ndepends_on: [${dependsOn}]\nacceptance_criteria:\n  - given: a\n    when: b\n    then: c\nfiles_in_scope: [a.txt]\nestimated_iterations: 1\norigin: gate-fix\n---\n# ${id}\n`;
+}
+
+test('runClosure: a fix-WI queue that throws (a dependency cycle) still moves the manifest and names it unreadable', async () => {
+  const h = setup();
+  try {
+    const wiDir = join(h.proj, '.forge', 'work-items');
+    mkdirSync(wiDir, { recursive: true });
+    writeFileSync(join(wiDir, 'WI-1.md'), fixWi('WI-1', 'WI-2'));
+    writeFileSync(join(wiDir, 'WI-2.md'), fixWi('WI-2', 'WI-1'));
+    await runClosure(input(h, () => true), h.logger, 'ready-for-review');
+    const ev = h.events().find((e) => e.message === 'closure-with-pending-fix-wi');
+    assert.match(String((ev?.metadata as Record<string, unknown> | undefined)?.pending_work_items), /^unreadable: /);
+    assert.ok(existsSync(join(h.paths.readyForReview, 'INIT-x.md')), 'the manifest still moves');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runClosure: a symlinked .forge/work-items is never followed — named unreadable', async () => {
+  const h = setup();
+  try {
+    const elsewhere = join(h.dir, 'elsewhere');
+    mkdirSync(elsewhere, { recursive: true });
+    writeFileSync(join(elsewhere, 'WI-1.md'), fixWi('WI-1', ''));
+    mkdirSync(join(h.proj, '.forge'), { recursive: true });
+    symlinkSync(elsewhere, join(h.proj, '.forge', 'work-items'), 'dir');
+    await runClosure(input(h, () => true), h.logger, 'ready-for-review');
+    const ev = h.events().find((e) => e.message === 'closure-with-pending-fix-wi');
+    assert.match(String((ev?.metadata as Record<string, unknown> | undefined)?.pending_work_items), /^unreadable: .*symlink/);
+    assert.ok(existsSync(join(h.paths.readyForReview, 'INIT-x.md')));
   } finally {
     h.cleanup();
   }

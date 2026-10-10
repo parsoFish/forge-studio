@@ -480,7 +480,7 @@ export type MergeGateEvidence = {
 
 export type MergeGateResult =
   | { ok: true; evidence: MergeGateEvidence[] }
-  | { ok: false; failedGate: 'local' | 'ci' | 'docs'; cmd: string[]; output: string }
+  | { ok: false; failedGate: 'local' | 'ci' | 'docs'; cmd: string[]; output: string; localCmd?: string[] }
   | { ok: false; failedGate: 'config'; reason: string };
 
 /**
@@ -704,7 +704,7 @@ export function runMergeBoundaryGate(
       evidence.push({ gate: 'ci', cmd: ciGate, ok: decision.gateOk, outputTail: decision.gateOutput.slice(-1200) });
       if (!decision.gateOk) {
         writeMergeGateFeedback(input.worktreePath, 'ci', ciGate, decision.gateOutput);
-        return { ok: false, failedGate: 'ci', cmd: ciGate, output: decision.gateOutput };
+        return { ok: false, failedGate: 'ci', cmd: ciGate, output: decision.gateOutput, ...(localCmd ? { localCmd } : {}) }; // forge-mfv5.1.27
       }
     }
   }

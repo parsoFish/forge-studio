@@ -563,7 +563,11 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed integrate run');
   });
 
-  it('R4-10-F2: a RED merge-boundary full-suite gate opens NO PR — compiles a gate-fix WI + stamps send-back, terminates to ready-for-review', async () => {
+  // forge-mfv5.1.27 sec 6: a CI-gate failure's fix WI runs the LOCAL gate (the WI schema cannot carry
+  // the CI gate's unset-env/timeout); with no local gate it parks by name. Never the per-WI ['true'].
+  for (const [label, red, wantGate] of [['local', { failedGate: 'local', cmd: ['npm', 'run', 'test:full'] }, ['npm', 'run', 'test:full']],
+    ['ci + local', { failedGate: 'ci', cmd: ['make', 'ci'], localCmd: ['npm', 'run', 'test:full'] }, ['npm', 'run', 'test:full']],
+    ['ci, no local', { failedGate: 'ci', cmd: ['make', 'ci'] }, null]] as const) it(`R4-10-F2 (${label}): a RED merge-boundary full-suite gate opens NO PR — compiles a gate-fix WI + stamps send-back, terminates to ready-for-review`, async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
@@ -590,7 +594,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       const deps = makeMockDeps(tracker);
       deps.runMergeBoundaryGate = (_input, _logger) => {
         tracker.calls.push('runMergeBoundaryGate');
-        return { ok: false, failedGate: 'local', cmd: ['npm', 'run', 'test:full'], output: 'dead-shared-helper: 1 failing' };
+        return { ok: false, failedGate: red.failedGate, cmd: [...red.cmd], ...('localCmd' in red ? { localCmd: [...red.localCmd] } : {}), output: 'dead-shared-helper: 1 failing' };
       };
       // NOT a dry run (so the gate-fix compiler + closure run); the integrate node's
       // only inbound is wi-branches (git-state — the artifact guard skips it).
@@ -600,21 +604,17 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       await runFlowT({ flow, input, logger, deps });
 
       // No integrate, no adversarial review, NO PR — a red baseline never merges.
-      assert.ok(!tracker.calls.includes('runIntegrate'), 'integrate does not run on a red merge-gate');
-      assert.ok(!tracker.calls.includes('runAdversarialReview'), 'adversarial review does not run on a red merge-gate');
-      assert.ok(!tracker.calls.includes('openPrInline'), 'NO PR opens on a red full-suite baseline (the preserved invariant)');
+      for (const never of ['runIntegrate', 'runAdversarialReview', 'openPrInline']) assert.ok(!tracker.calls.includes(never), `${never} never runs on a red full-suite baseline (no PR — the preserved invariant)`);
       assert.ok(tracker.calls.includes('runClosure'), 'closure runs — routes the manifest to ready-for-review for the drain');
 
       // The gate-fix WI is on the queue + the send-back is stamped (drain re-enters).
       const gateFix = readWorkItemsFromDir(join(wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'gate-fix');
-      assert.equal(gateFix.length, 1, 'one gate-fix WI compiled from the red gate'); assert.deepEqual(gateFix[0]!.quality_gate_cmd, ['npm', 'run', 'test:full'], "the fix WI's gate is the FAILING merge gate's own cmd, not ['true']");
-      assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'develop', 'manifest stamped resume_from:develop');
+      if (wantGate === null) assert.ok(gateFix.length === 0 && (logger.events as Array<{ message?: string }>).some((e) => e.message === 'merge-gate.fix-loop.cap-parked'), 'parked by name');
+      else assert.deepEqual([gateFix.length, gateFix[0]!.quality_gate_cmd, parseManifest(readFileSync(manifestPath, 'utf8')).resume_from], [1, wantGate, 'develop'], "one fix WI on the failing gate's local cmd (never ['true']), send-back stamped");
 
       // The integrate node's terminal 'end' carries status:'failed' so its hex renders
       // failed/blocked, NOT the green 'complete' of a real integrate run (it never ran).
-      const integrateEnd = (logger.events as Array<Record<string, unknown>>).find(
-        (e) => e.event_type === 'end' && (e.metadata as Record<string, unknown>)?.agent_slug === 'demo-agent',
-      );
+      const integrateEnd = (logger.events as Array<Record<string, unknown>>).find((e) => e.event_type === 'end' && (e.metadata as Record<string, unknown>)?.agent_slug === 'demo-agent');
       assert.ok(integrateEnd, 'the integrate node emits a terminal end on a gate-red');
       assert.equal((integrateEnd!.metadata as Record<string, unknown>).status, 'failed', 'gate-red integrate hex is NOT rendered green/complete');
     } finally {

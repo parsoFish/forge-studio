@@ -221,6 +221,12 @@
   "verified": "exec",
   "note": "`POST /api/verdict` approve → `finalizeAfterMerge` → `pruneMergedWorktrees`: manifest `worktree_path` + `initiative_id`"
  },
+ "packages/flows/fix-work-items.ts": {
+  "class": "other",
+  "guard": "resolveGuardedPath",
+  "verified": "read",
+  "note": "forge-mfv5.1.27 `readPendingFixWorkItems`: the manifest `worktree_path` (contained by every caller: the drain's `isContainedWorktreePath`, `runRequeue`'s `assertManifestPathFields`, the scheduler's own worktree) is read only after `guardedFile(worktree, ['.forge','work-items'], 'readdir')` passes; the one `existsSync` only names a guard rejection"
+ },
  "packages/flows/flow-artifacts.ts": {
   "class": "other",
   "guard": "isSafeCycleId",
@@ -976,6 +982,12 @@
   "guard": null,
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+ },
+ "packages/stations/phases/executor-table.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "forge-mfv5.1.27 `worktreeHead`: `git rev-parse HEAD` with cwd = the cycle's own scheduler-created worktree (`CycleInput.worktreePath`), never a request field"
  },
  "packages/stations/phases/integrate.ts": {
   "class": "guarded",

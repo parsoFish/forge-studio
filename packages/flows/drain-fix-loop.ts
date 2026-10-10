@@ -44,6 +44,7 @@ import {
   pendingFixWorkItems,
 } from './fix-work-items.ts';
 import type { CycleInput } from './cycle-context.ts';
+import { fixRoundHeadRefusal } from './requeue-resume.ts';
 
 /** Keep the claimed manifest's heartbeat fresh during a (possibly long) drain so
  *  a crashed daemon leaves a STALE heartbeat the recovery sweep can reclaim. */
@@ -200,6 +201,13 @@ export async function drainPendingFixWorkItems(
       const pending = pendingFixWorkItems(worktreePath);
       if (pending.length === 0) {
         out.push({ initiativeId, status: 'no-pending' });
+        continue;
+      }
+      // forge-mfv5.1.27: a gate-fix round re-enters only on the head it was parked on — checked BEFORE the claim.
+      const headRefusal = fixRoundHeadRefusal({ worktreePath, logPath: join(logsRoot, cycleId, 'events.jsonl'), projectRepoPath, branch: `forge/${initiativeId}` });
+      if (headRefusal !== null) {
+        createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'fix-round.head-moved', metadata: { detail: headRefusal } });
+        out.push({ initiativeId, status: 'needs-operator', detail: headRefusal });
         continue;
       }
 

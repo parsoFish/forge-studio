@@ -9,6 +9,7 @@
 
 import { resolve, basename, dirname } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { parseManifest, REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome, REPO_RE, type TriggerPayload } from '@forge/flows';
 import { enqueueGateFixWorkItems, writeMergeGateConfigErrorMarker, readOperatorStopRequest } from '@forge/flows';
 import type { NodeExecContext, NodeKind } from '@forge/flows';
@@ -256,7 +257,9 @@ const execIntegrate: NodeExecutor = async (ctx) => {
         manifestPath: input.manifestPath,
         initiativeId: input.initiativeId,
         failedGate: gate.failedGate,
-        projectGateCmd: gate.cmd, // the failing gate's OWN command (forge-mfv5.1.27), never the per-WI gate
+        // forge-mfv5.1.27: the failing gate's OWN command, never the per-WI gate. A CI failure's fix WI runs the
+        // LOCAL gate (a WI cannot carry the CI gate's unset-env/timeout); with no local gate it parks by name.
+        projectGateCmd: gate.failedGate === 'ci' ? (gate.localCmd ?? []) : gate.cmd,
       });
       nodeLogger.emit({
         initiative_id: input.initiativeId,
@@ -270,7 +273,7 @@ const execIntegrate: NodeExecutor = async (ctx) => {
           failed_gate: gate.failedGate,
           origin: 'gate-fix',
           ...(enqueue.status === 'compiled'
-            ? { appended_work_items: enqueue.appended, round: enqueue.round }
+            ? { appended_work_items: enqueue.appended, round: enqueue.round, head_sha: worktreeHead(input.worktreePath) }
             : { detail: enqueue.detail }),
         },
       });
@@ -732,4 +735,9 @@ export function createPhaseExecutor(opts: {
  *  (forge-8vfn.8.2.1). */
 export function integrateDeliveryFailure(reason: string, detail: string): string {
   return `delivery gate: integrate band failed (${reason}: ${detail}) — the branch is not review-ready, so no PR is opened. Triage the failure before re-running.`;
+}
+
+/** forge-mfv5.1.27: the head a gate-fix round is parked on (after any CI-fixer commit); null = unknown, so its resume fails closed. */
+function worktreeHead(worktreePath: string): string | null {
+  try { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).trim(); } catch { return null; }
 }

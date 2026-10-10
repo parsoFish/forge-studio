@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -65,3 +65,42 @@ test('fix round: a moved branch head is refused by name, and nothing moves', () 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---- security-review round (forge-mfv5.1.27) -------------------------------
+
+function withFixRound(fn: (root: string, fx: ReturnType<typeof plantStrandedFixRound>) => void, opts: { fixOrigin?: 'gate-fix' | 'review-fix' } = {}): void {
+  const root = mkdtempSync(join(tmpdir(), 'fix-round-sec-'));
+  try { fn(root, plantStrandedFixRound(root, { withGit: true, ...opts })); } finally { rmSync(root, { recursive: true, force: true }); }
+}
+function moveBranch(fx: ReturnType<typeof plantStrandedFixRound>): string {
+  writeFileSync(join(fx.worktree, 'stray.txt'), 'operator edit\n');
+  git(fx.worktree, ['add', 'stray.txt']);
+  git(fx.worktree, ['commit', '-q', '-m', 'stray']);
+  return git(fx.repo, ['rev-parse', `refs/heads/${FIX_BRANCH}`]);
+}
+const refused = (err: unknown) => err instanceof FixRoundRefusedError && /branch head moved since the last delivered work item/.test(err.message);
+
+test('sec 1: a same-named TAG at the delivered sha never stands in for the moved branch head', () => withFixRound((root, fx) => {
+  moveBranch(fx);
+  git(fx.repo, ['tag', FIX_BRANCH, fx.deliveredHead]);
+  assert.throws(() => runRequeue(FIX_INIT, { forgeRoot: root }), refused);
+  assert.ok(existsSync(fx.manifestPath), 'nothing moved');
+}));
+
+test('sec 2: a later event whose TEXT carries the marker is not a delivered-head event', () => withFixRound((root, fx) => {
+  const moved = moveBranch(fx);
+  appendFileSync(join(fx.logDir, 'events.jsonl'), `${JSON.stringify({ phase: 'orchestrator', skill: 'cycle', event_type: 'log', message: 'cycle.note', started_at: '2026-10-10T06:00:00.000Z', metadata: { text: 'cycle.dev-close-invariant-ok', local_head: moved } })}\n`);
+  assert.throws(() => runRequeue(FIX_INIT, { forgeRoot: root }), refused);
+}));
+
+test('sec 3: a REVIEW send-back fix round keeps today\'s behaviour — no head check, resumes develop', () => withFixRound((root, fx) => {
+  moveBranch(fx);
+  const r = runRequeue(FIX_INIT, { forgeRoot: root });
+  assert.equal(r.resumeDecision.resume && r.resumeDecision.resume_from, 'develop', r.resumeDecision.reason);
+}, { fixOrigin: 'review-fix' }));
+
+test('sec 8: a resume_from:plan classification wins over pending fix WIs', () => withFixRound((root, fx) => {
+  appendFileSync(join(fx.logDir, 'events.jsonl'), `${JSON.stringify({ phase: 'orchestrator', skill: 'cycle', event_type: 'log', message: 'failure_classification', started_at: '2026-10-10T06:00:00.000Z', metadata: { environment: false, cleanBoundaryHalt: false, resume_from: 'plan' } })}\n`);
+  const r = runRequeue(FIX_INIT, { forgeRoot: root });
+  assert.equal(r.resumeDecision.resume && r.resumeDecision.resume_from, 'plan', r.resumeDecision.reason);
+}));

@@ -197,7 +197,7 @@ export function runRequeue(
       : inferred;
   if (fixRound) {
     const logPath = join(forgeRoot, '_logs', manifest.cycle_id ?? initiativeId, 'events.jsonl');
-    const refusal = fixRoundHeadRefusal({ logPath, projectRepoPath, branch: `forge/${initiativeId}` });
+    const refusal = fixRoundHeadRefusal({ worktreePath, logPath, projectRepoPath, branch: `forge/${initiativeId}` });
     if (refusal !== null) throw new FixRoundRefusedError(`requeue: ${refusal}`);
   }
 

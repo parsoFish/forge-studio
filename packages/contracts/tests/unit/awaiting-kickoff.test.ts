@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fixRoundOf, isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
+import { fixRoundDeliveredHead, fixRoundHeadVerdict, fixRoundOf, isAwaitingKickoff, kickoffBuiltReason, type KickoffFacts } from '../../index.ts';
 
 const AT_KICKOFF: KickoffFacts = {
   queueDir: 'ready-for-review',
@@ -69,4 +69,30 @@ test('fixRoundOf: each fact alone breaks it', () => {
   assert.equal(fixRoundOf({ ...FIX_ROUND, resumeFrom: null }), null);
   assert.equal(fixRoundOf({ ...FIX_ROUND, pendingFixWorkItems: 0 }), null);
   assert.equal(fixRoundOf(AT_KICKOFF), null);
+});
+
+// forge-mfv5.1.27 security review (items 1–2): the delivered head is read from exact, parsed events only.
+const SHA_A = 'a'.repeat(40);
+const SHA_B = 'b'.repeat(40);
+const ev = (message: string, metadata: Record<string, unknown>, extra: Record<string, unknown> = {}) => JSON.stringify({ phase: 'orchestrator', skill: 'cycle', message, metadata, ...extra });
+
+test('fixRoundDeliveredHead: the last exact delivered-head event wins; text mentions, other emitters and torn rows do not', () => {
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A })]), SHA_A);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('merge-gate.fix-loop.compiled', { head_sha: SHA_B })]), SHA_B);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('cycle.note', { text: 'cycle.dev-close-invariant-ok', local_head: SHA_B })]), SHA_A);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('cycle.dev-close-invariant-ok', { local_head: SHA_B }, { skill: 'developer-ralph' })]), SHA_A);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), '{torn']), SHA_A);
+});
+
+test('fixRoundDeliveredHead: a non-40-hex head on the last event fails closed (null); a compile without head_sha keeps the prior head', () => {
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('cycle.dev-close-invariant-ok', { local_head: 'HEAD' })]), null);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A.slice(0, 7) })]), null);
+  assert.equal(fixRoundDeliveredHead([ev('cycle.dev-close-invariant-ok', { local_head: SHA_A }), ev('merge-gate.fix-loop.compiled', { round: 1 })]), SHA_A);
+});
+
+test('fixRoundHeadVerdict: null only when the found head IS the delivered head; every refusal is named', () => {
+  assert.equal(fixRoundHeadVerdict(SHA_A, SHA_A), null);
+  assert.match(fixRoundHeadVerdict(SHA_A, SHA_B) ?? '', /expected aaaaaaa, found bbbbbbb\) — not resuming/);
+  assert.match(fixRoundHeadVerdict(null, SHA_A) ?? '', /no 40-hex delivered head recorded/);
+  assert.match(fixRoundHeadVerdict(SHA_A, null) ?? '', /found \(no branch\)/);
 });

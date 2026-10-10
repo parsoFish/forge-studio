@@ -32,13 +32,14 @@ function event(message: string, eventType: string, at: string, metadata?: Record
   });
 }
 
-function writeWorkItems(dir: string): void {
+function writeWorkItems(dir: string, fixOrigin: string): void {
   mkdirSync(dir, { recursive: true });
   for (let n = 1; n <= 5; n++) writeFileSync(join(dir, `WI-${n}.md`), wiFile(n, 'complete'));
-  writeFileSync(join(dir, 'WI-6.md'), wiFile(6, 'pending', 'gate-fix'));
+  writeFileSync(join(dir, 'WI-6.md'), wiFile(6, 'pending', fixOrigin));
 }
 
-export function plantStrandedFixRound(forgeRoot: string, opts: { withGit?: boolean } = {}): StrandedFixRound {
+export function plantStrandedFixRound(forgeRoot: string, opts: { withGit?: boolean; fixOrigin?: 'gate-fix' | 'review-fix' } = {}): StrandedFixRound {
+  const fixOrigin = opts.fixOrigin ?? 'gate-fix';
   for (const d of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
     mkdirSync(join(forgeRoot, '_queue', d), { recursive: true });
   }
@@ -63,11 +64,11 @@ export function plantStrandedFixRound(forgeRoot: string, opts: { withGit?: boole
       git(worktree, ['commit', '-q', '-m', `feat: WI-${n}`]);
     }
     deliveredHead = git(worktree, ['rev-parse', 'HEAD']);
-    writeWorkItems(join(worktree, '.forge', 'work-items'));
+    writeWorkItems(join(worktree, '.forge', 'work-items'), fixOrigin);
   }
 
   const logDir = join(forgeRoot, '_logs', FIX_CYCLE);
-  writeWorkItems(join(logDir, 'work-items-snapshot'));
+  writeWorkItems(join(logDir, 'work-items-snapshot'), fixOrigin);
   writeFileSync(join(logDir, 'events.jsonl'), [
     event('cycle.start', 'start', '2026-10-10T01:56:00.000Z', { origin: 'architect' }),
     event('cycle.dev-close-invariant-ok', 'log', '2026-10-10T05:06:15.988Z', { branch: FIX_BRANCH, local_head: deliveredHead }),

@@ -52,3 +52,32 @@ export function fixRoundOf(f: KickoffFacts): number | null {
   const parked = f.queueDir === 'ready-for-review' && f.resumeFrom === 'develop' && f.pendingFixWorkItems > 0;
   return parked ? f.reviewRounds : null;
 }
+
+const SHA40 = /^[0-9a-f]{40}$/;
+
+/**
+ * forge-mfv5.1.27 — the head a gate-fix round was parked on: the LAST exact
+ * orchestrator/cycle `cycle.dev-close-invariant-ok` (`local_head`) or
+ * `merge-gate.fix-loop.compiled` (`head_sha`, after any CI-fixer commit) in the
+ * cycle log. A non-40-hex value on that last event fails closed (null).
+ */
+export function fixRoundDeliveredHead(lines: readonly string[]): string | null {
+  let head: string | null = null;
+  for (const line of lines) {
+    let ev: { message?: unknown; phase?: unknown; skill?: unknown; metadata?: Record<string, unknown> } | null;
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (ev?.phase !== 'orchestrator' || ev.skill !== 'cycle') continue;
+    const key = ev.message === 'cycle.dev-close-invariant-ok' ? 'local_head' : ev.message === 'merge-gate.fix-loop.compiled' ? 'head_sha' : null;
+    if (key === null || !(key in (ev.metadata ?? {}))) continue;
+    const sha = ev.metadata?.[key];
+    head = typeof sha === 'string' && SHA40.test(sha) ? sha : null;
+  }
+  return head;
+}
+
+/** The named refusal when the branch head is not the delivered head, else null. */
+export function fixRoundHeadVerdict(delivered: string | null, found: string | null): string | null {
+  if (delivered !== null && found === delivered) return null;
+  const expected = delivered === null ? 'no 40-hex delivered head recorded' : `expected ${delivered.slice(0, 7)}`;
+  return `branch head moved since the last delivered work item (${expected}, found ${found?.slice(0, 7) ?? '(no branch)'}) — not resuming`;
+}

@@ -54,21 +54,21 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 9 | 1,753 | **1,753** | ratified 1,753 — forge-mfv5.1.27: `fixRoundOf`, the one parked-fix-round rule beside `isAwaitingKickoff`, and `Run.fixRound`; +14 measured on main 1,739, lane-ratified (≤100, ruling 666). |
+| `contracts` | 9 | 1,782 | **1,782** | ratified 1,782 — forge-mfv5.1.27: `fixRoundOf` beside `isAwaitingKickoff`, `Run.fixRound`, and the pure delivered-head reader + named head verdict; +43 measured on main 1,739, lane-ratified (≤100, ruling 666). |
 | `kernel` | 39 | 6,743 | **5,609** | ratified 5,609 — forge-nk1y.8: one safe URL decoder (`url-decode.ts`, a named `MalformedUrlEncodingError`) on top of the spend-ceiling derivation; +32 measured on main 5,577, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 53 | 11,871 | **10,074** | ratified 10,074 — forge-mfv5.1.23: Save merges its forge-studio PR only on green required checks and GitHub's CLEAN (pure verdict over one graphql read), `--auto` only when allowed; +100 measured on main 9,974, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,504 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 65 | 21,283 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
-| `flows` | 90 | 25,407 | **25,208** | ratified 25,208 — forge-mfv5.1.27: immediate fix-round re-entry through the D-20 drain, `closure-with-pending-fix-wi`, the fix-round fact and the head-checked develop resume; +78 measured on main 25,130, lane-ratified (≤100, ruling 666). |
+| `flows` | 90 | 25,427 | **25,228** | ratified 25,228 — forge-mfv5.1.27: immediate fix-round re-entry through the D-20 drain, `closure-with-pending-fix-wi`, the fix-round fact, the head-checked develop resume and drain, a never-throwing fix-WI reader; +98 measured on main 25,130, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,073 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 48 | 12,635 | **12,635** | ratified 12,635 — forge-mfv5.1.26: `uncoveredAcceptanceCriteria` (D-47), a runnable initiative AC no WI gate carries is sent back through the PM acceptance revise turn; +60 measured on main 12,575, lane-ratified (≤100, ruling 666). |
+| `stations` | 48 | 12,643 | **12,643** | ratified 12,643 — forge-mfv5.1.27: a gate-fix WI runs the failing gate (a CI failure its local gate) and its compile event records the parked head; +8 measured on main 12,635, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 37 | 8,756 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **512** | **134,984** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **512** | **135,041** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -332,13 +332,13 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 152 |
 | packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 392 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's SPEC §1 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 77 |
-| packages/flows/drain-fix-loop.ts | flows | verbatim | 293 |
+| packages/flows/drain-fix-loop.ts | flows | verbatim | 301 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 82 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 415 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
 | packages/agents/failure-classifier.ts | agents | verbatim | 722 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 519 |
-| packages/flows/fix-work-items.ts | flows | verbatim | 388 |
+| packages/flows/fix-work-items.ts | flows | verbatim | 400 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 440 |
 | packages/flows/flow-budgets.ts | flows | verbatim | 558 |
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
@@ -380,7 +380,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
 | packages/sessions/testing.ts | sessions | verbatim | 15 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `tests/architect-ports-stub.ts`'s `stubArchitectManifestPorts`, three `kinds/architect-critic.ts` symbols, and three `turn-cost-rows.ts` symbols have no production consumer outside this package, only `apps/forge`/`scripts/stories` tests reach for them.** |
 | packages/stations/phases/cycle-id.ts | stations | rewritten | 12 |
-| packages/stations/phases/executor-table.ts | stations | verbatim | 735 |
+| packages/stations/phases/executor-table.ts | stations | verbatim | 743 |
 | packages/stations/phases/agent-skill-text.ts | stations | rewritten | 30 |
 | packages/forge-docs/skills/docs-integrate/SKILL.md | forge-docs | rewritten | 70 |
 | packages/forge-docs/skills/docs-review/SKILL.md | forge-docs | rewritten | 173 |
@@ -454,7 +454,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-planner-port.ts | stations | rewritten | 77 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 292 |
 | packages/stations/demo-model.ts | stations | verbatim | 794 |
-| packages/flows/requeue-resume.ts | flows | verbatim | 335 |
+| packages/flows/requeue-resume.ts | flows | verbatim | 331 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |
@@ -468,7 +468,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 254 |
 | packages/flows/scheduler.ts | flows | verbatim | 391 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 183 |
-| packages/flows/scheduler-run-one.ts | flows | verbatim | 685 |
+| packages/flows/scheduler-run-one.ts | flows | verbatim | 689 |
 | packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 116 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
 | packages/agents/stream-deadline.ts | agents | verbatim | 132 |
@@ -570,7 +570,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/index.ts | agents | verbatim | 133 |
 | packages/contracts/index.ts | contracts | verbatim | 275 |
 | packages/contracts/project-readiness.ts | contracts | rewritten | 61 |
-| packages/contracts/awaiting-kickoff.ts | contracts | rewritten | 54 **New file, forge-mfv5.1.25:** `isAwaitingKickoff`, the one Kickoff-gate rule. |
+| packages/contracts/awaiting-kickoff.ts | contracts | rewritten | 83 **New file, forge-mfv5.1.25:** `isAwaitingKickoff`, the one Kickoff-gate rule. |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 101 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
