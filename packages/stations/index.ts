@@ -34,4 +34,4 @@ export { rerunReflector } from './reflector-rerun.ts';
 export { runDocsGate } from './gates/docs-gate.ts';
 
 // ---- D-47 coverage, re-reported when the Kickoff gate adds a work item (forge-nk1y.12) ----
-export { uncoveredAcceptanceCriteria } from './phases/decompose-completeness.ts';
+export { uncoveredAcceptanceCriteria, firstRunnableSpan } from './phases/decompose-completeness.ts';

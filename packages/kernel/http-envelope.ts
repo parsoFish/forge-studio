@@ -139,3 +139,13 @@ export function parseQuery(rawUrl: string): URLSearchParams {
   return new URLSearchParams(idx >= 0 ? rawUrl.slice(idx + 1) : '');
 }
 
+/** A non-empty string of at most `max` characters. */
+export const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
+
+/** A work item's `qualityGateCmd` / `filesInScope` boundary rule on every route taking one (forge-nk1y.12, forge-mfv5.1.28):
+ *  the first bad entry's error naming `field`, or null for 1..maxLen strings ≤ maxStr. */
+export function stringList(field: string, v: unknown, maxLen: number, maxStr: number): string | null {
+  if (!Array.isArray(v) || v.length === 0 || v.length > maxLen) return `${field} must be an array of 1..${maxLen} strings`;
+  const bad = v.findIndex((s) => !isText(s, maxStr));
+  return bad < 0 ? null : `${field}[${bad}] must be a non-empty string of at most ${maxStr} characters`;
+}
