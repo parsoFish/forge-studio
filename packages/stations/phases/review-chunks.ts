@@ -32,6 +32,8 @@ export type ChunkableWorkItem = {
   readonly work_item_id: string;
   readonly files_in_scope: readonly string[];
   readonly creates?: readonly string[];
+  /** A D-20 fix work item's RECORDED delivery (forge-mfv5.1.30): when set it is the claim, shared with any declarer, never a declaration. */
+  readonly delivered?: readonly string[];
 };
 
 export type ReviewChunk = {
@@ -50,9 +52,9 @@ export function chunkLabel(chunk: ReviewChunk): string {
 
 /**
  * Partition `changedFiles` across `workItems`, in work-item order, then the
- * remainder. A file claimed twice goes to the FIRST claimant, so the union of
- * the chunks is the diff and no hunk is judged twice. A work item claiming
- * nothing here produces no chunk — no question to ask, no spawn to pay for.
+ * remainder. A file DECLARED twice goes to the FIRST declarer; a `delivered`
+ * work item also gets every file it changed, so a fix is judged on its own
+ * work. A work item claiming nothing produces no chunk and pays for no spawn.
  */
 export function partitionChangedFiles(
   changedFiles: readonly string[],
@@ -60,7 +62,7 @@ export function partitionChangedFiles(
 ): ReviewChunk[] {
   const unassigned = new Set(changedFiles);
   const chunks: ReviewChunk[] = [];
-  for (const wi of workItems) {
+  for (const wi of workItems.filter((w) => w.delivered === undefined)) {
     const claimed: string[] = [];
     for (const path of [...(wi.creates ?? []), ...wi.files_in_scope]) {
       if (unassigned.has(path)) {
@@ -69,6 +71,11 @@ export function partitionChangedFiles(
       }
     }
     if (claimed.length > 0) chunks.push({ workItemId: wi.work_item_id, files: claimed });
+  }
+  for (const wi of workItems.filter((w) => w.delivered !== undefined)) {
+    const own = changedFiles.filter((f) => wi.delivered!.includes(f));
+    for (const f of own) unassigned.delete(f);
+    if (own.length > 0) chunks.push({ workItemId: wi.work_item_id, files: own });
   }
   // Order-stable remainder: the diff's own order, not the Set's.
   const rest = changedFiles.filter((f) => unassigned.has(f));
@@ -93,7 +100,7 @@ export function partitionChangedFiles(
  */
 export function mergeChunkRecords(
   chunks: ReadonlyArray<{ label: string; record: ReviewFindingsRecord }>,
-  unjudgedCriteria: ReadonlyArray<{ criterion: string; workItemId: string }>,
+  unjudgedCriteria: ReadonlyArray<{ criterion: string; workItemId: string; verdict?: 'met' | 'missed'; evidence?: string }>,
 ): ReviewFindingsRecord {
   const first = chunks[0]?.record;
   if (first === undefined) {
@@ -115,10 +122,10 @@ export function mergeChunkRecords(
     findings: chunks.flatMap((c) => c.record.findings.map((f) => ({ ...f, id: `${c.label}/${f.id}` }))),
     acEvaluations: [
       ...chunks.flatMap((c) => c.record.acEvaluations),
-      ...unjudgedCriteria.map(({ criterion, workItemId }) => ({
+      ...unjudgedCriteria.map(({ criterion, workItemId, verdict, evidence }) => ({
         criterion,
-        verdict: 'missed' as const,
-        evidence: `no file declared by ${workItemId} appears in this diff — the work item delivered nothing, so its criterion cannot be met (verdict authored by the orchestrator, not by a review agent)`,
+        verdict: verdict ?? 'missed',
+        evidence: evidence ?? `no file declared by ${workItemId} appears in this diff — the work item delivered nothing, so its criterion cannot be met (verdict authored by the orchestrator, not by a review agent)`,
       })),
     ],
     whyWhatHow: {

@@ -102,7 +102,10 @@ export async function applyReviewVerdict(
     sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
     return;
   }
-  const listError = (body.qualityGateCmd === undefined ? null : stringList('qualityGateCmd', body.qualityGateCmd, 64, 500)) ?? (body.filesInScope === undefined ? null : stringList('filesInScope', body.filesInScope, 200, 500)); // forge-mfv5.1.28: both send-back doors' one boundary check
+  // forge-mfv5.1.28: both send-back doors' one boundary check, before any manifest or worktree access.
+  const gateError = body.qualityGateCmd === undefined ? null : stringList('qualityGateCmd', body.qualityGateCmd, 64, 500);
+  const scopeError = body.filesInScope === undefined ? null : stringList('filesInScope', body.filesInScope, 200, 500);
+  const listError = gateError ?? scopeError;
   if (listError) { sendJson(res, 400, { error: listError }, origin); return; }
   if (kind === 'send-back' && acs.length === 0) {
     sendJson(res, 400, { error: 'send-back needs a blocking comment or a typed work item — neither arrived (no acceptanceCriteria from a blocking review comment, none typed)' }, origin);
@@ -135,13 +138,13 @@ export async function applyReviewVerdict(
     // REAL per-segment containment (isContainedWorktreePath), not a lexical
     // resolve().startsWith() on an unresolved path — resolve() normalises ".."
     // before the comparison ever runs and never follows symlinks, so that
-    // shape is worthless against a symlinked escape. Two legitimate roots:
-    // in-place worktrees under <forgeRoot>/projects/, AND forge-managed
-    // worktrees identity-bound to THIS initiative under <forgeRoot>/_worktrees/.
+    // shape is worthless against a symlinked escape. The only legitimate value is
+    // THIS initiative's own <forgeRoot>/_worktrees/<id> (forge-nk1y.20 removed the
+    // in-place projects-root alternative: no producer, and it admitted any project dir).
     // Deliberately moved AHEAD of the existsSync probe below (was previously
     // checked first) — an out-of-bounds path must never even be stat'd through
     // this route.
-    if (!isContainedWorktreePath(approveWorktreePath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId })) {
+    if (!isContainedWorktreePath(approveWorktreePath, { forgeRoot: ctx.forgeRoot, initiativeId })) {
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
     }
@@ -315,10 +318,9 @@ export async function applyReviewVerdict(
   // send-back path writes fix work items + the cap-exhausted marker under
   // manifest-supplied worktree_path — REAL per-segment containment
   // (isContainedWorktreePath), not a lexical resolve().startsWith() check on
-  // an unresolved path, against the two legitimate roots (in-place worktrees
-  // under <forgeRoot>/projects/, forge-managed worktrees identity-bound to
-  // THIS initiative under <forgeRoot>/_worktrees/).
-  if (!isContainedWorktreePath(worktreePath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId })) {
+  // an unresolved path: the only legitimate value is THIS initiative's own
+  // <forgeRoot>/_worktrees/<id> (forge-nk1y.20 removed the projects-root alternative).
+  if (!isContainedWorktreePath(worktreePath, { forgeRoot: ctx.forgeRoot, initiativeId })) {
     sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
     return;
   }

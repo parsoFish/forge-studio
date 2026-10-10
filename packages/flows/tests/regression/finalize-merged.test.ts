@@ -66,7 +66,7 @@ function writeManifest(queueRoot: string, state: string, id: string, worktreePat
 test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → finalized', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-merged');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-merged', wt);
     const calls: string[] = [];
@@ -94,7 +94,7 @@ test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → fina
 test('finalize: merged → fires reflect once from the agent-target declaration (band-hook resolved)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-decl');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-decl', wt);
     const reflectCalls: string[] = [];
@@ -126,7 +126,7 @@ test('finalize: merged → fires reflect once from the agent-target declaration 
 test('finalize: merged → non-reflect agent-target is unhandled, reflect does NOT fire', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-notreflect');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-notreflect', wt);
     let reflected = false;
@@ -150,7 +150,7 @@ test('finalize: merged → non-reflect agent-target is unhandled, reflect does N
 test('finalize: merged but NO declared merge-trigger → reflect does NOT fire (declaration-driven)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-nodecl');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nodecl', wt);
     let reflected = false;
@@ -182,7 +182,7 @@ test('finalize: merged but NO declared merge-trigger → reflect does NOT fire (
 test('finalize: [forge-f9g] a scoped on:merged trigger fires reflect when the manifest project is a declared member', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-08-23-inscope');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-08-23-inscope', wt);
     const reflectCalls: string[] = [];
@@ -210,7 +210,7 @@ test('finalize: [forge-f9g] a scoped on:merged trigger fires reflect when the ma
 test('finalize: [forge-f9g] an out-of-scope on:merged trigger does NOT fire reflect, and the skip lands in the cycle event log (typed, observable, never silent)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-08-23-oos');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-08-23-oos';
     const cycleId = `2026-08-23T00-00-00_${id}`;
@@ -267,7 +267,7 @@ test('finalize: [forge-f9g] an out-of-scope on:merged trigger does NOT fire refl
 test('finalize: threads the manifest-persisted cycle_id into finalizeOne (D-20 lineage)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-lineage');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-lineage';
     // Manifest carries an explicit cycle_id (the one runCycle persisted at first claim).
@@ -275,7 +275,7 @@ test('finalize: threads the manifest-persisted cycle_id into finalizeOne (D-20 l
       '---',
       `initiative_id: ${id}`,
       'project: demo',
-      `project_repo_path: ${wt}`,
+      `project_repo_path: ${join(root, 'projects', 'demo')}`,
       "created_at: '2026-05-30T00:00:00.000Z'",
       'iteration_budget: 2',
       'cost_budget_usd: 1',
@@ -305,7 +305,7 @@ test('finalize: threads the manifest-persisted cycle_id into finalizeOne (D-20 l
 test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-open');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-open', wt);
     let called = false;
@@ -325,7 +325,7 @@ test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', a
 test('finalize: merged with pending fix work-items still finalizes, but surfaces the drop (B2, non-silent)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-merged-pending');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-merged-pending';
     // A post-send-back worktree (D-20): a review-fix work item compiled by
@@ -393,7 +393,7 @@ test('finalize: worktree gone → no-worktree, skipped (no re-claim)', async () 
 test('finalize: reflector throw after confirmed merge → cycle.reflection-lost recorded, finalize still completes', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-lost');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-lost';
     const cycleId = `2026-05-30T01-02-03_${id}`;
@@ -401,7 +401,7 @@ test('finalize: reflector throw after confirmed merge → cycle.reflection-lost 
       '---',
       `initiative_id: ${id}`,
       'project: demo',
-      `project_repo_path: ${wt}`,
+      `project_repo_path: ${join(root, 'projects', 'demo')}`,
       "created_at: '2026-05-30T00:00:00.000Z'",
       'iteration_budget: 2',
       'cost_budget_usd: 1',
@@ -468,7 +468,7 @@ test('finalize: reflector throw after confirmed merge → cycle.reflection-lost 
 test('finalize: real runClosure + promoteMergedToDone round-trip ready-for-review → merged → done in one sweep (integration, no closure/queue mocks)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'projects', 'demo', 'wt');
+    const wt = join(root, '_worktrees', 'INIT-2026-05-30-real-closure');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-real-closure';
     writeManifest(queueRoot, 'ready-for-review', id, wt);

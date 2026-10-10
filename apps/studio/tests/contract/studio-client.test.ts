@@ -825,7 +825,7 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     startedAt: '2026-01-01T00:00:00Z',
     // W8-A3 (flows-23): the architect session that produced the initiative,
     // served by packages/flows/run-model.ts and carried through parseRun.
-    architectSessionId: '2026-08-14T15-26-59-072e0775', awaitingKickoff: true, fixRound: 1, // forge-mfv5.1.25 / .27
+    architectSessionId: '2026-08-14T15-26-59-072e0775', awaitingKickoff: true, fixRound: 1, fixRoundRunning: true, developRunning: true, // forge-mfv5.1.25 / .27 / nk1y.23
     // W7-A3 (flows-29): served by packages/flows/run-model.ts since W6-RV-2, but
     // was silently dropped here — the exact declared-data-fails-open class
     // this pin exists for. MonitorSummary's ELAPSED depends on it.

@@ -29,6 +29,9 @@ import { startBridge } from '../../ui-bridge.ts';
 // /home/parso/forge/projects/gitpulse (forgeRoot is passed explicitly since
 // worktreePath alone doesn't always share its forgeRoot with the caller).
 function makeManifest(forgeRoot: string, worktreePath: string, initiativeId: string): string {
+  // The projects/ containment root must exist for project_repo_path to pass; the
+  // worktree used to sit under projects/test-project and create it as a side effect.
+  mkdirSync(join(forgeRoot, 'projects', 'test-project'), { recursive: true });
   return [
     '---',
     `initiative_id: ${initiativeId}`,
@@ -100,9 +103,9 @@ async function postVerdict(
 test('approve: 200, calls mergePr once with worktreePath, fires finalizeAfterMerge once', async () => {
   const s = makeStubs();
   const forgeRoot = mkdtempSync(join(tmpdir(), 'bv-'));
-  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/) or the
-  // bounds check rejects it.  Use a subdir inside projects/ so the guard passes.
-  const worktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'test-approve');
+  // H2: the worktree must be the initiative's own <forgeRoot>/_worktrees/<id>
+  // or the bounds check rejects it.
+  const worktreePath = join(forgeRoot, '_worktrees', 'INIT-2026-01-01-test-approve');
   mkdirSync(worktreePath, { recursive: true });
   const initiativeId = 'INIT-2026-01-01-test-approve';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
@@ -148,10 +151,10 @@ test('approve with missing worktree: 409 worktree-gone, mergePr not called', asy
   // SEC-02: "worktree already cleaned up" must be a LEGITIMATE but
   // never-created path — an out-of-bounds path now fails containment first
   // ("worktree_path outside allowed root"), masking the worktree-gone check
-  // this test actually exercises. The projects/ containment root must exist
+  // this test actually exercises. The _worktrees/ containment root must exist
   // even though the worktree itself deliberately does not.
-  mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
-  const missingWorktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'test-missing-wt');
+  mkdirSync(join(forgeRoot, '_worktrees'), { recursive: true });
+  const missingWorktreePath = join(forgeRoot, '_worktrees', initiativeId);
   writeFileSync(
     join(rfr, `${initiativeId}.md`),
     makeManifest(forgeRoot, missingWorktreePath, initiativeId),
@@ -188,8 +191,8 @@ test('approve when mergePr returns false: 409 gh-pr-merge-failed, finalize not c
   s.stubs.mergeReturn = false;
 
   const forgeRoot = mkdtempSync(join(tmpdir(), 'bv-'));
-  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/).
-  const worktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'test-merge-fail');
+  // H2: the worktree must be the initiative's own <forgeRoot>/_worktrees/<id>.
+  const worktreePath = join(forgeRoot, '_worktrees', 'INIT-2026-01-01-test-merge-fail');
   mkdirSync(worktreePath, { recursive: true });
   const initiativeId = 'INIT-2026-01-01-test-merge-fail';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
@@ -259,10 +262,10 @@ test('approve with no manifest: 409 no-manifest error', async () => {
 // WS-A — release-finalize hook (runs immediately BEFORE mergePr on approve)
 // ---------------------------------------------------------------------------
 
-/** Shared scaffold: a ready-for-review manifest whose worktree is inside the
- *  allowed projectsRoot, so the approve path reaches the merge. */
+/** Shared scaffold: a ready-for-review manifest whose worktree is the initiative's
+ *  own _worktrees/<id>, so the approve path reaches the merge. */
 function seedApprovableCycle(forgeRoot: string, initiativeId: string): { worktreePath: string } {
-  const worktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', initiativeId);
+  const worktreePath = join(forgeRoot, '_worktrees', initiativeId);
   mkdirSync(worktreePath, { recursive: true });
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });

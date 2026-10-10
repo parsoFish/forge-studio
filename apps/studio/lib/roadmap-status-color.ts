@@ -50,8 +50,21 @@ export function queueStatusToColor(status: QueueState): StatusTone {
 }
 
 /** The card's status label: the served word, except the Kickoff gate reads KICKOFF
- *  and a served fix round (forge-mfv5.1.27) reads FIX ROUND <n>. */
-export function queueStatusLabel(status: QueueState, fixRound?: number): string {
+ *  and a served fix round (forge-mfv5.1.27) reads FIX ROUND <n>; while that round is
+ *  building (forge-nk1y.23, `running` = done/total work items) it reads FIX ROUND <n> · running · k/N WI. */
+export function queueStatusLabel(status: QueueState, fixRound?: number, running?: { done: number; total: number }): string {
+  if (fixRound !== undefined && running !== undefined) return `fix round ${fixRound} · running · ${running.done}/${running.total} WI`;
   if (fixRound !== undefined) return `fix round ${fixRound}`;
   return status === 'awaiting-kickoff' ? 'kickoff' : status;
+}
+
+/**
+ * `data-develop-state`: the local press state, except `running` when the bridge
+ * SERVES that develop is building (forge-nk1y.23). Precedence: a press outcome the
+ * operator still has to act on (`starting`, `needs-confirm`, `error`) wins over the
+ * served fact — hiding a refusal or a pending confirm behind "running" would lie
+ * the other way; `idle` and `started` carry no such outcome, so the served fact wins.
+ */
+export function developStateAttr(local: string, servedRunning: boolean): string {
+  return servedRunning && (local === 'idle' || local === 'started') ? 'running' : local;
 }

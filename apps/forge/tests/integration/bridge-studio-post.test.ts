@@ -261,9 +261,9 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses resume with the typed 409, manifest s
 
 test('POST /api/runs/:id/gates/verdict approve → calls mergePr, 200', async () => {
   const id = 'INIT-2026-01-01-gate-approve';
-  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/) or the
-  // bounds check rejects it.
-  const wt = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'gate-approve');
+  // H2: the worktree must be the initiative's own <forgeRoot>/_worktrees/<id>
+  // or the bounds check rejects it.
+  const wt = join(forgeRoot, '_worktrees', id);
   mkdirSync(wt, { recursive: true });
   try {
     writeFileSync(join(forgeRoot, '_queue', 'ready-for-review', `${id}.md`), makeManifest(wt, id));
@@ -333,8 +333,8 @@ test('POST /api/runs/:id/gates/unknown-gate → 404', async () => {
 
 test('POST /api/verdict approve alias → 200 (old shape unchanged)', async () => {
   const id = 'INIT-2026-01-01-alias-approve';
-  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/).
-  const wt = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'alias-approve');
+  // H2: the worktree must be the initiative's own <forgeRoot>/_worktrees/<id>.
+  const wt = join(forgeRoot, '_worktrees', id);
   mkdirSync(wt, { recursive: true });
   try {
     writeFileSync(join(forgeRoot, '_queue', 'ready-for-review', `${id}.md`), makeManifest(wt, id));

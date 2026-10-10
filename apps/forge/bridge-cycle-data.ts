@@ -23,8 +23,12 @@
  */
 import type { IncomingMessage, ServerResponse, OutgoingHttpHeaders } from 'node:http';
 import { basename } from 'node:path';
+import { pipeline } from 'node:stream';
 
-import { sendJson, allowedOrigin, resolveGuardedPath, guardedReadFile, isSafeSubPath, decodeUrlPart } from '@forge/kernel';
+import {
+  sendJson, allowedOrigin, resolveGuardedPath, guardedReadFile, guardedByteReader, isSafeSubPath, decodeUrlPart,
+  contentTypeByExtension, resolveByteRange,
+} from '@forge/kernel';
 import type { EventLogEntry } from '@forge/kernel';
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows';
 
@@ -41,17 +45,18 @@ export type CycleDataContext = {
  *  string that quietly grows. */
 const LEGACY_ROOT_ARTIFACT = 'pr-description.md';
 
-/** Content-type by extension for served artifacts. `.html` → `text/html` so the
- *  PLAN/DEMO pages render in the operator's browser (Phase E); all
- *  else stays `text/plain`. Module-private and, by convention enforced in
+/** Content-type for a served artifact: the ONE kernel table
+ *  (`contentTypeByExtension`) by extension — `.html` → `text/html` so the
+ *  PLAN/DEMO pages render in the operator's browser (Phase E), `.webm`/`.png`/…
+ *  their media types — and an extension the table does not know (the
+ *  `.capture/**\/*.out` demo evidence) stays `text/plain; charset=utf-8`, as it
+ *  always was. Module-private and, by convention enforced in
  *  `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
  *  this file), callable ONLY from `servedFileHeaders` below — every route
  *  that serves a file on the bridge origin must go through the hardened
  *  helper, never this alone. */
 function contentTypeFor(filename: string): string {
-  return filename.toLowerCase().endsWith('.html')
-    ? 'text/html; charset=utf-8'
-    : 'text/plain; charset=utf-8';
+  return contentTypeByExtension(filename) ?? 'text/plain; charset=utf-8';
 }
 
 /** Reduce a filename to a header-safe charset before it rides inside
@@ -345,7 +350,11 @@ export async function handleCycleDataRoutes(
     // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
     // filename segments, all under the trusted logsRoot) through the
     // per-segment identity + nlink guard, which the lexical check cannot do.
-    let body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
+    //
+    // forge-mfv5.1.29 — read BYTES, not a utf8 string (a string decode mangled
+    // every `.webm`/`.png`), through the same guard (`guardedByteReader`), and
+    // honour a `Range` so a <video> can open and seek.
+    let reader = guardedByteReader(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
     // W7-D1 — PARITY with `deriveArtifacts` (packages/flows/run-model-derive.ts),
     // which marks `pr` ready when `pr-description.md` exists in EITHER
     // `artifacts/` OR the cycle-log ROOT ("accept the legacy cycle-log-root
@@ -358,22 +367,44 @@ export async function handleCycleDataRoutes(
     // Deliberately ONE exact filename, and only as a FALLBACK after the
     // modern location misses: the cycle-log root also holds events.jsonl,
     // report.md, retro.md and user-questions.json, none of which may become
-    // servable as a side effect. It goes through the SAME `guardedReadFile`,
-    // so a symlinked legacy copy is refused exactly as a symlinked modern one
+    // servable as a side effect. It goes through the SAME guard, so a
+    // symlinked legacy copy is refused exactly as a symlinked modern one
     // is. All four directions pinned in sec04-cycleid-containment.test.ts.
-    if (body === null && filename === LEGACY_ROOT_ARTIFACT) {
-      body = guardedReadFile(ctx.logsRoot, [cycleId, LEGACY_ROOT_ARTIFACT]);
+    if (reader === null && filename === LEGACY_ROOT_ARTIFACT) {
+      reader = guardedByteReader(ctx.logsRoot, [cycleId, LEGACY_ROOT_ARTIFACT]);
     }
-    if (body === null) {
+    if (reader === null) {
       sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
       return true;
     }
-    try {
-      res.writeHead(200, servedFileHeaders(filename, origin));
-      res.end(body);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+    // Range policy (RFC 9110 §14; `resolveByteRange`): ONE `bytes=a-b|a-|-n`
+    // → 206 + Content-Range; unsatisfiable → 416 + `Content-Range: bytes */size`;
+    // multi-range / malformed / non-bytes → IGNORED, full 200 (a server may).
+    const range = resolveByteRange(typeof req.headers.range === 'string' ? req.headers.range : undefined, reader.size);
+    if (range.kind === 'unsatisfiable') {
+      res.writeHead(416, {
+        'content-type': 'application/json',
+        'content-range': `bytes */${reader.size}`,
+        'access-control-allow-origin': origin,
+        'vary': 'origin',
+      });
+      res.end(JSON.stringify({ error: 'range not satisfiable', size: reader.size }));
+      return true;
     }
+    const partial = range.kind === 'partial';
+    const length = partial ? range.end - range.start + 1 : reader.size;
+    res.writeHead(partial ? 206 : 200, {
+      ...servedFileHeaders(filename, origin),
+      'accept-ranges': 'bytes',
+      'content-length': String(length),
+      ...(partial ? { 'content-range': `bytes ${range.start}-${range.end}/${reader.size}` } : {}),
+    });
+    if (length === 0) {
+      res.end();
+      return true;
+    }
+    // Headers are out: a read error now can only cut the connection short.
+    pipeline(reader.open(partial ? { start: range.start, end: range.end } : undefined), res, () => { /* pipeline destroys both ends */ });
     return true;
   }
 

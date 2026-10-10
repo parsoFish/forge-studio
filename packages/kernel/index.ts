@@ -30,6 +30,8 @@ export * from './init.ts';
 export * from './halt.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+/** The one answer to "is this the initiative's own `_worktrees/<id>`?" (forge-nk1y.20). */
+export * from './initiative-worktree.ts';
 /** Where a session dir lives: `<logsRoot>/_sessions/<project>/<kindDir>/<sid>`, never in the ground. */
 export * from './session-dir.ts';
 export { safeReadFileInSession } from './contained-read.ts';
@@ -72,6 +74,8 @@ export * from './route-entry.ts';
 export * from './http-envelope.ts';
 /** The ONE safe percent-decoder for request URL parts: a named error, never a bare `URIError`. */
 export * from './url-decode.ts';
+/** Content-type by file extension (one table) and `Range` header resolution for served files. */
+export * from './served-file.ts';
 /** The dry-bridge env gate and the typed 409 refusal — the two pieces five
  *  packages consumed and could previously reach only by importing `cli/`.
  *  The route classification table itself stays in `cli/dry-bridge.ts`. */

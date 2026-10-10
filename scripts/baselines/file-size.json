@@ -38,7 +38,7 @@
   "packages/stations/tests/unit/reflector.test.ts": 867,
   "packages/flows/tests/integration/run-model.test.ts": 1461,
   "packages/flows/tests/integration/wi-spec-compile.test.ts": 1059,
-  "packages/flows/tests/regression/manifest-path-fields.test.ts": 1031,
+  "packages/flows/tests/regression/manifest-path-fields.test.ts": 977,
   "packages/kernel/tests/unit/path-guard.test.ts": 876,
   "packages/library/tests/integration/community-index.test.ts": 933,
   "packages/library/tests/integration/community-install.test.ts": 816,
