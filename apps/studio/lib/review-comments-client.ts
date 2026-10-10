@@ -22,7 +22,13 @@ export type ReviewComment = {
 
 export type DerivedVerdict =
   | { kind: 'approve' }
-  | { kind: 'send-back'; rationale: string; acceptanceCriteria: ReviewCommentAc[] };
+  | {
+      kind: 'send-back';
+      rationale: string;
+      acceptanceCriteria: ReviewCommentAc[];
+      /** forge-mfv5.1.28: a blocker's runnable inline command — the fix WI's gate. */
+      qualityGateCmd?: string[];
+    };
 
 export type ReviewCommentsResponse = {
   cycleId: string;

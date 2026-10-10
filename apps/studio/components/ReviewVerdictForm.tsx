@@ -2,16 +2,20 @@
 
 import { useState } from 'react';
 
-import { submitVerdict, type AcceptanceCriterion } from '@/lib/bridge-client';
+import { submitVerdict } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
-import { AcceptanceCriteriaRows, acButtonStyle as buttonStyle, acInputStyle as inputStyle, acLabelStyle as labelStyle } from './AcceptanceCriteriaRows';
+import { emptyWorkItemDraft, sendBackDraftMissing, sendBackDraftToSource, type WorkItemDraft } from '@/lib/work-item-authoring';
+import { acButtonStyle as buttonStyle, acInputStyle as inputStyle, acLabelStyle as labelStyle } from './AcceptanceCriteriaRows';
+import { WorkItemAuthoringFields } from './WorkItemAuthoringFields';
 
 /**
  * The review human moment — approve or add work items to a cycle's PR
  * after review. Lives on its own screen (`/review/[cycleId]`), mirroring the
  * architect plan screen; the inline dashboard box was retired. Approve =
  * rationale only; "add work items" = rationale + 1+ `GIVEN/WHEN/THEN` acceptance
- * criteria. POSTs the kept `/api/verdict` bridge route (wire kind stays
+ * criteria, plus an optional gate command and files in scope (forge-mfv5.1.28:
+ * the row-5 `WorkItemAuthoringFields`, prefix `verdict`, no summary — the
+ * rationale is the fix work item's summary). POSTs the kept `/api/verdict` bridge route (wire kind stays
  * `send-back` for back-compat). D-20: the work items are appended to the
  * unifier's queue and run in the SAME cycle — no send-back to a dev phase, no
  * new cycle.
@@ -38,26 +42,21 @@ export function ReviewVerdictForm({
 }) {
   const [kind, setKind] = useState<'approve' | 'send-back'>(initialKind);
   const [rationale, setRationale] = useState('');
-  const [acs, setAcs] = useState<AcceptanceCriterion[]>([{ given: '', when: '', then: '' }]);
+  const [draft, setDraft] = useState<WorkItemDraft>(emptyWorkItemDraft);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   async function onSubmit(): Promise<void> {
     setError(null);
+    const typed = kind === 'send-back' ? sendBackDraftToSource(draft) : null;
+    if (typed && 'error' in typed) { setError(typed.error); return; }
     setSubmitting(true);
     try {
       const result =
-        kind === 'approve'
-          ? await submitVerdict({ kind, initiativeId, rationale: rationale.trim() })
-          : await submitVerdict({
-              kind,
-              initiativeId,
-              rationale: rationale.trim(),
-              acceptanceCriteria: acs
-                .filter((a) => a.given.trim() && a.when.trim() && a.then.trim())
-                .map((a) => ({ given: a.given.trim(), when: a.when.trim(), then: a.then.trim() })),
-            });
+        typed === null
+          ? await submitVerdict({ kind: 'approve', initiativeId, rationale: rationale.trim() })
+          : await submitVerdict({ kind: 'send-back', initiativeId, rationale: rationale.trim(), ...typed.source });
       if (!result.ok) {
         setError(result.error ?? 'submit failed');
         return;
@@ -94,7 +93,7 @@ export function ReviewVerdictForm({
       data-form-state={submitting ? 'submitting' : 'editing'}
       data-form-kind={kind}
       data-initiative-id={initiativeId}
-      data-ac-count={kind === 'send-back' ? acs.length : 0}
+      data-ac-count={kind === 'send-back' ? draft.acceptanceCriteria.length : 0}
     >
       <fieldset style={{ border: 'none', padding: 0, margin: '0 0 12px', display: 'flex', gap: 12 }}>
         {/* Bead `forge-8vfn.7.5.4`. The kind pair carried no handle at all, so a
@@ -134,7 +133,8 @@ export function ReviewVerdictForm({
       </label>
 
       {kind === 'send-back' && (
-        <AcceptanceCriteriaRows acs={acs} onChange={setAcs} fieldPrefix="verdict" lastRowReason="a send-back needs at least one acceptance criterion" />
+        <WorkItemAuthoringFields value={draft} onChange={setDraft} fieldPrefix="verdict" actionPrefix="" withSummary={false}
+          lastRowReason="a send-back needs at least one acceptance criterion" />
       )}
 
       {error && <div style={{ marginTop: 10, fontSize: 12, color: '#f85149' }}>{error}</div>}
@@ -151,7 +151,9 @@ export function ReviewVerdictForm({
               ? 'the verdict is being submitted'
               : !rationale.trim()
                 ? 'a rationale is required before a verdict can be submitted'
-                : null,
+                : kind === 'send-back'
+                  ? sendBackDraftMissing(draft)
+                  : null,
           )}
           data-action={kind === 'approve' ? 'approve-and-merge' : 'send-back'}
           style={{ ...buttonStyle, background: kind === 'approve' ? '#238636' : '#9e6a03', opacity: !rationale.trim() ? 0.5 : 1 }}

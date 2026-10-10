@@ -12,7 +12,16 @@ export type AcceptanceCriterion = { given: string; when: string; then: string };
 
 export type VerdictSubmission =
   | { kind: 'approve'; initiativeId: string; rationale: string }
-  | { kind: 'send-back'; initiativeId: string; rationale: string; acceptanceCriteria: AcceptanceCriterion[] };
+  | {
+      kind: 'send-back';
+      initiativeId: string;
+      rationale: string;
+      acceptanceCriteria: AcceptanceCriterion[];
+      /** forge-mfv5.1.28: the fix WI's gate (argv); absent ⇒ the project gate. */
+      qualityGateCmd?: string[];
+      /** forge-mfv5.1.28: the fix WI's scope; absent ⇒ the WI-scope union. */
+      filesInScope?: string[];
+    };
 
 export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/verdict', input);

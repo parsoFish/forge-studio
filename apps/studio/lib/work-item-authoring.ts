@@ -66,3 +66,38 @@ export function workItemDraftToSource(d: WorkItemDraft): { source: WorkItemSourc
     },
   };
 }
+
+/**
+ * forge-mfv5.1.28 — the verdict gate's typed send-back. The rationale is the fix
+ * work item's summary (it lands under `## Rationale` in the compiled WI), so the
+ * draft's summary is unused; gate and files are OPTIONAL — absent, the server
+ * backs the fix WI with the project gate and the WI-scope union (D-20).
+ */
+export type SendBackSource = {
+  acceptanceCriteria: AcceptanceCriterion[];
+  qualityGateCmd?: string[];
+  filesInScope?: string[];
+};
+
+/** Why the typed send-back cannot be submitted yet, or null — drives `disabledAttrs`. */
+export function sendBackDraftMissing(d: WorkItemDraft): string | null {
+  if (completeAcs(d.acceptanceCriteria).length === 0) {
+    return 'a send-back needs a blocking comment or at least one complete GIVEN/WHEN/THEN acceptance criterion — there is neither';
+  }
+  const gate = parseGateCmd(d.gateCmd);
+  return 'error' in gate ? gate.error : null;
+}
+
+export function sendBackDraftToSource(d: WorkItemDraft): { source: SendBackSource } | { error: string } {
+  const missing = sendBackDraftMissing(d);
+  if (missing !== null) return { error: missing };
+  const argv = (parseGateCmd(d.gateCmd) as { argv: string[] }).argv;
+  const files = parseFilesInScope(d.files);
+  return {
+    source: {
+      acceptanceCriteria: completeAcs(d.acceptanceCriteria),
+      ...(argv.length > 0 ? { qualityGateCmd: argv } : {}),
+      ...(files.length > 0 ? { filesInScope: files } : {}),
+    },
+  };
+}

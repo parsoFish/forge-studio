@@ -55,3 +55,36 @@ test('the draft maps to the request source: trimmed, complete ACs only', () => {
   });
   expect(workItemDraftToSource({ ...FULL, gateCmd: 'bash -c "a"' })).toEqual({ error: expect.stringMatching(/quote/) });
 });
+
+// ---- forge-mfv5.1.28 — the verdict gate's typed send-back ------------------
+
+import { sendBackDraftMissing, sendBackDraftToSource } from '../../lib/work-item-authoring';
+
+test('a typed send-back with no complete criterion is refused naming BOTH inputs it could have had', () => {
+  const r = sendBackDraftMissing({ ...emptyWorkItemDraft() });
+  expect(r).toMatch(/blocking comment/);
+  expect(r).toMatch(/acceptance criterion/);
+});
+
+test('a typed send-back needs only criteria — gate and scope are optional (absent ⇒ the project gate / WI-scope union)', () => {
+  const d = { ...emptyWorkItemDraft(), acceptanceCriteria: [{ given: ' g ', when: 'w', then: 't' }] };
+  expect(sendBackDraftMissing(d)).toBeNull();
+  expect(sendBackDraftToSource(d)).toEqual({ source: { acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] } });
+});
+
+test('a typed send-back carries the gate as argv and the files one per line', () => {
+  const d = { ...FULL, summary: '' };
+  expect(sendBackDraftToSource(d)).toEqual({
+    source: {
+      acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+      qualityGateCmd: ['node', '--test', 'tests/retire.test.ts'],
+      filesInScope: ['specs/legacy.md', 'tests/retire.test.ts'],
+    },
+  });
+});
+
+test('a quoted gate on a typed send-back is refused by name', () => {
+  const d = { ...FULL, gateCmd: 'pytest -k "a b"' };
+  expect(sendBackDraftMissing(d)).toMatch(/quote/);
+  expect('error' in sendBackDraftToSource(d)).toBe(true);
+});
