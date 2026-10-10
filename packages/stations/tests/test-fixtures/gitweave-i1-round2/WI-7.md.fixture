@@ -1,0 +1,45 @@
+---
+work_item_id: WI-7
+initiative_id: INIT-2026-10-10-i1-honest-baseline
+status: complete
+depends_on: []
+acceptance_criteria:
+  - given: the demo region "checkpoint-9"
+    when: the operator reviews the change
+    then: >-
+      Given the PR head, when `python3 -m pytest tests/` runs, then it exits 0
+      with zero failed and zero errored tests — no skip, xfail or deselect
+      added. Measured on 39ad991: 242 failed / 606 passed. Operator ruling
+      2026-10-10.
+  - given: the demo region "ac-11"
+    when: the operator reviews the change
+    then: >-
+      Given docs/demo-guide.md, README.md and .github/copilot-context.md, when
+      they are read, then none references a removed path (metrics/,
+      metrics/requirements.txt, modules/example-template, docker compose,
+      scripts/generate-update-pr.py).
+files_in_scope:
+  - tests/test_pruned_artefacts.py
+  - tests/test_demo_guide.py
+  - metrics/src/main.py
+  - README.md
+estimated_iterations: 15
+quality_gate_cmd:
+  - python3
+  - '-m'
+  - pytest
+  - tests/test_structure.py
+origin: review-fix
+---
+
+<!-- Provenance (forge-mfv5.1.30): trimmed from gitweave cycle
+2026-10-10T01-55-59_INIT-2026-10-10-i1-honest-baseline, file
+_worktrees/INIT-2026-10-10-i1-honest-baseline/.forge/work-items/WI-7.md, as
+reviewed at head 1d228b1 (delivered as commit 967c967, merged by 0a7c5fd
+"wi(WI-7): merge"). Kept: two of five criteria verbatim (one whose THEN carries
+a runnable command, one prose) and four of the 28 declared files — the first
+three are also declared by WI-1, the shape that left WI-7 with no chunk. -->
+
+# WI-7 — review-fix concern (code-fix)
+
+> Compiled from a post-develop fix loop (D-20).
