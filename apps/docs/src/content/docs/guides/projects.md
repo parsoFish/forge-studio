@@ -46,7 +46,7 @@ It checks the same clauses and prints a pass, fail or warn line for each. It als
 The editor also holds two declarations, both saved with **Save**:
 
 - **Demo means** lists what a demo may drive: commands, in-app routes, and API paths or commands. Ignored keys are left out of a before/after comparison. When the demo builder locks a declaration, it adds the commands its capture steps ran.
-- **Acceptance tier** is the substring that marks a live-acceptance gate, plus the environment variables such a gate needs. A tier with variables but no match is refused by name.
+- **Acceptance tier** is the text that marks a live-acceptance gate command, plus the environment variables such a gate needs. A tier with variables but no match is refused by name.
 
 The readiness panel lists both, or says that neither is declared.
 
