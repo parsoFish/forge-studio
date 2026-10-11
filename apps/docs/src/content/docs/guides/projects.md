@@ -3,7 +3,7 @@ title: Projects
 description: Register a git repository so forge can build it, check it against the project contract, and rebuild the contract when it drifts.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-10
+last_verified: 2026-10-12
 covers: [apps/studio/app/projects/**, packages/projects/**]
 sidebar:
   order: 4
@@ -51,7 +51,7 @@ When a project's generated mechanisms have drifted from the current template, pr
 - *The onboarding button says a run is in progress.* An onboarding run is already in flight for this project. Wait for it or cancel it.
 - **choose an app type first**: **Preview drift** needs an app type when the project has none recorded.
 - *The project page lists `.forge/project.json`, `.gitignore`, `AGENTS.md` or `roadmap.md` as not committed.* That contract file has a change outside the project's `forge-studio` branch, so a Save would push the default branch without it. Press **Commit these files and save** to commit them to `forge-studio` and save, or discard the change first. **Save pending changes** appears whenever `forge-studio` holds work the default branch does not have, even with no unsaved edits on the page.
-- *Save opened a pull request.* The project's default branch is protected (or refused the push), so Save pushed `forge-studio` and opened a pull request; the page links it and names its state. Save merges it only once every required check is green, so press **Save** again when the checks pass. With no required check, Save never merges: merge it on GitHub yourself or add one.
+- *Save opened a pull request.* The project's default branch is protected (or refused the push), so Save pushed `forge-studio` and opened a pull request; the page links it and names its state. Save merges it only once every required check is green, so press **Save** again when the checks pass. With no required check, Save never merges: merge it on GitHub yourself or add one. Once it has merged, the next Save fast-forwards the default branch and deletes the remote `forge-studio`. A remote `forge-studio` that is already merged is replaced on the next Save; one that holds unmerged commits is refused by name and left alone.
 - *Save shows commits that will move to `forge-studio`.* Your local default branch holds commits its remote does not. Confirm to move them to `forge-studio`, reset the local branch to the remote, and open a pull request.
 
 ## Related
