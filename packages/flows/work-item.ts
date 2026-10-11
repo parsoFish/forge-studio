@@ -108,7 +108,7 @@ export {
   DEV_WORK_ITEM_ID_PATTERN,
   devWorkItemIdStem,
 } from '@forge/contracts';
-import { WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN } from '@forge/contracts';
+import { WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, compareWorkItemIds } from '@forge/contracts';
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 /**
  * Exported (W6-RV-1) so forge-ui's hand-kept `WorkItemStatus` mirror
@@ -477,7 +477,7 @@ export function readWorkItemsFromDir(dir: string): {
     // was renamed _decomposition.md; the prefix rule is future-proof.)
     // forge-mfv5.1.35: Requeue repair mode restores a rejected set WITH its marker.
     .filter((f) => f.endsWith('.md') && !f.startsWith('_') && f !== REJECTED_SET_MARKER)
-    .sort();
+    .sort((x, y) => compareWorkItemIds(x.slice(0, -'.md'.length), y.slice(0, -'.md'.length))); // forge-mfv5.1.36: natural, never lexical
 
   for (const file of files) {
     const full = join(dir, file);
@@ -592,12 +592,13 @@ export function detectHiddenCoupling(items: WorkItem[]): CouplingPair[] {
           reachable(a, b, reverseAdj) ||
           reachable(b, a, reverseAdj);
         if (connected) continue;
-        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+        const [lo, hi] = compareWorkItemIds(a, b) <= 0 ? [a, b] : [b, a];
+        const key = `${lo}|${hi}`;
         const existing = pairs.get(key);
         if (existing) {
           if (!existing.sharedFiles.includes(file)) existing.sharedFiles.push(file);
         } else {
-          pairs.set(key, { a: a < b ? a : b, b: a < b ? b : a, sharedFiles: [file] });
+          pairs.set(key, { a: lo, b: hi, sharedFiles: [file] });
         }
       }
     }
@@ -609,6 +610,7 @@ export function detectHiddenCoupling(items: WorkItem[]): CouplingPair[] {
  * Return work items in dependency order: every WI's prerequisites appear
  * before it. Items with `depends_on` references that don't resolve in `items`
  * are treated as roots (orphan dependency = upstream-validation responsibility).
+ * Ready items tie-break in `compareWorkItemIds` order (forge-mfv5.1.36).
  * Throws if a cycle is present — callers should run `validateWorkItemSet`
  * first if they want a structured error.
  */
@@ -630,7 +632,7 @@ export function topologicalOrder(items: WorkItem[]): WorkItem[] {
   const ready = items
     .filter((i) => (indegree.get(i.work_item_id) ?? 0) === 0)
     .map((i) => i.work_item_id)
-    .sort();
+    .sort(compareWorkItemIds); // forge-mfv5.1.36: every ready tie-break is natural (WI-2 before WI-10)
   const out: WorkItem[] = [];
   while (ready.length > 0) {
     const id = ready.shift()!;
@@ -655,7 +657,7 @@ function insertSorted(list: string[], value: string): void {
   let hi = list.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (list[mid]! < value) lo = mid + 1;
+    if (compareWorkItemIds(list[mid]!, value) < 0) lo = mid + 1;
     else hi = mid;
   }
   list.splice(lo, 0, value);

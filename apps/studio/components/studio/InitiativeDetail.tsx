@@ -345,8 +345,10 @@ export function InitiativeDetail({
       {develop.status === 'error' && develop.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
       )}
-      {/* forge-nk1y.12 (D-48): add a plan work item at the Kickoff gate — below Start development (D-46). */}
-      {status === 'awaiting-kickoff' && develop.status !== 'started' && <KickoffAddWorkItem initiativeId={initiativeId} onAdded={onWorkItemAdded} />}
+      {/* forge-nk1y.12 (D-48): add a plan work item at the Kickoff gate — below Start development (D-46); forge-mfv5.1.36: its dependencies, from the roadmap's WIs. */}
+      {status === 'awaiting-kickoff' && develop.status !== 'started' && (
+        <KickoffAddWorkItem initiativeId={initiativeId} workItems={wiLevels ? [...wiLevels.byLevel.values()].flat() : []} onAdded={onWorkItemAdded} />
+      )}
       {/* W7-A3 (projects-16/17/32): no more "the unifier will open a PR" —
           the develop flow does; and the claim + run link are real. */}
       {develop.status === 'started' && (

@@ -31,7 +31,7 @@ import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows';
 import { cachedListRuns, recordedPmValidationErrors } from '@forge/flows';
 import { eventToNodeId } from '@forge/flows';
 import { listPlannedInitiatives } from '@forge/flows';
-import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
+import { isRunnableSource, DEVELOP_FLOW_ID, compareWorkItemIds } from '@forge/contracts';
 import { checkInitiativeDeps } from '@forge/flows';
 import type { Run } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
@@ -1194,7 +1194,7 @@ function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
       // skip unparseable WI
     }
   }
-  return items;
+  return items.sort((x, y) => compareWorkItemIds(x.id, y.id)); // forge-mfv5.1.36: readdir order is not an order
 }
 
 /** Scan _logs/ for the latest cycle dir belonging to initId. */
