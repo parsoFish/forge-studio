@@ -16,7 +16,8 @@
  * artifact-plan-19 — a cycle plan is always view-only; the plan's interactive
  * gate is the architect session's PlanGate):
  *   demo    → GateBar  (gateId='verdict'; posts rationale + synthesized AC — artifact-plan-18/V01)
- *   verdict → DemoReviewSurface / ReviewVerdictForm (the harness depends on their data-* intact)
+ *   verdict → DemoReviewSurface (decision card + criteria | findings + demo;
+ *             forge-mfv5.1.31) / ReviewVerdictForm when no demo.json was filed
  *   plan / workitems / pr / reflection → view only (no gate bar)
  *
  * data-* contract (main):
@@ -24,12 +25,15 @@
  *   data-mode, data-gate-state
  *
  * Preserved from existing components:
- *   data-section="demo-comparison" data-section="demo-evaluation" data-ac-verdict (DemoComparison)
- *   data-component="verdict-form" data-form-state data-action="approve-and-merge"|"send-back" (ReviewVerdictForm)
+ *   verdict gate: data-section="gate-decision" | "review" ("ac-verdicts", "review-findings")
+ *   | "demo-comparison" | "demo-details"; data-demo-region (criteria first in document
+ *   order) data-ac-verdict; data-component="verdict-form" data-form-state data-form-kind
+ *   data-action="approve-and-merge"|"send-back"|"compose-send-back"|"open-reflect"
  *
  * Fold-in (M4-4 → M7-3):
- *   type=verdict&mode=gate is the SOLE review gate surface — DemoComparison
- *   (evidence) + ReviewVerdictForm (the gate) + the post-approval open-reflect link.
+ *   type=verdict&mode=gate is the SOLE review gate surface — DemoReviewSurface
+ *  ; the post-approval open-reflect link also renders
+ *   on the view-mode verdict after an approve (forge-nk1y.25).
  *   type=reflection is the SOLE reflection surface — the interactive ReflectionGate
  *   (questions + freeform + submit) above the read-only ReflectionRenderer.
  *   The legacy /review/[cycleId] + /reflect/[cycleId] routes now redirect here
@@ -395,6 +399,23 @@ function ViewStampStrip({ verdictDoc }: { verdictDoc: VerdictDoc | null }) {
         </span>
       )}
     </div>
+  );
+}
+
+/** The reflect affordance after an approve — the cycle's last human step. */
+function ReflectLink({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      data-action="open-reflect"
+      style={{
+        alignSelf: 'flex-start', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-md)',
+        color: 'var(--accent-fg)', background: 'var(--ember)', borderRadius: 'var(--radius-sm)',
+        padding: 'var(--space-2) var(--space-4)', textDecoration: 'none',
+      }}
+    >
+      Reflect on this cycle →
+    </Link>
   );
 }
 
@@ -843,6 +864,10 @@ function ArtifactPageInner() {
   // is always a real, honest destination; `flowIsLive === false` covers both
   // "no run" and "a retired flow id" the same way.
   const monitorHref = isArchitect ? sessionBackHref : flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/flows';
+  // The reflection of this cycle — the payoff after an approve (forge-nk1y.25).
+  const reflectHref = `/artifact?run=${encodeURIComponent(runId)}&type=reflection&mode=view`;
+  // The verdict gate is a wide surface (before/after at ≥ 600 px each, D-46).
+  const wideGate = type === 'verdict' && isGateMode;
 
   // Status pill
   const statusPill = run?.status ?? null;
@@ -933,7 +958,7 @@ function ArtifactPageInner() {
     >
       <StudioNav />
 
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 28px' }}>
+      <div style={wideGate ? { maxWidth: 'none', margin: 0, padding: '0 var(--space-6)' } : { maxWidth: 1080, margin: '0 auto', padding: '0 28px' }}>
         {/* Breadcrumb — W7-C3 (crosscut-19): a labelled landmark; keeps its
             richer per-mode links + data-crumb pins (predates the shared
             Breadcrumbs component, which carries no action slots). */}
@@ -1124,90 +1149,40 @@ function ArtifactPageInner() {
               {/* Verdict gate-mode: demo evidence above the form (M4-4 fold-in).
                   Render even when artifact is empty (verdict.json doesn't exist
                   yet — we're authoring it). */}
-              {type === 'verdict' && isGateMode && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* R4-08-F3: findings above the evidence — the operator weighs
-                      the critique before deciding. Claims only; never a gate.
-                      W7-B7 (artifact-plan-16): an absent artifact renders an
-                      explicit "did not run" note, never silent nothing. */}
+              {/* Verdict gate (forge-mfv5.1.31): decision
+                  first, then criteria | findings, then the demo — DemoReviewSurface
+                  composes all four blocks and owns the comment-derived verdict.
+                  Renders even when verdict.json does not exist yet (we are
+                  authoring it). */}
+              {type === 'verdict' && isGateMode && demoModel && (
+                <DemoReviewSurface key={artifactRunId}
+                  model={demoModel}
+                  cycleId={artifactRunId}
+                  initiativeId={gateInitiativeId}
+                  reviewFindings={{ doc: reviewFindings, absent: reviewFindingsAbsent, error: reviewFindingsError }}
+                  costUsd={run?.costUsd ?? null}
+                  bridgeBase={bridgeBase}
+                  reflectHref={reflectHref}
+                  onSubmitted={(kind) => {
+                    setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                  }}
+                />
+              )}
+              {type === 'verdict' && isGateMode && !demoModel && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
-                  {demoModel ? (
-                    <>
-                      {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
-                      <DemoComparison model={demoModel} cycleId={artifactRunId} />
-                      {/* DEC-5: the comment-on-page visual review IS the verdict — markdown
-                          narrative + per-region slider/JSON-diff + anchored comments derive
-                          approve/send-back. Replaces the textarea form; still emits the
-                          verdict-form data-* contract. W7-B7 (artifact-plan-25):
-                          ONE id-resolution rule for every verdict surface. */}
-                      <DemoReviewSurface
-                        model={demoModel}
-                        cycleId={artifactRunId}
-                        initiativeId={gateInitiativeId}
-                        onSubmitted={(kind) => {
-                          setGateState(kind === 'approve' ? 'approved' : 'sent-back');
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <div style={{
-                        border: '1px solid var(--line)',
-                        borderRadius: 8,
-                        padding: '14px 18px',
-                        background: 'var(--panel)',
-                        fontSize: 13,
-                        color: 'var(--dim)',
-                      }}>
-                        No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
-                      </div>
-                      {/* No-demo fallback: the plain verdict form (same data-* contract).
-                          W7-B7 (artifact-plan-25): same id resolution as its sibling. */}
-                      <ReviewVerdictForm
-                        initiativeId={gateInitiativeId}
-                        onSubmitted={(kind) => {
-                          setGateState(kind === 'approve' ? 'approved' : 'sent-back');
-                        }}
-                      />
-                    </>
-                  )}
-
-                  {/* Approval payoff — surface the final human moment (reflect).
-                      Re-homed from the retired /review screen; points at the
-                      unified reflection artifact. Harness asserts data-action="open-reflect". */}
-                  {gateState === 'approved' && (
-                    <div style={{
-                      border: '1px solid rgba(74,222,128,.4)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '14px 18px',
-                      background: 'rgba(74,222,128,.07)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}>
-                      <span style={{ fontSize: 13, color: 'var(--green)' }}>
-                        Approved — merged. One last step: reflect on the cycle.
-                      </span>
-                      <Link
-                        href={`/artifact?run=${encodeURIComponent(runId)}&type=reflection&mode=view`}
-                        data-action="open-reflect"
-                        style={{
-                          flex: '0 0 auto',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: '#fff',
-                          background: '#8957e5',
-                          border: '1px solid var(--line)',
-                          borderRadius: 6,
-                          padding: '6px 14px',
-                          textDecoration: 'none',
-                        }}
-                      >
-                        Reflect on this cycle →
-                      </Link>
-                    </div>
-                  )}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-3) var(--space-4)', background: 'var(--panel)', fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
+                    No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
+                  </div>
+                  {/* No-demo fallback: the plain verdict form (same data-* contract,
+                      same id resolution — W7-B7 artifact-plan-25). */}
+                  <ReviewVerdictForm
+                    initiativeId={gateInitiativeId}
+                    onSubmitted={(kind) => {
+                      setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                    }}
+                  />
+                  {gateState === 'approved' && <ReflectLink href={reflectHref} />}
                 </div>
               )}
 
@@ -1344,6 +1319,9 @@ function ArtifactPageInner() {
 
               {artifact && artifact.type === 'verdict' && !isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* forge-nk1y.25: after an approve (the merge) the reflection is
+                      one press away from the verdict, as the docs describe. */}
+                  {artifact.doc.decision !== 'send-back' && <ReflectLink href={reflectHref} />}
                   <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
                   <VerdictRenderer doc={artifact.doc} />
                 </div>

@@ -36,19 +36,17 @@ export type ReviewCommentsResponse = {
   derivedVerdict: DerivedVerdict;
 };
 
-const EMPTY = (cycleId: string): ReviewCommentsResponse => ({
-  cycleId,
-  comments: [],
-  derivedVerdict: { kind: 'approve' },
-});
-
-export async function fetchReviewComments(cycleId: string): Promise<ReviewCommentsResponse> {
+/** The cycle's comments and the verdict they derive. A failed read is an ERROR, never an empty
+ *  comment set: an empty set derives "approve", and a gate must not offer approve and merge over
+ *  blockers it could not read (forge-mfv5.1.31; M7 §6.15 — a caught failure is UNKNOWN). An
+ *  absent sidecar is not a failure — the bridge answers it with an empty set. */
+export async function fetchReviewComments(cycleId: string): Promise<ReviewCommentsResponse | { error: string }> {
   try {
     const res = await bridgeFetch(`/api/review-comments/${encodeURIComponent(cycleId)}`);
-    if (!res.ok) return EMPTY(cycleId);
+    if (!res.ok) return { error: `the review comments could not be loaded (HTTP ${res.status})` };
     return normalize(cycleId, await res.json());
-  } catch {
-    return EMPTY(cycleId);
+  } catch (err) {
+    return { error: `the review comments could not be loaded (${err instanceof Error ? err.message : String(err)})` };
   }
 }
 
