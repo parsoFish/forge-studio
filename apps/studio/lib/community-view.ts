@@ -687,3 +687,12 @@ function baseRefreshOutcomeView(result: CommunityRefreshResult): CommunityRefres
     }
   }
 }
+
+/** forge-nk1y.17 (D-46 §3.1): the card grid pages — it never sets the page
+ *  height. 24 cards ≈ five rows of 260-px cards at the 1600-px viewport. */
+export const COMMUNITY_PAGE_SIZE = 24;
+
+/** The items shown after `shownPages` presses of "show more" (1 = first page). */
+export function visibleCommunityItems<T>(items: readonly T[], pageSize: number, shownPages: number): T[] {
+  return items.slice(0, pageSize * shownPages);
+}
