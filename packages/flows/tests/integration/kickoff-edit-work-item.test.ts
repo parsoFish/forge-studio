@@ -208,6 +208,7 @@ test('delete lock: Start development landing while it waits is refused not-at-ki
   assert.equal(enqueueDevelopRun(I2_INIT, { queueRoot: join(root, '_queue') }).status, 'enqueued');
   const r = await pending;
   assert.equal(r.status, 'not-at-kickoff');
+  assert.match(detail(r), /while the request waited on its lock/, 'refused by the in-lock re-check, not by a later write failing');
   assert.equal(existsSync(join(wiDir, 'WI-14.md')), true);
 }));
 
