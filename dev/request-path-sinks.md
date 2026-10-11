@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-250 files, 1425 sink calls; 180 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+250 files, 1424 sink calls; 180 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -232,7 +232,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/sessions/turn-cost-rows.ts` | 1 | not-request-derived |  | read | Not a route: the session/story spend emitters' FAILURE path |
 | `packages/stations/cycle-recap.ts` | 17 | unclassified |  |  |  |
 | `packages/stations/demo-delta.ts` | 2 | guarded |  | read | `bundleDir` (`before`/`after` `.out` or `.filmstrip.png`) |
-| `packages/stations/demo-model.ts` | 9 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `packages/stations/demo-model.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/demo-planner-port.ts` | 2 | not-request-derived |  | read | `worktreeDemoDir(input.worktreePath, input.initiativeId)` — the same flow-input demo dir integrate.ts writes demo.json into; no request value reaches it |
 | `packages/stations/gates/docs-gate.ts` | 3 | guarded |  | read | the markdown paths in the branch diff |
 | `packages/stations/phases/adversarial-review.ts` | 15 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

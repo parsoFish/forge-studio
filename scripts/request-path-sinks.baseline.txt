@@ -670,7 +670,7 @@ packages/stations/cycle-recap.ts statSync 1
 packages/stations/cycle-recap.ts writeFileSync 1
 packages/stations/demo-delta.ts readFileSync 2
 packages/stations/demo-model.ts existsSync 1
-packages/stations/demo-model.ts readdirSync 2
+packages/stations/demo-model.ts readdirSync 1
 packages/stations/demo-model.ts readFileSync 4
 packages/stations/demo-model.ts writeFileSync 2
 packages/stations/demo-planner-port.ts mkdirSync 1

@@ -273,6 +273,36 @@ test('recordTerminal: writes a webm + filmstrip; the rendered page footer names 
   }
 });
 
+/** PNG IHDR width/height (bytes 16..23, big-endian). */
+function pngSize(buf: Buffer): { width: number; height: number } {
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+test('forge-nk1y.30 — a CLI checkpoint keeps its last still at native capture resolution; the filmstrip stays a thumbnail; the frame bound to the checkpoint is the native still', async () => {
+  const { dir, root } = worktreeShapedTmp();
+  try {
+    const result = await recordTerminal({
+      side: 'after',
+      label: 'plan-fixture',
+      argv: ['gw', 'plan', '--fixture', 'tests/fixtures/org.json'],
+      outText: 'PLAN  team ghost-team  delete\nPLAN  repo  api  update\n2 changes\n',
+      bundleDir: dir,
+    });
+    assert.equal(result.still, join(dir, 'after', 'plan-fixture.png'));
+    const still = pngSize(readFileSync(result.still));
+    assert.ok(still.width >= 1280, `native still is ${still.width}px wide, not a 320px column`);
+    const strip = pngSize(readFileSync(result.filmstrip));
+    assert.ok(strip.width < still.width, 'the filmstrip grid stays a thumbnail');
+
+    const merged = mergeCapturedMedia(baseModel('plan-fixture'), collectCapturedMedia(dir));
+    const frame = merged.checkpoints[0].afterImage ?? '';
+    const bound = pngSize(Buffer.from(frame.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    assert.ok(bound.width >= 1280, `the checkpoint's frame is ${bound.width}px wide — the verdict page's frame tab shows this`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // ── demo-model.ts binding (collectCapturedMedia / mergeCapturedMedia) ───────
 
 function baseModel(label: string): DemoModel {
@@ -285,14 +315,14 @@ function baseModel(label: string): DemoModel {
   };
 }
 
-test('collectCapturedMedia: binds .webm to *VideoSrc and lets .filmstrip.png win over a plain .png', () => {
+test('collectCapturedMedia: binds .webm to *VideoSrc; the native still (.png) is the frame, never the filmstrip thumbnail (forge-nk1y.30)', () => {
   const bundleDir = mkdtempSync(join(tmpdir(), 'forge-demo-bind-'));
   try {
     for (const side of ['before', 'after'] as const) {
       const d = join(bundleDir, side);
       mkdirSync(d, { recursive: true });
       writeFileSync(join(d, 'checkout-flow.webm'), Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0, 0]));
-      // A plain screenshot AND a filmstrip of the same label — filmstrip must win.
+      // The native still AND a filmstrip of the same label — the still must win (the grid is a thumbnail).
       writeFileSync(join(d, 'checkout-flow.png'), Buffer.from(PNG_SIGNATURE.concat([1])));
       writeFileSync(join(d, 'checkout-flow.filmstrip.png'), Buffer.from(PNG_SIGNATURE.concat([2])));
     }
@@ -302,16 +332,31 @@ test('collectCapturedMedia: binds .webm to *VideoSrc and lets .filmstrip.png win
     assert.equal(cap.label, 'checkout-flow');
     assert.equal(cap.beforeVideoSrc, '.capture/before/checkout-flow.webm');
     assert.equal(cap.afterVideoSrc, '.capture/after/checkout-flow.webm');
-    const filmstripUri = `data:image/png;base64,${Buffer.from(PNG_SIGNATURE.concat([2])).toString('base64')}`;
-    assert.equal(cap.beforeImage, filmstripUri, 'the filmstrip PNG wins over the plain PNG');
-    assert.equal(cap.afterImage, filmstripUri);
+    const stillUri = `data:image/png;base64,${Buffer.from(PNG_SIGNATURE.concat([1])).toString('base64')}`;
+    assert.equal(cap.beforeImage, stillUri, 'the native still wins over the filmstrip');
+    assert.equal(cap.afterImage, stillUri);
 
     const merged = mergeCapturedMedia(baseModel('checkout-flow'), captured);
     const [cp] = merged.checkpoints;
     assert.equal(cp.kind, 'video', "a bound webm promotes the checkpoint's kind to 'video'");
     assert.equal(cp.beforeVideoSrc, '.capture/before/checkout-flow.webm');
     assert.equal(cp.afterVideoSrc, '.capture/after/checkout-flow.webm');
-    assert.equal(cp.beforeImage, filmstripUri);
+    assert.equal(cp.beforeImage, stillUri);
+  } finally {
+    rmSync(bundleDir, { recursive: true, force: true });
+  }
+});
+
+test('collectCapturedMedia: the native still wins whatever the listing order (plain .png listed before the filmstrip)', () => {
+  const bundleDir = mkdtempSync(join(tmpdir(), 'forge-demo-bind-order-'));
+  try {
+    const d = join(bundleDir, 'after');
+    mkdirSync(d, { recursive: true });
+    writeFileSync(join(d, 'plan.png'), Buffer.from(PNG_SIGNATURE.concat([1])));
+    writeFileSync(join(d, 'plan.filmstrip.png'), Buffer.from(PNG_SIGNATURE.concat([2])));
+    const order = (dir: string) => (dir.endsWith('after') ? ['plan.png', 'plan.filmstrip.png'] : []);
+    const [cap] = collectCapturedMedia(bundleDir, order);
+    assert.equal(cap.afterImage, `data:image/png;base64,${Buffer.from(PNG_SIGNATURE.concat([1])).toString('base64')}`);
   } finally {
     rmSync(bundleDir, { recursive: true, force: true });
   }
