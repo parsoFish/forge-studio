@@ -59,7 +59,7 @@ const SCOPE_BADGE: Record<string, string> = {
 export default function KnowledgePage() {
   return (
     <Suspense fallback={
-      <main id={MAIN_CONTENT_ID} data-page="knowledge" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <main id={MAIN_CONTENT_ID} data-page="knowledge" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         <StudioNav />
         <div style={{ padding: 40, color: 'var(--dim)' }}>Loading…</div>
       </main>
@@ -517,7 +517,8 @@ function KnowledgePageInner() {
       /* forge-8vfn.5.10: on the ROOT too, not only the banner below — the story
          runner reads the root first (beats.mjs resolveExpectations). */
       {...(seedSessionParam ? { 'data-seed-session-id': seedSessionParam } : {})}
-      style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}
+      // forge-nk1y.19 (D-46 §1): a fixed shell — exactly one viewport; panes scroll inside.
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}
     >
       <StudioNav />
 
@@ -639,13 +640,13 @@ function KnowledgePageInner() {
           "No KB data available." text a real-but-quiet KB graph also used
           to share. */}
       {tab === 'explore' && kbsError ? (
-        <div style={{ padding: '24px 20px', maxWidth: 720 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '24px 20px', maxWidth: 720 }}>
           <FetchErrorState what="knowledge bases" error={kbsError.message} status={kbsError.status} onRetry={reloadKbs} />
         </div>
       ) : tab === 'explore' && ready && allKbs.length === 0 ? (
         <KnowledgeEmptyState />
       ) : tab === 'explore' && (
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div data-tab-body="explore" style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
           {/* Graph area */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
@@ -693,7 +694,7 @@ function KnowledgePageInner() {
           replaces LintResolutionPanel — ONE button drives the KB to green
           server-side; the panel is a pure observer of that server state. */}
       {tab === 'health' && (
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div data-tab-body="health" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* W7-B2: the ONE action group (knowledge-05/32) sits first; the
               drain panel below it is the pure observer of whatever run is
               active-or-latest. */}
