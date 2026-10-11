@@ -23,13 +23,12 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { compareWorkItemIds } from '@forge/contracts';
 import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogEntry } from '@forge/kernel';
 import { summariseCycle, type CycleMetrics, phasesInRenderOrder, phaseCostRemainder } from './metrics.ts';
 import { parseManifest, type InitiativeManifest } from './manifest.ts';
-import { parseWorkItem, type WorkItem } from './work-item.ts';
+import { readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { cycleArchivePath, cycleArchiveRelPath } from '@forge/knowledge';
 
 export type CycleReportInput = {
@@ -146,19 +145,7 @@ function loadManifest(forgeRoot: string, initiativeId: string): InitiativeManife
 }
 
 function loadWorkItemsSnapshot(cycleLogDir: string): WorkItem[] {
-  const dir = join(cycleLogDir, 'work-items-snapshot');
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((f) => f.endsWith('.md') && f !== '_graph.md')
-    .sort((x, y) => compareWorkItemIds(x.slice(0, -'.md'.length), y.slice(0, -'.md'.length))) // forge-mfv5.1.36
-    .map((f) => {
-      try {
-        return parseWorkItem(readFileSync(join(dir, f), 'utf8'));
-      } catch {
-        return null;
-      }
-    })
-    .filter((w): w is WorkItem => w !== null);
+  return readWorkItemsFromDir(join(cycleLogDir, 'work-items-snapshot')).items; // natural id order (forge-mfv5.1.36); unparseable files skipped
 }
 
 function loadGraphMermaid(cycleLogDir: string): string | null {

@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-249 files, 1428 sink calls; 179 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+249 files, 1425 sink calls; 179 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -59,7 +59,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/flow-artifacts.ts` | 10 | other | `isSafeCycleId` | exec | `manifest.cycle_id` |
 | `packages/flows/flow-run-requests.ts` | 13 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/flow-runner.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
-| `packages/flows/forge-metrics.ts` | 34 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `packages/flows/forge-metrics.ts` | 31 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/forge-requeue.ts` | 16 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project` |
 | `packages/flows/gate-fix-loop.ts` | 4 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/gh-pinned.ts` | 2 | accidentally-safe |  |  | the PR lifecycle |
