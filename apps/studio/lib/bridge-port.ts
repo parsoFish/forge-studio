@@ -10,15 +10,12 @@
  *     and can't share a single TS import cleanly" — that is no longer true:
  *     contracts is a workspace package both sides import, so there is one
  *     definition and drift is structurally impossible rather than merely
- *     detected. Still a build-time constant, NOT an env read — `app/layout.tsx`
- *     inlines it into `window.__FORGE_BRIDGE_PORT__` with zero per-request
- *     work, so the layout stays fully static.
+ *     detected. The client's last-resort fallback (forge-nk1y.29: the layout no
+ *     longer inlines it — the launched port arrives via `bridgePortScript`).
  *   - `resolveBridgePortFromEnv` — the AUTHORITATIVE, env-derived value
  *     (reads `FORGE_BRIDGE_URL`, the var `apps/forge/forge-watch.ts` sets on the
- *     Next.js process for both `next dev`/`next start`). Used only by the
- *     dynamic `/api/forge-config` route — the correction path
- *     `lib/bridge-client.ts` falls back to when the optimistic default
- *     guess turns out wrong (e.g. a `--bridge-port` override).
+ *     Next.js process for both `next dev`/`next start`). Read by the dynamic
+ *     `/api/forge-config` route and its `/script` twin (`bridgePortScript`).
  *
  * Host never lives here: WSL2 + a Windows browser needs the host to come
  * from `window.location.hostname` client-side
@@ -39,4 +36,15 @@ export function resolveBridgePortFromEnv(env: NodeJS.ProcessEnv = process.env): 
   } catch {
     return null;
   }
+}
+
+/**
+ * forge-nk1y.29 — the script `/api/forge-config/script` serves, loaded `beforeInteractive` by the
+ * root layout: the LAUNCHED bridge port from the Next process's env, set before any bridge call.
+ * The layout used to inline the build-time default (4123) and the first call used it; an alt-port
+ * Studio read — and from a writing page, wrote — another session's bridge. `null` = this Next
+ * process has no FORGE_BRIDGE_URL (the client then falls back to the default, as the JSON route does).
+ */
+export function bridgePortScript(env: NodeJS.ProcessEnv = process.env): string {
+  return `window.__FORGE_BRIDGE_PORT__=${resolveBridgePortFromEnv(env) ?? 'null'};`;
 }
