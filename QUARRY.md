@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,506 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 65 | 21,281 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
-| `flows` | 94 | 25,995 | **25,796** | ratified 25,796 — forge-nk1y.32 12b: delete a Kickoff-added work item (`deleteKickoffWorkItem`), refused while another depends on it; +42 measured on main 25,754 (after 12a), lane-ratified (≤100, ruling 666). |
+| `flows` | 94 | 26,019 | **25,820** | ratified 25,820 — forge-nk1y.34: the approve rationale is written into the PR body before the merge (`writeVerdictToPrBody`); +24 measured on main 25,796, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,080 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 50 | 12,848 | **12,848** | ratified 12,848 — forge-mfv5.1.34 (D-49): `pm-set-repair.ts` replaces the one-shot revise, plus Requeue repair mode; +92 measured on main 12,756, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,145 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **523** | **136,482** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **523** | **136,506** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -170,7 +170,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/bridge-studio-kbs.ts | knowledge | verbatim | 773 |
 | packages/sessions/bridge-studio-lifecycle.ts | sessions | verbatim | 422 |
 | packages/flows/bridge-studio-runs.ts | flows | verbatim | 478 |
-| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 533 |
+| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 534 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 211 |
 | packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 696 **Ceiling re-keyed +4 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | packages/sessions/session-resolution.ts | sessions | rewritten | 446 |
@@ -592,7 +592,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/index.ts | flows | verbatim | 140 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 441 |
-| packages/flows/pr.ts | flows | verbatim | 420 |
+| packages/flows/pr.ts | flows | verbatim | 443 |
 | packages/flows/pr-media.ts | flows | rewritten | 157 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
 | packages/kernel/url-decode.ts | kernel | rewritten | 30 |
