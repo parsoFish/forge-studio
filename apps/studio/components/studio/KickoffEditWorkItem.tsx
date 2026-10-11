@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { compareWorkItemIds } from '@forge/contracts';
 
-import { editKickoffWorkItem, type RoadmapWorkItem } from '@/lib/bridge-client';
+import { deleteKickoffWorkItem, editKickoffWorkItem, type RoadmapWorkItem } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { workItemDraftFrom, workItemDraftMissing, workItemDraftToSource, type WorkItemDraft } from '@/lib/work-item-authoring';
 import { WorkItemAuthoringFields } from '@/components/WorkItemAuthoringFields';
@@ -32,12 +32,15 @@ export function DepsChecklist({ ids, checked, onToggle, fieldPrefix }: {
 export const toggleId = (ids: readonly string[], id: string): string[] =>
   (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]).sort(compareWorkItemIds);
 
-type State = { state: 'editing' | 'saving' | 'saved' } | { state: 'error'; detail: string };
+type State =
+  | { state: 'editing' | 'saving' | 'saved' | 'confirm-delete' | 'deleting' | 'deleted' }
+  | { state: 'error'; detail: string };
 
 /**
  * forge-mfv5.1.36 / forge-nk1y.32 (D-48 amended) — edit one work item at the
  * Kickoff gate: pick it; one ADDED at the gate prefills the shared authoring
- * fields; a plan work item edits its dependencies only. The server re-checks
+ * fields and can be deleted (after a confirm); a plan work item edits its
+ * dependencies only. The server re-checks
  * the gate under the manifest lock and validates the set; a refusal shows its
  * detail.
  */
@@ -59,6 +62,15 @@ export function KickoffEditWorkItem({ initiativeId, workItems, onSaved }: {
     setS({ state: 'editing' });
   }
 
+  async function onDelete(): Promise<void> {
+    setS({ state: 'deleting' });
+    const r = await deleteKickoffWorkItem({ initiativeId, workItemId: wiId });
+    if (!r.ok) return setS({ state: 'error', detail: r.error });
+    setS({ state: 'deleted' });
+    setWiId('');
+    await onSaved?.();
+  }
+
   async function onSave(): Promise<void> {
     const parsed = draft ? workItemDraftToSource(draft) : null;
     if (parsed && 'error' in parsed) return setS({ state: 'error', detail: parsed.error });
@@ -70,9 +82,13 @@ export function KickoffEditWorkItem({ initiativeId, workItems, onSaved }: {
     await onSaved?.();
   }
 
+  const busy = s.state === 'saving' || s.state === 'deleting';
   const saveReason = wiId === '' ? 'pick a work item to edit'
-    : s.state === 'saving' ? 'a change is being saved'
+    : busy ? 'a change is being saved'
       : draft ? workItemDraftMissing(draft) : null;
+  const deleteReason = wiId === '' ? 'pick a work item to delete'
+    : !draft ? `${wiId} is a plan work item — only a work item added at the Kickoff gate can be deleted`
+      : busy ? 'a change is being saved' : null;
   return (
     <div data-component="kickoff-edit-wi" data-form-state={s.state} style={{ marginTop: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 600 }}>Edit work item</div>
@@ -103,6 +119,7 @@ export function KickoffEditWorkItem({ initiativeId, workItems, onSaved }: {
       )}
       {s.state === 'error' && <div role="alert" style={{ marginTop: 8, fontSize: 12, color: '#f85149' }}>{s.detail}</div>}
       {s.state === 'saved' && <div style={{ marginTop: 8, fontSize: 12 }}>{wiId} saved.</div>}
+      {s.state === 'deleted' && <div style={{ marginTop: 8, fontSize: 12 }}>Work item deleted.</div>}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button
           data-action="save-kickoff-wi"
@@ -112,6 +129,30 @@ export function KickoffEditWorkItem({ initiativeId, workItems, onSaved }: {
         >
           {s.state === 'saving' ? 'saving…' : 'save'}
         </button>
+        {s.state !== 'confirm-delete' ? (
+          <button
+            data-action="delete-kickoff-wi"
+            onClick={() => setS({ state: 'confirm-delete' })}
+            {...disabledAttrs(deleteReason)}
+            style={{ ...acButtonStyle, opacity: deleteReason ? 0.5 : 1 }}
+          >
+            {s.state === 'deleting' ? 'deleting…' : 'delete'}
+          </button>
+        ) : (
+          <>
+            <span style={{ fontSize: 12 }}>Delete {wiId}?</span>
+            <button
+              data-action="confirm-delete-kickoff-wi"
+              onClick={() => void onDelete()}
+              style={{ ...acButtonStyle, background: '#da3633' }}
+            >
+              confirm delete
+            </button>
+            <button data-action="cancel-delete-kickoff-wi" onClick={() => setS({ state: 'editing' })} style={acButtonStyle}>
+              cancel
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

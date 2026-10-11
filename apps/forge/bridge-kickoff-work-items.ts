@@ -14,13 +14,14 @@
  * forge-nk1y.32 (D-48 amended): the PATCH takes the full editable set of a work
  * item ADDED at the gate (summary, acceptanceCriteria, qualityGateCmd,
  * filesInScope, creates, dependsOn — each optional, absent = unchanged; a plan
- * work item takes dependsOn only; `editKickoffWorkItem`).
+ * work item takes dependsOn only), and `DELETE /api/kickoff/work-items/<wiId>`
+ * `{ initiativeId }` removes one (`editKickoffWorkItem` / `deleteKickoffWorkItem`).
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { sendJson, allowedOrigin, sanitizeError, isText, stringList } from '@forge/kernel';
 import { WORK_ITEM_ID_PATTERN } from '@forge/contracts';
-import { addKickoffWorkItem, editKickoffWorkItem } from '@forge/flows';
+import { addKickoffWorkItem, deleteKickoffWorkItem, editKickoffWorkItem } from '@forge/flows';
 import { uncoveredAcceptanceCriteria } from '@forge/stations';
 import { readJson } from './bridge-http.ts';
 
@@ -95,6 +96,7 @@ const HTTP = {
   invalid: 400,
   unsafe: 409,
   'not-a-kickoff-work-item': 409,
+  'has-dependents': 409,
 } as const;
 
 async function readBody(req: IncomingMessage, res: ServerResponse, origin: string): Promise<Record<string, unknown> | null> {
@@ -127,6 +129,7 @@ export async function handleKickoffWorkItemRoutes(
   const wiMatch = url.match(/^\/api\/kickoff\/work-items\/([^/?]+)$/);
   // raw wiMatch[1]: a work-item id never needs percent-decoding, and the pattern refuses any escape
   if (method === 'PATCH' && wiMatch) return handleEdit(req, res, ctx, wiMatch[1]!);
+  if (method === 'DELETE' && wiMatch) return handleDelete(req, res, ctx, wiMatch[1]!);
   if (!(method === 'POST' && url === '/api/kickoff/work-items')) return false;
   const origin = allowedOrigin(req);
   const body = await readBody(req, res, origin);
@@ -179,6 +182,19 @@ async function handleEdit(req: IncomingMessage, res: ServerResponse, ctx: Kickof
   try {
     const r = await editKickoffWorkItem({ ...ctx, initiativeId: t.initiativeId, workItemId, edit: parsed.edit });
     reply(res, t.origin, r, r.status === 'edited' ? { workItemId: r.workItemId, dependsOn: r.dependsOn } : null);
+  } catch (err) {
+    sendJson(res, 500, { error: sanitizeError(err) }, t.origin);
+  }
+  return true;
+}
+
+/** `DELETE /api/kickoff/work-items/<wiId>` `{ initiativeId }` — a work item added at the gate. */
+async function handleDelete(req: IncomingMessage, res: ServerResponse, ctx: KickoffWorkItemContext, workItemId: string): Promise<true> {
+  const t = await readTarget(req, res, workItemId);
+  if (t === null) return true;
+  try {
+    const r = await deleteKickoffWorkItem({ ...ctx, initiativeId: t.initiativeId, workItemId });
+    reply(res, t.origin, r, r.status === 'deleted' ? { workItemId: r.workItemId } : null);
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, t.origin);
   }

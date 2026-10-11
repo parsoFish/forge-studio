@@ -1,6 +1,6 @@
 /** forge-nk1y.12 (D-48): add a plan WI (no `origin`) at the Kickoff gate, under the manifest lock; D-47 coverage injected, reported only.
  *  forge-mfv5.1.36: an added WI depends on the plan's leaves unless `dependsOn` is set.
- *  forge-nk1y.32: a WI ADDED at the gate (its `kickoff.work-item-added` event) is edited in full; a plan WI's
+ *  forge-nk1y.32: a WI ADDED at the gate (its `kickoff.work-item-added` event) is edited in full or deleted; a plan WI's
  *  dependencies only; every submitted scope entry is one relative path (`scopeEntryErrors`). */
 import { dirname } from 'node:path';
 import lockfile from 'proper-lockfile';
@@ -29,7 +29,8 @@ export type KickoffWorkItemEdit = Partial<Omit<KickoffWorkItemSource, 'dependsOn
 export type KickoffCoverage = (acs: ReadonlyArray<{ when: string }>, items: ReadonlyArray<WorkItem>) => string[];
 type GateArgs = { forgeRoot: string; logsRoot: string; initiativeId: string };
 export type AddKickoffWorkItemArgs = GateArgs & { source: KickoffWorkItemSource; coverage: KickoffCoverage };
-type Refusal = { status: 'not-found' | 'not-at-kickoff' | 'invalid' | 'unsafe' | 'not-a-kickoff-work-item'; detail: string };
+type RefusalStatus = 'not-found' | 'not-at-kickoff' | 'invalid' | 'unsafe' | 'not-a-kickoff-work-item' | 'has-dependents';
+type Refusal = { status: RefusalStatus; detail: string };
 export type AddKickoffWorkItemResult = { status: 'added'; workItemId: string; uncoveredAcceptanceCriteria: string[] } | Refusal;
 
 type AtKickoff = { manifest: InitiativeManifest; manifestPath: string; wiDir: string };
@@ -147,7 +148,7 @@ function kickoffAddedRefusal(logsRoot: string, cycleId: string, id: string): Ref
     return { status: 'not-a-kickoff-work-item', detail: `cannot show ${id} was added at the Kickoff gate: ${ids.unreadable}` };
   }
   if (ids.has(id)) return null;
-  const detail = `${id} is a plan work item — at the Kickoff gate only its dependsOn can be edited`;
+  const detail = `${id} is a plan work item — at the Kickoff gate only its dependsOn can be edited, and it cannot be deleted`;
   return { status: 'not-a-kickoff-work-item', detail };
 }
 
@@ -218,5 +219,45 @@ export async function editKickoffWorkItem(a: EditKickoffWorkItemArgs): Promise<E
     const fields = EDIT_FIELDS.filter((f) => a.edit[f] !== undefined && JSON.stringify(was[f]) !== JSON.stringify(now[f]));
     emitKickoff(a, g, 'kickoff.work-item-edited', { work_item_id: wi.work_item_id, fields });
     return { status: 'edited', workItemId: wi.work_item_id, dependsOn: wi.depends_on, fields };
+  });
+}
+
+export type DeleteKickoffWorkItemResult = { status: 'deleted'; workItemId: string } | Refusal;
+
+/**
+ * forge-nk1y.32 (D-48 amended): delete one work item added at the gate, while
+ * nothing is built and nothing depends on it. Manifest `specs` first, under the
+ * lock; a worktree removal that fails restores them; a snapshot copy that
+ * cannot be removed is named, never silent.
+ */
+export async function deleteKickoffWorkItem(a: GateArgs & { workItemId: string }): Promise<DeleteKickoffWorkItemResult> {
+  return underKickoffLock(a, (g): DeleteKickoffWorkItemResult => {
+    const id = a.workItemId, existing = readWorkItemsFromDir(g.wiDir).items;
+    if (!existing.some((w) => w.work_item_id === id)) {
+      return { status: 'not-found', detail: `${id} is not a work item of ${a.initiativeId}` };
+    }
+    const refused = kickoffAddedRefusal(a.logsRoot, cycleIdOf(a, g), id);
+    if (refused) return refused;
+    const dependents = existing.filter((w) => w.depends_on.includes(id)).map((w) => w.work_item_id);
+    if (dependents.length > 0) {
+      return { status: 'has-dependents', detail: `${id} is a dependency of ${dependents.join(', ')} — edit their dependencies first` };
+    }
+    const specs = g.manifest.specs ?? [];
+    if (!persistManifestSpecs(g.manifestPath, specs.filter((s) => s !== id))) {
+      const why = 'the manifest could not record the deletion — vanished or unwritable; nothing deleted';
+      return { status: 'not-at-kickoff', detail: `not at the kickoff gate (${why})` };
+    }
+    if (!guardedUnlink(a.forgeRoot, ['_worktrees', a.initiativeId, '.forge', 'work-items', `${id}.md`])) {
+      const restored = persistManifestSpecs(g.manifestPath, specs)
+        ? 'the manifest specs were restored — nothing deleted'
+        : 'the manifest specs could NOT be restored — re-add the id by hand';
+      return { status: 'unsafe', detail: `${id}.md could not be removed from the worktree; ${restored}` };
+    }
+    const snap = [cycleIdOf(a, g), 'work-items-snapshot', `${id}.md`];
+    const snapLeft = guardedFile(a.logsRoot, snap, 'read') !== null && !guardedUnlink(a.logsRoot, snap);
+    emitKickoff(a, g, 'kickoff.work-item-deleted', { work_item_id: id });
+    if (!snapLeft) return { status: 'deleted', workItemId: id };
+    const left = `its snapshot copy ${snap.join('/')} could not be removed — remove it by hand`;
+    return { status: 'unsafe', detail: `${id} was deleted from the worktree and the manifest specs, but ${left}` };
   });
 }

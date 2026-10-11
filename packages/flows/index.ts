@@ -62,6 +62,7 @@ export { reviewCapExhaustedPath, writeMergeGateConfigErrorMarker, writeReviewCap
 export { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 export {
   addKickoffWorkItem,
+  deleteKickoffWorkItem,
   editKickoffWorkItem,
   kickoffAddedWorkItemFields,
   type KickoffWorkItemFields,

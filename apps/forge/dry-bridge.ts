@@ -216,6 +216,12 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     classification: 'exempt-local',
     reason: 'forge-mfv5.1.36 / forge-nk1y.32: rewrites one work item at the Kickoff gate (worktree + snapshot); no spawn, no network',
   },
+  {
+    method: 'DELETE',
+    route: '/api/kickoff/work-items/:id',
+    classification: 'exempt-local',
+    reason: 'forge-nk1y.32: removes one kickoff-added work item + its manifest specs entry at the Kickoff gate; no spawn, no network',
+  },
   { method: 'POST', route: '/api/initiatives/:id/plan', classification: 'exempt-local', reason: 'plan enqueue: manifest move only (scheduler decomposes, no in-request spawn)' },
   { method: 'POST', route: '/api/flows/:id/run', classification: 'exempt-local', reason: 'W7-A3 per-flow enqueue: manifest move only (enqueueFlowRun); the scheduler claims it later, no in-request spawn' },
   { method: 'POST', route: '/api/halt', classification: 'exempt-local', reason: 'writes the one fixed _queue/halt.json record; no spawn, no network (D-03)' },
