@@ -187,6 +187,10 @@ export function parseManifest(content: string): InitiativeManifest {
     const specs = (data.specs as unknown[]).filter((s): s is string => typeof s === 'string');
     if (specs.length > 0) manifest.specs = specs;
   }
+  if (Array.isArray(data.pm_validation_errors)) {
+    const errors = (data.pm_validation_errors as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (errors.length > 0) manifest.pm_validation_errors = errors;
+  }
   if (typeof data.trigger_kind === 'string' && data.trigger_kind.length > 0) {
     manifest.trigger_kind = data.trigger_kind;
   }
@@ -262,6 +266,9 @@ export function serializeManifest(m: InitiativeManifest): string {
   }
   if (m.specs && m.specs.length > 0) {
     data.specs = m.specs;
+  }
+  if (m.pm_validation_errors && m.pm_validation_errors.length > 0) {
+    data.pm_validation_errors = m.pm_validation_errors;
   }
   if (m.trigger_kind) data.trigger_kind = m.trigger_kind;
   if (m.trigger_source) data.trigger_source = m.trigger_source;
@@ -520,10 +527,21 @@ export function persistManifestCostCeiling(manifestPath: string, costCeilingUsd:
  * if the manifest is missing/unparseable this is a no-op (returns false) and never throws.
  */
 export function persistManifestSpecs(manifestPath: string, specs: string[]): boolean {
+  // D-49: a completed decomposition supersedes any recorded validation errors.
+  return persistManifestPmFields(manifestPath, { specs, pm_validation_errors: undefined });
+}
+
+/** D-49: record the set-validation errors the PM's repair turns did not fix, so
+ *  Requeue can feed them to a repair turn. False = not recorded (the caller names it). */
+export function persistManifestPmValidationErrors(manifestPath: string, errors: readonly string[]): boolean {
+  return persistManifestPmFields(manifestPath, { pm_validation_errors: [...errors] });
+}
+
+function persistManifestPmFields(manifestPath: string, patch: Pick<InitiativeManifest, 'specs' | 'pm_validation_errors'>): boolean {
   try {
     if (!existsSync(manifestPath)) return false;
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    writeFileSync(manifestPath, serializeManifest({ ...m, specs }));
+    writeFileSync(manifestPath, serializeManifest({ ...m, ...patch }));
     return true;
   } catch {
     return false; // best-effort for the cycle; forge-nk1y.12's Kickoff-gate add treats false as a refusal

@@ -1,30 +1,24 @@
 /**
  * Row 157 (bead forge-8vfn.8.1.45, ruling 1873) — the acceptance-gate
  * requirement told to the PM up front (D-34, ONE source shared
- * with the post-hoc gate), and the ONE bounded revise turn a violation earns
- * before quarantine. `runPmAcceptanceRevise` only runs the bounded spawn
- * itself; `project-manager.ts` (the caller) re-reads the revised set and puts
- * it back through the SAME `appendStandingAcs` + `compileWorkItemSpecs` +
- * `validateWorkItemSet` stage the first pass used — both of those are
- * idempotent on already-processed items (see `runCompileStage`'s own doc
- * comment there), so a revise-added acceptance WI gets its standing ACs,
- * constraint clauses and hidden-coupling / creates-mandatory enforcement,
- * not a second-class pass-through.
+ * with the post-hoc gate), and the compile stage every validation of the set
+ * runs through. The repair turns a failing set earns (D-49) live in
+ * `pm-set-repair.ts`; each replacement set goes back through the SAME
+ * `runCompileStage` — idempotent on already-processed items (see its own doc
+ * comment), so a repair-added WI gets its standing ACs, constraint clauses
+ * and hidden-coupling / creates-mandatory enforcement, not a second-class pass-through.
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EventLogger } from '@forge/kernel';
-import { runAgent, resolveOneShotBudgetUsd, type StreamQueryFn } from '@forge/agents';
-import type { AgentDefinition, InitiativeManifest } from '@forge/contracts';
+import type { InitiativeManifest } from '@forge/contracts';
 import type { AcceptanceGateConfig } from '@forge/projects';
 import {
   compileWorkItemSpecs,
   serializeWorkItem,
   type CouplingPair,
-  type CycleInput,
   type WorkItem,
 } from '@forge/flows';
-import { requireCycleId } from './cycle-id.ts';
 
 /** Human text for the requirement, shared VERBATIM by the brief
  *  (`pm-binding.ts`) and the violation message (`project-manager.ts`) — one
@@ -49,8 +43,8 @@ export function describeAcceptanceRequirement(
   );
 }
 
-/** The gate's own violation, or null — shared by the first pass and the
- *  post-revise re-check (`project-manager.ts`, both call sites). */
+/** The gate's own violation, or null — shared by the first pass and
+ *  every repair turn's re-check (`pm-set-repair.ts`). */
 export function acceptanceGateViolation(
   items: readonly WorkItem[],
   acceptance: 'required' | 'advisory',
@@ -134,7 +128,7 @@ export type CompileStageResult = {
  * D-17 (wi-spec-compiler, deterministic core) + A2b's `appendStandingAcs`,
  * composed into ONE step so it can run TWICE on the SAME terms: once over the
  * PM's own decomposition (`project-manager.ts`'s first pass), and again over
- * the revised set a row-157 acceptance-gate turn produces. Both steps are
+ * each replacement set a D-49 repair turn produces. Both steps are
  * idempotent by construction, so re-running them over unchanged items is a
  * no-op: `appendStandingAcs` skips a WI that already carries the standing-ACs
  * header, and `compileWorkItemSpecs`'s three passes are each keyed off
@@ -144,7 +138,7 @@ export type CompileStageResult = {
  * pair already connected by a `depends_on` edge in EITHER direction
  * (`detectHiddenCoupling`'s `reachable` check, work-item.ts), and the
  * creates-mandatory / sizing invariants are pure re-reads with no state to
- * duplicate. A WI the revise turn ADDS therefore gets the exact same standing
+ * duplicate. A WI a repair turn ADDS therefore gets the exact same standing
  * ACs, constraint clauses, hidden-coupling resolution and creates-mandatory
  * enforcement the first pass's WIs already got — never a second-class work
  * item that reaches the dev loop uncompiled.
@@ -186,72 +180,4 @@ export function runCompileStage(opts: RunCompileStageOptions): CompileStageResul
       couplingViolations: [],
     };
   }
-}
-
-// The bounded revise pass's caps — a fraction of the PM's own, never a second full pass.
-const REVISE_TURN_FRACTION = 0.15;
-const REVISE_MIN_TURNS = 5;
-const REVISE_BUDGET_FRACTION = 0.2;
-
-export type PmAcceptanceReviseInput = {
-  input: CycleInput;
-  logger: EventLogger;
-  parentEventId: string;
-  /** Seam F4 — the executing node's own def; also the revise spawn's def. */
-  def: AgentDefinition;
-  queryFn: StreamQueryFn;
-  systemPrompt: string;
-  /** The gate's own message (`accGateViolation`), fed to the PM verbatim. */
-  violation: string;
-  /** Parity with the main spawn's `maxBudgetUsdShare` input — the SAME
-   *  initiative budget the first pass resolved its own cap against. */
-  costBudgetUsd?: number;
-  signal?: AbortSignal;
-};
-
-/** One bounded extra `runAgent` pass. Never a loop — one call, one outcome;
- *  the caller re-reads `.forge/work-items/` and re-checks the gate after. */
-export async function runPmAcceptanceRevise(
-  p: PmAcceptanceReviseInput,
-): Promise<{ costUsd: number; durationMs: number }> {
-  const { input, logger, parentEventId, def, queryFn, systemPrompt, violation, costBudgetUsd, signal } = p;
-  const emit = (message: string, metadata: Record<string, unknown>): void => {
-    logger.emit({
-      initiative_id: input.initiativeId, parent_event_id: parentEventId, phase: 'project-manager',
-      skill: def.slug, event_type: 'log', input_refs: [], output_refs: [], message, metadata,
-    });
-  };
-  emit('pm.acceptance-revise.start', { violation });
-  const reviseDef: AgentDefinition = {
-    ...def,
-    budgets: {
-      ...def.budgets,
-      maxTurns: Math.max(REVISE_MIN_TURNS, Math.ceil((def.budgets.maxTurns ?? 0) * REVISE_TURN_FRACTION)),
-    },
-  };
-  const budget = resolveOneShotBudgetUsd(def.budgets, { id: input.initiativeId, costBudgetUsd });
-  const prompt = [
-    '# Acceptance-gate revise (one bounded turn)',
-    '',
-    `Your work-item set at \`.forge/work-items/\` does not satisfy the plan's ` +
-      `acceptance requirements: ${violation}`,
-    '',
-    'Revise the EXISTING set — add or edit work items — so each requirement above is ' +
-      "met by some work item's quality_gate_cmd. Do not remove valid unrelated work. Then stop.",
-  ].join('\n');
-  const spawn = await runAgent(reviseDef, {
-    runId: `${requireCycleId(input, 'runPmAcceptanceRevise')}-pm-acc-revise`,
-    workdir: input.worktreePath,
-    cwd: input.worktreePath,
-    prompt,
-    systemPrompt,
-    lifecycle: 'caller',
-    logger,
-    streamGuard: { label: 'project-manager-acceptance-revise', signal },
-    kickoffCeilingUsd: budget !== undefined ? budget * REVISE_BUDGET_FRACTION : undefined,
-    bindings: { initiative: { id: input.initiativeId, manifestPath: input.manifestPath, costBudgetUsd } },
-    queryFn,
-  });
-  emit('pm.acceptance-revise.end', { cost_usd: spawn.costUsd, result_subtype: spawn.resultSubtype });
-  return { costUsd: spawn.costUsd, durationMs: spawn.durationMs ?? 0 };
 }

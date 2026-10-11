@@ -36,7 +36,7 @@ be reachable from here or it cannot reach the browser at all.
 | the fixed bridge port (D-12) | `DEFAULT_BRIDGE_PORT` |
 | KB drain round cap | `KB_DRAIN_MAX_ROUNDS` |
 | upload-materials vocabulary | `MATERIAL_KINDS` |
-| failure-signature prefixes failure-classifier.ts scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |
+| failure-signature prefixes failure-classifier.ts scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_SET_VALIDATION_UNREPAIRED_PREFIX` · `PM_REPAIR_NEEDS_REPLAN_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |
 
 ### Types (85)
 

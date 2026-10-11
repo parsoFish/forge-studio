@@ -766,7 +766,7 @@ function RoadmapDrawer({
           recoveryNote={recoveryNote}
           onInspectRecovery={inspectRecovery}
           onRecoveryAction={doRecoveryAction}
-          onDepJump={onDepJump} onWorkItemAdded={onRecoveryDone}
+          onDepJump={onDepJump} onWorkItemAdded={onRecoveryDone} pmRepairErrors={initiative.pmRepairErrors}
         />
       </>
     );

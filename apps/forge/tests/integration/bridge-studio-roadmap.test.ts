@@ -371,6 +371,37 @@ test('roadmap: a done initiative with a real cycle.end event carries completedAt
   }
 });
 
+// forge-mfv5.1.34 row 3: gitweave I2's card read FAILED while the header counted
+// "1 merged" — a failed cycle's crash-tail fallback stamped a completion instant.
+test('roadmap: a FAILED initiative carries no completedAt (never counted as merged) and carries its recorded PM errors', async () => {
+  const cycleId = 'cycle-init-f';
+  const err = 'WI-3: creates lists 7 path(s), exceeding the D-18 sizing bound of 5';
+  writeFileSync(
+    join(forgeRoot, '_queue', 'failed', 'INIT-F.md'),
+    makeManifest('INIT-F', { cycleId }).replace('---\n\n# INIT-F', `pm_validation_errors:\n  - '${err}'\n---\n\n# INIT-F`),
+  );
+  mkdirSync(join(forgeRoot, '_logs', cycleId), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, '_logs', cycleId, 'events.jsonl'),
+    [
+      { event_id: 'EV_1', phase: 'orchestrator', skill: 'cycle', event_type: 'start', started_at: '2026-10-11T02:16:05.000Z', message: 'cycle.start' },
+      { event_id: 'EV_2', phase: 'project-manager', skill: 'project-manager', event_type: 'error', started_at: '2026-10-11T02:29:44.000Z' },
+      { event_id: 'EV_3', phase: 'orchestrator', skill: 'cycle', event_type: 'end', started_at: '2026-10-11T02:29:45.000Z', message: 'cycle.end', metadata: { status: 'failed' } },
+    ].map((e) => JSON.stringify({ cycle_id: cycleId, initiative_id: 'INIT-F', input_refs: [], output_refs: [], ...e })).join('\n') + '\n',
+  );
+  try {
+    const roadmap = await fetchRoadmap();
+    const f = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-F');
+    assert.ok(f, 'INIT-F present in roadmap');
+    assert.equal(f!.status, 'failed');
+    assert.equal(f!.completedAt, undefined, 'a failed initiative is not a completion — no day column counts it');
+    assert.deepEqual((f as { pmRepairErrors?: string[] }).pmRepairErrors, [err]);
+  } finally {
+    rmSync(join(forgeRoot, '_queue', 'failed', 'INIT-F.md'), { force: true });
+    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
+  }
+});
+
 test('roadmap: a pending initiative with no cycle log has no completedAt (never fabricated)', async () => {
   const roadmap = await fetchRoadmap();
   const a = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-A');

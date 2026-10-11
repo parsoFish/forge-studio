@@ -18,6 +18,7 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { REPAIR_TURNS_MAX } from '../../phases/pm-set-repair.ts';
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { PM_BRAIN_ACCESS } from '../../phases/pm-binding.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
@@ -34,7 +35,7 @@ project: testproj
 project_repo_path: ./projects/testproj
 created_at: 2026-06-06T00:00:00Z
 iteration_budget: 3
-cost_budget_usd: 1
+cost_budget_usd: 10
 class: ${cls}
 phase: in-flight
 origin: architect
@@ -189,11 +190,13 @@ test('A2a: a declared acceptance tier + no live-acc WI → PM pass fails', async
 });
 
 // ---------------------------------------------------------------------------
-// Row 157 (forge-8vfn.8.1.45, ruling 1873), part (b) ONE REVISE TURN
+// Row 157 (forge-8vfn.8.1.45, ruling 1873) part (b), folded into D-49's
+// bounded REPAIR turns (forge-mfv5.1.34). cost_budget_usd is 10 so the
+// repair turn's ceiling fits the initiative budget (D-49's budget stop).
 // ---------------------------------------------------------------------------
 
 /** A stateful stub: pass `i` of `passes` answers the PM's `i`-th spawn (the
- *  main pass, then the ONE bounded revise pass) — clamped to the last entry
+ *  main pass, then each bounded repair turn) — clamped to the last entry
  *  so an unexpected extra call still gets an answer instead of hanging. */
 function makeMultiPassStubQueryFn(
   initiativeId: string,
@@ -209,12 +212,12 @@ function makeMultiPassStubQueryFn(
 }
 
 test(
-  'row 157/b: PM omits the acceptance WI, ADDS one on the revise turn → pass ' +
-    'succeeds, exactly one revise, and the ADDED WI is fully compiled (standing ' +
+  'row 157/b → D-49: PM omits the acceptance WI, ADDS one on the first repair turn → pass ' +
+    'succeeds, exactly one repair turn, and the ADDED WI is fully compiled (standing ' +
     'ACs + constraint clause), not a second-class pass-through',
   async () => {
     // Row 157 part (b) close-the-gap coverage: a constraint source + standing
-    // ACs, so the revise-ADDED WI-2 can be checked for both — proving
+    // ACs, so the repair-ADDED WI-2 can be checked for both — proving
     // `runCompileStage` ran on it, not just on the first pass's WI-1.
     const h = setupHarness({
       ...BASE_CONFIG,
@@ -249,53 +252,53 @@ test(
         constraintSourcesRoot: sourcesRoot,
         classProfiles: testClassProfilePort(),
       });
-      assert.equal(callCount(), 2, 'expected exactly one main pass + one bounded revise pass');
+      assert.equal(callCount(), 2, 'expected exactly one main pass + one repair turn');
 
       const events = readEvents(h.logger);
-      const start = events.find((e) => e.message === 'pm.acceptance-revise.start');
-      const end = events.find((e) => e.message === 'pm.acceptance-revise.end');
-      assert.ok(start, 'expected pm.acceptance-revise.start');
-      const violation = (start!.metadata as { violation?: string }).violation ?? '';
-      assert.match(violation, /no acceptance work item/);
-      assert.ok(end, 'expected pm.acceptance-revise.end');
-      const revises = events.filter((e) => e.message === 'pm.acceptance-revise.start');
-      assert.equal(revises.length, 1, 'exactly one revise turn');
+      const start = events.find((e) => e.message === 'pm.repair.start');
+      const end = events.find((e) => e.message === 'pm.repair.end');
+      assert.ok(start, 'expected pm.repair.start');
+      const errors = (start!.metadata as { errors?: string[] }).errors ?? [];
+      assert.ok(errors.some((e) => /no acceptance work item/.test(e)), `errors: ${errors}`);
+      assert.equal((end?.metadata as { resolved?: boolean })?.resolved, true, 'expected pm.repair.end resolved');
+      const repairs = events.filter((e) => e.message === 'pm.repair.start');
+      assert.equal(repairs.length, 1, 'exactly one repair turn');
 
       const quarantine = events.find((e) => e.message === 'pm.rejected-set-quarantined');
-      assert.equal(quarantine, undefined, 'a resolved revise must not quarantine');
+      assert.equal(quarantine, undefined, 'a resolved repair must not fail the pass');
       const pmEnd = events.find((e) => e.phase === 'project-manager' && e.event_type === 'end');
-      assert.ok(pmEnd, 'expected a successful pm.end event once the revise resolved the gate');
+      assert.ok(pmEnd, 'expected a successful pm.end event once the repair resolved the gate');
 
       const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
       assert.deepEqual(
         manifest.specs,
         ['WI-1', 'WI-2'],
-        'the REVISED set (post-revise re-read) is what gets persisted',
+        'the REVISED set (post-repair re-read) is what gets persisted',
       );
 
-      // The close-the-gap assertion: WI-2 only exists because of the revise
+      // The close-the-gap assertion: WI-2 only exists because of the repair
       // turn, and it must be compiled exactly like a first-pass WI.
       const wi2Path = resolve(h.worktree, '.forge', 'work-items', 'WI-2.md');
       const wi2Body = readFileSync(wi2Path, 'utf8');
       assert.match(
         wi2Body,
         /## Standing acceptance criteria \(project contract\)/,
-        'the revise-added WI must carry the project standing ACs',
+        'the repair-added WI must carry the project standing ACs',
       );
       assert.match(
         wi2Body,
         /Live acceptance: TF_ACC test proves it\./,
-        'the revise-added WI must carry the SPECIFIC standing AC text',
+        'the repair-added WI must carry the SPECIFIC standing AC text',
       );
       assert.match(
         wi2Body,
         /## Compiled constraints \(project & brain, D-17\)/,
-        'the revise-added WI must carry its compiled forge:constraint clause',
+        'the repair-added WI must carry its compiled forge:constraint clause',
       );
       assert.match(
         wi2Body,
         /<!-- forge:compiled clause="go-conventions" -->/,
-        'the revise-added WI must carry the SPECIFIC compiled clause id',
+        'the repair-added WI must carry the SPECIFIC compiled clause id',
       );
     } finally {
       rmSync(h.dir, { recursive: true, force: true });
@@ -305,8 +308,8 @@ test(
 );
 
 test(
-  'row 157/b: PM omits the acceptance WI on BOTH passes → exactly one ' +
-    'revise, then quarantine + failure',
+  'row 157/b → D-49: PM omits the acceptance WI on every pass → exactly ' +
+    'REPAIR_TURNS_MAX repair turns, then quarantine + failure',
   async () => {
     const h = setupHarness({
       ...BASE_CONFIG,
@@ -326,17 +329,13 @@ test(
           }),
         /no acceptance work item/,
       );
-      assert.equal(
-        callCount(),
-        2,
-        'expected exactly one main pass + one bounded revise pass — never a second revise',
-      );
+      assert.equal(callCount(), 1 + REPAIR_TURNS_MAX, 'one main pass + REPAIR_TURNS_MAX repair turns — never more');
 
       const events = readEvents(h.logger);
-      const revises = events.filter((e) => e.message === 'pm.acceptance-revise.start');
-      assert.equal(revises.length, 1, 'exactly one revise turn, even on a still-failing outcome');
+      const repairs = events.filter((e) => e.message === 'pm.repair.start');
+      assert.equal(repairs.length, REPAIR_TURNS_MAX, 'the turn bound holds on a still-failing outcome');
       const quarantined = events.find((e) => e.message === 'pm.rejected-set-quarantined');
-      assert.ok(quarantined, 'a still-violating revise outcome must still quarantine');
+      assert.ok(quarantined, 'a still-violating repaired set must still quarantine');
     } finally {
       rmSync(h.dir, { recursive: true, force: true });
     }

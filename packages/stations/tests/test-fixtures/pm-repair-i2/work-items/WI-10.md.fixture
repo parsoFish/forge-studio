@@ -1,0 +1,169 @@
+---
+work_item_id: WI-10
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-9a
+domain: ci
+acceptance_criteria:
+  - given: ".github/workflows/gitweave-apply.yaml after WI-10"
+    when: "the file is parsed as YAML"
+    then: "it is valid YAML with a pull_request trigger running 'gw plan --fixture' and a push-to-main trigger running 'gw apply'"
+  - given: "the rewritten workflow"
+    when: "grep 'gw plan --fixture' .github/workflows/gitweave-apply.yaml runs"
+    then: "returns a match — the PR job uses fixture-mode plan"
+  - given: "the rewritten workflow"
+    when: "grep 'GW_APP_PRIVATE_KEY' .github/workflows/gitweave-apply.yaml runs"
+    then: "the key is written to a temp file (mktemp pattern) and never echoed or logged"
+  - given: "the existing dry-run-smoke job in gitweave-apply.yaml"
+    when: "the workflow is inspected"
+    then: "the dry-run-smoke job and apply-overlays.py references are unchanged (I4 scope)"
+files_in_scope:
+  - .github/workflows/gitweave-apply.yaml
+  - tests/test_apply_workflow_structure.py
+  - tests/test_gw_apply_workflow.py
+creates:
+  - tests/test_gw_apply_workflow.py
+verification_artifact: .github/workflows/gitweave-apply.yaml
+estimated_iterations: 2
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/test_gw_apply_workflow.py
+---
+
+# WI-10: Apply workflow rewrite (.github/workflows/gitweave-apply.yaml)
+
+Target: rewrite `.github/workflows/gitweave-apply.yaml` to use `gw plan --fixture` on
+pull_request and `gw apply` on push to main. **Do not touch the dry-run-smoke job or
+apply-overlays.py references** — those are I4 scope. Handle the private key via a temp
+file per the operator-approved spec.
+
+## Workflow spec
+
+```yaml
+name: GitWeave Apply
+
+on:
+  push:
+    branches: [main]
+    paths: ["config/**"]
+  pull_request:
+    branches: [main]
+    paths: ["config/**"]
+  workflow_dispatch:
+
+jobs:
+  plan:
+    name: gw plan (credential-free)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install gw
+        run: pip install -e .
+      - name: Plan (fixture mode — no credentials)
+        run: gw plan --fixture tests/fixtures/org-empty.json
+
+  apply:
+    name: gw apply (live)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install gw
+        run: pip install -e .
+      - name: Write private key to temp file
+        run: |
+          KEY_FILE=$(mktemp)
+          echo "$GW_APP_PRIVATE_KEY" > "$KEY_FILE"
+          echo "GW_APP_PRIVATE_KEY_PATH=$KEY_FILE" >> "$GITHUB_ENV"
+          echo "KEY_FILE=$KEY_FILE" >> "$GITHUB_ENV"
+        env:
+          GW_APP_PRIVATE_KEY: ${{ secrets.GW_APP_PRIVATE_KEY }}
+      - name: Apply
+        run: gw apply
+        env:
+          GW_ORG: ${{ secrets.GW_ORG }}
+          GW_APP_ID: ${{ secrets.GW_APP_ID }}
+          GW_APP_INSTALLATION_ID: ${{ secrets.GW_APP_INSTALLATION_ID }}
+      - name: Cleanup key file
+        if: always()
+        run: rm -f "$KEY_FILE"
+```
+
+**Never echo or log key content.** The `echo "$GW_APP_PRIVATE_KEY" > "$KEY_FILE"` step
+writes to a file only; no stdout. The `trap` pattern cannot be used in multi-step Actions
+YAML — use `if: always()` cleanup step instead.
+
+**Keep the existing `dry-run-smoke` job entirely unchanged** — do not remove or rename it.
+
+## Update tests/test_apply_workflow_structure.py
+
+Read the current content of `tests/test_apply_workflow_structure.py` and update its
+assertions to reflect the new gw-based workflow structure:
+- Remove any TF-specific assertions (if present).
+- Add/keep assertions that the workflow is valid YAML, triggers on `push` to main + `pull_request`.
+
+## tests/test_gw_apply_workflow.py (new)
+
+```python
+"""Tests for the gw-native gitweave-apply.yaml workflow."""
+import pathlib, yaml
+
+ROOT = pathlib.Path(__file__).parent.parent
+WORKFLOW = ROOT / ".github" / "workflows" / "gitweave-apply.yaml"
+
+
+def test_workflow_is_valid_yaml():
+    doc = yaml.safe_load(WORKFLOW.read_text())
+    assert isinstance(doc, dict)
+
+
+def test_plan_job_uses_fixture_mode():
+    doc = yaml.safe_load(WORKFLOW.read_text())
+    jobs = doc.get("jobs", {})
+    # Find a job that runs gw plan --fixture
+    plan_steps = []
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            run = step.get("run", "")
+            if "gw plan" in run and "--fixture" in run:
+                plan_steps.append(step)
+    assert plan_steps, "No step found running 'gw plan --fixture'"
+
+
+def test_apply_job_uses_gw_apply():
+    doc = yaml.safe_load(WORKFLOW.read_text())
+    jobs = doc.get("jobs", {})
+    apply_steps = []
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            run = step.get("run", "")
+            if run.strip() == "gw apply":
+                apply_steps.append(step)
+    assert apply_steps, "No step found running 'gw apply'"
+
+
+def test_private_key_written_to_temp_file_not_echoed():
+    content = WORKFLOW.read_text()
+    # Key must be written to a file via mktemp pattern
+    assert "mktemp" in content, "Private key handling must use mktemp"
+    # Must not echo the raw key to stdout
+    assert "echo $GW_APP_PRIVATE_KEY\n" not in content
+    assert 'echo "$GW_APP_PRIVATE_KEY"\n' not in content
+```
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

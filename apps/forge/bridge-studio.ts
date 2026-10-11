@@ -854,7 +854,7 @@ export type RoadmapInitiative = {
    * `canStartDevelopment` derives from below) — never fabricated, absent
    * when the manifest carries no `flow_id` (a legacy/hand-authored one).
    */
-  flowId?: string; fixRound?: number; fixRoundRunning?: true; developRunning?: true; // `Run.*`: forge-mfv5.1.27 fixRound (ready-for-review parked, in-flight running); forge-nk1y.23 the flags
+  flowId?: string; fixRound?: number; fixRoundRunning?: true; developRunning?: true; pmRepairErrors?: string[]; // `Run.*`: forge-mfv5.1.27 fixRound (ready-for-review parked, in-flight running); forge-nk1y.23 the flags; D-49 a failed manifest's recorded PM errors (Requeue repairs)
 };
 
 export type ProjectRoadmap = {
@@ -1015,7 +1015,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
         && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
-      ...(completedAt !== undefined ? { completedAt } : {}), ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
+      ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' && manifest.pm_validation_errors ? { pmRepairErrors: manifest.pm_validation_errors } : {}), ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
       ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
   });

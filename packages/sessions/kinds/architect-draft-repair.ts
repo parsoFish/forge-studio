@@ -1,9 +1,7 @@
 /**
  * Row 159 (bead forge-8vfn.8.1.47, ruling 1891) — the ONE bounded repair
  * turn a draft-manifest VALIDATION error earns before the architect session
- * fails, mirroring row 157's `runPmAcceptanceRevise`
- * (`packages/stations/phases/pm-acceptance-gate.ts`) shape: a single extra
- * structured call, never a loop, carrying the validator's OWN message back
+ * fails: a single extra structured call, never a loop, carrying the validator's OWN message back
  * to the model verbatim so it fixes the one field named instead of
  * re-guessing the whole draft.
  *
@@ -67,7 +65,7 @@ export type DraftManifestRepairResult = {
  * success. On a second validation failure — the repair also produced an
  * invalid draft, or produced no initiatives at all — REJECTS with a
  * classified `Error` prefixed with `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX`
- * (mirroring `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX`, row 157): the same
+ * (mirroring `PM_SET_VALIDATION_UNREPAIRED_PREFIX`, D-49): the same
  * literal lands in BOTH the thrown message (which `writeSessionTerminalPhase`
  * — `apps/forge/agent-dispatch-cmd.ts` — stamps onto `status.json.error`)
  * and an `architect`-phase `error` event, so `failure-classifier.ts` can name

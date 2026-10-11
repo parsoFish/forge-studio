@@ -1,9 +1,10 @@
 /**
  * forge-mfv5.1.26 / D-47 — through the real PM pass: an initiative acceptance
  * criterion whose WHEN is a runnable command and that no work-item gate
- * carries earns the ONE bounded acceptance revise turn, with the criterion
- * named verbatim; if the revise does not carry it, the pass fails through
- * the named `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` path.
+ * carries earns a bounded repair turn (D-49), with the criterion named
+ * verbatim; if the repair turns do not carry it, the pass fails through the
+ * named `PM_SET_VALIDATION_UNREPAIRED_PREFIX` path. cost_budget_usd is 10 so
+ * a repair turn's ceiling fits the initiative budget (D-49's budget stop).
  *
  * AC/gate shapes copied from the gitweave I1 plan (2026-10-10), see
  * `packages/stations/tests/unit/decompose-completeness.acceptance-criteria.test.ts`.
@@ -18,7 +19,8 @@ import { join, resolve } from 'node:path';
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows';
-import { PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX } from '@forge/contracts';
+import { PM_SET_VALIDATION_UNREPAIRED_PREFIX } from '@forge/contracts';
+import { REPAIR_TURNS_MAX } from '../../phases/pm-set-repair.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
@@ -31,7 +33,7 @@ project: testproj
 project_repo_path: ./projects/testproj
 created_at: 2026-10-10T00:00:00Z
 iteration_budget: 3
-cost_budget_usd: 1
+cost_budget_usd: 10
 class: code
 phase: in-flight
 origin: architect
@@ -71,7 +73,7 @@ Body for ${id}.
 
 type Wi = { id: string; gate: string[] };
 
-/** Pass `i` answers the PM's `i`-th spawn (main pass, then the revise turn);
+/** Pass `i` answers the PM's `i`-th spawn (main pass, then each repair turn);
  *  records each spawn's prompt. */
 function multiPass(passes: Wi[][]): { queryFn: PmQueryFn; prompts: string[] } {
   const prompts: string[] = [];
@@ -120,39 +122,39 @@ const WHOLE_SUITE_GATE = { id: 'WI-2', gate: ['python3', '-m', 'pytest', 'tests/
 const run = (h: ReturnType<typeof harness>, queryFn: PmQueryFn): Promise<unknown> =>
   runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
-test('D-47: an uncarried runnable AC earns the revise turn, named verbatim; a revise that carries it → success', async () => {
+test('D-47: an uncarried runnable AC earns a repair turn, named verbatim; a repair that carries it → success', async () => {
   const h = harness();
   try {
     const { queryFn, prompts } = multiPass([[OWN_FILE_GATE], [OWN_FILE_GATE, WHOLE_SUITE_GATE]]);
     await run(h, queryFn);
-    assert.equal(prompts.length, 2, 'one main pass + one bounded revise pass');
-    assert.ok(prompts[1]!.includes(JSON.stringify(AC2_WHEN).slice(1, -1)), `revise prompt names AC2 verbatim: ${prompts[1]}`);
+    assert.equal(prompts.length, 2, 'one main pass + one repair turn');
+    assert.ok(prompts[1]!.includes(JSON.stringify(AC2_WHEN).slice(1, -1)), `repair prompt names AC2 verbatim: ${prompts[1]}`);
     assert.ok(!prompts[1]!.includes('cat LICENSE'), 'the prose AC is never sent back');
     const ev = events(h.logger);
-    const start = ev.find((e) => e.message === 'pm.acceptance-revise.start');
-    assert.match((start?.metadata as { violation?: string })?.violation ?? '', /not exercised by any work item's quality_gate_cmd/);
+    const start = ev.find((e) => e.message === 'pm.repair.start');
+    assert.ok(((start?.metadata as { errors?: string[] })?.errors ?? []).some((e) => /not exercised by any work item's quality_gate_cmd/.test(e)));
     assert.ok(ev.find((e) => e.phase === 'project-manager' && e.event_type === 'end'), 'the pass succeeds');
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
 });
 
-test('D-47: a revise that does nothing → the pass fails with the PM_ACCEPTANCE_GATE_UNRESOLVED prefix, AC named', async () => {
+test('D-47: repairs that do nothing → the pass fails with the PM_SET_VALIDATION_UNREPAIRED prefix, AC named', async () => {
   const h = harness();
   try {
     const { queryFn, prompts } = multiPass([[OWN_FILE_GATE], [OWN_FILE_GATE]]);
     await assert.rejects(() => run(h, queryFn), (err: Error) => {
-      assert.ok(err.message.includes(PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX), err.message);
+      assert.ok(err.message.includes(PM_SET_VALIDATION_UNREPAIRED_PREFIX), err.message);
       assert.ok(err.message.includes(AC2_WHEN), `AC2 named: ${err.message}`);
       return true;
     });
-    assert.equal(prompts.length, 2, 'exactly one revise turn, never a second');
+    assert.equal(prompts.length, 1 + REPAIR_TURNS_MAX, 'the repair-turn bound holds');
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
 });
 
-test('D-47: a first pass that already carries the AC runs no revise turn', async () => {
+test('D-47: a first pass that already carries the AC runs no repair turn', async () => {
   const h = harness();
   try {
     const { queryFn, prompts } = multiPass([[OWN_FILE_GATE, WHOLE_SUITE_GATE]]);

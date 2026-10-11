@@ -112,8 +112,10 @@ export function rejectWorkItemSet(
   workItemsDir: string,
   summary: string,
   ev?: RejectionEvent,
+  /** D-49: one bullet per validation error in REJECTED.md (default: the summary). */
+  errors: readonly string[] = [summary],
 ): { kind: 'failure'; summary: string } {
-  const q = quarantineRejectedSet(workItemsDir, [summary]);
+  const q = quarantineRejectedSet(workItemsDir, errors);
   if (q.movedTo && ev) {
     // Emitted HERE, not by the caller: the event is part of the act. A caller that
     // has to remember to log the quarantine is the same half-applicable pair the
