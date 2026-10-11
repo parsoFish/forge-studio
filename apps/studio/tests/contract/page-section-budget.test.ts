@@ -16,7 +16,9 @@ import { join } from 'node:path';
 
 const STUDIO = join(__dirname, '..', '..');
 
-type Row = { route: string; file: string; max: number; groups: string[] };
+/** Each group names the blocks it must wrap (a JSX tag or a data-section
+ *  literal), so a group left empty or a block left loose beside it reds. */
+type Row = { route: string; file: string; max: number; groups: string[]; wraps: Record<string, string[]> };
 
 const ROWS: Row[] = [
   {
@@ -24,6 +26,13 @@ const ROWS: Row[] = [
     file: 'app/projects/[id]/page.tsx',
     max: 5,
     groups: ['brief', 'demo', 'skills-knowledge', 'cycle-ledger', 'contract'],
+    wraps: {
+      brief: ['<NorthStar', '<Instructions'],
+      demo: ['<DemoTimeline'],
+      'skills-knowledge': ['<SkillsBind', '<KbBind'],
+      'cycle-ledger': ['<ProjectCycleLedger'],
+      contract: ['<ContractReadiness', '<RebuildContractPanel', '<ContractPanelMount', '<OnboardWithAgent', '<OpenSessionsPanel'],
+    },
   },
 ];
 
@@ -37,5 +46,19 @@ for (const row of ROWS) {
     const found = pageSections(row.file);
     expect(found.length).toBeLessThanOrEqual(row.max);
     expect(found).toEqual(row.groups);
+  });
+
+  test(`${row.route}: each group wraps its own blocks`, () => {
+    const src = readFileSync(join(STUDIO, row.file), 'utf8');
+    const starts = row.groups.map((g) => src.indexOf(`data-page-section="${g}"`));
+    row.groups.forEach((g, i) => {
+      const body = src.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : undefined);
+      for (const block of row.wraps[g] ?? []) {
+        // a mount is the tag followed by whitespace — never a `<Tag>` in a comment
+        const mount = new RegExp(`${block}\\s`, 'g');
+        expect(body.match(mount)?.length ?? 0, `${g} wraps ${block}`).toBe(1);
+        expect(src.match(mount)?.length ?? 0, `${block} mounted once`).toBe(1);
+      }
+    });
   });
 }

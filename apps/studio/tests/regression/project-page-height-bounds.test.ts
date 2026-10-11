@@ -57,24 +57,40 @@ test('the cycle ledger pages: n+1 cycles render one page plus "show more"', () =
   expect(html).toContain('data-action="ledger-show-more"');
 });
 
-test('the page mounts the ledger with a page size', () => {
-  expect(read('app/projects/[id]/page.tsx')).toMatch(/<ProjectCycleLedger[^>]*pageSize=\{PROJECT_LEDGER_PAGE_SIZE\}/);
+test('the page mounts the ledger with a page size of at most 15', () => {
+  const src = read('app/projects/[id]/page.tsx');
+  expect(src).toMatch(/<ProjectCycleLedger[\s\S]{0,200}?pageSize=\{PROJECT_LEDGER_PAGE_SIZE\}/);
+  const size = Number(src.match(/const PROJECT_LEDGER_PAGE_SIZE = (\d+);/)?.[1]);
+  expect(size).toBeGreaterThan(0);
+  expect(size).toBeLessThanOrEqual(15);
 });
 
-test('the contract rail is its own viewport-tall scroller, never the page height', () => {
+// A source pin, not a measure (the measured px pair is in the PR body): the
+// rail sticks BELOW the sticky nav (.afb-nav, --nav-height) so no control it
+// scrolls to sits under the nav, and it is one viewport minus the nav tall.
+test('the contract rail is its own scroller below the nav, never the page height', () => {
   const style = styleOf(read('app/projects/[id]/page.tsx'), 'data-page-section="contract"');
   expect(style).toMatch(/position: 'sticky'/);
-  expect(style).toMatch(/maxHeight: '100vh'/);
+  expect(style).toMatch(/top: 'var\(--nav-height\)'/);
+  expect(style).toMatch(/alignSelf: 'flex-start'/);
+  expect(style).toMatch(/maxHeight: 'calc\(100vh - var\(--nav-height\)\)'/);
   expect(style).toMatch(/overflowY: 'auto'/);
 });
 
+test('the sticky nav and the rail offset share one token', () => {
+  const css = read('app/globals.css');
+  expect(css).toMatch(/--nav-height: 56px;/);
+  expect(css).toMatch(/\.afb-nav \{[^}]*height: var\(--nav-height\)/);
+});
+
 test.each([
-  ['components/studio/project-builder/RebuildContractPanel.tsx', 'data-section="contract-drift-rows"'],
-  ['components/studio/project-builder/ProjectContractPanel.tsx', 'data-section="contract-checklist"'],
-  ['components/studio/project-builder/Instructions.tsx', 'data-section="instructions-file-view"'],
-  ['components/studio/project-builder/SkillsBind.tsx', 'data-section="skills-catalog"'],
-])('%s: %s is contained on the pane scale', (file, marker) => {
+  ['components/studio/project-builder/RebuildContractPanel.tsx', 'data-section="contract-drift-rows"', 'lg'],
+  ['components/studio/project-builder/ProjectContractPanel.tsx', 'data-section="contract-checklist"', 'lg'],
+  ['components/studio/project-builder/Instructions.tsx', 'data-section="instructions-file-view"', 'xl'],
+  ['components/studio/project-builder/SkillsBind.tsx', 'data-section="skills-catalog"', 'md'],
+  ['components/studio/project-builder/DemoTimeline.tsx', 'data-section="demo-steps"', 'lg'],
+])('%s: %s is contained at --pane-%s', (file, marker, pane) => {
   const style = styleOf(read(file), marker);
-  expect(style).toMatch(/maxHeight: 'var\(--pane-(xs|sm|md|lg|xl)\)'/);
+  expect(style).toMatch(new RegExp(`maxHeight: 'var\\(--pane-${pane}\\)'`));
   expect(style).toMatch(/overflow(Y)?: 'auto'/);
 });

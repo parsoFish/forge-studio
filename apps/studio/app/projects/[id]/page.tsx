@@ -603,7 +603,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           <aside data-page-section="contract" aria-label="Contract" style={{
  width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
             padding: '18px 18px 64px', display: 'flex', flexDirection: 'column',
-            gap: 16, position: 'sticky', top: 0, alignSelf: 'flex-start', maxHeight: '100vh', overflowY: 'auto', background: 'var(--bg-2)',
+            gap: 16, position: 'sticky', top: 'var(--nav-height)', alignSelf: 'flex-start', maxHeight: 'calc(100vh - var(--nav-height))', overflowY: 'auto', background: 'var(--bg-2)',
           }}>
             <div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>Card Preview</div>
