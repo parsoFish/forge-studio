@@ -460,6 +460,9 @@ export function validateWorkItemSet(items: WorkItem[], opts: Omit<ValidateOption
   return { perItem, setErrors };
 }
 
+/** The record a rejected work-item set carries beside it (pm-rejected-set.ts) — never a work item. */
+export const REJECTED_SET_MARKER = 'REJECTED.md';
+
 export function readWorkItemsFromDir(dir: string): {
   items: WorkItem[];
   parseErrors: Record<string, string>;
@@ -472,7 +475,8 @@ export function readWorkItemsFromDir(dir: string): {
     // Skip ALL `_`-prefixed artifacts (_graph.md, _decomposition.md, etc.) — only
     // WI-<n>.md files are work items. (Name-list skipping regressed when _coverage.md
     // was renamed _decomposition.md; the prefix rule is future-proof.)
-    .filter((f) => f.endsWith('.md') && !f.startsWith('_'))
+    // forge-mfv5.1.35: Requeue repair mode restores a rejected set WITH its marker.
+    .filter((f) => f.endsWith('.md') && !f.startsWith('_') && f !== REJECTED_SET_MARKER)
     .sort();
 
   for (const file of files) {

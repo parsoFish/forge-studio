@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -137,6 +137,59 @@ test('row 5: an unsafe cycle_id derives nothing — never a read outside _logs (
   try {
     assert.deepEqual(recordedPmValidationErrors(root, { cycle_id: `../_logs/${CYCLE}` }), []);
     assert.ok(recordedPmValidationErrors(root, { cycle_id: CYCLE }).includes(LIVE_D18), 'the safe id still derives');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---- row 6 (forge-mfv5.1.35): the stranded kickoff -------------------------
+// The live I2 repair resolved (cycle.end awaiting-kickoff, 15 WIs) but the PM of
+// #1185 left `resume_from: plan`, so the Kickoff gate never derived. Fixture:
+// COPIES of the live ready-for-review manifest, its events.jsonl and its 15 WIs.
+
+const STR = join(import.meta.dirname, '..', 'test-fixtures', 'pm-repair-i2-stranded');
+
+function plantStranded(opts: { withSet: boolean }): { root: string; manifestPath: string } {
+  const root = mkdtempSync(join(tmpdir(), 'requeue-stranded-'));
+  for (const d of ['pending', 'in-flight', 'failed', 'done', 'ready-for-review']) mkdirSync(join(root, '_queue', d), { recursive: true });
+  const repo = join(root, 'projects', 'gitweave');
+  mkdirSync(repo, { recursive: true });
+  const manifestPath = join(root, '_queue', 'ready-for-review', `${INIT}.md`);
+  writeFileSync(manifestPath, readFileSync(join(STR, 'manifest.md.fixture'), 'utf8').replace('PROJECT_REPO_PATH', repo));
+  mkdirSync(join(root, '_logs', CYCLE), { recursive: true });
+  copyFileSync(join(STR, 'events.jsonl.fixture'), join(root, '_logs', CYCLE, 'events.jsonl'));
+  if (opts.withSet) {
+    const wi = join(root, '_worktrees', INIT, '.forge', 'work-items');
+    mkdirSync(wi, { recursive: true });
+    for (const f of readdirSync(join(STR, 'work-items'))) copyFileSync(join(STR, 'work-items', f), join(wi, f.replace(/\.fixture$/, '')));
+  }
+  return { root, manifestPath };
+}
+
+test('row 6: Requeue on the stranded kickoff commits the repaired set — stays in ready-for-review, resume_from cleared, specs = the set, named event', () => {
+  const { root, manifestPath } = plantStranded({ withSet: true });
+  try {
+    assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'plan', 'fixture is the live stranded shape');
+    const r = runRequeue(INIT, { forgeRoot: root, resetRetries: true });
+    assert.equal(r.toQueueDir, 'ready-for-review');
+    assert.match(r.resumeDecision.reason, /stranded kickoff/);
+    assert.ok(!existsSync(join(root, '_queue', 'pending', `${INIT}.md`)), 'never re-queued — nothing re-runs');
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    assert.equal(m.resume_from, undefined);
+    assert.equal(m.specs?.length, 15);
+    assert.ok(m.specs?.includes('WI-3a') && m.specs?.includes('WI-9b'));
+    assert.match(readFileSync(join(root, '_logs', CYCLE, 'events.jsonl'), 'utf8'), /"message":"pm-set-commit-recovered"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 6: the stranded shape with no readable set is refused by name — nothing moves', () => {
+  const { root, manifestPath } = plantStranded({ withSet: false });
+  try {
+    assert.throws(() => runRequeue(INIT, { forgeRoot: root, resetRetries: true }), /stranded kickoff has no readable work-item set/);
+    assert.ok(existsSync(manifestPath), 'the manifest stays where it is');
+    assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'plan', 'untouched');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

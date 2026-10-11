@@ -1,0 +1,171 @@
+---
+work_item_id: WI-7
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-5b
+domain: apply
+acceptance_criteria:
+  - given: "GW_* set and a mocked Github org with no managed resources"
+    when: "apply(json_mode=False) is called"
+    then: "calls each manager's apply() for every declared resource; returns ApplyResult with per-resource status"
+  - given: "one resource apply fails mid-run (manager returns status='error')"
+    when: "apply() is called"
+    then: "continues applying remaining resources (best-effort), exits non-zero, reports per-resource status including the failure"
+  - given: "GW_* set"
+    when: "apply(json_mode=True) is called"
+    then: "first calls reset() to delete all prefixed resources, then applies the full declaration, then returns JSON-serialisable state dict"
+  - given: "a mocked org with prefixed resources only"
+    when: "reset() is called"
+    then: "deletes every prefixed team/repo/ruleset and restores org settings to safe defaults; 404s treated as success"
+  - given: "a mocked org already at defaults with no prefixed resources"
+    when: "reset() is called twice"
+    then: "both calls exit 0 and the second reports nothing changed"
+files_in_scope:
+  - gitweave/apply.py
+  - gitweave/reset.py
+  - tests/test_apply_reset.py
+creates:
+  - gitweave/apply.py
+  - gitweave/reset.py
+  - tests/test_apply_reset.py
+estimated_iterations: 4
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/test_apply_reset.py
+---
+
+# WI-7: Apply + reset engines (gitweave/apply.py + gitweave/reset.py)
+
+Target: `gitweave/apply.py` (apply declaration to live org, `--json` mode) and
+`gitweave/reset.py` (delete prefixed resources + restore org defaults). These are the
+two stateful engines; reset.py is a prerequisite for apply.py's `--json` mode.
+
+## gitweave/reset.py spec
+
+```python
+# gitweave/reset.py
+import os
+from dataclasses import dataclass, field
+from gitweave.managers.org import OrgSettingsManager, ResourceStatus
+from gitweave.managers.teams import TeamsManager
+from gitweave.managers.repos import ReposManager
+from gitweave.managers.rulesets import RulesetsManager
+
+@dataclass
+class ResetResult:
+    statuses: list[ResourceStatus] = field(default_factory=list)
+    nothing_changed: bool = False
+
+def reset(gh_org) -> ResetResult:
+    """Delete all prefixed resources + restore org settings to safe defaults.
+    404 on any individual resource → success (idempotent).
+    """
+    result = ResetResult()
+    prefix = os.environ.get("FORGE_RESOURCE_PREFIX", "")
+    if not prefix:
+        raise EnvironmentError("FORGE_RESOURCE_PREFIX must be set and non-empty")
+
+    teams_mgr = TeamsManager(gh_org)
+    for team in teams_mgr.list_managed():
+        result.statuses.append(teams_mgr.delete(team.name))
+
+    repos_mgr = ReposManager(gh_org)
+    for repo in repos_mgr.list_managed():
+        result.statuses.append(repos_mgr.delete(repo.name))
+
+    rulesets_mgr = RulesetsManager(gh_org)
+    for rs in rulesets_mgr.list_managed():
+        result.statuses.append(rulesets_mgr.delete(rs["name"]))
+
+    # Restore org settings to GitHub safe defaults
+    org_mgr = OrgSettingsManager(gh_org)
+    result.statuses.append(org_mgr.reset())
+
+    return result
+```
+
+## gitweave/apply.py spec
+
+```python
+# gitweave/apply.py
+import json
+from dataclasses import dataclass, field
+from gitweave.config import load_config
+from gitweave.managers.org import OrgSettingsManager, ResourceStatus
+from gitweave.managers.teams import TeamsManager
+from gitweave.managers.repos import ReposManager
+from gitweave.managers.rulesets import RulesetsManager
+from gitweave.reset import reset
+
+@dataclass
+class ApplyResult:
+    statuses: list[ResourceStatus] = field(default_factory=list)
+    state: dict | None = None  # populated in json_mode
+
+    @property
+    def has_errors(self) -> bool:
+        return any(s.status == "error" for s in self.statuses)
+
+    def to_json(self) -> str:
+        return json.dumps({
+            "statuses": [{"name": s.name, "status": s.status,
+                          "error": s.error} for s in self.statuses],
+            "state": self.state,
+        }, indent=2)
+
+def apply(gh_org, json_mode: bool = False) -> ApplyResult:
+    """Apply declaration. json_mode=True → reset-before-apply, return JSON state."""
+    if json_mode:
+        reset(gh_org)
+
+    cfg = load_config()
+    result = ApplyResult()
+
+    org_mgr = OrgSettingsManager(gh_org)
+    result.statuses.append(org_mgr.apply(cfg["org_settings"]))
+
+    teams_mgr = TeamsManager(gh_org)
+    for team in cfg["teams"]:
+        result.statuses.append(teams_mgr.apply(team))
+
+    repos_mgr = ReposManager(gh_org)
+    for repo in cfg["repos"]:
+        result.statuses.append(repos_mgr.apply(repo))
+
+    rulesets_mgr = RulesetsManager(gh_org)
+    for rs in cfg["rulesets"]:
+        result.statuses.append(rulesets_mgr.apply(rs))
+
+    if json_mode:
+        result.state = _read_state(gh_org)
+
+    return result
+
+def _read_state(gh_org) -> dict:
+    """Read current org state as a JSON-serialisable dict."""
+    ...
+```
+
+Volatile keys (`id`, `node_id`, `created_at`, `updated_at`) are present in raw output
+but clearly documented as volatile for stripping in idempotency tests.
+
+## tests/test_apply_reset.py
+
+All tests mock PyGithub. Key tests:
+1. `reset()` calls delete on all list_managed() results for each resource type.
+2. `reset()` calls `org_mgr.reset()` (restores defaults).
+3. `reset()` sets `nothing_changed=True` when org already clean + no managed resources.
+4. `apply(json_mode=False)` calls each manager's apply() for each configured resource.
+5. `apply()` continues after one resource error (best-effort), sets `has_errors=True`.
+6. `apply(json_mode=True)` calls `reset()` before applying.
+7. `apply(json_mode=True)` returns result with `state` dict populated.
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

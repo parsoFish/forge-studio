@@ -1,0 +1,96 @@
+---
+work_item_id: WI-3b
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-3a
+domain: config
+acceptance_criteria:
+  - given: "tests/fixtures/org-empty.json exists"
+    when: "the file is parsed as JSON"
+    then: "it represents an empty org state with keys: org_settings, teams, repos, rulesets all present as empty collections"
+  - given: "schemas/org.schema.json exists and config/org.yaml exists"
+    when: "jsonschema validates config/org.yaml against schemas/org.schema.json"
+    then: "exits 0 with no validation errors"
+  - given: "schemas/teams.schema.json exists and config/teams.yaml exists"
+    when: "jsonschema validates config/teams.yaml against schemas/teams.schema.json"
+    then: "exits 0 with no validation errors"
+  - given: "schemas/org-ruleset.schema.json exists and config/rulesets.yaml exists"
+    when: "jsonschema validates config/rulesets.yaml against schemas/org-ruleset.schema.json"
+    then: "exits 0 with no validation errors"
+files_in_scope:
+  - tests/fixtures/org-empty.json
+  - tests/test_gw_schemas.py
+creates:
+  - tests/fixtures/org-empty.json
+  - tests/test_gw_schemas.py
+estimated_iterations: 1
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/test_gw_schemas.py
+---
+
+# WI-3b: Org-empty fixture + schema validation tests
+
+Target: `tests/fixtures/org-empty.json` (empty org state fixture) and
+`tests/test_gw_schemas.py` (validates each schema against its corresponding config/fixture).
+Depends on WI-3a which created the schema files and config files.
+
+## tests/fixtures/org-empty.json
+
+Represents an org with no managed resources and settings at GitHub defaults:
+```json
+{
+  "org_settings": {
+    "description": "",
+    "default_repository_permission": "read",
+    "web_commit_signoff_required": false,
+    "members_can_create_repositories": true
+  },
+  "teams": [],
+  "repos": [],
+  "rulesets": []
+}
+```
+
+## tests/test_gw_schemas.py
+
+Validate each schema file validates its corresponding config/fixture:
+
+```python
+import json, pathlib, yaml, jsonschema
+
+ROOT = pathlib.Path(__file__).parent.parent
+
+def _load_schema(name):
+    return json.loads((ROOT / "schemas" / name).read_text())
+
+def _load_yaml(path):
+    return yaml.safe_load((ROOT / path).read_text())
+
+def test_org_schema_validates_org_yaml():
+    jsonschema.validate(_load_yaml("config/org.yaml"), _load_schema("org.schema.json"))
+
+def test_teams_schema_validates_teams_yaml():
+    jsonschema.validate(_load_yaml("config/teams.yaml"), _load_schema("teams.schema.json"))
+
+def test_ruleset_schema_validates_rulesets_yaml():
+    jsonschema.validate(_load_yaml("config/rulesets.yaml"), _load_schema("org-ruleset.schema.json"))
+
+def test_org_empty_fixture_is_valid_json_with_expected_keys():
+    data = json.loads((ROOT / "tests/fixtures/org-empty.json").read_text())
+    for key in ("org_settings", "teams", "repos", "rulesets"):
+        assert key in data
+    assert data["teams"] == []
+    assert data["repos"] == []
+    assert data["rulesets"] == []
+```
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

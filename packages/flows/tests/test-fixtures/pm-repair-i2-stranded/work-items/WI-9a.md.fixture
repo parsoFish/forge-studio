@@ -1,0 +1,125 @@
+---
+work_item_id: WI-9a
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-1
+domain: structure
+acceptance_criteria:
+  - given: "the worktree after WI-9a completes"
+    when: "find infra/ is run"
+    then: "the infra/ directory does not exist"
+  - given: "the worktree after WI-9a completes"
+    when: "ls .github/workflows/gitweave-infra.yaml is run"
+    then: "the file does not exist"
+  - given: "git prereq present and python3 present"
+    when: "bash scripts/bootstrap.sh runs from the repo root"
+    then: "exits 0 — no Terraform check, pip install -e . succeeds"
+  - given: "hashicorp/setup-terraform@v3 is absent from ci.yaml"
+    when: "grep 'setup-terraform' .github/workflows/ci.yaml runs"
+    then: "returns no matches"
+  - given: "the repository after I2 merges"
+    when: "it is read and python3 -m pytest tests/ runs"
+    then: "infra/ and every Terraform file and workflow are absent, and pytest reports zero failures"
+files_in_scope:
+  - infra/branch_protection.tf
+  - infra/main.tf
+  - infra/outputs.tf
+  - infra/variables.tf
+  - infra/examples/branch_protection_override.tfvars
+  - infra/demo.tfvars.example
+  - infra/bootstrap/README.md
+  - .github/workflows/gitweave-infra.yaml
+  - tests/test_tf_teams_structure.py
+  - tests/test_tf_teams_validate.py
+  - tests/test_tf_teams_plan.py
+  - tests/test_terraform_demo_config.py
+  - tests/test_infra_workflow_gates.py
+  - tests/test_structure.py
+  - scripts/bootstrap.sh
+  - .github/workflows/ci.yaml
+verification_artifact: scripts/bootstrap.sh
+estimated_iterations: 2
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/
+---
+
+# WI-9a: Terraform retirement + bootstrap rewrite + CI update
+
+Target: delete all Terraform artefacts, rewrite bootstrap.sh to install gw, update
+tests/test_structure.py to remove stale infra assertions, remove setup-terraform from CI.
+
+Gate rationale: `python3 -m pytest tests/` fails before this WI because the TF test files
+(test_tf_teams_structure.py etc.) and test_structure.py's infra assertions are present
+and fail. After this WI deletes TF files, removes the infra assertions from test_structure.py,
+and rewrites bootstrap.sh, the full suite passes.
+
+## Deletions
+
+Git-rm these files/dirs entirely:
+- `infra/` — entire directory (branch_protection.tf, main.tf, outputs.tf, variables.tf,
+  bootstrap/README.md, demo.tfvars.example, examples/)
+- `.github/workflows/gitweave-infra.yaml`
+- `tests/test_tf_teams_structure.py`
+- `tests/test_tf_teams_validate.py`
+- `tests/test_tf_teams_plan.py`
+- `tests/test_terraform_demo_config.py`
+- `tests/test_infra_workflow_gates.py`
+- `tests/test_modules/` — empty directory (removes failing test in test_pruned_artefacts.py)
+
+## scripts/bootstrap.sh rewrite
+
+Remove: Terraform install check, Docker compose call.
+Keep: git prereq check, python3 prereq check.
+Add: `pip install -e .` to install gw.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Checking prerequisites..."
+
+command -v git >/dev/null 2>&1 || { echo "git is required but not found."; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "python3 is required but not found."; exit 1; }
+
+echo "==> Installing gitweave (gw) CLI..."
+pip install -e . --quiet
+
+echo "==> Bootstrap complete. Run 'gw --help' to get started."
+```
+
+## tests/test_structure.py updates
+
+The file has four test methods that reference Terraform; all must be updated:
+
+### test_root_directories_exist
+Remove `'infra'` from `required_dirs`. Add `'gitweave'` (the package dir created by WI-1).
+
+### test_required_files_exist
+Remove `'.github/workflows/gitweave-infra.yaml'` and `'infra/main.tf'`.
+Add `'pyproject.toml'` and `'gitweave/__init__.py'` (both from WI-1).
+
+### test_gitweave_infra_workflow_is_valid_yaml_and_triggers_on_infra
+Delete this entire test method (infra workflow is being retired).
+
+### test_readme_contains_bootstrap_instructions
+Remove `'infra/'` from the tuple of directories checked in README content.
+
+### test_bootstrap_script_exits_zero
+Update the docstring to: "bootstrap.sh should succeed when git and python3 are present."
+The test body is UNCHANGED — it runs bootstrap.sh and asserts exit code 0.
+
+## .github/workflows/ci.yaml update
+
+Find the `structural-tests` job (or whichever job currently has
+`uses: hashicorp/setup-terraform@v3`) and remove that entire step.
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

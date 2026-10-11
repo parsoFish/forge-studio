@@ -294,3 +294,31 @@ test('resume at plan WITHOUT recorded errors is a normal decomposition (today\'s
     await runResumed(h, queryFn);
     assert.doesNotMatch(spawns[0]!.prompt, /Repair turn/);
   }));
+
+// ---- row 6 (forge-mfv5.1.35): the live I2 repair resolved but stayed unclaimable --
+// The live Requeue stamped `resume_from: plan`; the success path left it set, so
+// kickoffBuiltReason read "the manifest resumes from plan" and the card never
+// reached KICKOFF. The restored rejected set's REJECTED.md was also fed to the
+// repair turn as an unparseable work item.
+
+const RESUMED_RECORDED = RECORDED.replace('pm_validation_errors:', 'resume_from: plan\npm_validation_errors:');
+
+test('row 6: a repair-mode success commits the set like a first pass — specs written, resume_from and the errors cleared', () =>
+  within(async (h) => {
+    assert.equal(parseManifest(RESUMED_RECORDED).resume_from, 'plan', 'fixture is the live shape');
+    plantRejected(h);
+    const { queryFn } = scripted([repairedSet()]);
+    await runResumed(h, queryFn);
+    const m = manifestNow(h);
+    assert.equal(m.resume_from, undefined, 'the plan marker is consumed — otherwise the Kickoff gate never derives');
+    assert.equal(m.pm_validation_errors, undefined);
+    assert.ok(m.specs?.includes('WI-3b') && m.specs?.includes('WI-13'), `${m.specs}`);
+  }, RESUMED_RECORDED));
+
+test('row 6: the rejected set\'s REJECTED.md marker is never parsed as a work item (not fed to the repair turn)', () =>
+  within(async (h) => {
+    plantRejected(h);
+    const { queryFn, spawns } = scripted([repairedSet()]);
+    await runResumed(h, queryFn);
+    assert.doesNotMatch(spawns[0]!.prompt, /REJECTED\.md/, spawns[0]!.prompt.slice(0, 600));
+  }, RESUMED_RECORDED));

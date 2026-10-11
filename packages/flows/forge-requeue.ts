@@ -43,8 +43,10 @@ import { FORGE_ROOT } from '@forge/kernel';
 
 import { getPaths } from './queue.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
-import { parseManifest, serializeManifest } from './manifest.ts';
-import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, readPriorFailureSignal, recordedPmValidationErrors, type RequeueResumeDecision } from './requeue-resume.ts';
+import { parseManifest, persistManifestSpecs, serializeManifest } from './manifest.ts';
+import { readWorkItemsFromDir } from './work-item.ts';
+import { KICKOFF_SOURCE_FLOW_ID } from '@forge/contracts';
+import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, type RequeueResumeDecision } from './requeue-resume.ts';
 import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
@@ -171,6 +173,25 @@ export function runRequeue(
     },
     { forgeRoot, projectsRoot: opts.projectsRoot },
   );
+
+  // forge-mfv5.1.35: the STRANDED KICKOFF — a repair resolved (cycle.end
+  // awaiting-kickoff) but #1185's PM left `resume_from: plan`, so the Kickoff
+  // gate never derived. Commit the repaired set in place; nothing re-runs.
+  const cycleLog = join(forgeRoot, '_logs', manifest.cycle_id ?? initiativeId, 'events.jsonl');
+  if (fromQueueDir === 'ready-for-review' && manifest.flow_id === KICKOFF_SOURCE_FLOW_ID && manifest.resume_from === 'plan' && latestCycleEndStatus(cycleLog) === 'awaiting-kickoff') {
+    const setDir = join(worktreePath, '.forge', 'work-items');
+    const set = readWorkItemsFromDir(setDir);
+    if (set.items.length === 0 || Object.keys(set.parseErrors).length > 0) {
+      throw new Error(`requeue: stranded kickoff has no readable work-item set at ${setDir} — refusing (never a re-plan)`);
+    }
+    if (!persistManifestSpecs(fromPath, set.items.map((w) => w.work_item_id))) throw new Error(`requeue: stranded kickoff — could not commit the set to ${fromPath}`);
+    emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'pm-set-commit-recovered', { initiative_id: initiativeId, specs: set.items.length });
+    return {
+      initiativeId, fromQueueDir, toQueueDir: 'ready-for-review', worktreeRemoved: false, branchDeleted: false, verdictsRemoved: [],
+      retryCountBefore, retryCountAfter: retryCountBefore, previousFailureModesAfter: previousModes,
+      resumeDecision: { resume: true, resume_from: null, reason: `stranded kickoff: committed the repaired set (${set.items.length} work items) — the Kickoff gate derives` },
+    };
+  }
 
   // M7 row 150 addendum (ruling 1794): a clean-boundary halt (operator-stop
   // or cost-ceiling) is resumable for exactly the WI-completion reason an
