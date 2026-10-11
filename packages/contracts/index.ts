@@ -121,9 +121,17 @@ export function leafWorkItemIds(items: ReadonlyArray<{ id: string; dependsOn: re
  */
 export function scopeEntryErrors(field: 'files_in_scope' | 'creates', entries: readonly string[]): string[] {
   return entries.flatMap((e) => {
-    const why = e === '' ? 'is empty' : /\s/.test(e) ? 'contains whitespace' : e.startsWith('/') ? 'is absolute' : e.split(/[\\/]/).includes('..') ? 'has a ".." segment' : null;
+    const why = scopeEntryFault(e);
     return why === null ? [] : [`${field} entry ${JSON.stringify(e)} refused: ${why} — one relative path per entry`];
   });
+}
+
+function scopeEntryFault(e: string): string | null {
+  if (e === '') return 'is empty';
+  if (/\s/.test(e)) return 'contains whitespace';
+  if (e.startsWith('/')) return 'is absolute';
+  if (e.split(/[\\/]/).includes('..')) return 'has a ".." segment';
+  return null;
 }
 
 // ── Trigger payloads (D-23) ──

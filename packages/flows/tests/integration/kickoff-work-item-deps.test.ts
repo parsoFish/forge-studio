@@ -104,7 +104,8 @@ test('edit WI-13\'s dependencies: worktree AND snapshot rewritten, every other f
   const after = readWi(wiDir, 'WI-13');
   assert.deepEqual(after, { ...before, depends_on: ['WI-8'] });
   assert.equal(readFileSync(join(snapshotDir, 'WI-13.md'), 'utf8'), serializeWorkItem(after), 'the roadmap reads the snapshot first');
-  const ev = events(logDir).find((e) => e.message === 'kickoff.work-item-edited'); // forge-nk1y.32: one edit event, naming the changed fields
+  // forge-nk1y.32: one edit event, naming the changed fields
+  const ev = events(logDir).find((e) => e.message === 'kickoff.work-item-edited');
   assert.deepEqual(ev?.metadata, { work_item_id: 'WI-13', fields: ['dependsOn'] });
 }));
 

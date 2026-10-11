@@ -48,7 +48,12 @@ const filesOf = (text: string): string[] => {
 
 /** forge-nk1y.32: a kickoff-added work item's current fields as an editable draft. */
 export function workItemDraftFrom(f: WorkItemSource): WorkItemDraft {
-  return { summary: f.summary, acceptanceCriteria: f.acceptanceCriteria.map((a) => ({ ...a })), gateCmd: f.qualityGateCmd.join(' '), files: f.filesInScope.join('\n') };
+  return {
+    summary: f.summary,
+    acceptanceCriteria: f.acceptanceCriteria.map((a) => ({ ...a })),
+    gateCmd: f.qualityGateCmd.join(' '),
+    files: f.filesInScope.join('\n'),
+  };
 }
 
 const completeAcs = (acs: readonly AcceptanceCriterion[]): AcceptanceCriterion[] =>

@@ -29,7 +29,6 @@ const editMock = vi.fn<(input: EditInput) => Promise<EditResult>>();
 vi.mock('@/lib/bridge-client', () => ({
   addKickoffWorkItem: (input: Record<string, unknown>) => addMock(input),
   editKickoffWorkItem: (input: EditInput) => editMock(input),
-  deleteKickoffWorkItem: vi.fn(),
 }));
 
 import { KickoffAddWorkItem } from '@/components/studio/KickoffAddWorkItem';

@@ -35,7 +35,8 @@ const KICKOFF_DIR = join(HERE, 'kickoff-deps-i2');
 /** Every I2 work-item fixture file → its work-item file name (`WI-3a.md`). */
 export function i2WorkItemFiles(opts: I2PlantOpts): Array<{ name: string; path: string }> {
   const plan = readdirSync(PLAN_DIR).map((f) => ({ name: f.replace(/\.fixture$/, ''), path: join(PLAN_DIR, f) }));
-  const adds = ['WI-13', 'WI-14'].map((id) => ({ name: `${id}.md`, path: join(KICKOFF_DIR, `${id}${opts.live ? '.now' : ''}.md.fixture`) }));
+  const suffix = opts.live ? '.now.md.fixture' : '.md.fixture';
+  const adds = ['WI-13', 'WI-14'].map((id) => ({ name: `${id}.md`, path: join(KICKOFF_DIR, `${id}${suffix}`) }));
   return opts.withKickoffAdds ? [...plan, ...adds] : plan;
 }
 
@@ -65,6 +66,9 @@ export function plantI2Kickoff(forgeRoot: string, opts: I2PlantOpts = { withKick
     copyFileSync(f.path, join(wiDir, f.name));
     copyFileSync(f.path, join(snapshotDir, f.name));
   }
-  if (opts.live) writeFileSync(join(logDir, 'events.jsonl'), readFileSync(join(KICKOFF_DIR, 'events.jsonl.fixture'), 'utf8').replaceAll('FORGE_ROOT', forgeRoot));
+  if (opts.live) {
+    const events = readFileSync(join(KICKOFF_DIR, 'events.jsonl.fixture'), 'utf8');
+    writeFileSync(join(logDir, 'events.jsonl'), events.replaceAll('FORGE_ROOT', forgeRoot));
+  }
   return { manifestPath, wiDir, snapshotDir, logDir };
 }

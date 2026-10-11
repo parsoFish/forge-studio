@@ -114,30 +114,34 @@ export async function addKickoffWorkItem(input: KickoffWorkItemInput): Promise<A
 /** forge-nk1y.32: absent = unchanged; any field but `dependsOn` needs a work item added at the gate. */
 export type EditKickoffWorkItemInput = { initiativeId: string; workItemId: string; dependsOn?: string[] } & Partial<WorkItemSource>;
 export type EditKickoffWorkItemResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
-export type DeleteKickoffWorkItemResult = { ok: true; workItemId: string } | { ok: false; error: string };
+type KickoffCallResult = { ok: true; data: Record<string, unknown> } | { ok: false; error: string };
 
-async function kickoffWorkItemCall(method: 'PATCH' | 'DELETE', workItemId: string, body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
+/** One `/api/kickoff/work-items/<wiId>` call; a refusal (400/404/409) carries the server's detail. */
+async function kickoffWorkItemCall(
+  method: 'PATCH',
+  workItemId: string,
+  body: Record<string, unknown>,
+): Promise<KickoffCallResult> {
   try {
     const res = await bridgeFetch(`/api/kickoff/work-items/${encodeURIComponent(workItemId)}`, {
-      method, headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' }, body: JSON.stringify(body),
+      method,
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    return res.ok && data.ok === true ? { ok: true, data } : { ok: false, error: bridgeErrorMessage(res.status, data) };
+    if (!res.ok || data.ok !== true) return { ok: false, error: bridgeErrorMessage(res.status, data) };
+    return { ok: true, data };
   } catch (err) {
     return { ok: false, error: String(err) };
   }
 }
 
-/** forge-mfv5.1.36 / forge-nk1y.32: edit one work item at the Kickoff gate. A refusal (400/404/409) carries the server's detail. */
+/** forge-mfv5.1.36 / forge-nk1y.32: edit one work item at the Kickoff gate. */
 export async function editKickoffWorkItem({ workItemId, ...body }: EditKickoffWorkItemInput): Promise<EditKickoffWorkItemResult> {
   const r = await kickoffWorkItemCall('PATCH', workItemId, body);
-  return r.ok ? { ok: true, workItemId: String(r.data.workItemId), dependsOn: Array.isArray(r.data.dependsOn) ? r.data.dependsOn.map(String) : [] } : r;
-}
-
-/** forge-nk1y.32: delete one work item added at the Kickoff gate (refused while another depends on it). */
-export async function deleteKickoffWorkItem({ initiativeId, workItemId }: { initiativeId: string; workItemId: string }): Promise<DeleteKickoffWorkItemResult> {
-  const r = await kickoffWorkItemCall('DELETE', workItemId, { initiativeId });
-  return r.ok ? { ok: true, workItemId: String(r.data.workItemId) } : r;
+  if (!r.ok) return r;
+  const dependsOn = Array.isArray(r.data.dependsOn) ? r.data.dependsOn.map(String) : [];
+  return { ok: true, workItemId: String(r.data.workItemId), dependsOn };
 }
 
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------

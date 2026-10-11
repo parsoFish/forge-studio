@@ -8,8 +8,7 @@
  *     (prefix `kickoff-edit`) and the dependency boxes (`kickoff-edit-dep-<id>`);
  *     Save (`save-kickoff-wi`) PATCHes the full set;
  *   - a plan work item shows the dependency boxes only and saves dependsOn only;
- *   - Delete (`delete-kickoff-wi`) asks to confirm, then DELETEs — kickoff-added
- *     work items only; both acts disabled with a reason until one is picked;
+ *   - Save is disabled with a reason until a work item is picked;
  *   - a files line that is not one relative path is refused client-side, by name.
  *
  * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/kickoff-edit-work-item.test.ts
@@ -19,36 +18,24 @@ import * as React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
-type Ok<T> = ({ ok: true } & T) | { ok: false; error: string };
-const editMock = vi.fn<(input: Record<string, unknown>) => Promise<Ok<{ workItemId: string; dependsOn: string[] }>>>();
-const deleteMock = vi.fn<(input: Record<string, unknown>) => Promise<Ok<{ workItemId: string }>>>();
+import { KICKOFF_INIT as INIT, KICKOFF_WIS as WIS, WI14_LINE, AC14 } from '../test-fixtures/kickoff-i2-work-items';
+
+type EditResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
+const editMock = vi.fn<(input: Record<string, unknown>) => Promise<EditResult>>();
 
 vi.mock('@/lib/bridge-client', () => ({
   addKickoffWorkItem: vi.fn(),
   editKickoffWorkItem: (input: Record<string, unknown>) => editMock(input),
-  deleteKickoffWorkItem: (input: Record<string, unknown>) => deleteMock(input),
 }));
 
 import { KickoffAddWorkItem } from '@/components/studio/KickoffAddWorkItem';
 
-const INIT = 'INIT-2026-10-11-i2-apply-engine-terraform-retired';
-const WI14_LINE = 'tests/test_docs_no_terraform_tokens.py .github/copilot-context.md'; // live, verbatim
-const AC14 = { given: 'the repository after I2 (infra/ removed)', when: '`python3 -m pytest tests/test_docs_no_terraform_tokens.py` runs', then: 'no tokens' };
-const WIS = [
-  { id: 'WI-9a', dependsOn: [] }, { id: 'WI-10', dependsOn: ['WI-9a'] }, { id: 'WI-11', dependsOn: [] }, { id: 'WI-12', dependsOn: ['WI-11'] },
-  { id: 'WI-13', dependsOn: ['WI-12'], kickoff: { summary: 'Reset before apply', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }], qualityGateCmd: ['pytest'], filesInScope: ['tests/a.py'], creates: [], dependsOn: ['WI-12'] } },
-  { id: 'WI-14', dependsOn: ['WI-9a', 'WI-10', 'WI-11'], kickoff: {
-    summary: 'No Terraform references left in agent context or docs', acceptanceCriteria: [AC14],
-    qualityGateCmd: ['python3', '-m', 'pytest', 'tests/test_docs_no_terraform_tokens.py'], filesInScope: [WI14_LINE], creates: [], dependsOn: ['WI-9a', 'WI-10', 'WI-11'],
-  } },
-];
 let container: HTMLDivElement;
 let root: Root;
 const onAdded = vi.fn();
 
 beforeEach(async () => {
   editMock.mockReset();
-  deleteMock.mockReset();
   onAdded.mockReset();
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -69,7 +56,10 @@ const q = <T extends Element>(sel: string): T => {
 const panel = () => q('[data-component="kickoff-edit-wi"]');
 const btn = (action: string) => q<HTMLButtonElement>(`[data-action="${action}"]`);
 const val = (field: string) => q<HTMLInputElement | HTMLTextAreaElement>(`[data-field="${field}"]`).value;
-const checked = () => [...container.querySelectorAll<HTMLInputElement>('[data-field^="kickoff-edit-dep-"]')].filter((b) => b.checked).map((b) => b.getAttribute('data-field')!.slice('kickoff-edit-dep-'.length));
+const checked = () => {
+  const boxes = [...container.querySelectorAll<HTMLInputElement>('[data-field^="kickoff-edit-dep-"]')];
+  return boxes.filter((b) => b.checked).map((b) => b.getAttribute('data-field')!.slice('kickoff-edit-dep-'.length));
+};
 
 async function type(sel: string, value: string): Promise<void> {
   const el = q<HTMLInputElement | HTMLTextAreaElement>(sel);
@@ -87,18 +77,16 @@ async function pick(id: string): Promise<void> {
   });
 }
 
-test('inside the Add work item details; Save and Delete disabled with a reason until a work item is picked', () => {
+test('inside the Add work item details; Save disabled with a reason until a work item is picked', () => {
   expect(panel().closest('details')).not.toBeNull();
   expect(panel().getAttribute('data-form-state')).toBe('editing');
-  expect([...q<HTMLSelectElement>('[data-field="kickoff-edit-wi-id"]').options].map((o) => o.value).filter(Boolean))
-    .toEqual(['WI-9a', 'WI-10', 'WI-11', 'WI-12', 'WI-13', 'WI-14']);
-  for (const a of ['save-kickoff-wi', 'delete-kickoff-wi']) {
-    expect(btn(a).disabled).toBe(true);
-    expect(btn(a).getAttribute('data-disabled-reason')).toMatch(/pick a work item/);
-  }
+  const options = [...q<HTMLSelectElement>('[data-field="kickoff-edit-wi-id"]').options].map((o) => o.value).filter(Boolean);
+  expect(options).toEqual(['WI-9a', 'WI-10', 'WI-11', 'WI-12', 'WI-13', 'WI-14']);
+  expect(btn('save-kickoff-wi').disabled).toBe(true);
+  expect(btn('save-kickoff-wi').getAttribute('data-disabled-reason')).toMatch(/pick a work item/);
 });
 
-test('pick WI-14: its fields and dependencies prefill; the two-paths line is refused client-side, by name', async () => {
+test('pick WI-14: fields and dependencies prefill; the two-paths line is refused client-side, by name', async () => {
   await pick('WI-14');
   expect(val('kickoff-edit-wi-summary')).toBe('No Terraform references left in agent context or docs');
   expect(val('kickoff-edit-ac-given-1')).toBe(AC14.given);
@@ -106,7 +94,8 @@ test('pick WI-14: its fields and dependencies prefill; the two-paths line is ref
   expect(val('kickoff-edit-wi-files')).toBe(WI14_LINE);
   expect(checked()).toEqual(['WI-9a', 'WI-10', 'WI-11']);
   expect(btn('save-kickoff-wi').disabled).toBe(true);
-  expect(btn('save-kickoff-wi').getAttribute('data-disabled-reason')).toBe(`files_in_scope entry "${WI14_LINE}" refused: contains whitespace — one relative path per entry`);
+  const reason = `files_in_scope entry "${WI14_LINE}" refused: contains whitespace — one relative path per entry`;
+  expect(btn('save-kickoff-wi').getAttribute('data-disabled-reason')).toBe(reason);
   expect(editMock).not.toHaveBeenCalled();
 });
 
@@ -116,47 +105,34 @@ test('fix WI-14\'s files (one per line) and Save: PATCHes the full set, refreshe
   await type('[data-field="kickoff-edit-wi-files"]', WI14_LINE.replace(' ', '\n'));
   await act(async () => { btn('save-kickoff-wi').click(); });
   expect(editMock).toHaveBeenCalledWith({
-    initiativeId: INIT, workItemId: 'WI-14', summary: 'No Terraform references left in agent context or docs', acceptanceCriteria: [AC14],
+    initiativeId: INIT,
+    workItemId: 'WI-14',
+    summary: 'No Terraform references left in agent context or docs',
+    acceptanceCriteria: [AC14],
     qualityGateCmd: ['python3', '-m', 'pytest', 'tests/test_docs_no_terraform_tokens.py'],
-    filesInScope: ['tests/test_docs_no_terraform_tokens.py', '.github/copilot-context.md'], dependsOn: ['WI-9a', 'WI-10', 'WI-11'],
+    filesInScope: ['tests/test_docs_no_terraform_tokens.py', '.github/copilot-context.md'],
+    dependsOn: ['WI-9a', 'WI-10', 'WI-11'],
   });
   expect(panel().getAttribute('data-form-state')).toBe('saved');
   expect(onAdded).toHaveBeenCalledTimes(1);
 });
 
-test('a plan work item: dependency boxes only, Save sends dependsOn only; Delete disabled naming why', async () => {
+test('a plan work item: dependency boxes only; Save sends dependsOn only', async () => {
   editMock.mockResolvedValue({ ok: true, workItemId: 'WI-12', dependsOn: [] });
   await pick('WI-12');
   expect(container.querySelector('[data-field="kickoff-edit-wi-summary"]')).toBeNull();
   expect(checked()).toEqual(['WI-11']);
-  expect(btn('delete-kickoff-wi').disabled).toBe(true);
-  expect(btn('delete-kickoff-wi').getAttribute('data-disabled-reason')).toMatch(/plan work item/);
   await act(async () => { q<HTMLInputElement>('[data-field="kickoff-edit-dep-WI-11"]').click(); });
   await act(async () => { btn('save-kickoff-wi').click(); });
   expect(editMock).toHaveBeenCalledWith({ initiativeId: INIT, workItemId: 'WI-12', dependsOn: [] });
 });
 
-test('Delete asks to confirm, then DELETEs and refreshes; cancel sends nothing', async () => {
-  deleteMock.mockResolvedValue({ ok: true, workItemId: 'WI-14' });
-  await pick('WI-14');
-  await act(async () => { btn('delete-kickoff-wi').click(); });
-  expect(deleteMock).not.toHaveBeenCalled();
-  await act(async () => { btn('cancel-delete-kickoff-wi').click(); });
-  expect(container.querySelector('[data-action="confirm-delete-kickoff-wi"]')).toBeNull();
-  await act(async () => { btn('delete-kickoff-wi').click(); });
-  await act(async () => { btn('confirm-delete-kickoff-wi').click(); });
-  expect(deleteMock).toHaveBeenCalledWith({ initiativeId: INIT, workItemId: 'WI-14' });
-  expect(panel().getAttribute('data-form-state')).toBe('deleted');
-  expect(onAdded).toHaveBeenCalledTimes(1);
-});
-
 test('a refusal shows the server detail', async () => {
-  deleteMock.mockResolvedValue({ ok: false, error: 'WI-13 is a dependency of WI-14 — edit their dependencies first' });
-  await pick('WI-13');
-  await act(async () => { btn('delete-kickoff-wi').click(); });
-  await act(async () => { btn('confirm-delete-kickoff-wi').click(); });
+  editMock.mockResolvedValue({ ok: false, error: 'WI-12: work-item dependency cycle: WI-12 → WI-13 → WI-12' });
+  await pick('WI-12');
+  await act(async () => { btn('save-kickoff-wi').click(); });
   expect(panel().getAttribute('data-form-state')).toBe('error');
-  expect(q('[data-component="kickoff-edit-wi"] [role="alert"]').textContent).toContain('dependency of WI-14');
+  expect(q('[data-component="kickoff-edit-wi"] [role="alert"]').textContent).toContain('dependency cycle');
   expect(onAdded).not.toHaveBeenCalled();
 });
 
@@ -164,14 +140,20 @@ test('InitiativeDetail threads the roadmap\'s kickoff fields to the control (the
   const { renderToStaticMarkup } = await import('react-dom/server');
   const { InitiativeDetail } = await import('@/components/studio/InitiativeDetail');
   const wi14 = WIS[5]!;
-  const html = renderToStaticMarkup(React.createElement(InitiativeDetail as never, {
-    expanded: true, initiativeId: INIT, dependsOnInitiatives: [], blocked: false, blockedBy: [], unplanned: false, runCycleIds: [],
-    plan: { status: 'idle', error: null }, canStartDevelopment: true, develop: { status: 'idle', error: null }, onStart: () => {},
-    attempt: { attemptCount: 1, priorCycleIds: [] }, recoveryDetail: null, recoveryBusy: false, recoveryNote: '', onInspectRecovery: () => {}, onRecoveryAction: () => {},
+  const props = {
+    expanded: true, initiativeId: INIT, dependsOnInitiatives: [], blocked: false, blockedBy: [], unplanned: false,
+    runCycleIds: [], plan: { status: 'idle', error: null }, canStartDevelopment: true,
+    develop: { status: 'idle', error: null }, onStart: () => {}, attempt: { attemptCount: 1, priorCycleIds: [] },
+    recoveryDetail: null, recoveryBusy: false, recoveryNote: '', onInspectRecovery: () => {}, onRecoveryAction: () => {},
     status: 'awaiting-kickoff',
-    wiLevels: { levelById: new Map(), maxLevel: 0, byLevel: new Map([[0, [{ id: 'WI-9a', title: 'a', dependsOn: [] }, { ...wi14, title: 'b' }]]]) },
-  } as never));
+    wiLevels: {
+      levelById: new Map(),
+      maxLevel: 0,
+      byLevel: new Map([[0, [{ id: 'WI-9a', title: 'a', dependsOn: [] }, { ...wi14, title: 'b' }]]]),
+    },
+  };
+  const html = renderToStaticMarkup(React.createElement(InitiativeDetail as never, props as never));
   expect(html).toContain('data-component="kickoff-edit-wi"');
-  expect(html).toContain('WI-14 (added at the gate)');
-  expect(html).not.toContain('WI-9a (added at the gate)');
+  expect(html).toMatch(/WI-14(<!-- -->)? \(added at the gate\)/);
+  expect(html).not.toMatch(/WI-9a(<!-- -->)? \(added at the gate\)/);
 });
