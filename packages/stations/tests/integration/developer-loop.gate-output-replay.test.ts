@@ -20,7 +20,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,6 +31,8 @@ import {
   HEAD_UNKNOWN,
   type GateFeedbackEvent,
 } from '../../phases/gate-feedback.ts';
+import { emitGateFeedbackEvent } from '../../phases/dev-loop-events.ts';
+import type { EventLogger } from '@forge/kernel';
 
 type ReplayRow =
   | { run: number; kind: 'iteration'; iteration: number; last_assistant_text: string }
@@ -178,49 +180,109 @@ test('a "stale" claim answered by a failing gate at the current HEAD is refused 
   assert.equal(run2.snapshots.at(-1)?.brief, null);
 });
 
-test('refusal path: a "stale" claim followed by a PASSING gate is not refused, and the brief is removed', () => {
-  const wt = makeWorktree();
-  try {
-    const events: GateFeedbackEvent[] = [];
-    const tracker = createGateFeedbackTracker({ worktreePath: wt.path, emit: (e) => events.push(e) });
-    tracker.noteAgentTurn('Gate failure file is stale.');
-    tracker.onRun({ passed: true, exitCode: 0, durationMs: 0, stdoutTail: 'ok', stderrTail: '', command: 'true', iteration: 1 });
-    assert.equal(events.filter((e) => e.message === 'dev-loop.stale-claim-refused').length, 0);
-    assert.equal(existsSync(join(wt.path, '.forge', 'last-gate-failure.md')), false);
-  } finally {
-    wt.cleanup();
-  }
+const fail = (iteration: number, stdoutTail: string, extra: Partial<GateRunInfo> = {}): GateRunInfo => ({
+  passed: false, exitCode: 1, durationMs: 0, stdoutTail, stderrTail: '', command: 'pytest', iteration, ...extra,
 });
 
-test('an unreadable HEAD is recorded as UNKNOWN, never as a current commit (§6.15)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-replay-nogit-'));
+function withTracker(fn: (t: ReturnType<typeof createGateFeedbackTracker>, events: GateFeedbackEvent[], dir: string) => void, opts: { git?: boolean } = {}) {
+  const wt = opts.git === false ? { path: mkdtempSync(join(tmpdir(), 'forge-gate-replay-nogit-')), cleanup: () => {} } : makeWorktree();
   try {
     const events: GateFeedbackEvent[] = [];
-    const tracker = createGateFeedbackTracker({ worktreePath: dir, emit: (e) => events.push(e) });
-    tracker.noteAgentTurn('this failure is stale');
-    tracker.onRun({ passed: false, exitCode: 1, durationMs: 0, stdoutTail: 'boom', stderrTail: '', command: 'false', iteration: 1 });
-    const brief = readFileSync(join(dir, '.forge', 'last-gate-failure.md'), 'utf8');
-    assert.ok(brief.includes(`Gate ran at HEAD: ${HEAD_UNKNOWN}`));
-    const refused = events.find((e) => e.message === 'dev-loop.stale-claim-refused');
-    assert.equal(refused?.metadata.head_sha, HEAD_UNKNOWN);
+    fn(createGateFeedbackTracker({ worktreePath: wt.path, emit: (e) => events.push(e) }), events, wt.path);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(wt.path, { recursive: true, force: true });
   }
+}
+const named = (events: GateFeedbackEvent[], m: GateFeedbackEvent['message']) => events.filter((e) => e.message === m);
+const briefOf = (dir: string) => readFileSync(join(dir, '.forge', 'last-gate-failure.md'), 'utf8');
+
+test('refusal path: "stale" in a sentence that is not about the gate is no claim, even before a failing gate', () => {
+  withTracker((t, events, dir) => {
+    t.noteAgentTurn('Removed a stale import and bumped an out-of-date lockfile entry.');
+    t.onRun(fail(1, 'E   KeyError'));
+    assert.equal(named(events, 'dev-loop.stale-claim-refused').length, 0);
+    assert.doesNotMatch(briefOf(dir), /REFUSED/);
+  });
 });
 
-test('a brief that cannot be written is a named event, never swallowed', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-replay-blocked-'));
-  try {
-    writeFileSync(join(dir, '.forge'), 'a file where the .forge dir should be');
-    const events: GateFeedbackEvent[] = [];
-    const tracker = createGateFeedbackTracker({ worktreePath: dir, emit: (e) => events.push(e) });
-    tracker.onRun({ passed: false, exitCode: 1, durationMs: 0, stdoutTail: 'x', stderrTail: '', command: 'false', iteration: 1 });
-    const failed = events.find((e) => e.message === 'dev-loop.gate-feedback-write-failed');
-    assert.ok(failed, 'write failure is emitted');
-    assert.match(String(failed.metadata.error), /\S/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+test('a claim is consumed by the gate that answers it: a later turn without one is not refused again', () => {
+  withTracker((t, events) => {
+    t.noteAgentTurn('The gate failure is stale.');
+    t.onRun(fail(1, 'a'));
+    t.noteAgentTurn('Fixed the delete branch.');
+    t.onRun(fail(2, 'a'));
+    assert.deepEqual(named(events, 'dev-loop.stale-claim-refused').map((e) => e.metadata.iteration), [1]);
+  });
+});
+
+test('a repeat whose output changed says so, and a pass in between resets the repeat', () => {
+  withTracker((t, events, dir) => {
+    t.onRun(fail(1, 'first output'));
+    t.onRun(fail(2, 'second output'));
+    const rep = named(events, 'dev-loop.gate-output-repeated');
+    assert.equal(rep.length, 1);
+    assert.equal(rep[0].metadata.output_identical, false);
+    assert.match(briefOf(dir), /Output differs from this run/);
+    t.onRun({ ...fail(3, ''), passed: true, exitCode: 0 });
+    t.onRun(fail(4, 'fourth'));
+    assert.equal(named(events, 'dev-loop.gate-output-repeated').length, 1, 'a failure after a pass is not a repeat');
+  });
+});
+
+test('an errored or timed-out gate run is no test result: it neither repeats nor answers a claim', () => {
+  withTracker((t, events, dir) => {
+    t.onRun(fail(1, 'real failure'));
+    t.noteAgentTurn('Gate failure file is stale.');
+    t.onRun(fail(2, '', { errored: true, exitCode: -1 }));
+    t.noteAgentTurn('Gate failure file is stale.');
+    t.onRun(fail(3, '', { timedOut: true, exitCode: -1 }));
+    assert.equal(named(events, 'dev-loop.gate-output-repeated').length, 0);
+    assert.equal(named(events, 'dev-loop.stale-claim-refused').length, 0);
+    assert.doesNotMatch(briefOf(dir), /Repeat failure|REFUSED/);
+  });
+});
+
+test('an unreadable HEAD is recorded as UNKNOWN with a named event, never as a current commit (§6.15)', () => {
+  withTracker((t, events, dir) => {
+    t.noteAgentTurn('this gate failure is stale');
+    t.onRun(fail(1, 'boom'));
+    assert.ok(briefOf(dir).includes(`Gate ran at HEAD: ${HEAD_UNKNOWN}`));
+    assert.equal(named(events, 'dev-loop.stale-claim-refused')[0]?.metadata.head_sha, HEAD_UNKNOWN);
+    const unknown = named(events, 'dev-loop.gate-head-unknown');
+    assert.equal(unknown.length, 1);
+    assert.match(String(unknown[0].metadata.error), /\S/);
+  }, { git: false });
+});
+
+test('a brief that cannot be written is a named event, and the older brief does not survive as if current', () => {
+  withTracker((t, events, dir) => {
+    t.onRun(fail(1, 'iteration one output'));
+    const brief = join(dir, '.forge', 'last-gate-failure.md');
+    chmodSync(brief, 0o444); // the rewrite fails (EACCES); the directory still allows removal
+    t.onRun(fail(2, 'iteration two output'));
+    const failed = named(events, 'dev-loop.gate-feedback-write-failed');
+    assert.equal(failed.length, 1, 'write failure is emitted');
+    assert.match(String(failed[0].metadata.error), /\S/);
+    assert.equal(failed[0].metadata.older_brief, 'removed');
+    assert.equal(existsSync(brief), false, 'iteration one\'s brief must not be read as iteration two\'s');
+  });
+});
+
+test('emitGateFeedbackEvent routes the tracker event onto the developer-loop log with the work item', () => {
+  const emitted: Record<string, unknown>[] = [];
+  const logger = { emit: (e: Record<string, unknown>) => { emitted.push(e); return { ...e, event_id: 'x' }; } } as unknown as EventLogger;
+  emitGateFeedbackEvent(logger, { initiativeId: 'INIT-1', parentEventId: 'p-1', workItemId: 'WI-6', skill: 'forge-developer' }, {
+    message: 'dev-loop.stale-claim-refused', level: 'error', metadata: { iteration: 2, head_sha: 'abc' },
+  });
+  assert.equal(emitted.length, 1);
+  const e = emitted[0];
+  assert.equal(e.message, 'dev-loop.stale-claim-refused');
+  assert.equal(e.event_type, 'error');
+  assert.equal(e.phase, 'developer-loop');
+  assert.equal(e.skill, 'forge-developer');
+  assert.equal(e.initiative_id, 'INIT-1');
+  assert.equal(e.parent_event_id, 'p-1');
+  assert.deepEqual(e.metadata, { work_item_id: 'WI-6', iteration: 2, head_sha: 'abc' });
 });
 
 test('wiring through the real ralph runner: the turn that says "stale" is answered by the next gate, and the agent reads the refusal', async () => {

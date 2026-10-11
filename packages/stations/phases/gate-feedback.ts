@@ -68,64 +68,42 @@ export function writeGateFeedback(
   }
 }
 
-/** Bounded tails, verbatim, inside a fence the tail itself cannot close. */
-function fenced(text: string): string[] {
-  const fence = text.includes('```') ? '~~~~' : '```';
-  return [fence, text, fence];
+/** Bounded tails (4 KB, GateRunInfo), verbatim, inside a fence the tail itself cannot close. */
+function tails(prefix: string, stdout: string, stderr: string): string[] {
+  const fence = (t: string) => (t.includes('```') ? ['~~~~', t, '~~~~'] : ['```', t, '```']);
+  return [`${prefix} stdout (tail)`, ...fence(stdout), '', `${prefix} stderr (tail)`, ...fence(stderr), ''];
 }
 
 function renderGateFailureBody(info: GateRunInfo, context: GateFeedbackContext): string {
   const head = context.headSha ?? HEAD_UNKNOWN;
+  const exit = String(info.exitCode ?? '?');
   const lines = [
     `${GATE_FAILURE_FEEDBACK_HEADING} (forge, iteration ${info.iteration ?? '?'})`,
     '',
-    'This is the result of the SAME gate that decides whether this work item is done.',
-    'forge runs it after every one of your turns and rewrites this file, so it is never',
-    'stale: it judged the HEAD named below. A local re-run of the tests is never proof —',
-    "the gate's command, environment (secrets, resource prefixes, TF_ACC) and working",
-    'directory can differ from yours, and a local pass next to this failure means exactly',
-    'that difference. Fix EXACTLY what is below — the work item is NOT done until this',
-    'file disappears.',
+    'This is the result of the SAME gate that decides whether this work item is done. forge runs it after every',
+    'one of your turns and rewrites this file, so it is never stale: it judged the HEAD named below.',
+    "A local re-run of the tests is never proof — the gate's command, environment (secrets, resource prefixes,",
+    'TF_ACC) and working directory can differ from yours, and a local pass next to this failure means exactly that',
+    'difference. Fix EXACTLY what is below — the work item is NOT done until this file disappears.',
     '',
     `Command: ${info.command ?? ''}`,
-    `Exit code: ${String(info.exitCode ?? '?')}${info.errored ? '  (gate ERRORED — could not run; fix the gate/build itself)' : ''}`,
+    `Exit code: ${exit}${info.errored ? '  (gate ERRORED — could not run; fix the gate/build itself)' : ''}`,
     `Gate ran at HEAD: ${head}`,
     '',
-    '## stdout (tail)',
-    ...fenced(info.stdoutTail ?? ''),
-    '',
-    '## stderr (tail)',
-    ...fenced(info.stderrTail ?? ''),
-    '',
+    ...tails('##', info.stdoutTail ?? '', info.stderrTail ?? ''),
   ];
   if (context.staleClaim !== undefined) {
-    lines.push(
-      '## Your "stale" claim is REFUSED',
-      '',
-      `Your last turn called this gate failure stale ("${context.staleClaim}").`,
-      `It is not: forge ran the gate at HEAD ${head} after that turn and it failed`,
-      `(exit code ${String(info.exitCode ?? '?')}). A gate failure may be called stale only when no gate`,
-      'has run at the current HEAD. Read the output above and fix what it names.',
-      '',
-    );
+    lines.push('## Your "stale" claim is REFUSED', '', `Your last turn called this gate failure stale ("${context.staleClaim}").`);
+    lines.push(`It is not: forge ran the gate at HEAD ${head} after that turn and it failed (exit code ${exit}).`);
+    lines.push('A gate failure may be called stale only when no gate has run at the current HEAD. Fix what the output names.', '');
   }
   const prev = context.previous;
   if (prev) {
-    const identical = prev.stdoutTail === info.stdoutTail && prev.stderrTail === info.stderrTail;
-    lines.push(
-      `## Repeat failure — the previous gate run (iteration ${prev.iteration ?? '?'})`,
-      '',
-      `Previous: exit code ${String(prev.exitCode)} at HEAD ${prev.headSha}. Output ${identical ? 'IDENTICAL to' : 'differs from'} this run.`,
-      'Compare the two before you conclude anything: the same failure twice means your',
-      'change did not reach what the gate runs.',
-      '',
-      '### previous stdout (tail)',
-      ...fenced(prev.stdoutTail),
-      '',
-      '### previous stderr (tail)',
-      ...fenced(prev.stderrTail),
-      '',
-    );
+    const same = prev.stdoutTail === info.stdoutTail && prev.stderrTail === info.stderrTail ? 'IDENTICAL to' : 'differs from';
+    lines.push(`## Repeat failure — the previous gate run (iteration ${prev.iteration ?? '?'})`, '');
+    lines.push(`Previous: exit code ${String(prev.exitCode)} at HEAD ${prev.headSha}. Output ${same} this run.`);
+    lines.push('Compare the two before you conclude anything: the same failure twice means your change did not reach what the gate runs.', '');
+    lines.push(...tails('### previous', prev.stdoutTail, prev.stderrTail));
   }
   return lines.join('\n');
 }
@@ -184,13 +162,19 @@ export type PreviousGateRun = { iteration?: number; exitCode: number; headSha: s
 export type GateFeedbackContext = { headSha?: string; previous?: PreviousGateRun; staleClaim?: string };
 export type GateFeedbackWrite = { ok: true } | { ok: false; error: string };
 export type GateFeedbackEvent = {
-  message: 'dev-loop.gate-output-repeated' | 'dev-loop.stale-claim-refused' | 'dev-loop.gate-feedback-write-failed';
+  message: 'dev-loop.gate-output-repeated' | 'dev-loop.stale-claim-refused' | 'dev-loop.gate-feedback-write-failed' | 'dev-loop.gate-head-unknown';
   level: 'log' | 'error';
   metadata: Record<string, unknown>;
 };
 
-/** I2 WI-6's agent wrote "Gate failure file is stale from prior iteration" five times while the gate kept failing. */
-const STALE_CLAIM = /\b(stale|fossil|out[- ]of[- ]date)\b/i;
+/**
+ * I2 WI-6's agent wrote "Gate failure file is stale from prior iteration" five times while the gate kept failing.
+ * A claim is the stale word within one clause of "gate"/"failure" — "removed a stale import" is not one.
+ */
+const STALE_WORD = String.raw`\b(?:stale|fossil|out[- ]of[- ]date)\b`;
+const GATE_WORD = String.raw`\b(?:gate|failure)`;
+const STALE_CLAIM = new RegExp(`${GATE_WORD}[^.\n]{0,60}${STALE_WORD}|${STALE_WORD}[^.\n]{0,60}${GATE_WORD}`, 'i');
+const HEAD_READ_TIMEOUT_MS = 10_000;
 const CLAIM_EXCERPT_MAX = 200;
 
 function staleClaimExcerpt(text: string): string | undefined {
@@ -200,11 +184,24 @@ function staleClaimExcerpt(text: string): string | undefined {
   return text.slice(start, start + CLAIM_EXCERPT_MAX).replace(/\s+/g, ' ').trim();
 }
 
-function readHeadSha(worktreePath: string): string {
+function readHeadSha(worktreePath: string): { sha: string; error?: string } {
   try {
-    return execFileSync('git', ['-C', worktreePath, 'rev-parse', 'HEAD'], { stdio: 'pipe', encoding: 'utf8' }).trim() || HEAD_UNKNOWN;
-  } catch {
-    return HEAD_UNKNOWN;
+    const args = ['-C', worktreePath, 'rev-parse', 'HEAD'];
+    const sha = execFileSync('git', args, { stdio: 'pipe', encoding: 'utf8', timeout: HEAD_READ_TIMEOUT_MS }).trim();
+    return sha ? { sha } : { sha: HEAD_UNKNOWN, error: 'git rev-parse HEAD printed nothing' };
+  } catch (err) {
+    return { sha: HEAD_UNKNOWN, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** A brief that could not be rewritten must not survive as if current: remove the older one, and say whether that worked. */
+function removeOlderBrief(path: string): string {
+  try {
+    if (!existsSync(path)) return 'absent';
+    unlinkSync(path);
+    return 'removed';
+  } catch (err) {
+    return `remove failed: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
 
@@ -215,8 +212,9 @@ function readHeadSha(worktreePath: string): string {
  * the previous failing run beside the current (`dev-loop.gate-output-repeated`),
  * a "stale" claim the failing gate just answered at the current HEAD is refused
  * by name (`dev-loop.stale-claim-refused`), and an unwritable brief is named
- * (`dev-loop.gate-feedback-write-failed`). The iteration-0 pre-check runs
- * before any agent work and is never a "previous" run.
+ * (`dev-loop.gate-feedback-write-failed`, the older brief removed). The
+ * iteration-0 pre-check runs before any agent work, and an errored or timed-out
+ * run is no test result: neither is a "previous" run or answers a claim.
  */
 export function createGateFeedbackTracker(opts: {
   worktreePath: string;
@@ -231,11 +229,15 @@ export function createGateFeedbackTracker(opts: {
     onRun(info) {
       const claim = pendingClaim;
       pendingClaim = undefined;
-      const headSha = readHeadSha(opts.worktreePath);
-      const failedAfterAgent = !info.passed && (info.iteration ?? 0) > 0;
-      const repeat = failedAfterAgent ? previous : undefined;
-      const staleClaim = failedAfterAgent ? claim : undefined;
+      const head = readHeadSha(opts.worktreePath);
+      const headSha = head.sha;
+      const judged = !info.passed && (info.iteration ?? 0) > 0 && !info.errored && !info.timedOut;
+      const repeat = judged ? previous : undefined;
+      const staleClaim = judged ? claim : undefined;
       const base = { iteration: info.iteration, head_sha: headSha, exit_code: info.exitCode };
+      if (head.error !== undefined) {
+        opts.emit({ message: 'dev-loop.gate-head-unknown', level: 'error', metadata: { ...base, error: head.error } });
+      }
       if (repeat) {
         const output_identical = repeat.stdoutTail === info.stdoutTail && repeat.stderrTail === info.stderrTail;
         const prior = { previous_iteration: repeat.iteration, previous_head_sha: repeat.headSha, previous_exit_code: repeat.exitCode };
@@ -247,10 +249,11 @@ export function createGateFeedbackTracker(opts: {
       const written = writeGateFeedback(opts.worktreePath, info, { headSha, previous: repeat, staleClaim });
       if (!written.ok) {
         const path = lastGateFailurePath(opts.worktreePath);
-        opts.emit({ message: 'dev-loop.gate-feedback-write-failed', level: 'error', metadata: { ...base, path, error: written.error } });
+        const older_brief = removeOlderBrief(path);
+        opts.emit({ message: 'dev-loop.gate-feedback-write-failed', level: 'error', metadata: { ...base, path, error: written.error, older_brief } });
       }
       const { exitCode, stdoutTail, stderrTail } = info;
-      previous = failedAfterAgent ? { iteration: info.iteration, exitCode, headSha, stdoutTail, stderrTail } : undefined;
+      previous = judged ? { iteration: info.iteration, exitCode, headSha, stdoutTail, stderrTail } : undefined;
     },
   };
 }
