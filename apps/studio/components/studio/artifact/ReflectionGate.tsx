@@ -38,6 +38,9 @@ import {
   type ReflectionData,
 } from '@/lib/bridge-client';
 import { reflectionAllAnswered, reflectionAnsweredCount, buildReflectionAnswers, hasInferredAnswers } from '@/lib/reflection-form';
+import { disabledAttrs } from '@/lib/disabled-reason';
+import { GateBand, decisionCard, gateButton } from '@/components/studio/gate/GateBand';
+import { pane, paneHeader, paneTitle, meta, eyebrow, input } from '@/components/studio/gate/styles';
 
 export function ReflectionGate({
   cycleId,
@@ -113,14 +116,14 @@ export function ReflectionGate({
         style={{
           border: '1px solid var(--line)',
           borderRadius: 'var(--radius-sm)',
-          padding: 16,
+          padding: 'var(--space-4)',
           background: 'var(--panel)',
         }}
       >
-        <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4, fontWeight: 600 }}>
+        <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', marginBottom: 'var(--space-1)', fontWeight: 600 }}>
           Automated reflection
         </div>
-        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 16 }}>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--dim)', marginBottom: 'var(--space-4)' }}>
           No operator was in the loop — the reflector inferred these answers from the
           cycle logs, demo, and diff. Review them; they steer what lands in the brain.
         </div>
@@ -136,44 +139,43 @@ export function ReflectionGate({
               data-question-index={i}
               data-question-inferred={isInferred ? 'true' : 'false'}
               data-question-resolved={isInferred ? 'true' : 'false'}
-              style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
+              style={{ border: 'none', padding: 0, margin: '0 0 var(--space-3)' }}
             >
-              <legend style={{ fontSize: 13, color: 'var(--text)', marginBottom: 6, padding: 0 }}>
+              <legend style={{ fontSize: 'var(--text-base)', color: 'var(--text)', marginBottom: 'var(--space-2)', padding: 0 }}>
                 {q.question}
               </legend>
               <div
                 style={{
                   display: 'flex',
-                  gap: 8,
+                  gap: 'var(--space-2)',
                   alignItems: 'flex-start',
                   border: `1px solid ${isInferred ? 'var(--line)' : 'rgba(210,153,34,.5)'}`,
-                  borderRadius: 6,
-                  padding: '8px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: 'var(--space-2) var(--space-3)',
                   background: isInferred ? 'rgba(88,166,255,.06)' : 'rgba(210,153,34,.06)',
                 }}
               >
                 <span
                   data-question-inferred-badge
                   style={{
-                    fontSize: 10,
+                    fontSize: 'var(--text-xs)',
                     textTransform: 'uppercase',
                     letterSpacing: '.04em',
-                    color: isInferred ? 'var(--steel)' : '#d29922',
-                    border: `1px solid ${isInferred ? 'var(--steel)' : '#d29922'}`,
-                    borderRadius: 4,
-                    padding: '1px 5px',
-                    marginTop: 1,
+                    color: isInferred ? 'var(--steel)' : 'var(--amber)',
+                    border: `1px solid ${isInferred ? 'var(--steel)' : 'var(--amber)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0 var(--space-1)',
                     whiteSpace: 'nowrap',
                   }}
                 >
                   {isInferred ? 'inferred' : 'not inferred'}
                 </span>
                 {isInferred ? (
-                  <span data-question-answer style={{ fontSize: 13, color: 'var(--text)' }}>
+                  <span data-question-answer style={{ fontSize: 'var(--text-base)', color: 'var(--text)' }}>
                     {q.answer || '—'}
                   </span>
                 ) : (
-                  <span data-question-not-inferred style={{ fontSize: 13, color: 'var(--dim)' }}>
+                  <span data-question-not-inferred style={{ fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
                     The reflector could not infer an answer — worth an operator review.
                   </span>
                 )}
@@ -193,9 +195,9 @@ export function ReflectionGate({
         style={{
           border: '1px solid rgba(74,222,128,.4)',
           borderRadius: 'var(--radius-sm)',
-          padding: '14px 18px',
+          padding: 'var(--space-3) var(--space-4)',
           background: 'rgba(74,222,128,.07)',
-          fontSize: 13,
+          fontSize: 'var(--text-base)',
           color: 'var(--green)',
         }}
       >
@@ -214,9 +216,9 @@ export function ReflectionGate({
         style={{
           border: '1px solid var(--red)',
           borderRadius: 'var(--radius-sm)',
-          padding: '14px 18px',
+          padding: 'var(--space-3) var(--space-4)',
           background: 'var(--panel)',
-          fontSize: 13,
+          fontSize: 'var(--text-base)',
           color: 'var(--red)',
         }}
       >
@@ -232,13 +234,13 @@ export function ReflectionGate({
         style={{
           border: '1px solid var(--line)',
           borderRadius: 'var(--radius-sm)',
-          padding: '14px 18px',
+          padding: 'var(--space-3) var(--space-4)',
           background: 'var(--panel)',
-          fontSize: 13,
+          fontSize: 'var(--text-base)',
           color: 'var(--dim)',
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
+          gap: 'var(--space-3)',
           flexWrap: 'wrap',
         }}
       >
@@ -261,154 +263,110 @@ export function ReflectionGate({
 
   if (questions.length === 0) {
     return (
-      <div
-        style={{
-          border: '1px solid var(--line)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '14px 18px',
-          background: 'var(--panel)',
-          fontSize: 13,
-          color: 'var(--dim)',
-        }}
-      >
+      <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-3) var(--space-4)', background: 'var(--panel)', fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
         No reflection questions filed for this cycle yet.
       </div>
     );
   }
 
+  // The gate shell (forge-mfv5.1.31 row 3): what the reflector asks and the
+  // submit first (D-46 — the decision inside viewport 1), the questions below
+  // in a pane that scrolls inside.
+  const answered = reflectionAnsweredCount(questions, choices);
+  const blockedReason = submitting ? 'the reflection is being submitted' : allAnswered ? null : `Answer all ${questions.length} questions to submit`;
   return (
-    <div
-      data-section="reflect-questions"
-      style={{
-        border: '1px solid var(--line)',
-        borderRadius: 'var(--radius-sm)',
-        padding: 16,
-        background: 'var(--panel)',
-      }}
-    >
-      <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4, fontWeight: 600 }}>
-        How did this cycle go?
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 16 }}>
-        Your answers steer what the reflector writes to the brain. The cycle&apos;s
-        already merged — this tunes the next one.
-      </div>
-
-      {questions.map((q, i) => {
-        const hasOptions = Array.isArray(q.options) && q.options.length > 0;
-        return (
-          <fieldset
-            key={i}
-            data-question-index={i}
-            data-question-resolved={choices[i] ? 'true' : 'false'}
-            data-question-mode={hasOptions ? 'options' : 'freeform'}
-            data-question-inferred="false"
-            style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
-          >
-            <legend style={{ fontSize: 13, color: 'var(--text)', marginBottom: 6, padding: 0 }}>
-              {q.question}
-            </legend>
-            {hasOptions ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {(q.options ?? []).map((opt) => {
-                  const selected = choices[i] === opt.label;
-                  return (
-                    <label
-                      key={opt.label}
-                      data-option-label={opt.label}
-                      data-option-selected={selected ? 'true' : 'false'}
-                      style={{
-                        display: 'flex',
-                        gap: 8,
-                        alignItems: 'flex-start',
-                        border: `1px solid ${selected ? 'var(--steel)' : 'var(--line)'}`,
-                        borderRadius: 6,
-                        padding: '8px 10px',
-                        cursor: 'pointer',
-                        background: selected ? 'rgba(88,166,255,.1)' : 'transparent',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name={`rq-${i}`}
-                        checked={selected}
-                        onChange={() => setChoices((c) => ({ ...c, [i]: opt.label }))}
-                        style={{ marginTop: 2 }}
-                      />
-                      <span>
-                        <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>
-                          {opt.label}
-                        </span>
-                        {opt.description ? (
-                          <span style={{ display: 'block', fontSize: 12, color: 'var(--dim)' }}>
-                            {opt.description}
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <textarea
-                value={choices[i] ?? ''}
-                onChange={(e) => setChoices((c) => ({ ...c, [i]: e.target.value }))}
-                placeholder="Your answer…"
-                rows={2}
-                data-question-freeform
-                style={textareaStyle}
-              />
-            )}
-          </fieldset>
-        );
-      })}
-
-      <textarea
-        value={freeform}
-        onChange={(e) => setFreeform(e.target.value)}
-        placeholder="Anything else worth capturing this cycle…"
-        rows={2}
-        data-field="freeform"
-        style={{ ...textareaStyle, marginBottom: 10 }}
-      />
-      {error && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button
-          onClick={() => void submit()}
-          disabled={!allAnswered || submitting}
-          data-action="submit-reflection"
-          // W7-B7 (artifact-plan-24): the disabled state says WHY.
-          title={allAnswered ? undefined : `Answer all ${questions.length} questions to submit`}
-          style={{
-            background: allAnswered && !submitting ? '#238636' : 'var(--panel-2)',
-            color: allAnswered && !submitting ? '#fff' : 'var(--dim)',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-            padding: '6px 14px',
-            fontSize: 13,
-            cursor: allAnswered && !submitting ? 'pointer' : 'not-allowed',
-          }}
-        >
-          {submitting ? 'Submitting…' : 'Submit reflection'}
-        </button>
-        {!allAnswered && (
-          <span data-reflect-answered-count style={{ fontSize: 12, color: 'var(--dim)' }}>
-            {reflectionAnsweredCount(questions, choices)} of {questions.length} answered
-          </span>
+    <div data-section="reflect-questions" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+      <GateBand
+        story={(
+          <div style={{ ...pane, padding: 'var(--space-4) var(--space-5)', gap: 'var(--space-2)' }}>
+            <div style={eyebrow}>How did this cycle go?</div>
+            <p style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', lineHeight: 1.45, color: 'var(--text)' }}>
+              The reflector asked {questions.length} question{questions.length === 1 ? '' : 's'} about this cycle.
+            </p>
+            <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
+              Your answers steer what the reflector writes to the brain. The cycle&apos;s already merged — this tunes the next one.
+            </p>
+          </div>
         )}
+        decision={(
+          <aside style={decisionCard}>
+            <div style={eyebrow}>Your reflection</div>
+            <span data-reflect-answered-count style={{ ...meta, fontSize: 'var(--text-sm)', color: allAnswered ? 'var(--green)' : 'var(--dim)' }}>
+              {answered} of {questions.length} answered
+            </span>
+            <textarea
+              value={freeform}
+              onChange={(e) => setFreeform(e.target.value)}
+              placeholder="Anything else worth capturing this cycle…"
+              rows={3}
+              data-field="freeform"
+              style={{ ...input, resize: 'vertical' }}
+            />
+            {error && <div role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)' }}>{error}</div>}
+            <button onClick={() => void submit()} {...disabledAttrs(blockedReason)} data-action="submit-reflection" style={gateButton('primary', blockedReason === null)}>
+              {submitting ? 'Submitting…' : 'Submit reflection'}
+            </button>
+          </aside>
+        )}
+      />
+
+      <div style={pane}>
+        <header style={paneHeader}><h2 style={paneTitle}>The reflector&apos;s questions</h2><span style={meta}>{questions.length} · pick an answer for each</span></header>
+        <div data-pane-body style={{ height: 'var(--pane-xl)', overflowY: 'auto', padding: 'var(--space-3) var(--space-4)' }}>
+          {questions.map((q, i) => {
+            const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+            return (
+              <fieldset
+                key={i}
+                data-question-index={i}
+                data-question-resolved={choices[i] ? 'true' : 'false'}
+                data-question-mode={hasOptions ? 'options' : 'freeform'}
+                data-question-inferred="false"
+                style={{ border: 'none', padding: 0, margin: '0 0 var(--space-4)' }}
+              >
+                <legend style={{ fontSize: 'var(--text-base)', color: 'var(--text)', marginBottom: 'var(--space-2)', padding: 0, overflowWrap: 'anywhere' }}>
+                  {q.question}
+                </legend>
+                {hasOptions ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                    {(q.options ?? []).map((opt) => {
+                      const selected = choices[i] === opt.label;
+                      return (
+                        <label
+                          key={opt.label}
+                          data-option-label={opt.label}
+                          data-option-selected={selected ? 'true' : 'false'}
+                          style={{
+                            display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start', cursor: 'pointer',
+                            border: `1px solid ${selected ? 'var(--ember)' : 'var(--line)'}`, borderRadius: 'var(--radius-sm)',
+                            padding: 'var(--space-2) var(--space-3)', background: selected ? 'rgba(255,158,74,.08)' : 'transparent',
+                          }}
+                        >
+                          <input type="radio" name={`rq-${i}`} checked={selected} onChange={() => setChoices((c) => ({ ...c, [i]: opt.label }))} />
+                          <span>
+                            <span style={{ fontSize: 'var(--text-base)', color: 'var(--text)', fontWeight: 500 }}>{opt.label}</span>
+                            {opt.description ? <span style={{ display: 'block', fontSize: 'var(--text-sm)', color: 'var(--dim)' }}>{opt.description}</span> : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <textarea
+                    value={choices[i] ?? ''}
+                    onChange={(e) => setChoices((c) => ({ ...c, [i]: e.target.value }))}
+                    placeholder="Your answer…"
+                    rows={2}
+                    data-question-freeform
+                    style={{ ...input, resize: 'vertical' }}
+                  />
+                )}
+              </fieldset>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
-const textareaStyle: React.CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  background: 'var(--bg)',
-  color: 'var(--text)',
-  border: '1px solid var(--line)',
-  borderRadius: 6,
-  padding: '8px 10px',
-  fontSize: 13,
-  resize: 'vertical',
-};
