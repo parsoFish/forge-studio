@@ -11,6 +11,7 @@ import {
   type CycleListSnapshot,
   type EventLogEntry,
 } from './bridge-client-core.ts';
+import type { WorkItemSource } from './work-item-authoring.ts';
 
 /** W7-FIX-A1 (review): rides the shared classifier so a bridge-ANSWERED
  *  non-2xx carries its status (`BridgeReadError{status}`) — the showcase /
@@ -82,6 +83,8 @@ export type RoadmapWorkItem = {
    * fabricating a status.
    */
   status?: WiStatus;
+  /** forge-nk1y.32: served at the Kickoff gate for a work item ADDED there — its editable fields (the edit form's prefill). */
+  kickoff?: WorkItemSource & { creates: string[]; dependsOn: string[] };
 };
 
 export type RoadmapInitiative = {

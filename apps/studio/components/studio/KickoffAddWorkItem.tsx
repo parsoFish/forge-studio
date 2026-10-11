@@ -8,7 +8,7 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 import { emptyWorkItemDraft, workItemDraftMissing, workItemDraftToSource, type WorkItemDraft } from '@/lib/work-item-authoring';
 import { WorkItemAuthoringFields } from '@/components/WorkItemAuthoringFields';
 import { acButtonStyle } from '@/components/AcceptanceCriteriaRows';
-import { DepsChecklist, KickoffEditDeps, toggleId, type KickoffWorkItemRef } from './KickoffEditDeps';
+import { DepsChecklist, KickoffEditWorkItem, toggleId, type KickoffWorkItemRef } from './KickoffEditWorkItem';
 
 type Outcome = { state: 'editing' | 'submitting' } | { state: 'added'; workItemId: string; uncovered: string[] } | { state: 'error'; detail: string };
 
@@ -18,7 +18,8 @@ type Outcome = { state: 'editing' | 'submitting' } | { state: 'added'; workItemI
  * gate's primary act stays first (D-46). The D-47 coverage the server re-reports
  * is shown, never a refusal; a refusal shows the server's detail.
  * forge-mfv5.1.36: the new WI runs after the checked work items, pre-checked
- * with the plan's leaves (D-48 amended); "Edit dependencies" sits below.
+ * with the plan's leaves (D-48 amended); forge-nk1y.32: "Edit work item"
+ * (edit in full / delete one added at the gate; a plan WI's deps) sits below.
  */
 export function KickoffAddWorkItem({ initiativeId, workItems = [], onAdded }: {
   initiativeId: string; workItems?: readonly KickoffWorkItemRef[]; onAdded?: () => void | Promise<void>;
@@ -74,7 +75,7 @@ export function KickoffAddWorkItem({ initiativeId, workItems = [], onAdded }: {
           {outcome.state === 'submitting' ? 'adding…' : 'add work item'}
         </button>
       </div>
-      {ids.length > 0 && <KickoffEditDeps initiativeId={initiativeId} workItems={workItems} onSaved={onAdded} />}
+      {ids.length > 0 && <KickoffEditWorkItem initiativeId={initiativeId} workItems={workItems} onSaved={onAdded} />}
     </details>
   );
 }

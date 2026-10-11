@@ -9,7 +9,8 @@
 import { test, expect } from 'vitest';
 
 import {
-  emptyWorkItemDraft, parseGateCmd, parseFilesInScope, workItemDraftMissing, workItemDraftToSource,
+  emptyWorkItemDraft, parseGateCmd, parseFilesInScope, workItemDraftFrom, workItemDraftMissing, workItemDraftToSource,
+  sendBackDraftMissing, sendBackDraftToSource,
 } from '../../lib/work-item-authoring';
 
 const FULL = {
@@ -31,7 +32,35 @@ test('a quote in the gate command is refused by name — argv has no shell quoti
 });
 
 test('files: one path per line, trimmed, blanks dropped', () => {
-  expect(parseFilesInScope(FULL.files)).toEqual(['specs/legacy.md', 'tests/retire.test.ts']);
+  expect(parseFilesInScope(FULL.files)).toEqual({ files: ['specs/legacy.md', 'tests/retire.test.ts'] });
+});
+
+// forge-nk1y.32 (D-48): gitweave I2's WI-14 was added with two paths typed on one line.
+const WI14_LINE = 'tests/test_docs_no_terraform_tokens.py .github/copilot-context.md';
+
+test('files: a line that is not one relative path is refused by name, never split', () => {
+  expect(parseFilesInScope(`a.py\n${WI14_LINE}`)).toEqual({
+    error: `files_in_scope entry "${WI14_LINE}" refused: contains whitespace — one relative path per entry`,
+  });
+  for (const bad of ['../x', '/abs', 'a\tb']) expect('error' in parseFilesInScope(bad)).toBe(true);
+  expect(workItemDraftMissing({ ...FULL, files: WI14_LINE })).toMatch(/refused: contains whitespace/);
+  expect(workItemDraftToSource({ ...FULL, files: WI14_LINE })).toEqual({ error: expect.stringMatching(/one relative path per entry/) });
+});
+
+test('the verdict gate\'s typed send-back shares the refusal', () => {
+  const d = { ...FULL, files: WI14_LINE };
+  expect(sendBackDraftMissing(d)).toMatch(/refused: contains whitespace/);
+  expect('error' in sendBackDraftToSource(d)).toBe(true);
+});
+
+test('a kickoff-added work item\'s fields prefill a draft (argv joined, one path per line)', () => {
+  expect(workItemDraftFrom({
+    summary: 'No Terraform', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+    qualityGateCmd: ['python3', '-m', 'pytest', 'tests/t.py'], filesInScope: ['tests/t.py', '.github/c.md'],
+  })).toEqual({
+    summary: 'No Terraform', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+    gateCmd: 'python3 -m pytest tests/t.py', files: 'tests/t.py\n.github/c.md',
+  });
 });
 
 test('the missing-field reason names the first empty required field, null when complete', () => {
@@ -57,8 +86,6 @@ test('the draft maps to the request source: trimmed, complete ACs only', () => {
 });
 
 // ---- forge-mfv5.1.28 — the verdict gate's typed send-back ------------------
-
-import { sendBackDraftMissing, sendBackDraftToSource } from '../../lib/work-item-authoring';
 
 test('a typed send-back with no complete criterion is refused naming BOTH inputs it could have had', () => {
   const r = sendBackDraftMissing({ ...emptyWorkItemDraft() });
