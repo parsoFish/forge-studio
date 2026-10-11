@@ -38,6 +38,7 @@ import { buildManifest, slugify } from './architect-manifest.ts';
 import { emitArchitectStageStart } from './architect-stage-events.ts';
 import { runStructured } from './architect-structured-turn.ts';
 import { repairDraftManifest } from './architect-draft-repair.ts';
+import { architectBrainContext } from './architect-brain-read.ts';
 import type { InitiativeManifest } from '@forge/contracts';
 
 
@@ -620,10 +621,9 @@ export async function runDraftStep(
     body: m.body,
   }));
 
-  // ARCH-1: build brain_context from the brain/ paths the agent actually Read
-  // during the draft turn. Deduplicate paths; use a generic summary since the
-  // agent's Read content is not parsed here.
-  const brain_context = [...new Set(brainReads)].map((p) => ({ path: p, summary: 'consulted during architect draft' }));
+  // ARCH-1 + forge-mfv5.1.24: the brain/ paths the SESSION read (this draft turn ∪ every earlier turn's
+  // `brain.read` events); `architect.brain-gap` fires only when that is empty.
+  const brain_context = architectBrainContext({ draftReads: brainReads, logFilePath: logger.logFilePath, logger, initiativeId });
 
   const exploreFindings = readExploreFindings(homeOf(args), input.sessionId);
   const session: ArchitectSession = {
