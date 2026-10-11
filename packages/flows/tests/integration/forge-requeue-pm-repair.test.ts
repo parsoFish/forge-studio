@@ -6,12 +6,13 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runRequeue } from '../../forge-requeue.ts';
 import { parseManifest } from '../../manifest.ts';
+import { derivePmValidationErrors, recordedPmValidationErrors } from '../../requeue-resume.ts';
 
 const INIT = 'INIT-2026-10-11-i2-apply-engine-terraform-retired';
 const CYCLE = `2026-10-11T02-16-05_${INIT}`;
@@ -68,6 +69,74 @@ test('D-49: a manifest failed for another reason keeps today\'s requeue (no plan
     const r = runRequeue(INIT, { forgeRoot: root });
     assert.equal(r.resumeDecision.resume, false, r.resumeDecision.reason);
     assert.equal(pending(root).resume_from, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---- row 5: the live I2 manifest failed BEFORE D-49 — nothing recorded -------
+// Fixture: COPIES of the live `_queue/failed` manifest and its cycle's events.jsonl
+// (read-only sources; machine paths scrubbed), in test-fixtures/pm-repair-i2/.
+
+const FIX = join(import.meta.dirname, '..', 'test-fixtures', 'pm-repair-i2');
+const LIVE_D18 = 'WI-3: creates lists 7 path(s), exceeding the D-18 sizing bound of 5 — split into smaller work items';
+const LIVE_AC5 = 'AC5 (uncarried: `python3 -m pytest tests/`';
+
+function plantLive(): string {
+  const root = mkdtempSync(join(tmpdir(), 'requeue-pm-backfill-'));
+  for (const d of ['pending', 'in-flight', 'failed', 'done', 'ready-for-review']) mkdirSync(join(root, '_queue', d), { recursive: true });
+  mkdirSync(join(root, 'projects', 'gitweave'), { recursive: true });
+  writeFileSync(join(root, '_queue', 'failed', `${INIT}.md`),
+    readFileSync(join(FIX, 'manifest.md.fixture'), 'utf8').replace('PROJECT_REPO_PATH', join(root, 'projects', 'gitweave')));
+  mkdirSync(join(root, '_logs', CYCLE), { recursive: true });
+  copyFileSync(join(FIX, 'events.jsonl.fixture'), join(root, '_logs', CYCLE, 'events.jsonl'));
+  return root;
+}
+
+test('row 5: the live I2 log yields both validation errors from the PM error event', () => {
+  const errors = derivePmValidationErrors(join(FIX, 'events.jsonl.fixture'));
+  assert.ok(errors.includes(LIVE_D18), errors.join('\n'));
+  assert.ok(errors.some((e) => e.includes(LIVE_AC5)), errors.join('\n'));
+});
+
+test('row 5: Requeue on the live I2 manifest (no recorded errors) backfills them by a named event and resumes at plan', () => {
+  const root = plantLive();
+  try {
+    assert.equal(parseManifest(readFileSync(join(root, '_queue', 'failed', `${INIT}.md`), 'utf8')).pm_validation_errors, undefined, 'the live manifest recorded nothing');
+    const r = runRequeue(INIT, { forgeRoot: root, resetRetries: true });
+    assert.equal(r.resumeDecision.resume && r.resumeDecision.resume_from, 'plan', r.resumeDecision.reason);
+    const m = pending(root);
+    assert.equal(m.resume_from, 'plan');
+    assert.ok(m.pm_validation_errors?.includes(LIVE_D18), `${m.pm_validation_errors}`);
+    const log = readFileSync(join(root, '_logs', CYCLE, 'events.jsonl'), 'utf8');
+    assert.match(log, /"message":"pm-validation-errors-backfilled"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 5: a log whose last attempt did not fail in the PM derives nothing → standard requeue', () => {
+  const root = plantLive();
+  try {
+    appendFileSync(join(root, '_logs', CYCLE, 'events.jsonl'), [
+      { phase: 'orchestrator', skill: 'cycle', event_type: 'start', message: 'cycle.start', metadata: {} },
+      { phase: 'orchestrator', skill: 'cycle', event_type: 'end', message: 'cycle.end', metadata: { status: 'failed', error: 'Error: developer-loop phase failed: gate red' } },
+    ].map((e) => JSON.stringify(e)).join('\n') + '\n');
+    assert.deepEqual(derivePmValidationErrors(join(root, '_logs', CYCLE, 'events.jsonl')), []);
+    const r = runRequeue(INIT, { forgeRoot: root, resetRetries: true });
+    assert.notEqual(r.resumeDecision.resume && r.resumeDecision.resume_from, 'plan');
+    assert.equal(pending(root).pm_validation_errors, undefined);
+    assert.ok(existsSync(join(root, '_queue', 'pending', `${INIT}.md`)));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 5: an unsafe cycle_id derives nothing — never a read outside _logs (the roadmap GET calls this)', () => {
+  const root = plantLive();
+  try {
+    assert.deepEqual(recordedPmValidationErrors(root, { cycle_id: `../_logs/${CYCLE}` }), []);
+    assert.ok(recordedPmValidationErrors(root, { cycle_id: CYCLE }).includes(LIVE_D18), 'the safe id still derives');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

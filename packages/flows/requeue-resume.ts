@@ -41,6 +41,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
+import { isSafeCycleId } from './manifest-path-guard.ts';
 import { readPendingFixWorkItems } from './fix-work-items.ts';
 import { fixRoundDeliveredHead, fixRoundHeadVerdict } from '@forge/contracts';
 
@@ -102,34 +103,67 @@ const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanB
  * (tests; a future multi-tenant logsRoot) that configured its own.
  */
 export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSignal {
-  if (!existsSync(logPath)) return NO_PRIOR_FAILURE_SIGNAL;
+  const events = readLogEvents(logPath) ?? [];
+  const e = events[lastIndex(events, (ev) => ev.message === 'failure_classification')];
+  if (!e) return NO_PRIOR_FAILURE_SIGNAL;
+  return {
+    environment: e.metadata?.environment === true,
+    cleanBoundaryHalt: e.metadata?.cleanBoundaryHalt === true,
+    ...(e.metadata?.resume_from === 'plan'
+      ? { resumeFrom: 'plan' as const }
+      : e.metadata?.resume_from === 'pr-open'
+        ? { resumeFrom: 'pr-open' as const }
+        : {}),
+  };
+}
+
+type LogEvent = { phase?: string; skill?: string; event_type?: string; message?: string; metadata?: Record<string, unknown> };
+
+const lastIndex = (events: LogEvent[], pred: (e: LogEvent) => boolean): number => {
+  for (let i = events.length - 1; i >= 0; i--) if (pred(events[i]!)) return i;
+  return -1;
+};
+
+/** One reader of a cycle's events.jsonl: unparseable lines skipped; null when the log is missing or unreadable. */
+function readLogEvents(logPath: string): LogEvent[] | null {
   try {
-    const lines = readFileSync(logPath, 'utf8').split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i]!.trim();
-      if (!line) continue;
-      let e: { message?: string; metadata?: Record<string, unknown> };
-      try {
-        e = JSON.parse(line) as typeof e;
-      } catch {
-        continue;
-      }
-      if (e.message === 'failure_classification') {
-        return {
-          environment: e.metadata?.environment === true,
-          cleanBoundaryHalt: e.metadata?.cleanBoundaryHalt === true,
-          ...(e.metadata?.resume_from === 'plan'
-            ? { resumeFrom: 'plan' as const }
-            : e.metadata?.resume_from === 'pr-open'
-              ? { resumeFrom: 'pr-open' as const }
-              : {}),
-        };
-      }
-    }
+    if (!existsSync(logPath)) return null;
+    return readFileSync(logPath, 'utf8').split('\n').flatMap((l) => { try { return l.trim() ? [JSON.parse(l) as LogEvent] : []; } catch { return []; } });
   } catch {
-    return NO_PRIOR_FAILURE_SIGNAL;
+    return null;
   }
-  return NO_PRIOR_FAILURE_SIGNAL;
+}
+
+/**
+ * D-49 row 5: a manifest that failed on PM set validation BEFORE D-49 recorded
+ * no `pm_validation_errors`. Derive them from the latest attempt's own
+ * project-manager error event (structured `set_errors` / `acceptance_gate_violation`
+ * / `parse_errors` / coupling), only when that attempt's `cycle.end` failed in the
+ * project-manager phase. [] = nothing derivable → the standard requeue.
+ */
+export function derivePmValidationErrors(logPath: string): string[] {
+  const events = readLogEvents(logPath) ?? [];
+  const endAt = lastIndex(events, (e) => e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end');
+  const end = events[endAt]?.metadata;
+  if (!end || end.status !== 'failed' || !String(end.error ?? '').includes('project-manager phase failed:')) return [];
+  const attempt = events.slice(Math.max(0, lastIndex(events, (e) => e.message === 'cycle.start')), endAt);
+  const pm = attempt[lastIndex(attempt, (e) => e.phase === 'project-manager' && e.event_type === 'error' && Array.isArray(e.metadata?.set_errors))]?.metadata;
+  if (!pm) return [];
+  const coupling = (pm.hidden_coupling_violations as Array<{ a: string; b: string; sharedFiles: string[] }> | undefined) ?? [];
+  return [
+    ...Object.entries((pm.parse_errors as Record<string, string> | undefined) ?? {}).map(([file, msg]) => `${file}: unparseable — ${msg}`),
+    ...(pm.set_errors as string[]),
+    ...(typeof pm.per_item_error_count === 'number' && pm.per_item_error_count > 0 ? [`${pm.per_item_error_count} per-item validation error(s) (the repair turn re-derives them)`] : []),
+    ...coupling.map((c) => `hidden coupling: ${c.a}↔${c.b} share ${c.sharedFiles.join(',')}`),
+    ...(typeof pm.acceptance_gate_violation === 'string' ? [pm.acceptance_gate_violation] : []),
+  ];
+}
+
+/** D-49: the errors a FAILED manifest's Requeue repairs on — recorded, else derived (row 5). */
+export function recordedPmValidationErrors(forgeRoot: string, m: { pm_validation_errors?: string[]; cycle_id?: string }): string[] {
+  if (m.pm_validation_errors?.length) return m.pm_validation_errors;
+  // The cycle id becomes a path segment: an unsafe one derives nothing (standard requeue), never a read outside _logs.
+  return m.cycle_id && isSafeCycleId(m.cycle_id) ? derivePmValidationErrors(join(forgeRoot, '_logs', m.cycle_id, 'events.jsonl')) : [];
 }
 
 /**
@@ -298,12 +332,14 @@ export function inferRequeueResume(args: {
   initiativeId: string;
   worktreePath: string;
   projectRepoPath: string;
+  /** D-49: the manifest carries (or row 5 derived) PM validation errors → repair at plan. */
+  pmValidationErrors?: boolean;
 }): RequeueResumeDecision {
   const priorFailure = readPriorFailureSignal(args.forgeRoot, args.cycleId);
   return decideRequeueResume({
     environmentFailure: priorFailure.environment,
     cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
-    resumeFromPlan: priorFailure.resumeFrom === 'plan',
+    resumeFromPlan: priorFailure.resumeFrom === 'plan' || args.pmValidationErrors === true,
     resumeFromPrOpen: priorFailure.resumeFrom === 'pr-open',
     worktreePresent: existsSync(args.worktreePath),
     branchHasWork:
