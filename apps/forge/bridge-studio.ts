@@ -31,7 +31,7 @@ import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows';
 import { cachedListRuns, recordedPmValidationErrors } from '@forge/flows';
 import { eventToNodeId } from '@forge/flows';
 import { listPlannedInitiatives } from '@forge/flows';
-import { isRunnableSource, DEVELOP_FLOW_ID, compareWorkItemIds } from '@forge/contracts';
+import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
 import { checkInitiativeDeps } from '@forge/flows';
 import type { Run } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
@@ -47,10 +47,9 @@ import { projectKbBindings } from '@forge/knowledge';
 import { parseManifest, initiativeTitle } from '@forge/flows';
 // `forge-8vfn.7.6.18` — the ONE reader of the scheduler's refusal clauses.
 import { manifestBlockedClauses } from '@forge/flows';
-import { parseWorkItem, WORK_ITEM_FILE_PATTERN, kickoffAddedWorkItemFields } from '@forge/flows';
-import type { WorkItem, KickoffWorkItemFields } from '@forge/flows';
 import type { QueueState } from '@forge/flows';
 import { getPaths } from '@forge/flows';
+import { discoverCycleIdFromLogs, roadmapWorkItems, type RoadmapWorkItem } from './bridge-roadmap-work-items.ts';
 import { provenanceOfOrigin, type Provenance } from '@forge/kernel';
 // M4 §4 (projects routes carve): `GET /api/studio/projects`,
 // `/api/studio/starters`, `/api/studio/projects/starters`,
@@ -766,8 +765,8 @@ export async function handleStudioRoutes(
   // ---- /api/studio/projects/:id/roadmap -----------------------------------
   // NOT carved (M4 §4 projects routes carve — same allow-graph blocker) — see the note on
   // `GET /api/studio/projects/attention` above: `buildProjectRoadmap` and its
-  // helper cluster (`scanProjectManifests`, `runFactsByInitiative`,
-  // `readWorkItemsForInitiative`, `tryReadWorkItemDir`) read `@forge/flows`
+  // helper cluster (`scanProjectManifests`, `runFactsByInitiative`, and
+  // `./bridge-roadmap-work-items.ts`'s `roadmapWorkItems`) read `@forge/flows`
   // (queue/manifest/scheduler/work-item/run-list-cache), a strictly higher
   // package rank than `projects`; carving them would be a new, unbaselinable
   // `package-layer-order` violation.
@@ -799,19 +798,6 @@ export async function handleStudioRoutes(
 // ---------------------------------------------------------------------------
 // Roadmap read model (S6 DEC-3 / per-project Roadmap tab)
 // ---------------------------------------------------------------------------
-
-export type RoadmapWorkItem = {
-  id: string;
-  title: string;
-  dependsOn: string[];
-  /**
-   * W6-RV-1: the WI's own status (`WorkItem['status']`, packages/flows/work-item.ts),
-   * threaded through from `parseWorkItem` rather than discarded — feeds the
-   * roadmap card's "done/total" micro-badge. Optional so a read that predates
-   * this field (or a snapshot with no status) never fabricates one.
-   */
-  status?: WorkItem['status'];
-} & { kickoff?: KickoffWorkItemFields }; // forge-nk1y.32: a WI added at the Kickoff gate, at the gate — its editable fields (Studio's edit prefill)
 
 export type RoadmapInitiative = {
   initiativeId: string;
@@ -987,16 +973,17 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     // also uses — manifest metadata (title: / initiative_id), never a heading.
     const title = initiativeTitle(manifest);
 
-    const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
+    const { completedAt, awaitingKickoff, fixRound, fixRoundRunning, developRunning } = runById.get(initId) ?? {};
+    const atGate = awaitingKickoff === true && status === 'ready-for-review';
+    const items = roadmapWorkItems(initId, manifest.cycle_id ?? null, { forgeRoot, logsRoot }, { atGate });
     const workItems = items.length > 0 ? items : undefined;
 
     const blockedBy = checkInitiativeDeps(file, queuePaths);
-    const { completedAt, awaitingKickoff, fixRound, fixRoundRunning, developRunning } = runById.get(initId) ?? {};
 
     return {
       initiativeId: initId,
       title,
-      status: awaitingKickoff && status === 'ready-for-review' ? 'awaiting-kickoff' : status,
+      status: atGate ? 'awaiting-kickoff' : status,
       dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
       // `forge-8vfn.7.6.18`: ready means the scheduler WOULD claim it. A claim it
       // already refused for a named hard clause is not ready, and saying so is the
@@ -1014,7 +1001,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       canStartDevelopment: isRunnableSource(status, manifest.flow_id ?? null, DEVELOP_FLOW_ID)
         && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
-      ...(workItems !== undefined ? { workItems: awaitingKickoff && status === 'ready-for-review' ? ((k) => workItems.map((w) => (k[w.id] ? { ...w, kickoff: k[w.id] } : w)))(kickoffAddedWorkItemFields({ forgeRoot, logsRoot, initiativeId: initId, cycleId: manifest.cycle_id ?? null })) : workItems } : {}),
+      ...(workItems !== undefined ? { workItems } : {}),
       ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' ? ((e) => (e.length > 0 ? { pmRepairErrors: e } : {}))(recordedPmValidationErrors(forgeRoot, manifest)) : {}), /* D-49 row 5: recorded or derived; read-only here, Requeue persists */ ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
       ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
@@ -1132,82 +1119,6 @@ function isCompletenessFlagged(
     }
   }
   return false;
-}
-
-/**
- * Read work items for an initiative, independent of its queue status. Tries
- * the work-items-snapshot in `_logs/<cycleId>/` first (reliable for
- * done/in-flight); falls back to the live worktree spec if the snapshot
- * isn't present yet. Always returns an array — `[]` (never `undefined`)
- * when nothing is found, so callers decide what an empty result means.
- */
-function readWorkItemsForInitiative(
-  initId: string,
-  cycleId: string | null,
-  forgeRoot: string,
-  logsRoot: string,
-): RoadmapWorkItem[] {
-  const logsRootAbs = resolve(logsRoot);
-  const forgeRootAbs = resolve(forgeRoot);
-
-  // 1. Snapshot path (post-PM, reliable for done cycles).
-  if (cycleId) {
-    const snapshotDir = join(logsRootAbs, cycleId, 'work-items-snapshot');
-    const items = tryReadWorkItemDir(snapshotDir);
-    if (items !== null) return items;
-  }
-  // 2. Also try discovering the cycleId from logs dir if not stamped on manifest.
-  if (!cycleId) {
-    const discovered = discoverCycleIdFromLogs(logsRootAbs, initId);
-    if (discovered) {
-      const snapshotDir = join(logsRootAbs, discovered, 'work-items-snapshot');
-      const items = tryReadWorkItemDir(snapshotDir);
-      if (items !== null) return items;
-    }
-  }
-  // 3. Live worktree path (in-flight cycle, PM just ran).
-  const liveDir = join(forgeRootAbs, '_worktrees', initId, '.forge', 'work-items');
-  const items = tryReadWorkItemDir(liveDir);
-  return items ?? [];
-}
-
-/** Try to read WI-*.md files from a directory; returns null if dir absent. */
-function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
-  if (!existsSync(dir)) return null;
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)); // SSOT: packages/flows/work-item.ts
-  } catch {
-    return null;
-  }
-  if (files.length === 0) return null;
-  const items: RoadmapWorkItem[] = [];
-  for (const file of files) {
-    try {
-      const raw = readFileSync(join(dir, file), 'utf8');
-      const wi = parseWorkItem(raw);
-      // Extract title from WI body: first heading line or fall back to id.
-      const titleMatch = raw.match(/^##?\s+(.+)$/m);
-      const title = titleMatch ? titleMatch[1].trim() : wi.work_item_id;
-      items.push({ id: wi.work_item_id, title, dependsOn: wi.depends_on, status: wi.status });
-    } catch {
-      // skip unparseable WI
-    }
-  }
-  return items.sort((x, y) => compareWorkItemIds(x.id, y.id)); // forge-mfv5.1.36: readdir order is not an order
-}
-
-/** Scan _logs/ for the latest cycle dir belonging to initId. */
-function discoverCycleIdFromLogs(logsRoot: string, initId: string): string | null {
-  if (!existsSync(logsRoot)) return null;
-  try {
-    const dirs = readdirSync(logsRoot).filter((d) => d.endsWith(`_${initId}`));
-    if (dirs.length === 0) return null;
-    dirs.sort();
-    return dirs[dirs.length - 1] ?? null;
-  } catch {
-    return null;
-  }
 }
 
 // Write routes (PUT agents/projects/flows) live in bridge-studio-writes.ts.

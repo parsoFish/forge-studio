@@ -41,6 +41,12 @@
   "verified": "exec",
   "note": "`PUT /api/studio/flows/:id` body `triggers[].target.ref`"
  },
+ "apps/forge/bridge-roadmap-work-items.ts": {
+  "class": "unguarded",
+  "guard": null,
+  "verified": "read",
+  "note": "`GET /api/studio/projects/:id/roadmap` — the work-item readers moved verbatim out of bridge-studio.ts (forge-nk1y.32); the WI dir joins a scanned manifest's cycle_id / initiative id with no realpath containment (raw-fs allowlist GUARD-NEXT row `tryReadWorkItemDir`)"
+ },
  "apps/forge/bridge-studio.ts": {
   "class": "unguarded",
   "guard": null,
