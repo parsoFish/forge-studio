@@ -60,6 +60,17 @@ const ROWS: Row[] = [
       history: ['<HistoryLedger'],
     },
   },
+  {
+    route: '/monitor',
+    file: 'app/monitor/page.tsx',
+    max: 3,
+    groups: ['summary', 'rail', 'ledger'],
+    wraps: {
+      summary: ['<MonitorSummaryStrip', 'data-section="serve-status"', 'data-section="monitor-attention"', '<HomeSessionsStrip'],
+      rail: ['<RunRail'],
+      ledger: ['<UnresolvedHistoriesNotice', '<HistoryLedger'],
+    },
+  },
 ];
 
 function pageSections(file: string): string[] {
