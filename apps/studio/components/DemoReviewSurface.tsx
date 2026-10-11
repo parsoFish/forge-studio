@@ -31,6 +31,7 @@ import {
 import { effectiveInitiativeId } from '@/lib/initiative-id';
 import { summarizeReview } from '@/lib/demo-review-view';
 import { countBy, joinCriteria, parseDiffStat, reviewHeadIsStale } from '@/lib/gate-view';
+import { GateBand } from './studio/gate/GateBand';
 import { StoryBand } from './studio/gate/StoryBand';
 import { DecisionCard } from './studio/gate/DecisionCard';
 import { CriteriaPane } from './studio/gate/CriteriaPane';
@@ -147,8 +148,8 @@ export function DemoReviewSurface({
 
   return (
     <div data-component="demo-review-surface" data-cycle-id={cycleId} data-comment-count={comments.length} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-      <section data-section="gate-decision" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) calc(var(--pane-xl) - var(--pane-xs))', gap: 'var(--space-5)', alignItems: 'start' }}>
-        <StoryBand
+      <GateBand
+        story={<StoryBand
           narrative={model.narrative}
           essence={model.essence}
           facts={{
@@ -161,8 +162,8 @@ export function DemoReviewSurface({
             costUsd,
             headSha: model.changedRef,
           }}
-        />
-        <DecisionCard
+        />}
+        decision={<DecisionCard
           derived={derived}
           blockerCount={blockerCount}
           resolvedCount={resolvedCount}
@@ -186,8 +187,8 @@ export function DemoReviewSurface({
             headSha: model.changedRef,
             stale: reviewHeadIsStale(doc?.headSha, model.changedRef),
           }}
-        />
-      </section>
+        />}
+      />
 
       <section data-section="review" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--space-5)' }}>
         <CriteriaPane criteria={criteria} comments={comments} disabled={locked} handlers={handlers} focusRegion={focusRegion} />

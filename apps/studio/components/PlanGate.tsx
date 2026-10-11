@@ -2,52 +2,41 @@
 
 import { useEffect, useState } from 'react';
 
+
 import {
   postPlanVerdict,
   architectFileUrl,
   type CompletenessCriticFinding,
 } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
+import { GateBand, decisionCard, gateButton } from '@/components/studio/gate/GateBand';
+import { IdeaText } from '@/components/studio/gate/IdeaText';
+import { pane, paneHeader, paneTitle, meta, eyebrow, word, input } from '@/components/studio/gate/styles';
 
 const SEVERITY_COLOR: Record<CompletenessCriticFinding['severity'], string> = {
-  high: '#f85149',
-  medium: '#d29922',
-  low: '#8b949e',
+  high: 'var(--red)',
+  medium: 'var(--amber)',
+  low: 'var(--dim)',
 };
 
 /**
- * The architect-completeness-critic findings block (REFINEMENT-PLAN §6.3).
- * Rendered above the PLAN iframe when the critic ran and reported at least
- * one gap. Purely informational — the existing Approve button IS the
+ * The architect-completeness-critic findings (REFINEMENT-PLAN §6.3), in a
+ * contained pane below the decision. Purely informational — Approve IS the
  * operator's acknowledge action; there is no separate dismiss control.
  */
 function CriticFindings({ findings }: { findings: CompletenessCriticFinding[] }) {
   if (findings.length === 0) return null;
   return (
-    <div
-      data-section="critic-findings"
-      data-critic-finding-count={findings.length}
-      style={{
-        border: '1px solid #d29922',
-        borderRadius: 8,
-        padding: '10px 12px',
-        marginBottom: 14,
-        background: 'rgba(210,153,34,.08)',
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#e6edf3', marginBottom: 6 }}>
-        Completeness critic found {findings.length} potential gap{findings.length === 1 ? '' : 's'} — review before re-approving
-      </div>
-      <ul style={{ margin: 0, paddingLeft: 18 }}>
+    <div data-section="critic-findings" data-critic-finding-count={findings.length} style={{ ...pane, borderColor: 'var(--amber)' }}>
+      <header style={paneHeader}>
+        <h2 style={paneTitle}>Completeness critic</h2>
+        <span style={{ ...meta, color: 'var(--amber)' }}>{findings.length} potential gap{findings.length === 1 ? '' : 's'} — read before you approve</span>
+      </header>
+      <ul data-pane-body style={{ height: 'var(--pane-md)', overflowY: 'auto', margin: 0, padding: 'var(--space-2) var(--space-4) var(--space-2) var(--space-6)' }}>
         {findings.map((f, i) => (
-          <li
-            key={i}
-            data-critic-severity={f.severity}
-            style={{ fontSize: 12, color: '#e6edf3', marginBottom: 4 }}
-          >
-            <span style={{ color: SEVERITY_COLOR[f.severity], fontWeight: 600, textTransform: 'uppercase', fontSize: 10, marginRight: 6 }}>
-              {f.severity}
-            </span>
-            {f.initiativeId && <span style={{ color: '#8b949e' }}>[{f.initiativeId}] </span>}
+          <li key={i} data-critic-severity={f.severity} style={{ fontSize: 'var(--text-sm)', color: 'var(--text)', marginBottom: 'var(--space-2)', overflowWrap: 'anywhere' }}>
+            <span style={{ ...word, color: SEVERITY_COLOR[f.severity], marginRight: 'var(--space-2)' }}>{f.severity}</span>
+            {f.initiativeId && <span style={{ ...meta, color: 'var(--faint)' }}>{f.initiativeId} </span>}
             {f.gap}
           </li>
         ))}
@@ -56,17 +45,24 @@ function CriticFindings({ findings }: { findings: CompletenessCriticFinding[] })
   );
 }
 
+const DONE_COPY: Record<string, string> = {
+  approve: 'Approved — manifests queued, the autonomous loop is starting…',
+  revise: 'Sent back — the architect is taking another turn.',
+  reject: 'Rejected.',
+};
+
 /**
- * The in-UI PLAN gate. Shows the PLAN.html in a `sandbox=""` iframe
- * for reading. Approve is always enabled (no escalation gate). Send-back /
- * Reject are also available. There is no auto-approve.
+ * The in-UI PLAN gate on the gate shell (forge-mfv5.1.31 row 3): the idea and
+ * the decision first (D-46 — the decision control inside viewport 1), then
+ * the critic's gaps and the PLAN.html (a `sandbox=""` iframe) in contained
+ * panes. Approve is always enabled (no escalation gate); Send back and Reject
+ * are beside it. There is no auto-approve.
  */
 export function PlanGate({
   project,
   sessionId,
   planUrl,
   idea,
-  fullPage = false,
   criticFindings,
   onVerdict,
 }: {
@@ -74,8 +70,6 @@ export function PlanGate({
   sessionId: string;
   planUrl: string | null;
   idea: string;
-  /** Dedicated plan screen — render the PLAN.html iframe tall (its own page). */
-  fullPage?: boolean;
   /** Outstanding findings from the architect-completeness-critic (ADR
    *  REFINEMENT-PLAN §6.3), present once the critic has run for this
    *  session. A re-approve with findings still present skips the critic and
@@ -117,6 +111,8 @@ export function PlanGate({
   }
 
   const verdictState = done ?? 'ready';
+  const findings = criticFindings ?? [];
+  const busy = submitting ? 'the verdict is being submitted' : null;
 
   return (
     <div
@@ -124,103 +120,59 @@ export function PlanGate({
       data-session-id={sessionId}
       data-plan-verdict-state={verdictState}
       data-decisions-resolved="true"
-      style={{ border: '1px solid #30363d', borderRadius: 10, padding: 16, background: '#0d1117' }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}
     >
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#e6edf3', marginBottom: 4 }}>
-        Plan ready — review &amp; approve
-      </div>
-      <div style={{ fontSize: 12, color: '#8b949e', marginBottom: 12 }}>{idea}</div>
-
-      <CriticFindings findings={criticFindings ?? []} />
-
-      {iframeSrc ? (
-        <iframe
-          src={iframeSrc}
-          sandbox=""
-          data-plan-iframe
-          title="PLAN"
-          style={{
-            width: '100%',
-            height: fullPage ? '72vh' : 420,
-            border: '1px solid #30363d',
-            borderRadius: 8,
-            background: '#fff',
-            marginBottom: 14,
-          }}
-        />
-      ) : (
-        <div style={{ fontSize: 12, color: '#8b949e', marginBottom: 14 }}>
-          (PLAN.html not available)
-        </div>
-      )}
-
-      <textarea
-        value={rationale}
-        onChange={(e) => setRationale(e.target.value)}
-        placeholder="Optional note (required context for send-back)…"
-        rows={2}
-        data-field="rationale"
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          background: '#010409',
-          color: '#e6edf3',
-          border: '1px solid #30363d',
-          borderRadius: 6,
-          padding: '8px 10px',
-          fontSize: 13,
-          marginBottom: 10,
-          resize: 'vertical',
-        }}
+      <GateBand
+        story={(
+          <div style={{ ...pane, padding: 'var(--space-4) var(--space-5)', gap: 'var(--space-2)' }}>
+            <div style={eyebrow}>What you asked the architect for</div>
+            <div data-section="plan-idea" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', maxHeight: 'var(--pane-lg)', overflowY: 'auto', fontSize: 'var(--text-base)', color: 'var(--dim)', overflowWrap: 'anywhere' }}>
+              <IdeaText idea={idea} />
+            </div>
+          </div>
+        )}
+        decision={(
+          <aside style={decisionCard}>
+            <div style={eyebrow}>Your decision on the plan</div>
+            <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-lg)' }}>Plan ready — approve, send back or reject</h2>
+            {findings.length > 0 && (
+              <p data-section="review-claims" style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--amber)', borderLeft: '2px solid var(--amber)', paddingLeft: 'var(--space-2)' }}>
+                The completeness critic found {findings.length} potential gap{findings.length === 1 ? '' : 's'} — read them below before you approve.
+              </p>
+            )}
+            <textarea
+              value={rationale}
+              onChange={(e) => setRationale(e.target.value)}
+              placeholder="Optional note (required context for send-back)…"
+              rows={2}
+              data-field="rationale"
+              style={{ ...input, resize: 'vertical' }}
+            />
+            {error && <div style={{ color: 'var(--red)', fontSize: 'var(--text-sm)' }}>{error}</div>}
+            {done && (
+              <div data-plan-verdict-submitted={done} style={{ color: 'var(--green)', fontSize: 'var(--text-sm)' }}>{DONE_COPY[done]}</div>
+            )}
+            {!done && (
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <button onClick={() => void submit('approve')} {...disabledAttrs(busy)} data-action="approve-plan" style={gateButton('primary', !submitting)}>Approve</button>
+                <button onClick={() => void submit('revise')} {...disabledAttrs(busy)} data-action="revise-plan" style={gateButton('secondary', !submitting)}>Send back</button>
+                <button onClick={() => void submit('reject')} {...disabledAttrs(busy)} data-action="reject-plan" style={gateButton('danger', !submitting)}>Reject</button>
+              </div>
+            )}
+          </aside>
+        )}
       />
 
-      {error && <div style={{ color: '#f85149', fontSize: 12, marginBottom: 8 }}>{error}</div>}
-      {done && (
-        <div data-plan-verdict-submitted={done} style={{ color: '#3fb950', fontSize: 12, marginBottom: 8 }}>
-          {done === 'approve' ? 'Approved — manifests queued, the autonomous loop is starting…' : done === 'revise' ? 'Sent back — the architect is taking another turn.' : 'Rejected.'}
-        </div>
-      )}
+      <CriticFindings findings={findings} />
 
-      {!done && (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => void submit('approve')}
-            disabled={submitting}
-            data-action="approve-plan"
-            style={btn(!submitting, '#238636')}
-          >
-            Approve
-          </button>
-          <button
-            onClick={() => void submit('revise')}
-            disabled={submitting}
-            data-action="revise-plan"
-            style={btn(!submitting, '#9e6a03')}
-          >
-            Send back
-          </button>
-          <button
-            onClick={() => void submit('reject')}
-            disabled={submitting}
-            data-action="reject-plan"
-            style={btn(!submitting, '#6e2330')}
-          >
-            Reject
-          </button>
-        </div>
-      )}
+      <div style={pane}>
+        <header style={paneHeader}><h2 style={paneTitle}>The plan</h2><span style={meta}>PLAN.html · scrolls inside</span></header>
+        {iframeSrc ? (
+          <iframe src={iframeSrc} sandbox="" data-plan-iframe title="PLAN" style={{ width: '100%', height: 'var(--pane-xl)', border: 0, background: 'var(--text)' }} />
+        ) : (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--dim)', padding: 'var(--space-3) var(--space-4)' }}>(PLAN.html not available)</div>
+        )}
+      </div>
     </div>
   );
-}
-
-function btn(enabled: boolean, bg: string): React.CSSProperties {
-  return {
-    background: enabled ? bg : '#21262d',
-    color: enabled ? '#fff' : '#8b949e',
-    border: '1px solid #30363d',
-    borderRadius: 6,
-    padding: '6px 14px',
-    fontSize: 13,
-    cursor: enabled ? 'pointer' : 'not-allowed',
-  };
 }
