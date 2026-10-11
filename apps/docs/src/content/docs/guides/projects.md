@@ -43,6 +43,13 @@ forge preflight <project-name | path>
 
 It checks the same clauses and prints a pass, fail or warn line for each. It also treats a runnable quality gate as hard, so it fails until the project's dependencies are installed; Studio reports that check separately. It exits non-zero when a hard clause fails.
 
+The editor also holds two declarations, both saved with **Save**:
+
+- **Demo means** lists what a demo may drive: commands, in-app routes, and API paths or commands. Ignored keys are left out of a before/after comparison. When the demo builder locks a declaration, it adds the commands its capture steps ran.
+- **Acceptance tier** is the substring that marks a live-acceptance gate, plus the environment variables such a gate needs. A tier with variables but no match is refused by name.
+
+The readiness panel lists both, or says that neither is declared.
+
 When a project's generated mechanisms have drifted from the current template, press **Rebuild contract**. Studio shows a drift report first. Read it, then press **Apply rebuild**. The rebuild regenerates the test, demo and release processes and skill wiring. It never touches the north star, instructions or secrets. If the project has no recorded app type, choose one and press **Preview drift**. See [Reset a project contract](/guides/how-to/reset-a-project-contract/).
 
 ## Troubleshooting

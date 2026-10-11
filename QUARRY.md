@@ -57,10 +57,10 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 9 | 1,852 | **1,852** | ratified 1,852 — forge-nk1y.32 12a: `scopeEntryErrors`, the one-relative-path rule for a scope entry submitted at the Kickoff gate, shared by the Kickoff routes and Studio's authoring parse; +21 measured on main 1,831, lane-ratified (≤100, ruling 666). |
 | `kernel` | 41 | 6,945 | **5,798** | ratified 5,798 — forge-mfv5.1.28: `isText`/`stringList`, the one request-body list check every send-back and Kickoff-gate door uses; +10 measured on main 5,788, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 53 | 11,871 | **10,074** | ratified 10,074 — forge-mfv5.1.23: Save merges its forge-studio PR only on green required checks and GitHub's CLEAN (pure verdict over one graphql read), `--auto` only when allowed; +100 measured on main 9,974, lane-ratified (≤100, ruling 666). |
+| `projects` | 53 | 11,887 | **10,090** | ratified 10,090 — forge-mfv5.1.32: the project PUT patches `demoMeans` and `testProcess.acceptance` (refusing any other acceptance key) and the roster serves both; +16 measured on main 10,074, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,506 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 65 | 21,281 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
+| `sessions` | 65 | 21,292 | **21,254** | ratified 21,254 — forge-mfv5.1.32: the demo-builder lock writes its capture commands into `demoMeans.commands`; +9 measured on main 21,245, lane-ratified (≤100, ruling 666). |
 | `flows` | 94 | 25,995 | **25,796** | ratified 25,796 — forge-nk1y.32 12b: delete a Kickoff-added work item (`deleteKickoffWorkItem`), refused while another depends on it; +42 measured on main 25,754 (after 12a), lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,080 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 50 | 12,848 | **12,848** | ratified 12,848 — forge-mfv5.1.34 (D-49): `pm-set-repair.ts` replaces the one-shot revise, plus Requeue repair mode; +92 measured on main 12,756, lane-ratified (≤100, ruling 666). |
@@ -68,7 +68,7 @@ operator-ratified new cap — never a silent raise.
 | `apps/forge` | 40 | 9,145 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **523** | **136,482** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **523** | **136,509** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -333,7 +333,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-report.ts | flows | verbatim | 31 |
 | packages/flows/cycle.ts | flows | verbatim | 540 |
 | packages/flows/daemon.ts | flows | verbatim | 265 |
-| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 419 |
+| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 430 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 152 |
 | packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 392 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's SPEC §1 identity and stays in the parent rather than being imported back as a cycle. |
@@ -628,10 +628,10 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/index.ts | knowledge | verbatim | 112 |
 | packages/library/index.ts | library | verbatim | 115 |
 | packages/projects/index.ts | projects | verbatim | 108 |
-| packages/projects/project-roster.ts | projects | verbatim | 468 |
+| packages/projects/project-roster.ts | projects | verbatim | 475 |
 | packages/projects/project-preflight-read.ts | projects | verbatim | 208 |
 | packages/projects/project-roadmap.ts | projects | verbatim | 90 |
-| packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 696 |
+| packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 705 |
 | packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 307 |
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 501 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 230 |

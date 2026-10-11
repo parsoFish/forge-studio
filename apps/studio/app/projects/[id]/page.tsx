@@ -51,7 +51,7 @@ import { NorthStar } from '@/components/studio/project-builder/NorthStar';
 import { Instructions } from '@/components/studio/project-builder/Instructions';
 import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
-import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
+import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness'; import { DeclarationsEditor } from '@/components/studio/project-builder/DeclarationsEditor';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { RebuildContractPanel } from '@/components/studio/project-builder/RebuildContractPanel';
 import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWithAgent';
@@ -59,7 +59,7 @@ import { OpenSessionsPanel } from '@/components/studio/project-builder/OpenSessi
 import { ContractPanelMount } from '@/components/studio/ContractPanelMount';
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
-import { buildProjectSavePayload } from '@/lib/project-save-payload';
+import { buildProjectSavePayload } from '@/lib/project-save-payload'; import { declarationsFromForm, formFromDeclarations, shownDeclarations, type DeclarationsForm } from '@/lib/project-declarations';
 import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
@@ -179,11 +179,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [instructionsSource, setInstructionsSource] = useState<'AGENTS.md' | 'CLAUDE.md' | 'project.json' | undefined>(undefined);
   const [skills, setSkills] = useState<string[]>([]);
   const [kb, setKb] = useState<string | null>(null);
-  // W7-FIX-A4 (W7A4-03): `kb` above is hydrated from the roster, which serves
-  // the DERIVED project↔KB binding (kb.yaml binding.ref — never stored) when
-  // project.json has none. Only an operator change via KbBind flips this, and
-  // only then does Save carry `kb` — see lib/project-save-payload.ts.
-  const [kbTouched, setKbTouched] = useState(false);
+  // W7-FIX-A4: `kb` is hydrated from the roster's DERIVED binding when project.json has none; only a KbBind change
+  // flips this and only then does Save carry `kb` (lib/project-save-payload.ts). forge-mfv5.1.32: `decl` is null until
+  // the declarations editor is touched, so a Save never rewrites demoMeans/acceptance it did not show.
+  const [kbTouched, setKbTouched] = useState(false); const [decl, setDecl] = useState<DeclarationsForm | null>(null);
   const [name, setName] = useState('');
 
   const loadData = useCallback(async (signal: { cancelled: boolean }) => {
@@ -210,7 +209,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         }
         setSkills(p.skills ?? []);
         setKb(p.kb ?? null);
-        setKbTouched(false);
+        setKbTouched(false); setDecl(null);
       }
       setLoadError(null); setFailedRead(null);
     } catch (err) {
@@ -341,8 +340,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [recovery, setRecovery] = useState<SaveRecoveryProposal | null>(null); const recoverNextSave = useRef(false);
   const { repo, refresh: refreshRepo } = useRepoStatus(isNew ? null : id);
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
-    if (!project) return { ok: false, error: 'project not loaded' };
-    const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched });
+    if (!project) return { ok: false, error: 'project not loaded' }; const verdict = decl ? declarationsFromForm(decl) : null; if (verdict && !verdict.ok) return { ok: false, error: `refused — ${verdict.reason}` };
+    const payload = buildProjectSavePayload({ name, northStar, instructions, demoProcess: demoSteps, skills, kb, kbTouched, declarations: verdict?.ok ? verdict : null });
     const adopt = adoptNextSave.current; adoptNextSave.current = false; // consumed whether or not the save throws
     const recover = recoverNextSave.current && recovery ? { localHead: recovery.localHead, resetTo: recovery.resetTo } : null; recoverNextSave.current = false;
     const result = await saveProject(id, { ...(adopt ? { ...payload, adoptUncommitted: saveControl.adoptFiles } : payload), ...(recover ? { recover } : {}) });
@@ -621,8 +620,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             )}
 
             <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); setKbTouched(true); markDirty(); }} />
+            <DeclarationsEditor value={decl ?? formFromDeclarations(project ?? {})} onChange={(f) => { setDecl(f); markDirty(); }} />
 
-            <ContractReadiness northStar={northStar} instructions={instructions} demoSteps={demoSteps} skills={skills} kb={kb} preflight={preflight} />
+            <ContractReadiness northStar={northStar} instructions={instructions} demoSteps={demoSteps} skills={skills} kb={kb} preflight={preflight} {...shownDeclarations(decl, project)} />
 
             {preflight && (
               <ContractResolutionPanel

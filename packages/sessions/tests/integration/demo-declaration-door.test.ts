@@ -96,7 +96,10 @@ test('generate → lock: the declaration lands in project.json demoProcess and D
   approve(ctx.sessionDir);
   const locked = await turn(ctx, agentWriting([]));
   assert.equal(locked.phase, 'locked');
-  assert.deepEqual(readConfig(ctx.repoPath), { ...PROJECT_CONFIG, demoProcess: DRIVABLE }, 'only demoProcess changed');
+  // forge-mfv5.1.32: the lock also owns demoMeans.commands — the commands its capture steps drive.
+  const { demoMeans, ...rest } = readConfig(ctx.repoPath) as Record<string, unknown>;
+  assert.deepEqual(rest, { ...PROJECT_CONFIG, demoProcess: DRIVABLE }, 'only demoProcess (and demoMeans) changed');
+  assert.ok(Array.isArray((demoMeans as { commands?: unknown }).commands) && (demoMeans as { commands: string[] }).commands.length > 0, 'demoMeans.commands from the capture steps');
   assert.equal(JSON.parse(readFileSync(join(ctx.repoPath, '.forge', 'demo', 'demo.lock.json'), 'utf8')).generation, 1);
   const demoSkill = runPreflight(ctx.repoPath, { forgeRoot: FORGE_ROOT }).clauses.find((c) => c.clause === 'DEMO-SKILL');
   assert.equal(demoSkill?.pass, true, demoSkill?.detail);

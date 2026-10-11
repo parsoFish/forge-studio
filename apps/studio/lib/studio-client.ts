@@ -508,7 +508,7 @@ export type Project = {
   /** Source of `instructions`: the agent-instruction file (single source) or the
    *  legacy project.json field. When file-bound the editor is read-only. */
   instructionsSource?: 'AGENTS.md' | 'CLAUDE.md' | 'project.json';
-  demoProcess?: DemoStep[];
+  demoProcess?: DemoStep[]; demoMeans?: import('./project-declarations').DemoMeans; acceptance?: import('./project-declarations').AcceptanceTier; // forge-mfv5.1.32, as stored
   skills: string[];
   kb?: string;
   /** True when a reproducible demo is locked in the repo (.forge/demo/demo.lock.json). */
