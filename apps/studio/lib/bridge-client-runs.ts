@@ -114,11 +114,12 @@ export async function addKickoffWorkItem(input: KickoffWorkItemInput): Promise<A
 /** forge-nk1y.32: absent = unchanged; any field but `dependsOn` needs a work item added at the gate. */
 export type EditKickoffWorkItemInput = { initiativeId: string; workItemId: string; dependsOn?: string[] } & Partial<WorkItemSource>;
 export type EditKickoffWorkItemResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
+export type DeleteKickoffWorkItemResult = { ok: true; workItemId: string } | { ok: false; error: string };
 type KickoffCallResult = { ok: true; data: Record<string, unknown> } | { ok: false; error: string };
 
 /** One `/api/kickoff/work-items/<wiId>` call; a refusal (400/404/409) carries the server's detail. */
 async function kickoffWorkItemCall(
-  method: 'PATCH',
+  method: 'PATCH' | 'DELETE',
   workItemId: string,
   body: Record<string, unknown>,
 ): Promise<KickoffCallResult> {
@@ -142,6 +143,12 @@ export async function editKickoffWorkItem({ workItemId, ...body }: EditKickoffWo
   if (!r.ok) return r;
   const dependsOn = Array.isArray(r.data.dependsOn) ? r.data.dependsOn.map(String) : [];
   return { ok: true, workItemId: String(r.data.workItemId), dependsOn };
+}
+
+/** forge-nk1y.32: delete one work item added at the Kickoff gate (refused while another depends on it). */
+export async function deleteKickoffWorkItem(input: { initiativeId: string; workItemId: string }): Promise<DeleteKickoffWorkItemResult> {
+  const r = await kickoffWorkItemCall('DELETE', input.workItemId, { initiativeId: input.initiativeId });
+  return r.ok ? { ok: true, workItemId: String(r.data.workItemId) } : r;
 }
 
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------
