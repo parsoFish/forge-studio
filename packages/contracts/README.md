@@ -27,7 +27,7 @@ be reachable from here or it cannot reach the browser at all.
 | the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `resolveDeclaredBin` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
 | pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |
-| work-item id patterns (`WI-`/`UWI-`, the split-suffix rule) + numeric stem | `WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `DEV_WORK_ITEM_ID_PATTERN` · `devWorkItemIdStem` |
+| work-item id patterns (`WI-`/`UWI-`, the split-suffix rule) + numeric stem; the one natural id order and a set's leaf work items (forge-mfv5.1.36) | `WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `DEV_WORK_ITEM_ID_PATTERN` · `devWorkItemIdStem` · `compareWorkItemIds` · `leafWorkItemIds` |
 | trigger payloads — the owner/repo full-name validator | `REPO_RE` |
 | trigger-kind registry (D-23) | `TRIGGER_KINDS` · `TRIGGER_KIND_IDS` · `SHIPPED_TRIGGER_KIND_IDS` |
 | onboarding session-stage vocabulary | `SESSION_STAGES` |
