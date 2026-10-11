@@ -3,7 +3,7 @@ title: The example factory
 description: The develop factory forge ships as a working example, where it pauses for your decision, and how to set its spend ceilings.
 type: guide
 owner: parsoFish
-last_verified: 2026-10-09
+last_verified: 2026-10-12
 covers: [packages/factory/**, packages/stations/**, studio/flows/**]
 sidebar:
   order: 12
@@ -33,7 +33,7 @@ At the plan gate, an optional note goes with your choice; add one when you send 
 
 At the verdict gate, read the review findings first. **approve and merge** merges the pull request. **add work items** writes new acceptance criteria and runs them in the same cycle; no new cycle starts. On the demo page, a **blocking** comment makes the verdict a send-back and no rationale is asked for; a run with no demo shows a plain form that needs one.
 
-The reflection gate lists questions; answer all of them to submit. The reflector folds your answers into Knowledge, which agents read before they act on later runs.
+The reflection gate lists questions; answer all of them to submit. A question that allows several answers shows checkboxes. The reflector folds your answers into the themes it wrote for the run, and your corrections override its own claims. Agents read those themes in Knowledge before they act on later runs. If no theme changed, the run's log says so by name.
 
 ## Set spend ceilings
 

@@ -1061,6 +1061,12 @@
   "verified": "read",
   "note": "`user-questions.md`/`.json` under the reflector's own `cycleLogDir`, resolved by runReflector from the cycle id it was dispatched with (moved out of reflector.ts, forge-nk1y.3)"
  },
+ "packages/stations/phases/reflector-fold.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "reads theme files under the forge root's own brain theme dirs (project from the closed manifest, `brain/cycles/themes`); the cycleId it matches on is the one `bridge-reflect.ts` already resolved with resolveGuardedPath, and it is matched as text, never joined into a path (forge-nk1y.27)"
+ },
  "packages/stations/phases/reflector.ts": {
   "class": "guarded",
   "guard": "resolveGuardedPath",
