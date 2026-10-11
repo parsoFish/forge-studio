@@ -159,6 +159,13 @@ export function derivePmValidationErrors(logPath: string): string[] {
   ];
 }
 
+/** forge-mfv5.1.35: the latest attempt's `cycle.end` status, or null (no log / no end). */
+export function latestCycleEndStatus(logPath: string): string | null {
+  const events = readLogEvents(logPath) ?? [];
+  const status = events[lastIndex(events, (e) => e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end')]?.metadata?.status;
+  return typeof status === 'string' ? status : null;
+}
+
 /** D-49: the errors a FAILED manifest's Requeue repairs on — recorded, else derived (row 5). */
 export function recordedPmValidationErrors(forgeRoot: string, m: { pm_validation_errors?: string[]; cycle_id?: string }): string[] {
   if (m.pm_validation_errors?.length) return m.pm_validation_errors;

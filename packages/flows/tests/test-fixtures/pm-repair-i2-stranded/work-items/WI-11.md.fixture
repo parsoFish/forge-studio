@@ -1,0 +1,112 @@
+---
+work_item_id: WI-11
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on: []
+domain: docs
+acceptance_criteria:
+  - given: "README.md and docs/demo-guide.md after WI-11"
+    when: "grep -in 'terraform' README.md docs/demo-guide.md runs"
+    then: "returns no matches — all Terraform references removed"
+  - given: "README.md after WI-11"
+    when: "grep -in 'infra/' README.md runs"
+    then: "returns no matches — infra/ directory references removed"
+  - given: "README.md after WI-11"
+    when: "grep 'gw plan' README.md runs"
+    then: "returns a match — gw usage is documented"
+  - given: "docs/demo-guide.md after WI-11"
+    when: "grep 'gw apply' docs/demo-guide.md runs"
+    then: "returns a match — gw apply usage is documented in demo guide"
+files_in_scope:
+  - README.md
+  - docs/demo-guide.md
+  - tests/test_docs_terraform_retired.py
+creates:
+  - tests/test_docs_terraform_retired.py
+estimated_iterations: 2
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/test_docs_terraform_retired.py
+---
+
+# WI-11: Docs cleanup + terraform-retired assertion test
+
+Target: remove all Terraform and `infra/` references from `README.md` and
+`docs/demo-guide.md`, replace with `gw` CLI usage. Create
+`tests/test_docs_terraform_retired.py` that asserts no Terraform references remain
+(gate fails before this WI's work, passes after).
+
+## Scope discovery
+
+Before editing, run mentally through these searches (the manifest requires them):
+- `grep -rn 'terraform\|infra/' docs/ README.md` — find all locations
+- Note: `.github/copilot-context.md` may also contain references — include in scope if found
+
+Confirmed scope: **README.md** and **docs/demo-guide.md**. Check
+`.github/copilot-context.md` and `.github/agents/copilot-instructions.md` — if they
+contain Terraform references, add them to `files_in_scope` and clean them up in this WI.
+
+## README.md changes
+
+Replace all content referencing Terraform/infra/ with gw CLI equivalents:
+- "Bootstrap" section: remove Terraform install, replace with `pip install -e .` then `gw --help`
+- Any directory listing that mentions `infra/`: remove or replace with `gitweave/`
+- `gw plan`, `gw apply`, `gw reset` quickstart examples added
+- Keep: `modules/`, `config/`, `schemas/` sections unchanged
+
+## docs/demo-guide.md changes
+
+Replace TF apply/plan demo steps with gw equivalents:
+- Demo before: `terraform plan` / `terraform apply` → replace with `gw plan --fixture` / `gw apply --json`
+- Story: "a platform team declares its org once and applies it through the API — no Terraform state to drift"
+- Keep: overlay/copier module demo content if present (I4 scope)
+
+## tests/test_docs_terraform_retired.py
+
+```python
+"""
+Assert Terraform and infra/ references are gone from docs.
+This test FAILS on the baseline (pre-WI-11) because README.md still has them.
+"""
+import pathlib
+import re
+
+ROOT = pathlib.Path(__file__).parent.parent
+
+DOCS_TO_SCAN = [
+    ROOT / "README.md",
+    ROOT / "docs" / "demo-guide.md",
+]
+
+TF_PATTERN = re.compile(r'\bterraform\b|\binfra/', re.IGNORECASE)
+
+
+def test_no_terraform_references_in_docs():
+    """No Terraform or infra/ references in README.md or docs/demo-guide.md."""
+    found = []
+    for doc in DOCS_TO_SCAN:
+        if not doc.exists():
+            continue
+        for i, line in enumerate(doc.read_text().splitlines(), 1):
+            if TF_PATTERN.search(line):
+                found.append(f"{doc.relative_to(ROOT)}:{i}: {line.strip()}")
+    assert not found, (
+        "Terraform/infra references found in docs:\n" + "\n".join(found)
+    )
+
+
+def test_readme_documents_gw_usage():
+    """README.md must mention gw plan and gw apply."""
+    readme = (ROOT / "README.md").read_text()
+    assert "gw plan" in readme, "README.md must document 'gw plan'"
+    assert "gw apply" in readme, "README.md must document 'gw apply'"
+```
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

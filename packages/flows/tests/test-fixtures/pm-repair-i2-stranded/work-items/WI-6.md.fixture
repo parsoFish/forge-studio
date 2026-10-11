@@ -1,0 +1,146 @@
+---
+work_item_id: WI-6
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-4
+  - WI-5b
+domain: plan
+acceptance_criteria:
+  - given: "tests/fixtures/org-empty.json exists and config declares teams + rulesets"
+    when: "plan(fixture_path='tests/fixtures/org-empty.json') is called"
+    then: "returns a PlanResult with all declared resources listed as 'create' actions and makes zero network calls"
+  - given: "the fixture represents an org that already has all declared resources"
+    when: "plan(fixture_path=...) is called"
+    then: "returns a PlanResult with all resources listed as 'unchanged'"
+  - given: "both fixture_path is provided AND GW_* env vars are set"
+    when: "plan(fixture_path=...) is called"
+    then: "uses the fixture exclusively — no network calls — fixture and live auth are mutually exclusive"
+  - given: "GW_ORG is unset and no fixture_path provided"
+    when: "plan() is called"
+    then: "raises EnvironmentError naming GW_ORG"
+files_in_scope:
+  - gitweave/plan.py
+  - tests/test_plan.py
+creates:
+  - gitweave/plan.py
+  - tests/test_plan.py
+estimated_iterations: 3
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/test_plan.py
+---
+
+# WI-6: Plan engine — fixture + live diff (gitweave/plan.py)
+
+Target: `gitweave/plan.py` implementing the diff engine for `gw plan`. Compares the
+declared config against a snapshot (fixture file or live org state) and returns structured
+diff results. Fixture mode MUST make zero network calls even when GW_* are set.
+
+## Output format
+
+```python
+from dataclasses import dataclass, field
+from typing import Literal
+
+Action = Literal["create", "update", "delete", "unchanged"]
+
+@dataclass
+class PlanItem:
+    resource_type: str   # "team", "repo", "ruleset", "org_settings"
+    name: str
+    action: Action
+    detail: str = ""     # human-readable description of the change
+
+@dataclass
+class PlanResult:
+    items: list[PlanItem] = field(default_factory=list)
+
+    def print(self) -> None:
+        """Print human-readable diff: + create, ~ update, - delete, = unchanged."""
+        symbols = {"create": "+", "update": "~", "delete": "-", "unchanged": "="}
+        for item in self.items:
+            sym = symbols[item.action]
+            print(f"  {sym} {item.resource_type}/{item.name}"
+                  + (f": {item.detail}" if item.detail else ""))
+```
+
+## gitweave/plan.py spec
+
+```python
+import json, os, pathlib
+from gitweave.config import load_config
+
+def _load_fixture(fixture_path: str) -> dict:
+    return json.loads(pathlib.Path(fixture_path).read_text())
+
+def _live_snapshot(gh_org, prefix: str) -> dict:
+    """Build snapshot dict from live org (same shape as fixture)."""
+    from gitweave.managers.teams import TeamsManager
+    from gitweave.managers.repos import ReposManager
+    from gitweave.managers.rulesets import RulesetsManager
+    return {
+        "org_settings": {},   # read from gh_org attributes
+        "teams": [{"name": t.name} for t in TeamsManager(gh_org).list_managed()],
+        "repos": [],
+        "rulesets": [],
+    }
+
+def plan(fixture_path: str | None = None) -> "PlanResult":
+    """Compute diff. fixture_path → no network; None → live org."""
+    cfg = load_config()
+    prefix = os.environ.get("FORGE_RESOURCE_PREFIX", "")
+
+    if fixture_path:
+        snapshot = _load_fixture(fixture_path)
+    else:
+        gw_org = os.environ.get("GW_ORG")
+        if not gw_org:
+            raise EnvironmentError("GW_ORG is required for live plan (or use --fixture)")
+        from gitweave.auth import get_github_client
+        gh = get_github_client()
+        snapshot = _live_snapshot(gh.get_organization(gw_org), prefix)
+
+    return _diff(cfg, snapshot, prefix)
+
+def _diff(cfg: dict, snapshot: dict, prefix: str) -> "PlanResult":
+    """Compare declared config against snapshot; return PlanResult."""
+    result = PlanResult()
+
+    declared_org = cfg["org_settings"]
+    live_org = snapshot.get("org_settings", {})
+    if declared_org != live_org:
+        result.items.append(PlanItem("org_settings", "org_settings", "update"))
+    else:
+        result.items.append(PlanItem("org_settings", "org_settings", "unchanged"))
+
+    for rtype in ("teams", "repos", "rulesets"):
+        declared_names = {r["name"] for r in cfg[rtype] if r.get("name","").startswith(prefix)}
+        snap_names     = {r["name"] for r in snapshot.get(rtype, []) if r.get("name","").startswith(prefix)}
+        for n in declared_names - snap_names:
+            result.items.append(PlanItem(rtype[:-1], n, "create"))
+        for n in snap_names - declared_names:
+            result.items.append(PlanItem(rtype[:-1], n, "delete"))
+        for n in declared_names & snap_names:
+            result.items.append(PlanItem(rtype[:-1], n, "unchanged"))
+
+    return result
+```
+
+## tests/test_plan.py
+
+All tests use fixture files or in-memory dicts; no live network. Key tests:
+1. `plan(fixture_path=...)` with empty org fixture returns "create" for all declared resources.
+2. `plan(fixture_path=...)` with fully-matching snapshot returns all "unchanged".
+3. `plan(fixture_path=...)` never calls `get_github_client()` even when GW_* set.
+4. `plan()` without fixture and without GW_ORG raises `EnvironmentError` naming `GW_ORG`.
+5. A resource in snapshot but not in config appears as "delete".
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

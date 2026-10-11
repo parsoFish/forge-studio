@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from 'n
 import { dirname, join } from 'node:path';
 
 import type { EventLogger } from '@forge/kernel';
-import { WORK_ITEM_FILE_PATTERN } from '@forge/flows';
+import { REJECTED_SET_MARKER, WORK_ITEM_FILE_PATTERN } from '@forge/flows';
 
 /** What `rejectWorkItemSet` needs in order to record the quarantine itself. */
 export type RejectionEvent = {
@@ -44,7 +44,7 @@ export type QuarantineResult = {
 };
 
 /** Filename of the record placed beside a quarantined set. */
-export const REJECTION_REASON_FILENAME = 'REJECTED.md';
+export const REJECTION_REASON_FILENAME = REJECTED_SET_MARKER;
 
 /**
  * Move every file out of `workItemsDir` into a timestamped

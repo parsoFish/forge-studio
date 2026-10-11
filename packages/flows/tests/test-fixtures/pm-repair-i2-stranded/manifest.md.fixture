@@ -1,0 +1,186 @@
+---
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+project: gitweave
+project_repo_path: PROJECT_REPO_PATH
+created_at: '2026-10-11T00:55:44.289Z'
+iteration_budget: 14
+cost_budget_usd: 22
+phase: pending
+origin: architect
+class: code
+acceptance_criteria:
+  - given: >-
+      no credentials and `tests/fixtures/org-empty.json` exists in the
+      repository, with GW_* unset
+    when: '`gw plan --fixture tests/fixtures/org-empty.json` runs'
+    then: >-
+      exits 0 and prints the full set of creation lines for the declared
+      standard (org settings, teams, repos, rulesets) with no network calls made
+  - given: >-
+      the throwaway org and GW_APP_ID, GW_APP_INSTALLATION_ID,
+      GW_APP_PRIVATE_KEY_PATH, GW_ORG are set
+    when: '`gw apply --json` runs twice in sequence'
+    then: >-
+      both runs exit 0 and their JSON output is identical after stripping
+      volatile keys: `id`, `node_id`, `created_at`, `updated_at`
+  - given: the throwaway org after a `gw apply` run with GW_* set
+    when: '`gw reset` runs twice in sequence'
+    then: >-
+      the org holds no resources matching FORGE_RESOURCE_PREFIX, org settings
+      equal GitHub safe defaults (`description=""`,
+      `default_repository_permission="read"`,
+      `web_commit_signoff_required=false`,
+      `members_can_create_repositories=true`), and the second run exits 0
+      reporting nothing changed
+  - given: GW_ORG is unset
+    when: '`gw plan` runs without `--fixture`'
+    then: exits non-zero and the error message names `GW_ORG`
+  - given: the repository after I2 merges
+    when: it is read and `python3 -m pytest tests/` runs
+    then: >-
+      `infra/` and every Terraform file and workflow are absent, and pytest
+      reports zero failures
+  - given: the merged change on main with GW_* secrets configured in Actions
+    when: the GitWeave Apply workflow runs
+    then: it completes green
+title: 'I2 — Apply engine, Terraform retired'
+cycle_id: 2026-10-11T02-16-05_INIT-2026-10-11-i2-apply-engine-terraform-retired
+flow_id: forge-architect
+architect_session_id: 2026-10-10T13-24-03-6d0959e2
+architect_cost_usd: 6.0711019
+architect_duration_ms: 46321687
+resume_from: plan
+previous_failure_modes:
+  - requeued-from-failed-2026-10-11
+specs:
+  - WI-1
+  - WI-10
+  - WI-11
+  - WI-12
+  - WI-2
+  - WI-3a
+  - WI-3b
+  - WI-4
+  - WI-5a
+  - WI-5b
+  - WI-6
+  - WI-7
+  - WI-8
+  - WI-9a
+  - WI-9b
+---
+
+## Context
+
+GitWeave's constitution (AGENTS.md §III) declares: organisation behaviour is applied through the GitHub API by the `gw` CLI — no Terraform, no state file. I1 retired spike artefacts but left `infra/` and a broken apply workflow in place. I2 delivers the engine that replaces them.
+
+## CLI specification
+
+### Installation
+
+`pyproject.toml` declares `gw` as a `console_scripts` entry point. `pip install -e .` makes `gw` available on PATH in any checkout. **This packaging WI is the first; all other gw WIs depend on it.**
+
+### Authentication
+
+GitHub App auth: JWT from `GW_APP_ID` + RSA key at `GW_APP_PRIVATE_KEY_PATH`, exchanged for an installation token for `GW_APP_INSTALLATION_ID` on org `GW_ORG`. Any missing variable fails immediately, naming the missing variable. Implementation: **PyJWT + cryptography** for JWT generation; **PyGithub** for API calls. Do not hand-roll the token exchange (pattern: avoid-hand-rolling-tools).
+
+### Resource scope
+
+`gw` manages four resource types: org settings, teams, repositories, rulesets. Only resources whose names match `FORGE_RESOURCE_PREFIX` are created, changed, or deleted by plan/apply/reset. **Exception: org settings are unscoped** (an org has one description, one permission level) — they are applied from `config/org.yaml` and restored to GitHub defaults by reset. `FORGE_RESOURCE_PREFIX` unset or empty is a fatal startup error for `apply` and `reset`.
+
+### Verbs
+
+**`gw plan`**
+- Without `--fixture`: diffs declaration against the live org (requires GW_* auth).
+- With `--fixture <path>`: diffs declaration against the recorded snapshot at `<path>`. **No network call is made even if GW_* are set.** `--fixture` and live auth are mutually exclusive.
+- Prints human-readable diff: `+ create`, `~ update`, `- delete`, `= unchanged` lines per resource.
+- Exits 0 if diff computed successfully (even if non-empty). Exits non-zero on auth failure or missing env var.
+
+**`gw apply`**
+- Applies the declaration to the live org: creates/updates/deletes prefixed resources.
+- Partial failure: best-effort — applies all resources, collects per-resource status (ok/error/skipped). Exits non-zero if any resource errored. Per-resource status always reported.
+- **`--json` — reset-before-apply mode:** (1) delete all prefixed resources in the live org; (2) apply the full declaration; (3) print resulting state as JSON. This makes the command self-contained and idempotent for demos. The JSON output includes per-resource status and the final state of every managed resource. Volatile keys (`id`, `node_id`, `created_at`, `updated_at`) are present in raw output but stripped for idempotency comparison in tests.
+
+**`gw reset`**
+- Deletes all prefixed resources (teams, repos, rulesets) whose names match `FORGE_RESOURCE_PREFIX`. **Treats 404 as success** (idempotency requirement).
+- Restores org settings to GitHub safe defaults: `description=""`, `default_repository_permission="read"`, `web_commit_signoff_required=false`, `members_can_create_repositories=true`. Org settings have no prefix — these fixed values are the restore targets.
+- If no prefixed resources exist and org settings are already at defaults, exits 0 and reports nothing changed.
+
+### Read-back commands
+
+`gw org show --json`, `gw org repos --json`, `gw org teams --json`, `gw org rulesets --json` — print live state as JSON, no mutations.
+
+## Configuration layout
+
+- `config/org.yaml` — **new file**. Schema: `schemas/org.schema.json`. Fields: `description` (str), `default_repository_permission` (read|write|none), `web_commit_signoff_required` (bool), `members_can_create_repositories` (bool). FORGE_RESOURCE_PREFIX does not apply.
+- `config/teams.yaml` — **existing file, existing format preserved exactly** (teams[], name, description, privacy, members). Schema: **new file `schemas/teams.schema.json`** — validates the existing format. The gw engine reads this file unchanged; no reformatting.
+- `config/repos/<slug>.yaml` — existing, unchanged by I2.
+- `config/rulesets.yaml` — **new file**. Schema: `schemas/org-ruleset.schema.json`. Minimum fields: `name` (str), `target` (branch|tag), `enforcement` (active|disabled), `rules[]` (each: `type` str, `parameters` object).
+
+Required new schema files: `schemas/org.schema.json`, `schemas/teams.schema.json`, `schemas/org-ruleset.schema.json`.
+
+## Python package structure
+
+`pyproject.toml`:
+- `[project.scripts] gw = "gitweave.cli:main"`
+- Dependencies: `PyJWT>=2.8`, `cryptography>=41`, `PyGithub>=2.3`, `PyYAML>=6.0`, `jsonschema>=4.0`
+- `[tool.pytest.ini_options] testpaths = ["tests"]`
+
+Flat source layout: `gitweave/` package. Existing test imports must not break.
+
+Core modules: `gitweave/cli.py` (entry point, verb dispatch), `gitweave/auth.py` (GitHub App JWT + token exchange), `gitweave/config.py` (load + validate all config files against their JSON Schemas), `gitweave/managers/org.py` (org settings apply + reset-to-defaults — **reset path must be implemented; reset restores to fixed defaults, not prior state**), `gitweave/managers/teams.py`, `gitweave/managers/repos.py`, `gitweave/managers/rulesets.py`, `gitweave/plan.py` (diff engine), `gitweave/apply.py` (apply engine; `--json` flag triggers reset-before-apply sequence), `gitweave/reset.py` (404-tolerant delete + org settings restore).
+
+## Test fixtures
+
+`tests/fixtures/org-empty.json` — **new file** representing an empty org state (no teams, repos, rulesets, org settings at defaults). Schema matches `gw org show/repos/teams/rulesets --json` output format.
+
+## Terraform retirement
+
+Delete: `infra/` (entire directory), `.github/workflows/gitweave-infra.yaml`.
+
+**PM must run a full `python3 -m pytest tests/ --collect-only -q` scan before WI decomposition** to identify ALL currently-passing tests referencing infra/ — do not rely on an enumerated list (antipattern: 2026-10-10-failing-test-audit-must-be-exhaustive). Known suites: `tests/test_tf_teams_structure.py`, `tests/test_tf_teams_validate.py`, `tests/test_tf_teams_plan.py`, `tests/test_terraform_demo_config.py`, `tests/test_infra_workflow_gates.py`, plus infra/ references inside `tests/test_structure.py`.
+
+Delete `tests/test_modules/` empty directory (sole failing test from I1: `test_pruned_artefacts.py::test_test_modules_directory_removed`).
+
+Replace deleted TF team tests with gw-native tests: validate `config/teams.yaml` against `schemas/teams.schema.json`; `gw plan --fixture tests/fixtures/org-empty.json` exits 0.
+
+## Apply workflow fix
+
+`.github/workflows/gitweave-apply.yaml`:
+- On pull_request: `gw plan --fixture tests/fixtures/org-empty.json` (credential-free).
+- On push to main: `gw apply` (live, requires GW_* secrets).
+
+**Key content handling:** `GW_APP_PRIVATE_KEY` Actions secret contains key CONTENT (not a path). Workflow must: `KEY_FILE=$(mktemp)` → write `$GW_APP_PRIVATE_KEY` to `$KEY_FILE` → `export GW_APP_PRIVATE_KEY_PATH=$KEY_FILE` → `trap "rm -f $KEY_FILE" EXIT`. Never echo or log key content.
+
+The existing `dry-run-smoke` job and `apply-overlays.py` must not be modified (I4 scope).
+
+## bootstrap.sh rewrite
+
+Remove: Docker compose call (metrics/ deleted in I1), Terraform install check.
+Keep: git prereq check, python3 prereq check.
+Add: `pip install -e .` (installs `gw` on PATH).
+Update `tests/test_structure.py::test_bootstrap_script_exits_zero` to not require Terraform.
+Remove `hashicorp/setup-terraform@v3` from the `structural-tests` job in `.github/workflows/ci.yaml`.
+
+## Documentation
+
+`README.md` and `docs/demo-guide.md`: replace all Terraform/infra references with `gw` usage. **PM must grep `grep -rn 'terraform\|infra/' docs/ README.md .github/copilot-context.md` before WI decomposition and include all matches in scope** (antipattern: 2026-10-10-docs-cleanup-must-accompany-artefact-deletion).
+
+## Demo evidence
+
+`gw plan` before/after; `gw apply --json` against the throwaway org. The before tree has no `gw` CLI — command-not-found text is honest before evidence. Delta is `changed`. Story: "a platform team declares its org once and applies it through the API — no Terraform state to drift."
+
+## Not in scope
+
+- Self-service requests and policy exceptions (I3).
+- Overlay modules and `apply-overlays.py` (I4).
+- DORA metrics (I6).
+- Any changes to `config/repos/`, `apply-overlays.py`, or the `dry-run-smoke` CI job.
+- Rate limiting / pagination beyond PyGithub defaults.
+- Multi-org support.
+- Audit logging beyond CLI stdout.
+
+
+## Resolved design decisions (operator)
+
+Operator approves round 3: both send-back notes honoured (key content via temp file; required CI jobs untouched). Two ACs (reset-before-apply proof; no Terraform tokens in docs) are added at the Kickoff gate.

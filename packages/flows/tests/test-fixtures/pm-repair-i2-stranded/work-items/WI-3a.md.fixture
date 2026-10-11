@@ -1,0 +1,153 @@
+---
+work_item_id: WI-3a
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on: []
+domain: config
+acceptance_criteria:
+  - given: "schemas/org.schema.json exists"
+    when: "python3 loads it as JSON"
+    then: "exits 0 — valid JSON with required, properties, additionalProperties fields"
+  - given: "schemas/teams.schema.json exists"
+    when: "python3 loads it as JSON"
+    then: "exits 0 — valid JSON with a 'teams' array property"
+  - given: "schemas/org-ruleset.schema.json exists"
+    when: "python3 loads it as JSON"
+    then: "exits 0 — valid JSON with a 'rulesets' array property"
+files_in_scope:
+  - schemas/org.schema.json
+  - schemas/teams.schema.json
+  - schemas/org-ruleset.schema.json
+  - config/org.yaml
+  - config/rulesets.yaml
+creates:
+  - schemas/org.schema.json
+  - schemas/teams.schema.json
+  - schemas/org-ruleset.schema.json
+  - config/org.yaml
+  - config/rulesets.yaml
+estimated_iterations: 1
+quality_gate_cmd:
+  - python3
+  - -c
+  - "import json,pathlib; [json.loads(pathlib.Path(f).read_text()) for f in ['schemas/org.schema.json','schemas/teams.schema.json','schemas/org-ruleset.schema.json']]"
+---
+
+# WI-3a: JSON Schema files + seed config files
+
+Target: three JSON Schema files and two new YAML config files (org settings and rulesets).
+All static data — no logic. WI-3b depends on this and adds the fixture + test.
+
+## schemas/org.schema.json
+
+Validates `config/org.yaml`. Required fields:
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["description", "default_repository_permission",
+               "web_commit_signoff_required", "members_can_create_repositories"],
+  "properties": {
+    "description": {"type": "string"},
+    "default_repository_permission": {"type": "string", "enum": ["read","write","none","admin"]},
+    "web_commit_signoff_required": {"type": "boolean"},
+    "members_can_create_repositories": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}
+```
+
+## schemas/teams.schema.json
+
+Validates `config/teams.yaml` (existing format, not changed). Structure:
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["teams"],
+  "properties": {
+    "teams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "privacy": {"type": "string", "enum": ["secret","closed"]},
+          "members": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+Read `config/teams.yaml` to confirm the exact existing structure before writing the schema.
+
+## schemas/org-ruleset.schema.json
+
+Minimum fields: `name` (str), `target` (branch|tag), `enforcement` (active|disabled), `rules[]`.
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["rulesets"],
+  "properties": {
+    "rulesets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "target", "enforcement", "rules"],
+        "properties": {
+          "name": {"type": "string"},
+          "target": {"type": "string", "enum": ["branch","tag"]},
+          "enforcement": {"type": "string", "enum": ["active","disabled","evaluate"]},
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": {"type": "string"},
+                "parameters": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## config/org.yaml
+
+Starter values (safe defaults that match GitHub reset targets from the initiative spec):
+```yaml
+description: ""
+default_repository_permission: read
+web_commit_signoff_required: false
+members_can_create_repositories: true
+```
+
+## config/rulesets.yaml
+
+Starter with one example ruleset (uses FORGE_RESOURCE_PREFIX in name):
+```yaml
+rulesets:
+  - name: forge-main-protection
+    target: branch
+    enforcement: active
+    rules:
+      - type: required_linear_history
+```
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

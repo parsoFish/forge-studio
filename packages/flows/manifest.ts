@@ -527,8 +527,10 @@ export function persistManifestCostCeiling(manifestPath: string, costCeilingUsd:
  * if the manifest is missing/unparseable this is a no-op (returns false) and never throws.
  */
 export function persistManifestSpecs(manifestPath: string, specs: string[]): boolean {
-  // D-49: a completed decomposition supersedes any recorded validation errors.
-  return persistManifestPmFields(manifestPath, { specs, pm_validation_errors: undefined });
+  // D-49: THE commit of the PM's set — first pass and repair alike. A completed
+  // decomposition supersedes recorded validation errors and consumes a `plan`
+  // resume marker (forge-mfv5.1.35: left set, the Kickoff gate never derived).
+  return persistManifestPmFields(manifestPath, { specs, pm_validation_errors: undefined }, true);
 }
 
 /** D-49: record the set-validation errors the PM's repair turns did not fix, so
@@ -537,11 +539,12 @@ export function persistManifestPmValidationErrors(manifestPath: string, errors: 
   return persistManifestPmFields(manifestPath, { pm_validation_errors: [...errors] });
 }
 
-function persistManifestPmFields(manifestPath: string, patch: Pick<InitiativeManifest, 'specs' | 'pm_validation_errors'>): boolean {
+function persistManifestPmFields(manifestPath: string, patch: Pick<InitiativeManifest, 'specs' | 'pm_validation_errors'>, consumePlan = false): boolean {
   try {
     if (!existsSync(manifestPath)) return false;
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    writeFileSync(manifestPath, serializeManifest({ ...m, ...patch }));
+    const resume = consumePlan && m.resume_from === 'plan' ? { resume_from: undefined } : {};
+    writeFileSync(manifestPath, serializeManifest({ ...m, ...patch, ...resume }));
     return true;
   } catch {
     return false; // best-effort for the cycle; forge-nk1y.12's Kickoff-gate add treats false as a refusal
