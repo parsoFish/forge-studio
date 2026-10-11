@@ -77,6 +77,42 @@ export function devWorkItemIdStem(id: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** `WORK_ITEM_ID_PATTERN` with its parts captured (prefix, number, split suffix); a unit test pins the two equal. */
+const WORK_ITEM_ID_PARTS = /^(U?)WI-(\d+)([a-z]?)$/;
+const lexical = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+/** Decimal digit strings compared as numbers, exactly (no float precision loss). */
+function compareDigits(a: string, b: string): number {
+  const x = a.replace(/^0+(?=\d)/, ''), y = b.replace(/^0+(?=\d)/, '');
+  return x.length - y.length || lexical(x, y);
+}
+
+/**
+ * THE work-item-id order (bead forge-mfv5.1.36) — every place that orders work
+ * items or their ids for execution or display uses this, never `.sort()`:
+ * lexical order ran `WI-13` second in gitweave I2 (`WI-1, WI-10 … WI-2`).
+ * `WI-` before `UWI-`; then the number as a number; then the split suffix
+ * (`WI-3` < `WI-3a` < `WI-3b` < `WI-4` < `WI-10`); then the whole id lexically
+ * (`WI-05` vs `WI-5`). An id `WORK_ITEM_ID_PATTERN` rejects sorts after every
+ * id it admits, then lexically. Total, deterministic, never throws.
+ */
+export function compareWorkItemIds(a: string, b: string): number {
+  const sa = String(a), sb = String(b);
+  const ma = WORK_ITEM_ID_PARTS.exec(sa), mb = WORK_ITEM_ID_PARTS.exec(sb);
+  if (!ma || !mb) return ma ? -1 : mb ? 1 : lexical(sa, sb);
+  return lexical(ma[1]!, mb[1]!) || compareDigits(ma[2]!, mb[2]!) || lexical(ma[3]!, mb[3]!) || lexical(sa, sb);
+}
+
+/**
+ * The LEAF work items of a set — those no other item in it depends on — in
+ * `compareWorkItemIds` order. D-48 (forge-mfv5.1.36): a work item added at the
+ * Kickoff gate depends on these unless the operator sets its dependencies, so
+ * an addition runs after the decomposed plan.
+ */
+export function leafWorkItemIds(items: ReadonlyArray<{ id: string; dependsOn: readonly string[] }>): string[] {
+  const dependedOn = new Set(items.flatMap((i) => i.dependsOn));
+  return items.map((i) => i.id).filter((id) => !dependedOn.has(id)).sort(compareWorkItemIds);
+}
+
 // ── Trigger payloads (D-23) ──
 
 /** The owner/repo regex — strict-charset validator for a GitHub-shaped

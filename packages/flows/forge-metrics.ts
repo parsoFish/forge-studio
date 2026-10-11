@@ -23,6 +23,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { compareWorkItemIds } from '@forge/contracts';
 import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogEntry } from '@forge/kernel';
@@ -149,7 +150,7 @@ function loadWorkItemsSnapshot(cycleLogDir: string): WorkItem[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.endsWith('.md') && f !== '_graph.md')
-    .sort()
+    .sort((x, y) => compareWorkItemIds(x.slice(0, -'.md'.length), y.slice(0, -'.md'.length))) // forge-mfv5.1.36
     .map((f) => {
       try {
         return parseWorkItem(readFileSync(join(dir, f), 'utf8'));

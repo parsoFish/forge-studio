@@ -1,0 +1,26 @@
+---
+work_item_id: WI-13
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on: []
+acceptance_criteria:
+  - given: >-
+      a FORGE_RESOURCE_PREFIX-named team that is NOT in the declaration exists
+      in the throwaway org (created by the test via the API) and GW_* are set
+    when: >-
+      `python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py` runs
+      `gw apply --json`
+    then: >-
+      the command exits 0 and that team is absent from both the printed JSON
+      state and a read-back of the org (reset ran before apply)
+files_in_scope:
+  - tests/acceptance/test_gw_reset_before_apply.py
+estimated_iterations: 2
+quality_gate_cmd:
+  - python3
+  - '-m'
+  - pytest
+  - tests/acceptance/test_gw_reset_before_apply.py
+---
+
+Live proof that gw apply --json resets before applying

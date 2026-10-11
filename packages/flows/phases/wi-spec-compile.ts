@@ -24,6 +24,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { compareWorkItemIds } from '@forge/contracts';
 import type { EventLogger } from '@forge/kernel';
 import type { InitiativeManifest } from '../manifest.ts';
 import {
@@ -268,10 +269,9 @@ export type CouplingCompileResult = {
 /**
  * `detectHiddenCoupling` upgraded from reject-only to compile-when-derivable
  * (D-17). A shared-file overlap with no `depends_on` edge is resolved by
- * WI-id numeric order — the higher-numbered WI gets `depends_on` the lower
- * ("WI-2 gets depends_on WI-1"); on a numeric TIE the order falls back to
- * deterministic LEXICOGRAPHIC id comparison, the greater id becoming the
- * dependent. The tie arm carries two cases: zero-padding (`WI-05` vs `WI-5`,
+ * `compareWorkItemIds` order — the later WI gets `depends_on` the earlier
+ * ("WI-2 gets depends_on WI-1"); on a numeric TIE the split suffix, then the
+ * whole id lexically, decides, the later id becoming the dependent. The tie arm carries two cases: zero-padding (`WI-05` vs `WI-5`,
  * both stem 5) and — since D-17's 2026-08-23 amendment — a SPLIT PAIR
  * (`WI-4a` vs `WI-4b`, both stem 4), which is why `WI-4b depends_on WI-4a`
  * and a split CHAINS instead of fanning out. Chaining is the point: two halves
@@ -297,25 +297,16 @@ export function compileHiddenCoupling(
   const derived: CompiledCouplingEdge[] = [];
   const unresolved: CouplingPair[] = [];
   for (const pair of pairs) {
-    // Stem, not whole id: `WI-4a` and `WI-4b` both stem 4, so a split pair
-    // reaches the lexicographic tie arm below instead of falling through to
-    // reject. `devWorkItemIdStem` is the exported SSOT (packages/flows/work-item.ts).
-    const numA = devWorkItemIdStem(pair.a);
-    const numB = devWorkItemIdStem(pair.b);
-    if (numA === null || numB === null) {
+    // Only dev ids (`WI-<n>[a-z]`, split halves included) have a derivable
+    // order; `devWorkItemIdStem` is the exported SSOT (@forge/contracts).
+    if (devWorkItemIdStem(pair.a) === null || devWorkItemIdStem(pair.b) === null) {
       unresolved.push(pair); // non-derivable id shape → reject (pre-D-17 behavior)
       continue;
     }
-    let dependent: string;
-    let prerequisite: string;
-    if (numA !== numB) {
-      [dependent, prerequisite] = numA > numB ? [pair.a, pair.b] : [pair.b, pair.a];
-    } else {
-      // Numeric-stem tie — zero-padding (WI-05 vs WI-5) or a SPLIT PAIR
-      // (WI-4a vs WI-4b) → deterministic lexicographic id order; the greater
-      // id becomes the dependent, so WI-4b depends_on WI-4a.
-      [dependent, prerequisite] = pair.a > pair.b ? [pair.a, pair.b] : [pair.b, pair.a];
-    }
+    // The ONE work-item-id order (forge-mfv5.1.36): the later id is the
+    // dependent — stem as a number, then the split suffix (WI-4b depends_on
+    // WI-4a), then the whole id (zero-padding: WI-05 vs WI-5).
+    const [dependent, prerequisite] = compareWorkItemIds(pair.a, pair.b) > 0 ? [pair.a, pair.b] : [pair.b, pair.a];
     derived.push({ dependent, prerequisite, sharedFiles: pair.sharedFiles });
   }
 
