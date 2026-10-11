@@ -5,12 +5,12 @@
  * items, and emits decomposition telemetry.
  */
 
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pinnedStreamQuery, type StreamQueryFn, type HeartbeatTimers } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest, persistManifestSpecs } from '@forge/flows';
+import { parseManifest, persistManifestPmValidationErrors, persistManifestSpecs } from '@forge/flows';
 import type { InitiativeManifest, AgentDefinition } from '@forge/contracts';
 import {
   PM_BRAIN_ACCESS,
@@ -21,27 +21,23 @@ import {
   tallyToolUse,
   type PmToolUseSummary,
 } from './pm-binding.ts';
-import { readWorkItemsFromDir, validateWorkItemSet } from '@forge/flows';
+import { readWorkItemsFromDir } from '@forge/flows';
 import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
-import { PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX } from '@forge/contracts';
-import {
-  acceptanceGateViolation,
-  describeAcceptanceRequirement,
-  runCompileStage,
-  runPmAcceptanceRevise,
-} from './pm-acceptance-gate.ts';
+import { PM_REPAIR_NEEDS_REPLAN_PREFIX, PM_SET_VALIDATION_UNREPAIRED_PREFIX } from '@forge/contracts';
+import { describeAcceptanceRequirement } from './pm-acceptance-gate.ts';
+import { runPmRepairLoop, validatePmSet } from './pm-set-repair.ts';
 import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '@forge/flows';
 import { requireCycleId } from './cycle-id.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents';
-import { acceptanceCriteriaViolation, checkDecomposeCompleteness } from './decompose-completeness.ts';
+import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
 import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
-import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
+import type { ClassProfilePort } from '../class-profile-port.ts';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge';
 
 /**
@@ -170,6 +166,18 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   if (existsSync(stalePmScratch)) {
     rmSync(stalePmScratch, { recursive: true, force: true });
   }
+  // D-49 Requeue REPAIR MODE: resumed at the plan node with errors the manifest
+  // records → the last rejected set is restored and repaired; no decomposition
+  // spawn, never a blind re-decompose. No rejected set → refused by name.
+  const recordedErrors = input.resumeFrom === 'plan' ? manifest.pm_validation_errors ?? [] : [];
+  if (recordedErrors.length > 0) {
+    const prior = latestRejectedSet(resolve(input.worktreePath, '.forge'));
+    if (prior === null) {
+      return rejectWorkItemSet(stalePmScratch, `pm-repair-no-prior-set: Requeue repair mode found no rejected work-item set under .forge/ — recorded errors: ${recordedErrors.join('; ')}`);
+    }
+    renameSync(prior, stalePmScratch);
+  }
+  const repairMode = recordedErrors.length > 0;
 
   // Seam F4: no fallback — read once, before the prompt, for both it and the spawn.
   const def = p.agentDef;
@@ -313,7 +321,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   });
   let pmToolSeq = 0;
 
-  const spawn = await runAgent(def, {
+  const spawn = repairMode ? { costUsd: 0, durationMs: 0, resultSubtype: 'success' } : await runAgent(def, {
     runId: requireCycleId(input, 'runProjectManager'),
     workdir: input.worktreePath,
     cwd: input.worktreePath,
@@ -362,8 +370,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     },
     queryFn,
   });
-  // Row 157: `let` — a bounded acceptance-gate revise pass (below) folds its
-  // own spend/duration into the pass's own accounting (its `lifecycle:
+  // `let` — the D-49 repair turns (below) fold their
+  // own spend/duration into the pass's own accounting (their `lifecycle:
   // 'caller'` spawn emits no event of its own; this pass's end event must).
   let costUsd = spawn.costUsd;
   let durationMs = spawn.durationMs ?? 0;
@@ -399,6 +407,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // injection came up empty (no profile, themes missing) AND the agent read
   // nothing.
   if (
+    !repairMode &&
     PM_BRAIN_ACCESS === 'mandatory' &&
     !recordBrainGateResult(
       'project-manager',
@@ -418,32 +427,6 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
 
   const workItemsDir = resolve(input.worktreePath, '.forge', 'work-items');
   const read = readWorkItemsFromDir(workItemsDir);
-  let items = read.items;
-  let parseErrors = read.parseErrors;
-
-  for (const item of items) {
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: parentEventId,
-      phase: 'project-manager',
-      skill: def.slug,
-      event_type: 'log',
-      input_refs: [input.manifestPath],
-      output_refs: [resolve(workItemsDir, `${item.work_item_id}.md`)],
-      message: 'pm.work-item-emitted',
-      metadata: {
-        work_item_id: item.work_item_id,
-        // historical: carried for the Studio hex-detail drawer (D-12 removed it)
-        // + the WI dependency graph (observability #11): the WI's deps, scope size, and a one-line task.
-        depends_on: item.depends_on,
-        files_in_scope: item.files_in_scope.length,
-        ac_count: item.acceptance_criteria.length,
-        task: item.acceptance_criteria[0]
-          ? `Given ${item.acceptance_criteria[0].given} — Then ${item.acceptance_criteria[0].then}`
-          : item.files_in_scope.join(', '),
-      },
-    });
-  }
 
   // Load the project's forge config (best-effort) for the A2 testing-contract
   // checks. A malformed config is surfaced + fail-closed elsewhere (the
@@ -471,12 +454,9 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     ...releaseDraftAcs(projectConfig?.releaseProcess),
   ];
 
-  // D-17 (wi-spec-compiler) + A2b's standing-ACs, composed into ONE step
-  // in `runCompileStage` (pm-acceptance-gate.ts — see its own doc comment for
-  // why it is safe to run TWICE: once here, and again over the revised set a
-  // row-157 acceptance-gate turn (below) produces). `compileOpts` carries
-  // every field BOTH calls share; only `items` differs between them.
-  const compileOpts = {
+  // D-17 compile + A2b standing-ACs + set validation + acceptance gate (D-34) + D-47
+  // coverage as ONE list of named errors; the SAME call re-validates every repair turn.
+  const validateOpts = {
     workItemsDir,
     standingAcs,
     constraintSourcesRoot: p.constraintSourcesRoot ?? forgeRoot,
@@ -485,102 +465,88 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     logger,
     initiativeId: input.initiativeId,
     parentEventId,
+    accGate: projectConfig?.acceptance_gate,
+    classProfiles: p.classProfiles,
+    skill: def.slug,
   };
-  const firstStage = runCompileStage({ ...compileOpts, items });
-  items = firstStage.items;
-  let couplingViolations = firstStage.couplingViolations;
-
-  let { perItem, setErrors: validationSetErrors } = validateWorkItemSet(items, {
-    expectedInitiativeId: manifest.initiative_id,
-  });
-  let setErrors = [...validationSetErrors, ...firstStage.compileErrors];
+  let v = validatePmSet(validateOpts, read);
   // D-34 / ruling 229 half A — a FLAG, never a failure. The gate for this
   // column runs at the plan gate, on the declared criteria, before any spend.
-  const underDecomposed = underDecomposedFlag(manifest, items, p.classProfiles);
+  const underDecomposed = underDecomposedFlag(manifest, v.items, p.classProfiles);
   if (underDecomposed !== null) {
     logger.emit({
       initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
       phase: 'project-manager', skill: def.slug, event_type: 'log',
       input_refs: [], output_refs: [], message: 'pm.under-decomposed',
-      metadata: { change_class: manifest.class, work_item_count: items.length, detail: underDecomposed },
+      metadata: { change_class: manifest.class, work_item_count: v.items.length, detail: underDecomposed },
     });
   }
-  let itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
-  // A2a (2026-06-06): live-acceptance-WI requirement (contract C7), decided
-  // by class (D-34, bead forge-mfv5.3.5 — a phase
-  // reads the class → gate-profile table; branching on a class NAME is a
-  // conformance failure). The project declares the tier (`match`,
-  // `requiresEnv`); the class profile's `acceptance` column says whether this
-  // initiative must prove itself on it. `advisory` (docs — no live behaviour
-  // to prove) skips the rule and logs the skip, never silently. `required`
-  // with NO acceptance WI earns one bounded revise turn (row 157) below.
-  let accGateViolation: string | null = null;
-  const accGate = projectConfig?.acceptance_gate;
-  if (accGate && items.length > 0) {
-    const acceptance = requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class).acceptance;
-    if (acceptance === 'advisory') {
-      logger.emit({
-        initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
-        phase: 'project-manager', skill: def.slug, event_type: 'log',
-        input_refs: [], output_refs: [], message: 'pm.acceptance-wi-not-required',
-        metadata: { change_class: manifest.class, reason: "the class profile's acceptance is advisory" },
-      });
-    } else {
-      accGateViolation = acceptanceGateViolation(items, acceptance, accGate);
-    }
+  // Plan 2.11 parts 2+3: the skill writes WIs incrementally and keeps a
+  // checkbox checkpoint (`_decomposition-state.md`) — so a turn/budget cap
+  // mid-flight leaves a partial graph the orchestrator can CLASSIFY instead
+  // of nothing. Read the checkpoint best-effort: planned > emitted WI files
+  // means the set is incomplete even when every written WI validates cleanly.
+  const capped = resultSubtype === 'error_max_turns' || resultSubtype === 'error_max_budget_usd';
+  let decompState: { planned: number; emitted: number } | null = null;
+  try {
+    decompState = parseDecompositionState(
+      readFileSync(join(workItemsDir, DECOMPOSITION_STATE_FILENAME), 'utf8'),
+    );
+  } catch {
+    decompState = null; // no checkpoint — the PM never got that far, or pre-2.11 skill
   }
-  // D-47 (forge-mfv5.1.26): a runnable initiative AC no WI gate carries is
-  // folded into the same violation, so it earns the same one revise turn.
-  const planViolation = (gate: string | null): string | null =>
-    [gate, items.length > 0 ? acceptanceCriteriaViolation(manifest.acceptance_criteria, items) : null]
-      .filter((v): v is string => v !== null).join(' ') || null;
-  accGateViolation = planViolation(accGateViolation);
+  const plannedCount = decompState?.planned ?? null;
+  const checkpointIncomplete = capped && plannedCount !== null && plannedCount > v.items.length;
 
-  // Row 157/1873 part (b) ONE REVISE TURN — fires only when the acceptance
-  // gate is the set's SOLE problem (no parse/set/per-item/coupling error
-  // already present): the PM gets the gate's own message and one more
-  // bounded pass before quarantine. The revised set is re-read from disk and
-  // put back through the SAME compile stage as the first pass (below), so a
-  // revise-added acceptance WI is never a second-class work item.
-  if (
-    accGateViolation !== null &&
-    Object.keys(parseErrors).length === 0 &&
-    setErrors.length === 0 &&
-    itemErrorCount === 0 &&
-    couplingViolations.length === 0
-  ) {
-    const revised = await runPmAcceptanceRevise({
-      input,
-      logger,
-      parentEventId,
-      def,
-      queryFn,
-      systemPrompt,
-      violation: accGateViolation,
-      costBudgetUsd: manifest.cost_budget_usd,
-      signal,
+  // D-49: a set that fails validation earns at most REPAIR_TURNS_MAX repair
+  // turns fed every error verbatim (row 157's one-shot revise is folded in).
+  // An empty or capped first pass keeps its own classification below.
+  const repairable = (v.items.length > 0 || Object.keys(v.parseErrors).length > 0) && v.errors.length > 0 && !capped;
+  // 8vfn.6.1: a turn that throws (operator stop, wedge abort) leaves no claimable
+  // set behind; the original error still propagates for the classifier.
+  const repair = repairable
+    ? await runPmRepairLoop({
+        input, logger, parentEventId, def, queryFn, systemPrompt, workItemsDir, signal,
+        costBudgetUsd: manifest.cost_budget_usd,
+        spentUsd: costUsd,
+        initial: v,
+        revalidate: (reread) => validatePmSet(validateOpts, reread),
+      }).catch((err: unknown) => {
+        rejectWorkItemSet(workItemsDir, `pm repair turn threw: ${(err as Error).message}`);
+        throw err;
+      })
+    : null;
+  if (repair) {
+    costUsd += repair.costUsd;
+    durationMs += repair.durationMs;
+    v = repair.validation;
+  }
+  const items = v.items;
+  for (const item of items) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'project-manager',
+      skill: def.slug,
+      event_type: 'log',
+      input_refs: [input.manifestPath],
+      output_refs: [resolve(workItemsDir, `${item.work_item_id}.md`)],
+      message: 'pm.work-item-emitted',
+      metadata: {
+        work_item_id: item.work_item_id,
+        // historical: carried for the Studio hex-detail drawer (D-12 removed it)
+        // + the WI dependency graph (observability #11): the WI's deps, scope size, and a one-line task.
+        depends_on: item.depends_on,
+        files_in_scope: item.files_in_scope.length,
+        ac_count: item.acceptance_criteria.length,
+        task: item.acceptance_criteria[0]
+          ? `Given ${item.acceptance_criteria[0].given} — Then ${item.acceptance_criteria[0].then}`
+          : item.files_in_scope.join(', '),
+      },
     });
-    costUsd += revised.costUsd;
-    durationMs += revised.durationMs;
-    const reread = readWorkItemsFromDir(workItemsDir);
-    items = reread.items;
-    parseErrors = reread.parseErrors;
-    // Re-run the SAME compile stage over the REVISED set — the revise-added
-    // WI earns its standing ACs, its constraint clauses and its
-    // hidden-coupling / creates-mandatory enforcement here, not "at the next
-    // pass". Safe on the unchanged old items too: see runCompileStage's own
-    // doc comment on why each step no-ops rather than duplicates.
-    const secondStage = runCompileStage({ ...compileOpts, items });
-    items = secondStage.items;
-    couplingViolations = secondStage.couplingViolations;
-    const revalidated = validateWorkItemSet(items, { expectedInitiativeId: manifest.initiative_id });
-    perItem = revalidated.perItem;
-    setErrors = [...revalidated.setErrors, ...secondStage.compileErrors];
-    itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
-    const profile = accGate ? requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class) : null;
-    accGateViolation = planViolation(profile && accGate ? acceptanceGateViolation(items, profile.acceptance, accGate) : null);
   }
+
 
   // Operator sanity-check surface: a greppable WI list so a human can eyeball
   // at a glance whether each WI got plausible scope (and spot off-target scope —
@@ -602,38 +568,14 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     });
   }
 
-  // Plan 2.11 parts 2+3: the skill writes WIs incrementally and keeps a
-  // checkbox checkpoint (`_decomposition-state.md`) — so a turn/budget cap
-  // mid-flight leaves a partial graph the orchestrator can CLASSIFY instead
-  // of nothing. Read the checkpoint best-effort: planned > emitted WI files
-  // means the set is incomplete even when every written WI validates cleanly.
-  const capped = resultSubtype === 'error_max_turns' || resultSubtype === 'error_max_budget_usd';
-  let decompState: { planned: number; emitted: number } | null = null;
-  try {
-    decompState = parseDecompositionState(
-      readFileSync(join(workItemsDir, DECOMPOSITION_STATE_FILENAME), 'utf8'),
-    );
-  } catch {
-    decompState = null; // no checkpoint — the PM never got that far, or pre-2.11 skill
-  }
-  const plannedCount = decompState?.planned ?? null;
-  const checkpointIncomplete = capped && plannedCount !== null && plannedCount > items.length;
-
-  const failed =
-    items.length === 0 ||
-    Object.keys(parseErrors).length > 0 ||
-    setErrors.length > 0 ||
-    itemErrorCount > 0 ||
-    couplingViolations.length > 0 ||
-    accGateViolation !== null ||
-    checkpointIncomplete;
+  const failed = items.length === 0 || v.errors.length > 0 || checkpointIncomplete;
 
   // Partial-but-usable signal (plan 2.11): a capped run that DID write WIs is
   // a different failure class from an empty decomposition — the classifier
   // treats `usable: true` (≥1 valid WI) as transient (the 07-10 evidence shows
   // a re-queue succeeds), while empty/degenerate stays terminal.
   if (capped && items.length > 0 && failed) {
-    const validCount = items.filter((it) => (perItem[it.work_item_id] ?? []).length === 0).length;
+    const validCount = items.filter((it) => (v.perItem[it.work_item_id] ?? []).length === 0).length;
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
@@ -679,12 +621,13 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       work_item_count: items.length,
       result_subtype: resultSubtype,
       tool_use: toolUseSummary,
-      parse_errors: parseErrors,
-      set_errors: setErrors,
-      per_item_error_count: itemErrorCount,
-      hidden_coupling_violations: couplingViolations,
+      parse_errors: v.parseErrors,
+      set_errors: v.setErrors,
+      per_item_error_count: v.itemErrorCount,
+      hidden_coupling_violations: v.couplingViolations,
       ...(plannedCount !== null ? { planned_count: plannedCount } : {}),
-      ...(accGateViolation ? { acceptance_gate_violation: accGateViolation } : {}),
+      ...(v.accGateViolation ? { acceptance_gate_violation: v.accGateViolation } : {}),
+      ...(repair ? { repair_turns: repair.turns, repair_stop: repair.stop } : {}),
     },
   });
 
@@ -741,26 +684,44 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     return { kind: 'success' };
   }
 
+  // D-49: still failing after repair → fail by name, errors recorded for Requeue's
+  // repair mode; a needs-replan declaration is terminal and not recorded.
+  const repairStop = repair?.stop === 'budget'
+    ? `pm-repair-budget-exhausted after ${repair.turns} repair turn(s)`
+    : repair?.stop === 'quarantine-failed'
+      ? `pm-repair-quarantine-failed after ${repair.turns} repair turn(s): the set could not be moved aside`
+      : repair?.stop === 'no-prior-set'
+        ? 'pm-repair-no-prior-set: no set to repair'
+        : `after ${repair?.turns ?? 0} repair turn(s)`;
+  const unrepaired = repair !== null && repair.stop !== 'needs-replan' && v.errors.length > 0;
+  const recorded = unrepaired && persistManifestPmValidationErrors(input.manifestPath, v.errors);
   const summary = [
     items.length === 0 ? 'no work items emitted' : null,
-    Object.keys(parseErrors).length > 0 ? `parse errors: ${Object.keys(parseErrors).join(', ')}` : null,
-    setErrors.length > 0 ? `set errors: ${setErrors.join('; ')}` : null,
-    itemErrorCount > 0 ? `${itemErrorCount} per-item validation errors` : null,
-    couplingViolations.length > 0
-      ? `${couplingViolations.length} hidden-coupling pair(s): ${couplingViolations.map((pair) => `${pair.a}↔${pair.b} share ${pair.sharedFiles.join(',')}`).join('; ')}`
-      : null,
     checkpointIncomplete
       ? `decomposition capped mid-flight (${resultSubtype}): checkpoint plans ${plannedCount} WI(s) but only ${items.length} emitted`
       : null,
-    // Row 157: prefixed so failure-classifier.ts recognises a resumable PM failure.
-    accGateViolation ? `${PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX} ${accGateViolation}` : null,
+    repair === null && (items.length > 0 || Object.keys(v.parseErrors).length > 0) && v.errors.length > 0 ? `set errors: ${v.errors.join('; ')}` : null,
+    repair?.stop === 'needs-replan'
+      ? `${PM_REPAIR_NEEDS_REPLAN_PREFIX} ${repair.detail} — errors: ${v.errors.join('; ')}`
+      : null,
+    // Prefixed so failure-classifier.ts resumes it at the plan node (repair mode).
+    unrepaired
+      ? `${PM_SET_VALIDATION_UNREPAIRED_PREFIX} ${repairStop}: ${v.errors.join('; ')}` +
+        (recorded ? '' : ' (the errors could not be recorded in the manifest)')
+      : null,
   ]
     .filter((s): s is string => s !== null)
     .join('; ');
 
   // 8vfn.6.1 / §15.167 — claimants read the DIRECTORY. Story: pm-rejected-set.ts.
-  return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId, skill: def.slug });
+  return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId, skill: def.slug }, v.errors.length > 0 ? v.errors : [summary]);
 }
 
 // `appendStandingAcs` moved to pm-acceptance-gate.ts (row 157, PURE MOVE) —
 // it is now internal to that module's `runCompileStage`, this file's only caller.
+
+/** D-49: the newest `work-items-rejected-<ISO stamp>` dir under `.forge/` (stamps sort lexically), or null. */
+function latestRejectedSet(forgeDir: string): string | null {
+  const dirs = existsSync(forgeDir) ? readdirSync(forgeDir).filter((d) => d.startsWith('work-items-rejected-')).sort() : [];
+  return dirs.length > 0 ? join(forgeDir, dirs[dirs.length - 1]!) : null;
+}

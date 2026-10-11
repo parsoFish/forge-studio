@@ -1037,11 +1037,17 @@
   "verified": "exec",
   "note": "Not a route: the project-manager PHASE's failure path (`packages/stations/phases/project-manager.ts`)"
  },
- "packages/stations/phases/project-manager.ts": {
-  "class": "other",
+ "packages/stations/phases/pm-set-repair.ts": {
+  "class": "not-request-derived",
   "guard": null,
-  "verified": null,
-  "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
+  "verified": "read",
+  "note": "Not a route: the project-manager phase's repair turns read `.forge/work-items` and `_needs-replan.md` under `input.worktreePath` (D-49)"
+ },
+ "packages/stations/phases/project-manager.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "Not a route: the project-manager phase; every path is under `input.worktreePath/.forge` (D-49 repair mode restores the newest `work-items-rejected-*` set by rename)"
  },
  "packages/stations/phases/reflector-questions.ts": {
   "class": "not-request-derived",

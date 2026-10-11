@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 150 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 151 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -54,21 +54,21 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 9 | 1,798 | **1,798** | ratified 1,798 — forge-nk1y.23: `fixRoundOf` reads the re-entered (in-flight) round as `{ round, running }`, `developRunningOf`, and the two `Run` flags; +16 measured on main 1,782, lane-ratified (≤100, ruling 666). |
+| `contracts` | 9 | 1,795 | **1,798** | ratified 1,798 — forge-nk1y.23: `fixRoundOf` reads the re-entered (in-flight) round as `{ round, running }`, `developRunningOf`, and the two `Run` flags; +16 measured on main 1,782, lane-ratified (≤100, ruling 666). |
 | `kernel` | 41 | 6,933 | **5,798** | ratified 5,798 — forge-mfv5.1.28: `isText`/`stringList`, the one request-body list check every send-back and Kickoff-gate door uses; +10 measured on main 5,788, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 53 | 11,871 | **10,074** | ratified 10,074 — forge-mfv5.1.23: Save merges its forge-studio PR only on green required checks and GitHub's CLEAN (pure verdict over one graphql read), `--auto` only when allowed; +100 measured on main 9,974, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,499 | **12,918** | ratified 12,918 — forge-mfv5.1.15: the project-brain analyze plan carries the operator's revision notes and the revise-in-place instruction; +18 measured on main 12,900, lane-ratified (≤100, ruling 666). |
 | `agents` | 44 | 12,506 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 65 | 21,283 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
-| `flows` | 94 | 25,729 | **25,530** | ratified 25,530 — forge-mfv5.1.28: both verdict send-back doors pass and validate a typed WI's gate cmd and files in one boundary check in `applyReviewVerdict`; +8 measured on main 25,522, lane-ratified (≤100, ruling 666). |
-| `factory` | 17 | 3,071 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 49 | 12,756 | **12,756** | ratified 12,756 — forge-mfv5.1.28: `firstRunnableSpan` beside the D-47 `runnableSpan` over one `isRunnerSpan`, so a verdict comment's command becomes its fix WI's gate by the same rule; +9 measured on main 12,747, lane-ratified (≤100, ruling 666). |
+| `sessions` | 65 | 21,281 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
+| `flows` | 94 | 25,747 | **25,548** | ratified 25,548 — forge-mfv5.1.34 (D-49): the manifest's `pm_validation_errors` field (parse, serialize, one shared PM-fields writer) so Requeue can feed a repair turn; +18 measured on main 25,530, lane-ratified (≤100, ruling 666). |
+| `factory` | 17 | 3,080 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 50 | 12,848 | **12,848** | ratified 12,848 — forge-mfv5.1.34 (D-49): `pm-set-repair.ts` replaces the one-shot revise, plus Requeue repair mode; +92 measured on main 12,756, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 39 | 8,985 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **521** | **135,891** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **522** | **136,005** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -311,7 +311,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/architect-stage-events.ts | sessions | rewritten | 40 The architect's per-stage `architect.<stage>.start` event, emitted before each stage's model turn (forge-8vfn.8.1.14). |
 | packages/sessions/kinds/architect-structured-turn.ts | sessions | rewritten | 149 `runStructured` moved out of `architect-steps.ts` verbatim (forge-8vfn.8.1.14) to give that file headroom for the critiquing/revising phase writes. |
 | packages/sessions/kinds/architect-manifest.ts | sessions | rewritten | 189 |
-| packages/sessions/kinds/architect-draft-repair.ts | sessions | rewritten | 116 **New file, row 159 (forge-8vfn.8.1.47, ruling 1891):** the architect's ONE bounded draft-manifest repair turn, split out of `architect-steps.ts` (file-size budget) — mirrors `stations/phases/pm-acceptance-gate.ts`'s row-157 shape. |
+| packages/sessions/kinds/architect-draft-repair.ts | sessions | rewritten | 114 **New file, row 159 (forge-8vfn.8.1.47, ruling 1891):** the architect's ONE bounded draft-manifest repair turn, split out of `architect-steps.ts` (file-size budget) — mirrors `stations/phases/pm-acceptance-gate.ts`'s row-157 shape. |
 | packages/sessions/kinds/architect-brain-read.ts | sessions | rewritten | 93 **New file, M7-C ABR (forge-8vfn.8.3.5, ruling 666):** the architect's own `brain.read` tally + emission, wrapping each phase's `KindStepHandler` from outside `architect-steps.ts` (near the file cap) and `kind-turn.ts` (ruling 78's hook budget). Priced into `sessions`'s cap-table raise 20,000 → 20,093. |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
 | packages/sessions/kinds/brain-fix.ts | sessions | rewritten | 277 |
@@ -371,7 +371,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-backend.ts | knowledge | verbatim | 280 |
 | packages/knowledge/kb-graph.ts | knowledge | verbatim | 662 |
 | packages/knowledge/kb-health.ts | knowledge | verbatim | 263 |
-| packages/flows/manifest.ts | flows | verbatim | 663 |
+| packages/flows/manifest.ts | flows | verbatim | 681 |
 | packages/flows/mint-triggered-initiative.ts | flows | verbatim | 284 |
 | packages/agents/model-range.ts | agents | verbatim | 79 |
 | packages/flows/notify.ts | flows | verbatim | 73 |
@@ -382,7 +382,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 454 |
 | packages/stations/phases/executor-deps.ts | stations | verbatim | 337 |
-| packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 139 |
+| packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 141 |
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
 | packages/sessions/testing.ts | sessions | verbatim | 15 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `tests/architect-ports-stub.ts`'s `stubArchitectManifestPorts`, three `kinds/architect-critic.ts` symbols, and three `turn-cost-rows.ts` symbols have no production consumer outside this package, only `apps/forge`/`scripts/stories` tests reach for them.** |
 | packages/stations/phases/cycle-id.ts | stations | rewritten | 12 |
@@ -404,8 +404,9 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 395 |
-| packages/stations/phases/project-manager.ts | stations | verbatim | 766 |
-| packages/stations/phases/pm-acceptance-gate.ts | stations | rewritten | 257 |
+| packages/stations/phases/project-manager.ts | stations | verbatim | 727 |
+| packages/stations/phases/pm-acceptance-gate.ts | stations | rewritten | 183 |
+| packages/stations/phases/pm-set-repair.ts | stations | rewritten | 203 **New file, forge-mfv5.1.34 (D-49):** the PM's set validation as one list of named errors + the bounded repair turns; replaces `runPmAcceptanceRevise` and the validate/revise block of `project-manager.ts`. |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
 | packages/stations/phases/reflector.ts | stations | verbatim | 623 |
@@ -423,7 +424,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 237 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/sessions/kinds/architect-ports.ts | sessions | rewritten | 52 |
-| packages/contracts/manifest-types.ts | contracts | rewritten | 243 |
+| packages/contracts/manifest-types.ts | contracts | rewritten | 245 |
 | packages/sessions/tests/architect-ports-stub.ts | sessions | rewritten | 49 |
 | apps/forge/session-kind-deps.ts | apps/forge | rewritten | 61 |
 | apps/forge/brain-fix-turn.ts | apps/forge | rewritten | 99 |
@@ -569,13 +570,13 @@ operator-ratified new cap — never a silent raise.
 | skills/pre-impl-interview/SKILL.md | factory | verbatim | 39 |
 | skills/preflight-fix/SKILL.md | projects | verbatim | 72 |
 | skills/project-brain-builder/SKILL.md | knowledge | verbatim | 103 |
-| skills/project-manager/SKILL.md | factory | verbatim | 241 |
+| skills/project-manager/SKILL.md | factory | verbatim | 250 |
 | skills/project-scoped-review/SKILL.md | projects | verbatim | 214 |
 | skills/reflector/SKILL.md | factory | verbatim | 181 |
 | skills/release-finalizer/SKILL.md | flows | verbatim | 91 |
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
 | packages/agents/index.ts | agents | verbatim | 133 |
-| packages/contracts/index.ts | contracts | verbatim | 275 |
+| packages/contracts/index.ts | contracts | verbatim | 270 |
 | packages/contracts/project-readiness.ts | contracts | rewritten | 61 |
 | packages/contracts/awaiting-kickoff.ts | contracts | rewritten | 95 **New file, forge-mfv5.1.25:** `isAwaitingKickoff`, the one Kickoff-gate rule. |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 105 |

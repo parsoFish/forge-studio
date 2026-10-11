@@ -1,0 +1,96 @@
+---
+work_item_id: WI-9b
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-8
+  - WI-3
+  - WI-9a
+domain: structure
+acceptance_criteria:
+  - given: "schemas/teams.schema.json and config/teams.yaml exist"
+    when: "test_teams_yaml_validates_against_schema runs"
+    then: "passes — config/teams.yaml conforms to the schema"
+  - given: "tests/fixtures/org-empty.json and the gw CLI installed"
+    when: "gw plan --fixture tests/fixtures/org-empty.json runs"
+    then: "exits 0 and stdout contains at least one '+ create' line for each declared resource type"
+  - given: "no TF team test files remain"
+    when: "find tests/ -name 'test_tf_teams_*.py' runs"
+    then: "returns no results (all TF team tests are deleted)"
+files_in_scope:
+  - tests/test_gw_teams.py
+creates:
+  - tests/test_gw_teams.py
+estimated_iterations: 2
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/test_gw_teams.py
+---
+
+# WI-9b: gw-native team tests (replaces deleted TF team tests)
+
+Target: `tests/test_gw_teams.py` — replacement tests for the deleted
+`test_tf_teams_structure.py`, `test_tf_teams_validate.py`, `test_tf_teams_plan.py`.
+Tests are credential-free (no GW_* needed).
+
+## tests/test_gw_teams.py
+
+```python
+"""
+Replacement for the deleted TF team test suite.
+Validates config/teams.yaml against its JSON schema, and tests that
+gw plan --fixture runs cleanly credential-free.
+"""
+import json
+import pathlib
+import subprocess
+import sys
+
+import jsonschema
+import yaml
+
+ROOT = pathlib.Path(__file__).parent.parent
+
+
+def test_teams_yaml_validates_against_schema():
+    """config/teams.yaml must satisfy schemas/teams.schema.json."""
+    schema = json.loads((ROOT / "schemas" / "teams.schema.json").read_text())
+    data = yaml.safe_load((ROOT / "config" / "teams.yaml").read_text())
+    jsonschema.validate(data, schema)  # raises ValidationError if invalid
+
+
+def test_gw_plan_fixture_exits_zero():
+    """gw plan --fixture tests/fixtures/org-empty.json exits 0 with no network calls."""
+    result = subprocess.run(
+        [sys.executable, "-m", "gitweave.cli",
+         "plan", "--fixture", str(ROOT / "tests" / "fixtures" / "org-empty.json")],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    assert result.returncode == 0, (
+        f"gw plan --fixture exited {result.returncode}:\n"
+        f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    )
+    # Must print at least one creation line for declared resources
+    assert "+ create" in result.stdout or "create" in result.stdout.lower(), (
+        f"Expected creation lines in output but got:\n{result.stdout}"
+    )
+
+
+def test_no_tf_team_test_files_remain():
+    """All test_tf_teams_*.py files must be deleted by WI-9a."""
+    tf_tests = list((ROOT / "tests").glob("test_tf_teams_*.py"))
+    assert tf_tests == [], (
+        f"TF team test files still present: {[str(p) for p in tf_tests]}"
+    )
+```
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

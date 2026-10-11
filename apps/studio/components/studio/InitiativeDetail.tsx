@@ -97,6 +97,8 @@ export type InitiativeDetailProps = {
   onDepJump?: (initiativeId: string) => void;
   /** forge-nk1y.12: refetch the roadmap after a work item is added at the Kickoff gate. */
   onWorkItemAdded?: () => void | Promise<void>;
+  /** D-49: a FAILED initiative's recorded PM validation errors — present ⇒ Requeue runs the PM in repair mode. */
+  pmRepairErrors?: string[];
 };
 
 export function InitiativeDetail({
@@ -124,6 +126,7 @@ export function InitiativeDetail({
   onRecoveryAction,
   onDepJump,
   onWorkItemAdded,
+  pmRepairErrors,
   initialPendingRecovery = null,
 }: InitiativeDetailProps) {
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
@@ -387,6 +390,18 @@ export function InitiativeDetail({
                 Abandon
               </button>
             </span>
+          </div>
+
+          {/* D-49: say which Requeue this is before the operator presses it. */}
+          <div data-recovery-requeue-mode={pmRepairErrors?.length ? 'repair' : 'standard'} style={{ fontSize: 11, color: 'var(--dim)' }}>
+            {pmRepairErrors?.length ? (
+              <>
+                Requeue repairs the work-item set: the project manager is fed these {pmRepairErrors.length} recorded validation error(s); the approved plan is kept.
+                <ul style={{ margin: '4px 0 0', paddingLeft: 16, fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>
+                  {pmRepairErrors.map((e) => <li key={e} data-recovery-repair-error>{e}</li>)}
+                </ul>
+              </>
+            ) : 'Requeue re-runs the cycle, resuming preserved work where the failure allows.'}
           </div>
 
           {pendingAbandon && (

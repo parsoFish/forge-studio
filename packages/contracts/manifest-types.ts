@@ -108,6 +108,8 @@ export type InitiativeManifest = {
    * depends_on (which orders WIs within the initiative).
    */
   specs?: string[];
+  /** D-49: set-validation errors the PM's repair turns did not fix; Requeue feeds them back. */
+  pm_validation_errors?: string[];
   body: string;                // markdown initiative spec
   /** The change class (D-34): set by the architect, confirmed at the plan
    *  gate, inherited by every work item; it selects the gate profile. No default. */

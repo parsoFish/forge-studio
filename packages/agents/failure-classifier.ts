@@ -13,7 +13,8 @@ import {
   ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX,
   COST_CEILING_MESSAGE_PREFIX,
   OPERATOR_STOP_MESSAGE_PREFIX,
-  PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX,
+  PM_REPAIR_NEEDS_REPLAN_PREFIX,
+  PM_SET_VALIDATION_UNREPAIRED_PREFIX,
 } from '@forge/contracts';
 
 export type FailureKind = 'transient' | 'terminal';
@@ -40,11 +41,11 @@ export type FailureClassification = {
    */
   cleanBoundaryHalt: boolean;
   /**
-   * Row 157 (bead forge-8vfn.8.1.45, ruling 1873): set to `'plan'` for a
-   * PM-phase acceptance-gate violation that survived its one bounded revise
-   * turn — deterministic (never auto-retried, `kind: 'terminal'`) but a
-   * requeue's inference (`requeue-resume.ts`) resumes it at the plan
-   * (project-manager) node instead of wiping the worktree for nothing salvaged.
+   * D-49 (forge-mfv5.1.34): set to `'plan'` for PM set-validation errors
+   * that survived the bounded repair turns — deterministic (never
+   * auto-retried, `kind: 'terminal'`) but a requeue's inference
+   * (`requeue-resume.ts`) resumes it at the plan (project-manager) node, in
+   * repair mode, instead of wiping the worktree for a blind re-decompose.
    *
    * Row 122 (bead forge-8vfn.8.1.55): set to `'pr-open'` for a DNS/transient-
    * network failure at the review node's own PR-open call — `environment: true`,
@@ -335,10 +336,11 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // AbortController — the SAME "flow's own halt firing" shape as
   // costCeilingHit above, never a defect in the work.
   let operatorStopHit = false, operatorStopMessage = '';
-  // Row 157 (ruling 1873): the PM's own rejection summary, prefixed by the
-  // writer (project-manager.ts) when an acceptance-gate violation survived
-  // its one bounded revise turn — see the shared constant's own doc.
-  let pmAcceptanceGateUnresolved = false;
+  // D-49: the PM's own rejection summary, prefixed by the writer
+  // (project-manager.ts) when set-validation errors survived its bounded
+  // repair turns, or when a repair turn declared a re-plan — see the shared constants' docs.
+  let pmSetValidationUnrepaired = false;
+  let pmRepairNeedsReplan = false;
   // Row 159 (ruling 1891): the architect's own draft-manifest validation
   // failure, prefixed by the writer (architect-draft-repair.ts) when it
   // survived its one bounded repair turn — see the shared constant's own doc.
@@ -371,11 +373,15 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       operatorStopMessage = msg;
       ev(e);
     }
-    // Row 157: the wrapper `runProjectManager` throws ("project-manager phase
+    // D-49: the wrapper `runProjectManager` throws ("project-manager phase
     // failed: …") precedes the prefix, so this is `includes`, not `startsWith`
     // — the two above are unwrapped throws and anchor at position 0.
-    if (e.event_type === 'error' && msg.includes(PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX)) {
-      pmAcceptanceGateUnresolved = true;
+    if (e.event_type === 'error' && msg.includes(PM_SET_VALIDATION_UNREPAIRED_PREFIX)) {
+      pmSetValidationUnrepaired = true;
+      ev(e);
+    }
+    if (e.event_type === 'error' && msg.includes(PM_REPAIR_NEEDS_REPLAN_PREFIX)) {
+      pmRepairNeedsReplan = true;
       ev(e);
     }
     // Row 159: the architect phase's own thrown message (agent-dispatch-cmd.ts's
@@ -592,6 +598,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // shielding per-item errors and stops shielding coupling; when it shields,
     // defer to the ordinary chain so the environment-first rules still get
     // their say and the transient reason stays accurate.
+    // D-49: checked BEFORE every other PM signal — the repair turns already
+    // ran, the errors are recorded in the manifest, and the end event's
+    // `set_errors` would otherwise read as pmInvalidWorkItems (no resume
+    // point), so Requeue would re-decompose blind (gitweave I2, 2026-10-11).
+    if (pmRepairNeedsReplan) return T('terminal', "a PM repair turn declared that an error needs the plan changed — only the architect can fix it; never auto re-planned. Read the declared reason in the project-manager error event, then revise the initiative through the architect (Abandon + a new idea, or a send-back).", evidence);
+    if (pmSetValidationUnrepaired) return T('terminal', "PM's set-validation errors survived its bounded repair turns — deterministic, so no auto-retry. The errors are recorded in the manifest; Requeue resumes at the plan node in repair mode, feeding them to a repair turn (the approved plan is kept).", evidence, false, false, 'plan');
     if (pmPartialUsable && !pmHiddenCoupling) return null;
     if (pmEmptyDecomposition) return T('terminal', 'PM emitted zero work items — the initiative body may have no decomposable ACs or the PM ignored them entirely; amend the initiative body and re-queue', evidence);
     if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
@@ -608,18 +620,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // see it.
     if (pmHiddenCoupling) return T('terminal', 'PM emitted overlapping WIs (hidden coupling) — deterministic: the same decomposition re-runs the same violation, so no auto-retry. Fix the decomposition (add the missing depends_on edge, or merge the WIs) and re-dispatch', evidence);
     if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see `set_errors` / the per-item errors on the project-manager error event) and re-dispatch', evidence);
-    // Row 157 (ruling 1873): the acceptance-gate violation survived its one
-    // bounded revise turn — deterministic (a fresh PM pass reasons from the
-    // same manifest + class profile), but well-understood: never "examine
-    // events.jsonl manually", resumable at the plan (project-manager) node.
-    if (pmAcceptanceGateUnresolved) {
-      const why =
-        "PM's work items still miss an acceptance requirement (no acceptance work item, or an " +
-        'initiative acceptance criterion no quality_gate_cmd carries) after its one bounded revise ' +
-        'turn — deterministic: the same manifest, class profile and acceptance-gate config re-derive ' +
-        'the same requirement, so no auto-retry. Resume from the plan node to re-decompose.';
-      return T('terminal', why, evidence, false, false, 'plan');
-    }
     // Row 159 (ruling 1891): a draft-manifest validation error that survived
     // the architect's one bounded repair turn — deterministic (the same
     // draft content re-derives the same validation error), never

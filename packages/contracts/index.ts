@@ -254,15 +254,10 @@ export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review' | 'awaiting
  */
 export const COST_CEILING_MESSAGE_PREFIX = 'cost-ceiling:' as const;
 export const OPERATOR_STOP_MESSAGE_PREFIX = 'operator-stop:' as const;
-/**
- * Row 157 (bead forge-8vfn.8.1.45, ruling 1873): the project-manager phase
- * (`packages/stations/phases/project-manager.ts`) prefixes its rejection
- * summary with this literal when an acceptance-gate violation (D-34
- * decision 2) survives the ONE bounded revise turn — `failure-classifier.ts`
- * scans for it to classify the failure as PM-phase, deterministic and
- * resumable from the plan node, instead of "could not be classified".
- */
-export const PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX = 'pm-acceptance-gate-unresolved:' as const;
+/** D-49: `project-manager.ts` prefixes its rejection summary when set-validation errors survive the repair turns;
+ *  `failure-classifier.ts` resumes it at the plan node (repair mode). NEEDS_REPLAN: terminal, never resumed. */
+export const PM_SET_VALIDATION_UNREPAIRED_PREFIX = 'pm-set-validation-unrepaired:' as const;
+export const PM_REPAIR_NEEDS_REPLAN_PREFIX = 'pm-repair-needs-replan:' as const;
 /**
  * Row 159 (bead forge-8vfn.8.1.47, ruling 1891): the architect runner
  * (`packages/sessions/kinds/architect-draft-repair.ts`) prefixes its
@@ -270,6 +265,6 @@ export const PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX = 'pm-acceptance-gate-unresolv
  * error (D-34 `requireDraftAcceptanceCriteria` / `requireChangeClass`,
  * `architect-manifest.ts`) survives the ONE bounded repair turn —
  * `failure-classifier.ts` scans an `architect`-phase error event for it, the
- * same convention as `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` above.
+ * same convention as `PM_SET_VALIDATION_UNREPAIRED_PREFIX` above.
  */
 export const ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX = 'architect-draft-manifest-unresolved:' as const;

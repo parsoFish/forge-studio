@@ -1,0 +1,149 @@
+---
+work_item_id: WI-12
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on:
+  - WI-8
+domain: acceptance
+acceptance_criteria:
+  - given: "GW_* set and the throwaway org after a gw apply run"
+    when: "gw apply --json runs twice in sequence"
+    then: "both runs exit 0 and their JSON output is identical after stripping id, node_id, created_at, updated_at keys"
+  - given: "the throwaway org after a gw apply run with GW_* set"
+    when: "gw reset runs twice in sequence"
+    then: "both runs exit 0; the second run prints 'Nothing changed' and no resources matching FORGE_RESOURCE_PREFIX remain"
+  - given: "tests/fixtures/org-empty.json exists and GW_* irrelevant (fixture mode)"
+    when: "gw plan --fixture tests/fixtures/org-empty.json runs"
+    then: "exits 0 and stdout contains + create lines for each declared resource type with zero network calls"
+files_in_scope:
+  - tests/acceptance/__init__.py
+  - tests/acceptance/test_gw_workflow.py
+creates:
+  - tests/acceptance/__init__.py
+  - tests/acceptance/test_gw_workflow.py
+estimated_iterations: 4
+quality_gate_cmd:
+  - python3
+  - -m
+  - pytest
+  - tests/acceptance/test_gw_workflow.py
+---
+
+# WI-12: Acceptance tests (live: apply idempotency + reset idempotency)
+
+Target: `tests/acceptance/test_gw_workflow.py` — live acceptance tests that run against
+the throwaway org. Requires `GW_ORG`, `GW_APP_ID`, `GW_APP_INSTALLATION_ID`,
+`GW_APP_PRIVATE_KEY_PATH` (forge checks `requiresEnv` before running the gate).
+
+## tests/acceptance/__init__.py
+
+Empty file (marks the directory as a Python package).
+
+## tests/acceptance/test_gw_workflow.py
+
+```python
+"""
+Live acceptance tests for gw plan/apply/reset.
+Requires: GW_ORG, GW_APP_ID, GW_APP_INSTALLATION_ID, GW_APP_PRIVATE_KEY_PATH,
+          FORGE_RESOURCE_PREFIX (the org+prefix are throwaway / forge-managed only).
+
+All tests run against the real GitHub API.
+"""
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
+import pytest
+
+ROOT = pathlib.Path(__file__).parent.parent.parent
+
+REQUIRED = ["GW_ORG", "GW_APP_ID", "GW_APP_INSTALLATION_ID",
+            "GW_APP_PRIVATE_KEY_PATH", "FORGE_RESOURCE_PREFIX"]
+
+missing = [v for v in REQUIRED if not os.environ.get(v)]
+if missing:
+    pytest.skip(
+        f"Skipping acceptance tests: missing env vars: {', '.join(missing)}",
+        allow_module_level=True,
+    )
+
+
+def _run_gw(*args) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-m", "gitweave.cli", *args],
+        capture_output=True, text=True, cwd=str(ROOT),
+    )
+
+
+def _strip_volatile(d):
+    """Recursively remove volatile keys from a JSON-serialisable structure."""
+    VOLATILE = {"id", "node_id", "created_at", "updated_at"}
+    if isinstance(d, dict):
+        return {k: _strip_volatile(v) for k, v in d.items() if k not in VOLATILE}
+    if isinstance(d, list):
+        return [_strip_volatile(i) for i in d]
+    return d
+
+
+class TestApplyIdempotency:
+    def test_apply_json_twice_identical_output(self):
+        """gw apply --json twice → same JSON after stripping volatile keys."""
+        r1 = _run_gw("apply", "--json")
+        assert r1.returncode == 0, f"First apply failed:\n{r1.stderr}"
+
+        r2 = _run_gw("apply", "--json")
+        assert r2.returncode == 0, f"Second apply failed:\n{r2.stderr}"
+
+        out1 = _strip_volatile(json.loads(r1.stdout))
+        out2 = _strip_volatile(json.loads(r2.stdout))
+        assert out1 == out2, (
+            "apply --json outputs differ after stripping volatile keys:\n"
+            f"First:  {json.dumps(out1, indent=2)}\n"
+            f"Second: {json.dumps(out2, indent=2)}"
+        )
+
+
+class TestResetIdempotency:
+    def setup_method(self):
+        """Ensure resources exist before reset test."""
+        _run_gw("apply")  # populate the org
+
+    def test_reset_twice_second_nothing_changed(self):
+        """gw reset twice → second run exits 0 and reports nothing changed."""
+        r1 = _run_gw("reset")
+        assert r1.returncode == 0, f"First reset failed:\n{r1.stderr}"
+
+        r2 = _run_gw("reset")
+        assert r2.returncode == 0, f"Second reset failed:\n{r2.stderr}"
+        assert "Nothing changed" in r2.stdout, (
+            f"Second reset should report 'Nothing changed' but got:\n{r2.stdout}"
+        )
+
+
+class TestPlanFixtureMode:
+    def test_plan_fixture_exits_zero_with_create_lines(self):
+        """gw plan --fixture exits 0 and shows creation lines (no network)."""
+        fixture = ROOT / "tests" / "fixtures" / "org-empty.json"
+        r = _run_gw("plan", "--fixture", str(fixture))
+        assert r.returncode == 0, f"gw plan --fixture failed:\n{r.stderr}"
+        assert "+ create" in r.stdout or "create" in r.stdout.lower(), (
+            f"Expected creation lines but got:\n{r.stdout}"
+        )
+```
+
+### Teardown note
+Each acceptance test class should clean up after itself with `_run_gw("reset")` in a
+`teardown_method` to leave the throwaway org clean. Add this to avoid test pollution:
+```python
+def teardown_method(self):
+    _run_gw("reset")
+```
+
+---
+
+Brain themes consulted:
+- `brain/projects/gitweave/profile.md`
+- `brain/cycles/themes/spec-driven-work-items.md`
+- `brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`

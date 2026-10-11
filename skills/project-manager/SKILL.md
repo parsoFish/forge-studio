@@ -231,6 +231,15 @@ graph TD
 
    **Brain-cite sanity:** "Brain themes consulted" footer must reference files you actually `Read`-ed.
 
+## Repair turn
+
+When your prompt is headed `# Repair turn n of N`, your previous set failed the orchestrator's validation. The prompt lists every error verbatim and where the previous set now lives; `.forge/work-items/` is empty.
+
+1. Read the previous set from the directory the prompt names.
+2. Write a **full replacement set** into `.forge/work-items/`: every WI the set still needs, `_graph.md` and `_decomposition-state.md` — a WI you do not rewrite is gone. Carry valid, unrelated WIs forward unchanged.
+3. Fix each listed error by name: a D-18 `creates` bound → split the WI (keep its id for the first half so dependants still resolve; chain the halves — "Splitting a WI"); an uncarried acceptance criterion → add or edit a WI whose `quality_gate_cmd` runs that command as written; any other error → the rule it names in this file.
+4. If an error can only be fixed by changing the plan itself (an acceptance criterion no work item can carry, a scope the initiative never declared), do not guess: write `.forge/work-items/_needs-replan.md` naming the error and why, and stop. The orchestrator stops and hands it to the operator.
+
 ## Constraints
 
 - **Self-sufficient specs.** A WI must contain everything the developer loop needs; the dev-loop never asks the PM for clarification.

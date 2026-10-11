@@ -109,6 +109,8 @@ export type RoadmapInitiative = {
    * the canvas's projected zone with an honest "no date" marker instead.
    */
   completedAt?: string;
+  /** D-49: a FAILED initiative's recorded project-manager validation errors — Requeue repairs the set on them. */
+  pmRepairErrors?: string[];
   /**
    * M7 findings row 59: forge-architect and forge-develop both terminate at
    * the SAME status word (`ready-for-review`), so `status` alone cannot

@@ -212,8 +212,8 @@ export function decideRequeueResume(args: {
    */
   cleanBoundaryHalt?: boolean;
   /**
-   * Row 157 (ruling 1873): the classifier's own `resumeFrom:'plan'` — a
-   * PM-phase acceptance-gate failure. Independent of the WI-salvage
+   * D-49: the classifier's own `resumeFrom:'plan'` — PM set-validation
+   * errors that survived the bounded repair turns. Independent of the WI-salvage
    * reasoning below: the PM failed before any per-WI work ran, so there is
    * nothing to check worktree/branch state for — the plan node just re-runs.
    */
@@ -234,8 +234,8 @@ export function decideRequeueResume(args: {
 }): RequeueResumeDecision {
   if (args.resumeFromPlan) {
     const reason =
-      'prior failure was a PM-phase acceptance-gate violation, deterministic after its one ' +
-      'bounded revise turn — resume at the plan node to re-decompose';
+      "prior failure was the PM's set validation, unrepaired after its bounded repair turns (D-49) — " +
+      'resume at the plan node in repair mode on the errors the manifest records';
     return { resume: true, resume_from: 'plan', reason };
   }
   if ((args.pendingFixWorkItems ?? 0) > 0 && args.worktreePresent && args.branchHasWork) {

@@ -714,8 +714,13 @@ packages/stations/phases/pm-rejected-set.ts mkdirSync 1
 packages/stations/phases/pm-rejected-set.ts readdirSync 1
 packages/stations/phases/pm-rejected-set.ts renameSync 1
 packages/stations/phases/pm-rejected-set.ts writeFileSync 1
-packages/stations/phases/project-manager.ts existsSync 1
+packages/stations/phases/pm-set-repair.ts existsSync 2
+packages/stations/phases/pm-set-repair.ts readdirSync 1
+packages/stations/phases/pm-set-repair.ts readFileSync 1
+packages/stations/phases/project-manager.ts existsSync 2
+packages/stations/phases/project-manager.ts readdirSync 1
 packages/stations/phases/project-manager.ts readFileSync 2
+packages/stations/phases/project-manager.ts renameSync 1
 packages/stations/phases/project-manager.ts rmSync 1
 packages/stations/phases/reflector-brain-writes.ts existsSync 2
 packages/stations/phases/reflector-brain-writes.ts readdirSync 1
