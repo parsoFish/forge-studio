@@ -93,6 +93,10 @@ async function fetchCycleCostMap(cycles: Cycle[], prev: Record<string, number | 
   return { ...reused, ...Object.fromEntries(entries) };
 }
 
+// forge-nk1y.16 (D-46): the cycle ledger pages — it never sets the page height.
+const PROJECT_LEDGER_PAGE_SIZE = 10;
+const GROUP_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' };
+
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
@@ -530,29 +534,37 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       {tab === 'editor' && (
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           <div style={{ flex: 1, padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
-            <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
-            <Instructions project={id} value={instructions} source={instructionsSource} onChange={(v) => { setInstructions(v); markDirty(); }} />
-            <DemoTimeline
-              project={id}
-              steps={demoSteps}
-              hasLockedDemo={project?.hasLockedDemo ?? false}
-              onChange={(s) => { setDemoSteps(s); markDirty(); }}
-            />
+            {/* forge-nk1y.16 (D-46 §3): five groups wrap the data-section blocks. */}
+            <section data-page-section="brief" aria-label="Brief" style={GROUP_STYLE}>
+              <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
+              <Instructions project={id} value={instructions} source={instructionsSource} onChange={(v) => { setInstructions(v); markDirty(); }} />
+            </section>
+            <section data-page-section="demo" aria-label="Demo" style={GROUP_STYLE}>
+              <DemoTimeline
+                project={id}
+                steps={demoSteps}
+                hasLockedDemo={project?.hasLockedDemo ?? false}
+                onChange={(s) => { setDemoSteps(s); markDirty(); }}
+              />
+            </section>
             {/* W8-C3 (projects-06): the picker gets the project's OWN skills
                 (.forge/skills/<id>, derived per read by the bridge) alongside
                 the forge-wide catalog — without them a project-local skill
                 that is unbound can never be re-bound. */}
-            <SkillsBind
-              skills={skills}
-              onChange={(s) => { setSkills(s); markDirty(); }}
-              catalog={skillItems}
-              localSkills={project?.localSkills ?? []}
-            />
+            <section data-page-section="skills-knowledge" aria-label="Skills and knowledge" style={GROUP_STYLE}>
+              <SkillsBind
+                skills={skills}
+                onChange={(s) => { setSkills(s); markDirty(); }}
+                catalog={skillItems}
+                localSkills={project?.localSkills ?? []}
+              />
+              <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); setKbTouched(true); markDirty(); }} />
+            </section>
 
             {/* R4-12-F2: permanent cycle ledger — the completed-cycle dig-in.
                 Feeds this project's RAW cycles through <ProjectCycleLedger>'s
                 shared deriveProjectCycleLedgerRows → HistoryLedger. */}
-            <section data-section="project-cycle-ledger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <section data-page-section="cycle-ledger" data-section="project-cycle-ledger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>
                   Cycle Ledger
@@ -583,14 +595,15 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
                   </Link>
                 )}
               </div>
-              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} costByCycleId={costByCycleId} />
+              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} costByCycleId={costByCycleId} pageSize={PROJECT_LEDGER_PAGE_SIZE} />
             </section>
           </div>
 
-          <aside style={{
+          {/* forge-nk1y.16: the contract rail scrolls inside, never sets page height. */}
+          <aside data-page-section="contract" aria-label="Contract" style={{
  width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
             padding: '18px 18px 64px', display: 'flex', flexDirection: 'column',
-            gap: 16, overflowY: 'auto', background: 'var(--bg-2)',
+            gap: 16, position: 'sticky', top: 0, alignSelf: 'flex-start', maxHeight: '100vh', overflowY: 'auto', background: 'var(--bg-2)',
           }}>
             <div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>Card Preview</div>
@@ -619,8 +632,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
                 </code>
               </div>
             )}
-
-            <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); setKbTouched(true); markDirty(); }} />
 
             <ContractReadiness northStar={northStar} instructions={instructions} demoSteps={demoSteps} skills={skills} kb={kb} preflight={preflight} />
 
@@ -659,9 +670,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             {/* W7-B6 (projects-19): this project's open sessions with resume
                 links — the page no longer only mints new ones. */}
             <OpenSessionsPanel projectId={id} />
-            {/* W7-B6 (orch-02 / projects-20): the bottom "Run a flow" select
-                (UsedByFlows) is REMOVED — kick-off now lives in the
-                above-the-fold Start-work action group under the tab bar. */}
           </aside>
         </div>
       )}
@@ -679,14 +687,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     </main>
   );
 }
-
-// OnboardWithAgent (R4-02-F1, repointed R4-17) moved to
-// components/studio/project-builder/OnboardWithAgent.tsx (W6-B14) — a
-// page-route file can only export the reserved Next.js route symbols, so a
-// component this task needs a standalone render-pin test for has to live
-// outside this file (mirrors RunPanel.tsx's own D12 extraction).
-
-// ContractPanelMount (R4-12-F1) moved to components/studio/ContractPanelMount.tsx (row 174).
 
 // ---------------------------------------------------------------------------
 // NewProjectSurface — `/projects/new`. ONE `main[data-page]` over BOTH doors,

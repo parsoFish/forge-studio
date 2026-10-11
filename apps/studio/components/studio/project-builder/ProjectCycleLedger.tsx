@@ -36,8 +36,11 @@ export type ProjectCycleLedgerProps = {
   /** W7-B6 (projects-27): per-cycle totals from `GET /api/cost/<cycleId>`
    *  (fetched by the page). Absent entries render the honest em dash. */
   costByCycleId?: Record<string, number | null>;
+  /** forge-nk1y.16: rows per page (`ledger-show-more` reveals the next) — the
+   *  ledger never sets the page height (dev/UI-CONSTRAINTS.md §3). */
+  pageSize?: number;
 };
 
-export function ProjectCycleLedger({ cycles, nowMs, costByCycleId }: ProjectCycleLedgerProps): JSX.Element {
-  return <HistoryLedger rows={deriveProjectCycleLedgerRows(cycles, costByCycleId)} nowMs={nowMs} />;
+export function ProjectCycleLedger({ cycles, nowMs, costByCycleId, pageSize }: ProjectCycleLedgerProps): JSX.Element {
+  return <HistoryLedger rows={deriveProjectCycleLedgerRows(cycles, costByCycleId)} nowMs={nowMs} pageSize={pageSize} />;
 }
