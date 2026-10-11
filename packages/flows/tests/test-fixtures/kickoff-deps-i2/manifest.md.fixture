@@ -1,0 +1,77 @@
+---
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+project: gitweave
+project_repo_path: PROJECT_REPO_PATH
+created_at: '2026-10-11T00:55:44.289Z'
+iteration_budget: 14
+cost_budget_usd: 22
+phase: pending
+origin: architect
+class: code
+acceptance_criteria:
+  - given: >-
+      no credentials and `tests/fixtures/org-empty.json` exists in the
+      repository, with GW_* unset
+    when: '`gw plan --fixture tests/fixtures/org-empty.json` runs'
+    then: >-
+      exits 0 and prints the full set of creation lines for the declared
+      standard (org settings, teams, repos, rulesets) with no network calls made
+  - given: >-
+      the throwaway org and GW_APP_ID, GW_APP_INSTALLATION_ID,
+      GW_APP_PRIVATE_KEY_PATH, GW_ORG are set
+    when: '`gw apply --json` runs twice in sequence'
+    then: >-
+      both runs exit 0 and their JSON output is identical after stripping
+      volatile keys: `id`, `node_id`, `created_at`, `updated_at`
+  - given: the throwaway org after a `gw apply` run with GW_* set
+    when: '`gw reset` runs twice in sequence'
+    then: >-
+      the org holds no resources matching FORGE_RESOURCE_PREFIX, org settings
+      equal GitHub safe defaults (`description=""`,
+      `default_repository_permission="read"`,
+      `web_commit_signoff_required=false`,
+      `members_can_create_repositories=true`), and the second run exits 0
+      reporting nothing changed
+  - given: GW_ORG is unset
+    when: '`gw plan` runs without `--fixture`'
+    then: exits non-zero and the error message names `GW_ORG`
+  - given: the repository after I2 merges
+    when: it is read and `python3 -m pytest tests/` runs
+    then: >-
+      `infra/` and every Terraform file and workflow are absent, and pytest
+      reports zero failures
+  - given: the merged change on main with GW_* secrets configured in Actions
+    when: the GitWeave Apply workflow runs
+    then: it completes green
+title: 'I2 — Apply engine, Terraform retired'
+worktree_path: WORKTREE_PATH
+cycle_id: 2026-10-11T02-16-05_INIT-2026-10-11-i2-apply-engine-terraform-retired
+flow_id: forge-architect
+architect_session_id: 2026-10-10T13-24-03-6d0959e2
+architect_cost_usd: 6.0711019
+architect_duration_ms: 46321687
+previous_failure_modes:
+  - requeued-from-failed-2026-10-11
+specs:
+  - WI-1
+  - WI-10
+  - WI-11
+  - WI-12
+  - WI-2
+  - WI-3a
+  - WI-3b
+  - WI-4
+  - WI-5a
+  - WI-5b
+  - WI-6
+  - WI-7
+  - WI-8
+  - WI-9a
+  - WI-9b
+  - WI-13
+  - WI-14
+---
+
+# I2 — Apply engine, Terraform retired
+
+Body trimmed for the fixture (forge-mfv5.1.36); the frontmatter is verbatim but for the two path placeholders.

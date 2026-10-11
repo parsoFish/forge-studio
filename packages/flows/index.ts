@@ -60,7 +60,7 @@ export { type MergeConflictDetail, type MergeQueue, createMergeQueue, mergeAndPu
 export { type DispatchOutcome, runConcurrentDispatch } from './wi-dispatch-scheduler.ts';
 export { reviewCapExhaustedPath, writeMergeGateConfigErrorMarker, writeReviewCapExhaustedMarker } from './fix-work-items.ts';
 export { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
-export { addKickoffWorkItem } from './kickoff-add-work-item.ts';
+export { addKickoffWorkItem, editKickoffWorkItemDeps } from './kickoff-add-work-item.ts';
 
 // ---- Triggers and staged flow runs -----------------------------------------
 export { TRIGGER_KIND_IDS, fireAgentCompleteTriggers } from './flow-trigger.ts';

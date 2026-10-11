@@ -64,7 +64,7 @@ test('at kickoff: a plan WI lands in the worktree + snapshot, the manifest gains
   const wi = parseWorkItem(readFileSync(join(wiDir, 'WI-6.md'), 'utf8'));
   assert.equal(wi.origin, undefined, 'a plan WI, never a fix WI (the D-20 drain keys on origin)');
   assert.equal(wi.status, 'pending');
-  assert.deepEqual(wi.depends_on, []);
+  assert.deepEqual(wi.depends_on, ['WI-5'], 'forge-mfv5.1.36: no dependsOn → the plan\'s leaf (WI-1…WI-5 is a chain)');
   assert.deepEqual(wi.acceptance_criteria, SOURCE.acceptanceCriteria);
   assert.deepEqual(wi.quality_gate_cmd, RETIRE_GATE);
   assert.deepEqual(wi.files_in_scope, SOURCE.filesInScope);

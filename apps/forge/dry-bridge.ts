@@ -82,7 +82,7 @@ export type RouteClassification = {
   // were re-keyed to this method in M4-library's route carve (T1 ruling 28),
   // and that canonicalization is gone with them. A delete is declared here as
   // DELETE; no route string encodes a method.
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | '*';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | '*'; // PATCH: forge-mfv5.1.36's kickoff dependency edit
   /** Route path. `:id`-style segments are literal placeholders (documentation,
    *  not a router pattern). A `(op=...)` suffix distinguishes routes that
    *  multiplex behavior over a body field (e.g. KB maintenance). `*` for the
@@ -210,6 +210,7 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // ---- exempt-local: no RouteEntry (still if-chain arms) -------------------
   { method: 'POST', route: '/api/develop/start', classification: 'exempt-local', reason: 'manifest move only' },
   { method: 'POST', route: '/api/kickoff/work-items', classification: 'exempt-local', reason: 'forge-nk1y.12: writes one plan work item + the manifest specs at the Kickoff gate; no spawn, no network' },
+  { method: 'PATCH', route: '/api/kickoff/work-items/:id', classification: 'exempt-local', reason: 'forge-mfv5.1.36: rewrites one work item\'s depends_on at the Kickoff gate (worktree + snapshot); no spawn, no network' },
   { method: 'POST', route: '/api/initiatives/:id/plan', classification: 'exempt-local', reason: 'plan enqueue: manifest move only (scheduler decomposes, no in-request spawn)' },
   { method: 'POST', route: '/api/flows/:id/run', classification: 'exempt-local', reason: 'W7-A3 per-flow enqueue: manifest move only (enqueueFlowRun); the scheduler claims it later, no in-request spawn' },
   { method: 'POST', route: '/api/halt', classification: 'exempt-local', reason: 'writes the one fixed _queue/halt.json record; no spawn, no network (D-03)' },

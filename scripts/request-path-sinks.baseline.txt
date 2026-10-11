@@ -163,9 +163,9 @@ packages/flows/flow-run-requests.ts rmSync 5
 packages/flows/flow-run-requests.ts writeFileSync 1
 packages/flows/flow-runner.ts readFileSync 1
 packages/flows/forge-metrics.ts execFileSync 6
-packages/flows/forge-metrics.ts existsSync 15
-packages/flows/forge-metrics.ts readdirSync 3
-packages/flows/forge-metrics.ts readFileSync 9
+packages/flows/forge-metrics.ts existsSync 14
+packages/flows/forge-metrics.ts readdirSync 2
+packages/flows/forge-metrics.ts readFileSync 8
 packages/flows/forge-metrics.ts statSync 1
 packages/flows/forge-requeue.ts execFileSync 4
 packages/flows/forge-requeue.ts existsSync 6

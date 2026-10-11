@@ -1,0 +1,22 @@
+---
+work_item_id: WI-14
+initiative_id: INIT-2026-10-11-i2-apply-engine-terraform-retired
+status: pending
+depends_on: []
+acceptance_criteria:
+  - given: the repository after I2 (infra/ removed)
+    when: '`python3 -m pytest tests/test_docs_no_terraform_tokens.py` runs'
+    then: >-
+      no file under docs/ and neither .github/copilot-context.md nor README.md
+      contains the tokens terraform, infra/ or TF_ (case-insensitive)
+files_in_scope:
+  - tests/test_docs_no_terraform_tokens.py .github/copilot-context.md
+estimated_iterations: 2
+quality_gate_cmd:
+  - python3
+  - '-m'
+  - pytest
+  - tests/test_docs_no_terraform_tokens.py
+---
+
+No Terraform references left in agent context or docs

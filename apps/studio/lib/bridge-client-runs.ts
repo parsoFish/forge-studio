@@ -6,6 +6,7 @@
  * run + gate write endpoints.
  */
 import { bridgeFetch, bridgePost, bridgeReadOr404 } from './bridge-client-core.ts';
+import { bridgeErrorMessage } from './bridge-result.ts';
 import type { WorkItemSource } from './work-item-authoring.ts';
 
 export type AcceptanceCriterion = { given: string; when: string; then: string };
@@ -95,7 +96,8 @@ export async function startDevelopment(
 
 // ---- Kickoff gate: add a plan work item (forge-nk1y.12, D-48) -------------
 
-export type KickoffWorkItemInput = { initiativeId: string } & WorkItemSource;
+/** `dependsOn` absent = the server's default, the plan's leaf work items (forge-mfv5.1.36). */
+export type KickoffWorkItemInput = { initiativeId: string; dependsOn?: string[] } & WorkItemSource;
 export type AddKickoffWorkItemResult =
   | { ok: true; workItemId: string; uncoveredAcceptanceCriteria: string[] }
   | { ok: false; error: string };
@@ -107,6 +109,25 @@ export async function addKickoffWorkItem(input: KickoffWorkItemInput): Promise<A
   if (!r.ok || typeof r.data?.workItemId !== 'string') return { ok: false, error: r.error ?? 'the work item was not added' };
   const uncovered = r.data.uncoveredAcceptanceCriteria;
   return { ok: true, workItemId: r.data.workItemId, uncoveredAcceptanceCriteria: Array.isArray(uncovered) ? uncovered.map(String) : [] };
+}
+
+export type EditKickoffWorkItemDepsInput = { initiativeId: string; workItemId: string; dependsOn: string[] };
+export type EditKickoffWorkItemDepsResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
+
+/** forge-mfv5.1.36: set one work item's dependencies at the Kickoff gate. A refusal (400/404/409) carries the server's detail. */
+export async function editKickoffWorkItemDeps(input: EditKickoffWorkItemDepsInput): Promise<EditKickoffWorkItemDepsResult> {
+  try {
+    const res = await bridgeFetch(`/api/kickoff/work-items/${encodeURIComponent(input.workItemId)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ initiativeId: input.initiativeId, dependsOn: input.dependsOn }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok || !Array.isArray(data.dependsOn)) return { ok: false, error: bridgeErrorMessage(res.status, data) };
+    return { ok: true, workItemId: String(data.workItemId), dependsOn: data.dependsOn.map(String) };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------
