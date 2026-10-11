@@ -13,7 +13,7 @@
  * `/api/forge-config/script` serves) or, when that has not run, through `/api/forge-config`
  * BEFORE the first bridge call.
  *
- * RUN: cd apps/studio && npx vitest run tests/integration/bridge-launched-port.test.ts
+ * RUN: npx vitest run apps/studio/tests/integration/bridge-launched-port.test.ts
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
