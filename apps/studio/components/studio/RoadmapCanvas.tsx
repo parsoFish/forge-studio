@@ -137,10 +137,9 @@ export type RoadmapCanvasProps = {
 
 const BAND_LABEL: Record<PendingBand, string> = {
   'done-no-date': 'done — date unknown',
-  'in-flight': 'in flight',
+  'in-flight': 'in flight', failed: 'failed',
   ready: 'ready — projected next',
-  'after-prerequisites': 'after prerequisites',
-  unplanned: 'unplanned',
+  'after-prerequisites': 'after prerequisites', unplanned: 'unplanned',
 };
 
 const BAND_TONE: Record<PendingBand, string> = {
@@ -148,7 +147,7 @@ const BAND_TONE: Record<PendingBand, string> = {
   // colour, carries the "we don't know when" distinction from the real
   // time-axis 'done' cards and from the 'ready' (upcoming) band.
   'done-no-date': STATUS_COLOR.complete,
-  'in-flight': STATUS_COLOR.active,
+  'in-flight': STATUS_COLOR.active, failed: STATUS_COLOR.failed,
   ready: STATUS_COLOR.complete,
   'after-prerequisites': STATUS_COLOR.attention,
   unplanned: STATUS_COLOR.idle,

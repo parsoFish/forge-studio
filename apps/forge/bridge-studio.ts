@@ -28,7 +28,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows';
-import { cachedListRuns } from '@forge/flows';
+import { cachedListRuns, recordedPmValidationErrors } from '@forge/flows';
 import { eventToNodeId } from '@forge/flows';
 import { listPlannedInitiatives } from '@forge/flows';
 import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
@@ -1015,7 +1015,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
         && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
-      ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' && manifest.pm_validation_errors ? { pmRepairErrors: manifest.pm_validation_errors } : {}), ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
+      ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' ? ((e) => (e.length > 0 ? { pmRepairErrors: e } : {}))(recordedPmValidationErrors(forgeRoot, manifest)) : {}), /* D-49 row 5: recorded or derived; read-only here, Requeue persists */ ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
       ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
   });

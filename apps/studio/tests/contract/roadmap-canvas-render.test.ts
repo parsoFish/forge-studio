@@ -48,7 +48,7 @@ const NOW_MS = Date.parse('2026-06-10T00:00:00.000Z');
 // initiatives / edge shape), PLUS a real `completedAt` on INIT-A so the
 // canvas has something on its time axis to assert against.
 //   INIT-A  (done, completedAt)  deps []            <- on the time axis; has runs
-//   INIT-B  (failed)             deps [A]           <- recoverable, pending band "in-flight"
+//   INIT-B  (failed)             deps [A]           <- recoverable, pending band "failed" (forge-mfv5.1.34 row 5)
 //   INIT-C  (pending, blocked)   deps [A, B]         <- planned, band "after-prerequisites"
 //   INIT-D  (pending, unplanned) deps []             <- band "unplanned"
 // ---------------------------------------------------------------------------
@@ -331,7 +331,8 @@ test('[W6-RV-2] AT6: a completedAt-carrying initiative renders a [data-day-colum
 test('[W6-RV-2] AT6: pending work (no completedAt) renders inside the hatched [data-projected-zone], banded by dependency-feasibility', () => {
   const html = render();
   expect(html).toContain('data-projected-zone');
-  expect(html).toContain('data-band="in-flight"'); // INIT-B: failed, no date yet
+  expect(html).toContain('data-band="failed"'); // INIT-B: failed — its own band, never "in flight"
+  expect(html).not.toContain('data-band="in-flight"');
   expect(html).toContain('data-band="after-prerequisites"'); // INIT-C: planned + blocked
   expect(html).toContain('data-band="unplanned"'); // INIT-D: no WI snapshot
 });

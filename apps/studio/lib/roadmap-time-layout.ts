@@ -80,11 +80,12 @@ export type DayCaption = { x: number; day: string; count: number };
  * before any genuinely-pending band) precisely because it already
  * happened; the canvas just can't say when.
  */
-export type PendingBand = 'done-no-date' | 'in-flight' | 'ready' | 'after-prerequisites' | 'unplanned';
+export type PendingBand = 'done-no-date' | 'in-flight' | 'failed' | 'ready' | 'after-prerequisites' | 'unplanned';
 
 export const PENDING_BAND_ORDER: readonly PendingBand[] = [
   'done-no-date',
   'in-flight',
+  'failed',
   'ready',
   'after-prerequisites',
   'unplanned',
@@ -212,7 +213,6 @@ export function computeGapWidth(diffDays: number): number {
 const ACTIVE_STATUSES: ReadonlySet<RoadmapInitiative['status']> = new Set([
   'in-flight',
   'ready-for-review',
-  'failed',
 ]);
 
 /** `done`/`merged` — genuinely finished, just missing a derivable
@@ -231,6 +231,8 @@ const DONE_STATUSES: ReadonlySet<RoadmapInitiative['status']> = new Set(['done',
 export function assignPendingBand(initiative: RoadmapInitiative): PendingBand {
   if (DONE_STATUSES.has(initiative.status)) return 'done-no-date';
   if (ACTIVE_STATUSES.has(initiative.status)) return 'in-flight';
+  // forge-mfv5.1.34 row 5: the card's own status — a FAILED initiative is not "in flight".
+  if (initiative.status === 'failed') return 'failed';
   if (initiative.workItems === undefined) return 'unplanned';
   return initiative.ready ? 'ready' : 'after-prerequisites';
 }

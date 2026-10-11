@@ -175,10 +175,10 @@ test('computeRoadmapTimeLayout: a sub-threshold gap (overnight) gets no chip', (
 // Pending-band assignment
 // ---------------------------------------------------------------------------
 
-test('assignPendingBand: an in-flight/gated/failed initiative always bands as in-flight', () => {
+test('assignPendingBand: an in-flight/gated initiative bands as in-flight; a FAILED one bands as failed, like its card (forge-mfv5.1.34 row 5)', () => {
   expect(assignPendingBand(init('A', { status: 'in-flight' }))).toBe('in-flight');
   expect(assignPendingBand(init('A', { status: 'ready-for-review' }))).toBe('in-flight');
-  expect(assignPendingBand(init('A', { status: 'failed' }))).toBe('in-flight');
+  expect(assignPendingBand(init('A', { status: 'failed' }))).toBe('failed');
 });
 
 test('assignPendingBand: unplanned (no WI snapshot) pending initiative bands as unplanned', () => {

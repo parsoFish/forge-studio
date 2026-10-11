@@ -44,7 +44,8 @@ import { FORGE_ROOT } from '@forge/kernel';
 import { getPaths } from './queue.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, serializeManifest } from './manifest.ts';
-import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, readPriorFailureSignal, type RequeueResumeDecision } from './requeue-resume.ts';
+import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, readPriorFailureSignal, recordedPmValidationErrors, type RequeueResumeDecision } from './requeue-resume.ts';
+import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
 
@@ -190,7 +191,12 @@ export function runRequeue(
   // else re-runs fresh from main — the pre-N7 behaviour).
   // forge-mfv5.1.27: pending compiled fix WIs win over the integrate override —
   // jumping to integrate would skip them — and resume develop on the kept branch.
-  const inferred = inferRequeueResume({ forgeRoot, cycleId: manifest.cycle_id, initiativeId, worktreePath, projectRepoPath });
+  // D-49 row 5: a pre-D-49 validation failure recorded no errors — derive them
+  // (named event) so this Requeue repairs instead of re-planning blind.
+  const pmErrors = recordedPmValidationErrors(forgeRoot, manifest);
+  const backfilled = !manifest.pm_validation_errors?.length && pmErrors.length > 0;
+  if (backfilled) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'pm-validation-errors-backfilled', { initiative_id: initiativeId, errors: pmErrors });
+  const inferred = inferRequeueResume({ forgeRoot, cycleId: manifest.cycle_id, initiativeId, worktreePath, projectRepoPath, pmValidationErrors: pmErrors.length > 0 });
   const fixRound = inferred.resume && inferred.resume_from === 'develop';
   const resumeDecision: RequeueResumeDecision =
     opts.resumeFromIntegrate && !priorFailure.cleanBoundaryHalt && !fixRound
@@ -213,6 +219,7 @@ export function runRequeue(
     ...manifest,
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
+    ...(backfilled ? { pm_validation_errors: pmErrors } : {}),
     // D-06: stamp the resume marker so the scheduler runs the cycle from the
     // preserved worktree — `integrate` re-enters at the post-develop `integrate` node
     // (successor develop flow, R4-10-F6); `pr-open` (row 122, bead forge-8vfn.8.1.55)
