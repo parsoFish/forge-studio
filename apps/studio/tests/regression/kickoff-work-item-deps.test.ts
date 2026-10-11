@@ -5,10 +5,11 @@
  *   - the add form lists the initiative's work items in natural id order as
  *     checkboxes (`data-field="kickoff-wi-dep-<id>"`), PRE-CHECKED with the
  *     plan's leaves, and submits the checked set as `dependsOn`;
- *   - "Edit dependencies" (`data-component="kickoff-edit-deps"`) picks a work
- *     item (`kickoff-deps-wi`), shows the others as checkboxes
- *     (`kickoff-dep-<id>`) checked with its current dependencies, and Save
- *     (`save-kickoff-deps`) PATCHes;
+ *   - "Edit work item" (`data-component="kickoff-edit-wi"`, forge-nk1y.32 folded
+ *     row 11's "Edit dependencies" into it) picks a work item
+ *     (`kickoff-edit-wi-id`), shows the others as checkboxes
+ *     (`kickoff-edit-dep-<id>`) checked with its current dependencies, and Save
+ *     (`save-kickoff-wi`) PATCHes — dependsOn only, for a plan work item;
  *   - both live inside the add `<details>`, which renders only at the gate.
  *
  * RUN: npx vitest run apps/studio/tests/regression/kickoff-work-item-deps.test.ts (from apps/studio)
@@ -20,14 +21,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 type AddResult = { ok: true; workItemId: string; uncoveredAcceptanceCriteria: string[] } | { ok: false; error: string };
-type EditInput = { initiativeId: string; workItemId: string; dependsOn: string[] };
+type EditInput = { initiativeId: string; workItemId: string; dependsOn?: string[] };
 type EditResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
 const addMock = vi.fn<(input: Record<string, unknown>) => Promise<AddResult>>();
 const editMock = vi.fn<(input: EditInput) => Promise<EditResult>>();
 
 vi.mock('@/lib/bridge-client', () => ({
   addKickoffWorkItem: (input: Record<string, unknown>) => addMock(input),
-  editKickoffWorkItemDeps: (input: EditInput) => editMock(input),
+  editKickoffWorkItem: (input: EditInput) => editMock(input),
 }));
 
 import { KickoffAddWorkItem } from '@/components/studio/KickoffAddWorkItem';
@@ -85,7 +86,7 @@ async function fillAll(): Promise<void> {
 }
 
 async function selectWi(id: string): Promise<void> {
-  const sel = q<HTMLSelectElement>('[data-field="kickoff-deps-wi"]');
+  const sel = q<HTMLSelectElement>('[data-field="kickoff-edit-wi-id"]');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, id);
     sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -119,37 +120,37 @@ test('add form with every box unchecked sends dependsOn: [] (a root, on purpose)
   expect(addMock.mock.calls[0]![0].dependsOn).toEqual([]);
 });
 
-// ---- edit dependencies ---------------------------------------------------------
+// ---- edit dependencies (the Edit work item control, plan work items) ---------------------------------------------------------
 
 test('edit: pick a WI, its current dependencies are checked, the others listed (never itself), Save PATCHes and refreshes', async () => {
   editMock.mockResolvedValue({ ok: true, workItemId: 'WI-13', dependsOn: ['WI-8', 'WI-10'] });
-  const panel = q('[data-component="kickoff-edit-deps"]');
+  const panel = q('[data-component="kickoff-edit-wi"]');
   expect(panel.closest('details')).not.toBeNull();
-  expect([...q<HTMLSelectElement>('[data-field="kickoff-deps-wi"]').options].map((o) => o.value).filter(Boolean))
+  expect([...q<HTMLSelectElement>('[data-field="kickoff-edit-wi-id"]').options].map((o) => o.value).filter(Boolean))
     .toEqual(['WI-1', 'WI-2', 'WI-8', 'WI-9a', 'WI-10', 'WI-13']);
   await selectWi('WI-10');
-  expect(fields('kickoff-dep-')).toEqual(['WI-1', 'WI-2', 'WI-8', 'WI-9a', 'WI-13']);
-  expect(box('kickoff-dep-WI-9a').checked).toBe(true);
+  expect(fields('kickoff-edit-dep-')).toEqual(['WI-1', 'WI-2', 'WI-8', 'WI-9a', 'WI-13']);
+  expect(box('kickoff-edit-dep-WI-9a').checked).toBe(true);
   await selectWi('WI-13');
-  expect(fields('kickoff-dep-').filter((id) => box(`kickoff-dep-${id}`).checked)).toEqual([]);
-  await act(async () => { box('kickoff-dep-WI-10').click(); });
-  await act(async () => { box('kickoff-dep-WI-8').click(); });
-  await act(async () => { q<HTMLButtonElement>('[data-action="save-kickoff-deps"]').click(); });
+  expect(fields('kickoff-edit-dep-').filter((id) => box(`kickoff-edit-dep-${id}`).checked)).toEqual([]);
+  await act(async () => { box('kickoff-edit-dep-WI-10').click(); });
+  await act(async () => { box('kickoff-edit-dep-WI-8').click(); });
+  await act(async () => { q<HTMLButtonElement>('[data-action="save-kickoff-wi"]').click(); });
   expect(editMock).toHaveBeenCalledWith({ initiativeId: INIT, workItemId: 'WI-13', dependsOn: ['WI-8', 'WI-10'] });
   expect(panel.getAttribute('data-form-state')).toBe('saved');
   expect(onAdded).toHaveBeenCalledTimes(1);
 });
 
 test('edit: Save is disabled with a reason until a WI is picked; a refusal shows the server detail', async () => {
-  const save = () => q<HTMLButtonElement>('[data-action="save-kickoff-deps"]');
+  const save = () => q<HTMLButtonElement>('[data-action="save-kickoff-wi"]');
   expect(save().disabled).toBe(true);
   expect(save().getAttribute('data-disabled-reason')).toMatch(/work item/);
   editMock.mockResolvedValue({ ok: false, error: 'WI-1: work-item dependency cycle: WI-1 → WI-2 → WI-1' });
   await selectWi('WI-1');
-  await act(async () => { box('kickoff-dep-WI-2').click(); });
+  await act(async () => { box('kickoff-edit-dep-WI-2').click(); });
   await act(async () => { save().click(); });
-  expect(q('[data-component="kickoff-edit-deps"]').getAttribute('data-form-state')).toBe('error');
-  expect(q('[data-component="kickoff-edit-deps"] [role="alert"]').textContent).toContain('dependency cycle');
+  expect(q('[data-component="kickoff-edit-wi"]').getAttribute('data-form-state')).toBe('error');
+  expect(q('[data-component="kickoff-edit-wi"] [role="alert"]').textContent).toContain('dependency cycle');
   expect(onAdded).not.toHaveBeenCalled();
 });
 
@@ -167,10 +168,10 @@ const render = (status: string): string => renderToStaticMarkup(React.createElem
 
 test('InitiativeDetail: the dependency controls render at the Kickoff gate, fed the roadmap\'s work items, and nowhere else', () => {
   const html = render('awaiting-kickoff');
-  expect(html).toContain('data-component="kickoff-edit-deps"');
+  expect(html).toContain('data-component="kickoff-edit-wi"');
   expect(html).toContain('data-field="kickoff-wi-dep-WI-2"');
   expect(html).toMatch(/data-field="kickoff-wi-dep-WI-2"[^>]*checked/);
   for (const status of ['pending', 'ready-for-review', 'in-flight', 'failed']) {
-    expect(render(status)).not.toContain('data-component="kickoff-edit-deps"');
+    expect(render(status)).not.toContain('data-component="kickoff-edit-wi"');
   }
 });

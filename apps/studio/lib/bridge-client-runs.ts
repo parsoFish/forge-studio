@@ -111,23 +111,37 @@ export async function addKickoffWorkItem(input: KickoffWorkItemInput): Promise<A
   return { ok: true, workItemId: r.data.workItemId, uncoveredAcceptanceCriteria: Array.isArray(uncovered) ? uncovered.map(String) : [] };
 }
 
-export type EditKickoffWorkItemDepsInput = { initiativeId: string; workItemId: string; dependsOn: string[] };
-export type EditKickoffWorkItemDepsResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
+/** forge-nk1y.32: absent = unchanged; any field but `dependsOn` needs a work item added at the gate. */
+export type EditKickoffWorkItemInput = { initiativeId: string; workItemId: string; dependsOn?: string[] } & Partial<WorkItemSource>;
+export type EditKickoffWorkItemResult = { ok: true; workItemId: string; dependsOn: string[] } | { ok: false; error: string };
+type KickoffCallResult = { ok: true; data: Record<string, unknown> } | { ok: false; error: string };
 
-/** forge-mfv5.1.36: set one work item's dependencies at the Kickoff gate. A refusal (400/404/409) carries the server's detail. */
-export async function editKickoffWorkItemDeps(input: EditKickoffWorkItemDepsInput): Promise<EditKickoffWorkItemDepsResult> {
+/** One `/api/kickoff/work-items/<wiId>` call; a refusal (400/404/409) carries the server's detail. */
+async function kickoffWorkItemCall(
+  method: 'PATCH',
+  workItemId: string,
+  body: Record<string, unknown>,
+): Promise<KickoffCallResult> {
   try {
-    const res = await bridgeFetch(`/api/kickoff/work-items/${encodeURIComponent(input.workItemId)}`, {
-      method: 'PATCH',
+    const res = await bridgeFetch(`/api/kickoff/work-items/${encodeURIComponent(workItemId)}`, {
+      method,
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({ initiativeId: input.initiativeId, dependsOn: input.dependsOn }),
+      body: JSON.stringify(body),
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok || !Array.isArray(data.dependsOn)) return { ok: false, error: bridgeErrorMessage(res.status, data) };
-    return { ok: true, workItemId: String(data.workItemId), dependsOn: data.dependsOn.map(String) };
+    if (!res.ok || data.ok !== true) return { ok: false, error: bridgeErrorMessage(res.status, data) };
+    return { ok: true, data };
   } catch (err) {
     return { ok: false, error: String(err) };
   }
+}
+
+/** forge-mfv5.1.36 / forge-nk1y.32: edit one work item at the Kickoff gate. */
+export async function editKickoffWorkItem({ workItemId, ...body }: EditKickoffWorkItemInput): Promise<EditKickoffWorkItemResult> {
+  const r = await kickoffWorkItemCall('PATCH', workItemId, body);
+  if (!r.ok) return r;
+  const dependsOn = Array.isArray(r.data.dependsOn) ? r.data.dependsOn.map(String) : [];
+  return { ok: true, workItemId: String(r.data.workItemId), dependsOn };
 }
 
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------

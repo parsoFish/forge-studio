@@ -14,6 +14,9 @@ apps/forge/bridge-cycle-scan.ts statSync 3
 apps/forge/bridge-halt.ts existsSync 1
 apps/forge/bridge-halt.ts readdirSync 1
 apps/forge/bridge-review-comments.ts existsSync 1
+apps/forge/bridge-roadmap-work-items.ts existsSync 2
+apps/forge/bridge-roadmap-work-items.ts readdirSync 2
+apps/forge/bridge-roadmap-work-items.ts readFileSync 1
 apps/forge/bridge-studio-writes.ts cpSync 1
 apps/forge/bridge-studio-writes.ts existsSync 2
 apps/forge/bridge-studio-writes.ts mkdirSync 2
@@ -22,9 +25,9 @@ apps/forge/bridge-studio-writes.ts readFileSync 1
 apps/forge/bridge-studio-writes.ts rmSync 1
 apps/forge/bridge-studio-writes.ts spawn 1
 apps/forge/bridge-studio-writes.ts writeFileSync 1
-apps/forge/bridge-studio.ts existsSync 6
-apps/forge/bridge-studio.ts readdirSync 4
-apps/forge/bridge-studio.ts readFileSync 4
+apps/forge/bridge-studio.ts existsSync 4
+apps/forge/bridge-studio.ts readdirSync 2
+apps/forge/bridge-studio.ts readFileSync 3
 apps/forge/forge-watch.ts execSync 4
 apps/forge/forge-watch.ts existsSync 1
 apps/forge/forge-watch.ts readdirSync 1

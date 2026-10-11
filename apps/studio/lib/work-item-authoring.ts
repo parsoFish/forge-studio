@@ -4,6 +4,7 @@
  * verdict gate's send-back next). The server validates again; this only keeps
  * the obvious mistakes from making a round trip.
  */
+import { scopeEntryErrors } from '@forge/contracts';
 import type { AcceptanceCriterion } from './bridge-client-runs.ts';
 
 export type WorkItemDraft = {
@@ -11,7 +12,7 @@ export type WorkItemDraft = {
   acceptanceCriteria: AcceptanceCriterion[];
   /** One command line; split on whitespace into argv — no shell, so no quoting. */
   gateCmd: string;
-  /** One worktree-relative path per line. */
+  /** One worktree-relative path per line; a line that is not one relative path is refused (forge-nk1y.32). */
   files: string;
 };
 
@@ -33,8 +34,26 @@ export function parseGateCmd(text: string): { argv: string[] } | { error: string
   return { argv: text.trim().split(/\s+/).filter(Boolean) };
 }
 
-export function parseFilesInScope(text: string): string[] {
-  return text.split('\n').map((l) => l.trim()).filter(Boolean);
+/** One path per line, trimmed, blanks dropped; a line that is not ONE relative path is refused by name, never split (D-48). */
+export function parseFilesInScope(text: string): { files: string[] } | { error: string } {
+  const files = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const [error] = scopeEntryErrors('files_in_scope', files);
+  return error === undefined ? { files } : { error };
+}
+
+const filesOf = (text: string): string[] => {
+  const r = parseFilesInScope(text);
+  return 'files' in r ? r.files : [];
+};
+
+/** forge-nk1y.32: a kickoff-added work item's current fields as an editable draft. */
+export function workItemDraftFrom(f: WorkItemSource): WorkItemDraft {
+  return {
+    summary: f.summary,
+    acceptanceCriteria: f.acceptanceCriteria.map((a) => ({ ...a })),
+    gateCmd: f.qualityGateCmd.join(' '),
+    files: f.filesInScope.join('\n'),
+  };
 }
 
 const completeAcs = (acs: readonly AcceptanceCriterion[]): AcceptanceCriterion[] =>
@@ -49,7 +68,9 @@ export function workItemDraftMissing(d: WorkItemDraft): string | null {
   const gate = parseGateCmd(d.gateCmd);
   if ('error' in gate) return gate.error;
   if (gate.argv.length === 0) return 'a gate command is required';
-  if (parseFilesInScope(d.files).length === 0) return 'at least one file in scope is required';
+  const files = parseFilesInScope(d.files);
+  if ('error' in files) return files.error;
+  if (files.files.length === 0) return 'at least one file in scope is required';
   return null;
 }
 
@@ -62,7 +83,7 @@ export function workItemDraftToSource(d: WorkItemDraft): { source: WorkItemSourc
       summary: d.summary.trim(),
       acceptanceCriteria: completeAcs(d.acceptanceCriteria),
       qualityGateCmd: gate.argv,
-      filesInScope: parseFilesInScope(d.files),
+      filesInScope: filesOf(d.files),
     },
   };
 }
@@ -85,14 +106,16 @@ export function sendBackDraftMissing(d: WorkItemDraft): string | null {
     return 'a send-back needs a blocking comment or at least one complete GIVEN/WHEN/THEN acceptance criterion — there is neither';
   }
   const gate = parseGateCmd(d.gateCmd);
-  return 'error' in gate ? gate.error : null;
+  if ('error' in gate) return gate.error;
+  const files = parseFilesInScope(d.files);
+  return 'error' in files ? files.error : null;
 }
 
 export function sendBackDraftToSource(d: WorkItemDraft): { source: SendBackSource } | { error: string } {
   const missing = sendBackDraftMissing(d);
   if (missing !== null) return { error: missing };
   const argv = (parseGateCmd(d.gateCmd) as { argv: string[] }).argv;
-  const files = parseFilesInScope(d.files);
+  const files = filesOf(d.files);
   return {
     source: {
       acceptanceCriteria: completeAcs(d.acceptanceCriteria),

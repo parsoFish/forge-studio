@@ -5,7 +5,7 @@
  *
  *   - an added work item depends on the plan's LEAF work items unless the
  *     operator sets its dependencies (an explicit `[]` is a root, honoured);
- *   - `editKickoffWorkItemDeps` rewrites one pending work item's `depends_on`
+ *   - `editKickoffWorkItem` with `dependsOn` alone rewrites one pending work item's `depends_on`
  *     (worktree + snapshot), validated as a set, under the manifest lock, and
  *     is refused by name once anything is built.
  */
@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
 
-import { addKickoffWorkItem, editKickoffWorkItemDeps, type KickoffWorkItemSource } from '../../kickoff-add-work-item.ts';
+import { addKickoffWorkItem, editKickoffWorkItem, type KickoffWorkItemSource } from '../../kickoff-add-work-item.ts';
 import { enqueueDevelopRun } from '../../enqueue-develop-run.ts';
 import { parseWorkItem, serializeWorkItem, type WorkItem } from '../../work-item.ts';
 import { I2_INIT, I2_PLAN_LEAVES, plantI2Kickoff } from '../test-fixtures/kickoff-deps-i2.ts';
@@ -38,7 +38,7 @@ function withRoot(fn: (root: string) => Promise<void>): Promise<void> {
 const add = (root: string, source: KickoffWorkItemSource) =>
   addKickoffWorkItem({ forgeRoot: root, logsRoot: join(root, '_logs'), initiativeId: I2_INIT, source, coverage: noCoverage });
 const edit = (root: string, workItemId: string, dependsOn: string[]) =>
-  editKickoffWorkItemDeps({ forgeRoot: root, logsRoot: join(root, '_logs'), initiativeId: I2_INIT, workItemId, dependsOn });
+  editKickoffWorkItem({ forgeRoot: root, logsRoot: join(root, '_logs'), initiativeId: I2_INIT, workItemId, edit: { dependsOn } });
 const readWi = (dir: string, id: string): WorkItem => parseWorkItem(readFileSync(join(dir, `${id}.md`), 'utf8'));
 const detail = (r: { status: string }) => ('detail' in r ? String(r.detail) : '');
 const events = (logDir: string) => readFileSync(join(logDir, 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { message: string; metadata?: unknown });
@@ -104,8 +104,9 @@ test('edit WI-13\'s dependencies: worktree AND snapshot rewritten, every other f
   const after = readWi(wiDir, 'WI-13');
   assert.deepEqual(after, { ...before, depends_on: ['WI-8'] });
   assert.equal(readFileSync(join(snapshotDir, 'WI-13.md'), 'utf8'), serializeWorkItem(after), 'the roadmap reads the snapshot first');
-  const ev = events(logDir).find((e) => e.message === 'kickoff.work-item-deps-edited');
-  assert.deepEqual(ev?.metadata, { work_item_id: 'WI-13', depends_on: ['WI-8'] });
+  // forge-nk1y.32: one edit event, naming the changed fields
+  const ev = events(logDir).find((e) => e.message === 'kickoff.work-item-edited');
+  assert.deepEqual(ev?.metadata, { work_item_id: 'WI-13', fields: ['dependsOn'] });
 }));
 
 test('edit to [] makes the WI a root; an edit of a plan WI is equally allowed (nothing is built)', () => withRoot(async (root) => {

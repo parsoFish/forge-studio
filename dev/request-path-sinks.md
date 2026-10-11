@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-249 files, 1425 sink calls; 179 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 13). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+250 files, 1425 sink calls; 180 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -15,8 +15,9 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `apps/forge/bridge-cycle-scan.ts` | 10 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `apps/forge/bridge-halt.ts` | 2 | other |  | read | `GET /api/health`, `POST /api/halt` (the drain counts) |
 | `apps/forge/bridge-review-comments.ts` | 1 | unclassified |  |  |  |
+| `apps/forge/bridge-roadmap-work-items.ts` | 5 | unguarded |  | read | `GET /api/studio/projects/:id/roadmap` — the work-item readers moved verbatim out of bridge-studio.ts (forge-nk1y.32); the WI dir joins a scanned manifest's cycle_id / initiative id with no realpath containment (raw-fs allowlist GUARD-NEXT row `tryReadWorkItemDir`) |
 | `apps/forge/bridge-studio-writes.ts` | 10 | unguarded |  | exec | `PUT /api/studio/flows/:id` body `triggers[].target.ref` |
-| `apps/forge/bridge-studio.ts` | 14 | unguarded |  | exec | `GET /api/studio/flows/:id` |
+| `apps/forge/bridge-studio.ts` | 9 | unguarded |  | exec | `GET /api/studio/flows/:id` |
 | `apps/forge/forge-watch.ts` | 16 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `apps/forge/reflection-pending.ts` | 2 | not-request-derived | `resolveGuardedPath` | read | `GET /api/reflections/pending` takes no request field: it lists the host's trusted `logsRoot` (as bridge-cycle-scan.ts does) and reads each listed cycle dir's files only through guardedReadFile/guardedFile |
 | `apps/forge/ui-bridge.ts` | 3 | unguarded |  | read | body `project`, `sessionId` |
