@@ -259,6 +259,10 @@ export type DemoModelCheckpoint = {
   // sibling path (served via the bridge artifact route, NOT a data: URI).
   beforeVideoSrc?: string | null;
   afterVideoSrc?: string | null;
+  /** Mirror of packages/stations/demo-model.ts — whether before/after differ (computed post-capture, fails closed to 'unknown'). */
+  delta?: 'changed' | 'unchanged' | 'unknown';
+  /** Mirror — a bounded `- before` / `+ after` excerpt of the first differing lines, set only when `delta` is 'changed'. */
+  deltaExcerpt?: string;
 };
 
 export type DemoSummarySection = {
@@ -305,6 +309,8 @@ export type DemoModel = {
   // New-capability fields (sibling agent adds to packages/stations/demo-model.ts)
   usage_example?: string;
   impact?: string[];
+  /** Mirror — the demo planner's "what this enables": agent narrative, never evidence (D-45). */
+  narrative?: string;
 };
 
 /** Fetch the cycle's structured demo (mirrored into _logs/<cycle>/artifacts/

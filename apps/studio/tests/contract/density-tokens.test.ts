@@ -44,7 +44,6 @@ const OFF_SCALE: readonly string[] = [
   'app/connections/[id]/page.tsx|maxHeight|200',
   'app/connections/[id]/page.tsx|maxHeight|200',
   'app/monitor/page.tsx|RUN_RAIL_HEIGHT|420',
-  'components/DemoReviewSurface.tsx|height|340',
   'components/studio/ActivityLog.tsx|maxHeight|260',
   'components/studio/FlowTopology.tsx|minHeight|260',
   'components/studio/HistoryLedger.tsx|maxHeight|220',
