@@ -517,8 +517,7 @@ function KnowledgePageInner() {
       /* forge-8vfn.5.10: on the ROOT too, not only the banner below — the story
          runner reads the root first (beats.mjs resolveExpectations). */
       {...(seedSessionParam ? { 'data-seed-session-id': seedSessionParam } : {})}
-      // forge-nk1y.19 (D-46 §1): a fixed shell — exactly one viewport; panes scroll inside.
-      style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }} /* forge-nk1y.19: fixed shell, panes scroll inside */
     >
       <StudioNav />
 
