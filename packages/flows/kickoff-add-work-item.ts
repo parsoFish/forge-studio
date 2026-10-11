@@ -86,7 +86,7 @@ async function underKickoffLock<R>(a: GateArgs, fn: (g: AtKickoff) => R): Promis
 }
 
 const cycleIdOf = (a: GateArgs, g: AtKickoff): string => g.manifest.cycle_id ?? a.initiativeId;
-const emitKickoff = (a: GateArgs, g: AtKickoff, message: string, metadata: Record<string, unknown>): void => createLogger(cycleIdOf(a, g), a.logsRoot).emit({
+const emitKickoff = (a: GateArgs, g: AtKickoff, message: string, metadata: Record<string, unknown>): void => void createLogger(cycleIdOf(a, g), a.logsRoot).emit({
   initiative_id: a.initiativeId, phase: 'orchestrator', skill: 'kickoff-gate', event_type: 'log', input_refs: [g.manifestPath],
   output_refs: [`.forge/work-items/${String(metadata.work_item_id)}.md`], message, metadata });
 
@@ -136,7 +136,7 @@ function kickoffAddedRefusal(logsRoot: string, cycleId: string, id: string): Ref
 const EDIT_FIELDS = ['summary', 'acceptanceCriteria', 'qualityGateCmd', 'filesInScope', 'creates', 'dependsOn'] as const;
 export type KickoffWorkItemFields = Required<KickoffWorkItemSource>;
 const editableOf = (w: WorkItem): KickoffWorkItemFields => ({ summary: w.body.trim(), acceptanceCriteria: w.acceptance_criteria,
-  qualityGateCmd: w.quality_gate_cmd, filesInScope: w.files_in_scope, creates: w.creates ?? [], dependsOn: w.depends_on });
+  qualityGateCmd: w.quality_gate_cmd ?? [], filesInScope: w.files_in_scope, creates: w.creates ?? [], dependsOn: w.depends_on });
 
 /** Studio's prefill (served on the roadmap at the gate): each work item added at the gate, by id, with its editable fields; none when the log is unreadable. */
 export function kickoffAddedWorkItemFields(a: GateArgs & { cycleId: string | null }): Record<string, KickoffWorkItemFields> {
@@ -147,10 +147,9 @@ export function kickoffAddedWorkItemFields(a: GateArgs & { cycleId: string | nul
 }
 
 function applyEdit(w: WorkItem, e: KickoffWorkItemEdit): WorkItem {
-  const { creates: _c, ...rest } = w;
-  const creates = e.creates ?? w.creates;
-  return { ...rest, ...(creates?.length ? { creates: [...creates] } : {}), body: e.summary ?? w.body, acceptance_criteria: e.acceptanceCriteria ?? w.acceptance_criteria,
-    quality_gate_cmd: [...(e.qualityGateCmd ?? w.quality_gate_cmd)], files_in_scope: [...(e.filesInScope ?? w.files_in_scope)], depends_on: [...(e.dependsOn ?? w.depends_on)] };
+  const { creates, ...rest } = w, next = e.creates ?? creates;
+  return { ...rest, ...(next?.length ? { creates: [...next] } : {}), body: e.summary ?? w.body, acceptance_criteria: e.acceptanceCriteria ?? w.acceptance_criteria,
+    ...(e.qualityGateCmd ? { quality_gate_cmd: [...e.qualityGateCmd] } : {}), files_in_scope: [...(e.filesInScope ?? w.files_in_scope)], depends_on: [...(e.dependsOn ?? w.depends_on)] };
 }
 
 export type EditKickoffWorkItemArgs = GateArgs & { workItemId: string; edit: KickoffWorkItemEdit };

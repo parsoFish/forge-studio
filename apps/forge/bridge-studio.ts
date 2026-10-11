@@ -47,8 +47,8 @@ import { projectKbBindings } from '@forge/knowledge';
 import { parseManifest, initiativeTitle } from '@forge/flows';
 // `forge-8vfn.7.6.18` — the ONE reader of the scheduler's refusal clauses.
 import { manifestBlockedClauses } from '@forge/flows';
-import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows';
-import type { WorkItem } from '@forge/flows';
+import { parseWorkItem, WORK_ITEM_FILE_PATTERN, kickoffAddedWorkItemFields } from '@forge/flows';
+import type { WorkItem, KickoffWorkItemFields } from '@forge/flows';
 import type { QueueState } from '@forge/flows';
 import { getPaths } from '@forge/flows';
 import { provenanceOfOrigin, type Provenance } from '@forge/kernel';
@@ -811,7 +811,7 @@ export type RoadmapWorkItem = {
    * this field (or a snapshot with no status) never fabricates one.
    */
   status?: WorkItem['status'];
-};
+} & { kickoff?: KickoffWorkItemFields }; // forge-nk1y.32: a WI added at the Kickoff gate, at the gate — its editable fields (Studio's edit prefill)
 
 export type RoadmapInitiative = {
   initiativeId: string;
@@ -1014,7 +1014,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       canStartDevelopment: isRunnableSource(status, manifest.flow_id ?? null, DEVELOP_FLOW_ID)
         && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
-      ...(workItems !== undefined ? { workItems } : {}),
+      ...(workItems !== undefined ? { workItems: awaitingKickoff && status === 'ready-for-review' ? ((k) => workItems.map((w) => (k[w.id] ? { ...w, kickoff: k[w.id] } : w)))(kickoffAddedWorkItemFields({ forgeRoot, logsRoot, initiativeId: initId, cycleId: manifest.cycle_id ?? null })) : workItems } : {}),
       ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' ? ((e) => (e.length > 0 ? { pmRepairErrors: e } : {}))(recordedPmValidationErrors(forgeRoot, manifest)) : {}), /* D-49 row 5: recorded or derived; read-only here, Requeue persists */ ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
       ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
