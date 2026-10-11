@@ -65,10 +65,10 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 17 | 3,080 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 51 | 12,943 | **12,943** | ratified 12,943 — forge-nk1y.27 + .26: `reflector-fold.ts` (the fold turn after the operator answers, checked by name) and the `Choose any:` multi marker; +95 measured on main 12,848, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 40 | 9,170 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
+| `apps/forge` | 40 | 9,171 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **524** | **136,602** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **524** | **136,603** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -275,7 +275,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/review-comment-gate.ts | apps/forge | rewritten | 107 **New file, forge-mfv5.1.28:** a blocking verdict comment's GWT and runnable command become its criterion and the fix work item's gate (D-20). |
 | apps/forge/bridge-review-comments.ts | apps/forge | rewritten | 208 |
 | apps/forge/bridge-agent-dispatch.ts | apps/forge | rewritten | 522 |
-| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 328 |
+| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 329 |
 | apps/forge/bridge-safe-dispatch.ts | apps/forge | rewritten | 47 |
 | apps/forge/reflection-pending.ts | apps/forge | rewritten | 92 |
 | apps/forge/bridge-cycle-scan.ts | apps/forge | rewritten | 259 |
