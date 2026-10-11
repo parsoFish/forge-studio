@@ -113,6 +113,19 @@ export function leafWorkItemIds(items: ReadonlyArray<{ id: string; dependsOn: re
   return items.map((i) => i.id).filter((id) => !dependedOn.has(id)).sort(compareWorkItemIds);
 }
 
+/**
+ * D-48 (forge-nk1y.32): each `files_in_scope` / `creates` entry submitted at
+ * the Kickoff gate is ONE relative path — refused by name, never split. The
+ * Kickoff routes and Studio's authoring parse apply it; PM-authored queues on
+ * disk are not re-judged (`validateWorkItem` is unchanged).
+ */
+export function scopeEntryErrors(field: 'files_in_scope' | 'creates', entries: readonly string[]): string[] {
+  return entries.flatMap((e) => {
+    const why = e === '' ? 'is empty' : /\s/.test(e) ? 'contains whitespace' : e.startsWith('/') ? 'is absolute' : e.split(/[\\/]/).includes('..') ? 'has a ".." segment' : null;
+    return why === null ? [] : [`${field} entry ${JSON.stringify(e)} refused: ${why} — one relative path per entry`];
+  });
+}
+
 // ── Trigger payloads (D-23) ──
 
 /** The owner/repo regex — strict-charset validator for a GitHub-shaped

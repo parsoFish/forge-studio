@@ -10,6 +10,15 @@
  * kickoff-added work items, verbatim (`depends_on: []` — the defect). The 15
  * plan work items are byte-identical to `pm-repair-i2-stranded/work-items/`
  * (`cmp` against the live worktree), so they are read from there, not copied.
+ *
+ * Bead forge-nk1y.32 — `WI-13.now.md.fixture` / `WI-14.now.md.fixture` are the
+ * same two work items as they stood live later on 2026-10-11 (forge 84b11e29),
+ * verbatim, after row 11's dependency edits: WI-14 still holds ONE
+ * files_in_scope entry naming two paths ("tests/test_docs_no_terraform_tokens.py
+ * .github/copilot-context.md") and no `creates` — the defect. `events.jsonl.fixture`
+ * is the cycle log's four `kickoff.work-item-*` lines, verbatim except the
+ * forge root in `input_refs` (placeholder `FORGE_ROOT`): the provenance that
+ * marks WI-13/14 as added at the gate. `plantI2Kickoff(root, { live: true })`.
  */
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,12 +33,14 @@ const PLAN_DIR = join(HERE, 'pm-repair-i2-stranded', 'work-items');
 const KICKOFF_DIR = join(HERE, 'kickoff-deps-i2');
 
 /** Every I2 work-item fixture file → its work-item file name (`WI-3a.md`). */
-export function i2WorkItemFiles(opts: { withKickoffAdds: boolean }): Array<{ name: string; path: string }> {
+export function i2WorkItemFiles(opts: I2PlantOpts): Array<{ name: string; path: string }> {
   const plan = readdirSync(PLAN_DIR).map((f) => ({ name: f.replace(/\.fixture$/, ''), path: join(PLAN_DIR, f) }));
-  const adds = ['WI-13', 'WI-14'].map((id) => ({ name: `${id}.md`, path: join(KICKOFF_DIR, `${id}.md.fixture`) }));
+  const adds = ['WI-13', 'WI-14'].map((id) => ({ name: `${id}.md`, path: join(KICKOFF_DIR, `${id}${opts.live ? '.now' : ''}.md.fixture`) }));
   return opts.withKickoffAdds ? [...plan, ...adds] : plan;
 }
 
+/** `live`: WI-13/14 as they are now (row 11's edits) plus the kickoff events (forge-nk1y.32). */
+export type I2PlantOpts = { withKickoffAdds: boolean; live?: boolean };
 export type I2Paths = { manifestPath: string; wiDir: string; snapshotDir: string; logDir: string };
 
 /**
@@ -39,7 +50,7 @@ export type I2Paths = { manifestPath: string; wiDir: string; snapshotDir: string
  * 15 plan WIs only (the manifest's `specs` still lists WI-13/14; nothing reads
  * specs for the gate).
  */
-export function plantI2Kickoff(forgeRoot: string, opts: { withKickoffAdds: boolean } = { withKickoffAdds: true }): I2Paths {
+export function plantI2Kickoff(forgeRoot: string, opts: I2PlantOpts = { withKickoffAdds: true }): I2Paths {
   for (const d of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) mkdirSync(join(forgeRoot, '_queue', d), { recursive: true });
   const repo = join(forgeRoot, 'projects', 'gitweave');
   const worktree = join(forgeRoot, '_worktrees', I2_INIT);
@@ -54,5 +65,6 @@ export function plantI2Kickoff(forgeRoot: string, opts: { withKickoffAdds: boole
     copyFileSync(f.path, join(wiDir, f.name));
     copyFileSync(f.path, join(snapshotDir, f.name));
   }
+  if (opts.live) writeFileSync(join(logDir, 'events.jsonl'), readFileSync(join(KICKOFF_DIR, 'events.jsonl.fixture'), 'utf8').replaceAll('FORGE_ROOT', forgeRoot));
   return { manifestPath, wiDir, snapshotDir, logDir };
 }

@@ -1,23 +1,28 @@
 /** forge-nk1y.12 (D-48): add a plan WI (no `origin`) at the Kickoff gate, under the manifest lock; D-47 coverage injected, reported only.
- *  forge-mfv5.1.36: an added WI depends on the plan's leaves unless `dependsOn` is set; `editKickoffWorkItemDeps` edits one WI's. */
+ *  forge-mfv5.1.36: an added WI depends on the plan's leaves unless `dependsOn` is set.
+ *  forge-nk1y.32: a WI ADDED at the gate (its `kickoff.work-item-added` event) is edited in full or deleted; a plan WI's
+ *  dependencies only; every submitted scope entry is one relative path (`scopeEntryErrors`). */
 import { dirname } from 'node:path';
 import lockfile from 'proper-lockfile';
 
 import { createLogger, guardedFile, guardedReadFile, guardedUnlink, guardedWriteFile } from '@forge/kernel';
-import { KICKOFF_SOURCE_FLOW_ID, kickoffBuiltReason, leafWorkItemIds } from '@forge/contracts';
+import { KICKOFF_SOURCE_FLOW_ID, kickoffBuiltReason, leafWorkItemIds, scopeEntryErrors } from '@forge/contracts';
 import { parseManifest, persistManifestSpecs, type InitiativeManifest } from './manifest.ts';
 import { isCanonicalInitiativeId } from './initiative-id.ts';
 import { validateManifestPathFields } from './manifest-path-guard.ts';
 import { manifestAwaitsKickoff, readKickoffFacts } from './kickoff-facts.ts';
 import { nextDevWorkItemId } from './fix-work-items.ts';
+import { readCycleEvents } from './legacy-fix-gate.ts';
 import { readWorkItemsFromDir, serializeWorkItem, validateWorkItemSet, writeWorkItem, type AcceptanceCriterion, type WorkItem } from './work-item.ts';
 
 /** `dependsOn` absent = the plan's leaf work items (D-48 amended); `[]` = a root. */
-export type KickoffWorkItemSource = { summary: string; acceptanceCriteria: AcceptanceCriterion[]; qualityGateCmd: string[]; filesInScope: string[]; dependsOn?: readonly string[] };
+export type KickoffWorkItemSource = { summary: string; acceptanceCriteria: AcceptanceCriterion[]; qualityGateCmd: string[]; filesInScope: string[]; creates?: string[]; dependsOn?: readonly string[] };
+/** Absent = unchanged; `creates: []` clears it. Any field but `dependsOn` needs a kickoff-added work item. */
+export type KickoffWorkItemEdit = Partial<Omit<KickoffWorkItemSource, 'dependsOn'>> & { dependsOn?: readonly string[] };
 export type KickoffCoverage = (acs: ReadonlyArray<{ when: string }>, items: ReadonlyArray<WorkItem>) => string[];
 type GateArgs = { forgeRoot: string; logsRoot: string; initiativeId: string };
 export type AddKickoffWorkItemArgs = GateArgs & { source: KickoffWorkItemSource; coverage: KickoffCoverage };
-type Refusal = { status: 'not-found' | 'not-at-kickoff' | 'invalid' | 'unsafe'; detail: string };
+type Refusal = { status: 'not-found' | 'not-at-kickoff' | 'invalid' | 'unsafe' | 'not-a-kickoff-work-item' | 'has-dependents'; detail: string };
 export type AddKickoffWorkItemResult = { status: 'added'; workItemId: string; uncoveredAcceptanceCriteria: string[] } | Refusal;
 
 type AtKickoff = { manifest: InitiativeManifest; manifestPath: string; wiDir: string };
@@ -52,11 +57,17 @@ export function buildPlanWorkItem(existing: readonly WorkItem[], id: string, ini
     work_item_id: id, initiative_id: initiativeId, status: 'pending', acceptance_criteria: source.acceptanceCriteria,
     depends_on: [...(source.dependsOn ?? leafWorkItemIds(existing.map((w) => ({ id: w.work_item_id, dependsOn: w.depends_on }))))],
     files_in_scope: [...source.filesInScope], quality_gate_cmd: [...source.qualityGateCmd], estimated_iterations: medianIterations(existing), body: source.summary,
+    ...(source.creates?.length ? { creates: [...source.creates] } : {}),
   };
-  const set = validateWorkItemSet([...existing, workItem]);
-  const errors = setErrorList(set);
+  const errors = gateSetErrors([...existing, workItem], workItem);
   return errors.length > 0 ? { errors } : { workItem };
 }
+
+/** The path rule on the work item authored at the gate, then the whole set. */
+const gateSetErrors = (set: WorkItem[], authored: WorkItem | null): string[] => [
+  ...(authored ? [...scopeEntryErrors('files_in_scope', authored.files_in_scope), ...scopeEntryErrors('creates', authored.creates ?? [])] : []),
+  ...setErrorList(validateWorkItemSet(set)),
+];
 
 const setErrorList = (set: ReturnType<typeof validateWorkItemSet>): string[] =>
   [...set.setErrors, ...Object.entries(set.perItem).flatMap(([wid, es]) => es.map((e) => `${wid}: ${e}`))];
@@ -74,12 +85,15 @@ async function underKickoffLock<R>(a: GateArgs, fn: (g: AtKickoff) => R): Promis
   } finally { await release(); }
 }
 
+const cycleIdOf = (a: GateArgs, g: AtKickoff): string => g.manifest.cycle_id ?? a.initiativeId;
+const emitKickoff = (a: GateArgs, g: AtKickoff, message: string, metadata: Record<string, unknown>): void => createLogger(cycleIdOf(a, g), a.logsRoot).emit({
+  initiative_id: a.initiativeId, phase: 'orchestrator', skill: 'kickoff-gate', event_type: 'log', input_refs: [g.manifestPath],
+  output_refs: [`.forge/work-items/${String(metadata.work_item_id)}.md`], message, metadata });
+
 /** Rewrite into the cycle's work-items snapshot too, when it exists (the roadmap reads it first). */
-function writeSnapshotCopy(a: GateArgs, g: AtKickoff, wi: WorkItem): string {
-  const cycleId = g.manifest.cycle_id ?? a.initiativeId;
-  const snap = [cycleId, 'work-items-snapshot'];
+function writeSnapshotCopy(a: GateArgs, g: AtKickoff, wi: WorkItem): void {
+  const snap = [cycleIdOf(a, g), 'work-items-snapshot'];
   if (guardedFile(a.logsRoot, snap, 'readdir') !== null) guardedWriteFile(a.logsRoot, [...snap, `${wi.work_item_id}.md`], serializeWorkItem(wi));
-  return cycleId;
 }
 
 export async function addKickoffWorkItem(a: AddKickoffWorkItemArgs): Promise<AddKickoffWorkItemResult> {
@@ -93,39 +107,107 @@ export async function addKickoffWorkItem(a: AddKickoffWorkItemArgs): Promise<Add
       guardedUnlink(a.forgeRoot, ['_worktrees', a.initiativeId, '.forge', 'work-items', `${wi.work_item_id}.md`]); // no stray WI
       return { status: 'not-at-kickoff', detail: 'not at the kickoff gate (the manifest could not record the work item — vanished or unwritable; nothing added)' };
     }
-    const cycleId = writeSnapshotCopy(a, g, wi);
+    writeSnapshotCopy(a, g, wi);
     const uncovered = a.coverage(g.manifest.acceptance_criteria ?? [], [...existing, wi]);
-    createLogger(cycleId, a.logsRoot).emit({ initiative_id: a.initiativeId, phase: 'orchestrator', skill: 'kickoff-gate', event_type: 'log',
-      input_refs: [g.manifestPath], output_refs: [`.forge/work-items/${wi.work_item_id}.md`], message: 'kickoff.work-item-added',
-      metadata: { work_item_id: wi.work_item_id, uncovered_acceptance_criteria: uncovered } });
+    emitKickoff(a, g, 'kickoff.work-item-added', { work_item_id: wi.work_item_id, uncovered_acceptance_criteria: uncovered });
     return { status: 'added', workItemId: wi.work_item_id, uncoveredAcceptanceCriteria: uncovered };
   });
 }
 
-export type EditKickoffWorkItemDepsArgs = GateArgs & { workItemId: string; dependsOn: readonly string[] };
-export type EditKickoffWorkItemDepsResult = { status: 'edited'; workItemId: string; dependsOn: string[] } | Refusal;
+/** The ids added at the gate: the last `kickoff.work-item-added`/`-deleted` event per id wins; an unreadable log is named (fail closed). */
+function kickoffAddedIds(logsRoot: string, cycleId: string): Set<string> | { unreadable: string } {
+  const evs = readCycleEvents(logsRoot, cycleId);
+  if ('unreadable' in evs) return evs;
+  const ids = new Set<string>();
+  for (const e of evs) {
+    const id = e.skill === 'kickoff-gate' ? e.metadata?.work_item_id : undefined;
+    if (typeof id === 'string' && e.message === 'kickoff.work-item-added') ids.add(id);
+    if (typeof id === 'string' && e.message === 'kickoff.work-item-deleted') ids.delete(id);
+  }
+  return ids;
+}
+
+function kickoffAddedRefusal(logsRoot: string, cycleId: string, id: string): Refusal | null {
+  const ids = kickoffAddedIds(logsRoot, cycleId);
+  if (!(ids instanceof Set)) return { status: 'not-a-kickoff-work-item', detail: `cannot show ${id} was added at the Kickoff gate: ${ids.unreadable}` };
+  return ids.has(id) ? null : { status: 'not-a-kickoff-work-item', detail: `${id} is a plan work item — at the Kickoff gate only its dependsOn can be edited, and it cannot be deleted` };
+}
+
+const EDIT_FIELDS = ['summary', 'acceptanceCriteria', 'qualityGateCmd', 'filesInScope', 'creates', 'dependsOn'] as const;
+export type KickoffWorkItemFields = Required<KickoffWorkItemSource>;
+const editableOf = (w: WorkItem): KickoffWorkItemFields => ({ summary: w.body.trim(), acceptanceCriteria: w.acceptance_criteria,
+  qualityGateCmd: w.quality_gate_cmd, filesInScope: w.files_in_scope, creates: w.creates ?? [], dependsOn: w.depends_on });
+
+/** Studio's prefill (served on the roadmap at the gate): each work item added at the gate, by id, with its editable fields; none when the log is unreadable. */
+export function kickoffAddedWorkItemFields(a: GateArgs & { cycleId: string | null }): Record<string, KickoffWorkItemFields> {
+  const ids = kickoffAddedIds(a.logsRoot, a.cycleId ?? a.initiativeId);
+  const dir = isCanonicalInitiativeId(a.initiativeId) && ids instanceof Set && ids.size > 0 ? guardedFile(a.forgeRoot, ['_worktrees', a.initiativeId, '.forge', 'work-items'], 'readdir') : null;
+  if (dir === null) return {};
+  return Object.fromEntries(readWorkItemsFromDir(dir).items.filter((w) => (ids as Set<string>).has(w.work_item_id)).map((w) => [w.work_item_id, editableOf(w)]));
+}
+
+function applyEdit(w: WorkItem, e: KickoffWorkItemEdit): WorkItem {
+  const { creates: _c, ...rest } = w;
+  const creates = e.creates ?? w.creates;
+  return { ...rest, ...(creates?.length ? { creates: [...creates] } : {}), body: e.summary ?? w.body, acceptance_criteria: e.acceptanceCriteria ?? w.acceptance_criteria,
+    quality_gate_cmd: [...(e.qualityGateCmd ?? w.quality_gate_cmd)], files_in_scope: [...(e.filesInScope ?? w.files_in_scope)], depends_on: [...(e.dependsOn ?? w.depends_on)] };
+}
+
+export type EditKickoffWorkItemArgs = GateArgs & { workItemId: string; edit: KickoffWorkItemEdit };
+export type EditKickoffWorkItemResult = { status: 'edited'; workItemId: string; dependsOn: string[]; fields: string[] } | Refusal;
 
 /**
- * forge-mfv5.1.36 (D-48 amended): set one work item's `depends_on` at the
- * Kickoff gate. Scope: ANY work item of an initiative still at the gate —
- * the gate itself means nothing is built, so every WI is pending (operator-added
- * and decomposed alike; the capstone needs I2's WI-13/14 re-pointed). The
- * resulting SET is validated (unknown id, self, cycle) before the validated
- * writer rewrites the worktree file and the snapshot copy.
+ * forge-mfv5.1.36 / forge-nk1y.32 (D-48 amended): edit one work item at the
+ * Kickoff gate, under the add's lock and in-lock re-check. `dependsOn` alone:
+ * any work item (row 11). Any other field: only one added at the gate, and the
+ * path rule holds on its scope. The resulting SET is validated before the
+ * validated writer rewrites the worktree file and the snapshot copy.
  */
-export async function editKickoffWorkItemDeps(a: EditKickoffWorkItemDepsArgs): Promise<EditKickoffWorkItemDepsResult> {
-  return underKickoffLock(a, (g): EditKickoffWorkItemDepsResult => {
+export async function editKickoffWorkItem(a: EditKickoffWorkItemArgs): Promise<EditKickoffWorkItemResult> {
+  return underKickoffLock(a, (g): EditKickoffWorkItemResult => {
     const worktree = dirname(dirname(g.wiDir)), existing = readWorkItemsFromDir(g.wiDir).items;
     const current = existing.find((w) => w.work_item_id === a.workItemId);
     if (!current) return { status: 'not-found', detail: `${a.workItemId} is not a work item of ${a.initiativeId}` };
-    const wi: WorkItem = { ...current, depends_on: [...a.dependsOn] };
-    const errors = setErrorList(validateWorkItemSet(existing.map((w) => (w === current ? wi : w))));
+    const full = Object.keys(a.edit).some((k) => k !== 'dependsOn');
+    const refused = full ? kickoffAddedRefusal(a.logsRoot, cycleIdOf(a, g), a.workItemId) : null;
+    if (refused) return refused;
+    const wi = applyEdit(current, a.edit);
+    const errors = gateSetErrors(existing.map((w) => (w === current ? wi : w)), full ? wi : null);
     if (errors.length > 0) return { status: 'invalid', detail: errors.join('; ') };
     writeWorkItem(wi, worktree, { workItemsDir: g.wiDir });
-    const cycleId = writeSnapshotCopy(a, g, wi);
-    createLogger(cycleId, a.logsRoot).emit({ initiative_id: a.initiativeId, phase: 'orchestrator', skill: 'kickoff-gate', event_type: 'log',
-      input_refs: [g.manifestPath], output_refs: [`.forge/work-items/${wi.work_item_id}.md`], message: 'kickoff.work-item-deps-edited',
-      metadata: { work_item_id: wi.work_item_id, depends_on: wi.depends_on } });
-    return { status: 'edited', workItemId: wi.work_item_id, dependsOn: wi.depends_on };
+    writeSnapshotCopy(a, g, wi);
+    const was = editableOf(current), now = editableOf(wi);
+    const fields = EDIT_FIELDS.filter((f) => a.edit[f] !== undefined && JSON.stringify(was[f]) !== JSON.stringify(now[f]));
+    emitKickoff(a, g, 'kickoff.work-item-edited', { work_item_id: wi.work_item_id, fields });
+    return { status: 'edited', workItemId: wi.work_item_id, dependsOn: wi.depends_on, fields };
+  });
+}
+
+export type DeleteKickoffWorkItemResult = { status: 'deleted'; workItemId: string } | Refusal;
+
+/**
+ * forge-nk1y.32 (D-48 amended): delete one work item added at the gate, while
+ * nothing is built and nothing depends on it. Manifest `specs` first, under the
+ * lock; a worktree removal that fails restores them; a snapshot copy that
+ * cannot be removed is named, never silent.
+ */
+export async function deleteKickoffWorkItem(a: GateArgs & { workItemId: string }): Promise<DeleteKickoffWorkItemResult> {
+  return underKickoffLock(a, (g): DeleteKickoffWorkItemResult => {
+    const id = a.workItemId, existing = readWorkItemsFromDir(g.wiDir).items;
+    if (!existing.some((w) => w.work_item_id === id)) return { status: 'not-found', detail: `${id} is not a work item of ${a.initiativeId}` };
+    const refused = kickoffAddedRefusal(a.logsRoot, cycleIdOf(a, g), id);
+    if (refused) return refused;
+    const dependents = existing.filter((w) => w.depends_on.includes(id)).map((w) => w.work_item_id);
+    if (dependents.length > 0) return { status: 'has-dependents', detail: `${id} is a dependency of ${dependents.join(', ')} — edit their dependencies first` };
+    const specs = g.manifest.specs ?? [];
+    if (!persistManifestSpecs(g.manifestPath, specs.filter((s) => s !== id))) return { status: 'not-at-kickoff', detail: 'not at the kickoff gate (the manifest could not record the deletion — vanished or unwritable; nothing deleted)' };
+    if (!guardedUnlink(a.forgeRoot, ['_worktrees', a.initiativeId, '.forge', 'work-items', `${id}.md`])) {
+      const restored = persistManifestSpecs(g.manifestPath, specs);
+      return { status: 'unsafe', detail: `${id}.md could not be removed from the worktree; ${restored ? 'the manifest specs were restored — nothing deleted' : 'the manifest specs could NOT be restored — re-add the id by hand'}` };
+    }
+    const snap = [cycleIdOf(a, g), 'work-items-snapshot', `${id}.md`];
+    const snapLeft = guardedFile(a.logsRoot, snap, 'read') !== null && !guardedUnlink(a.logsRoot, snap);
+    emitKickoff(a, g, 'kickoff.work-item-deleted', { work_item_id: id });
+    return snapLeft ? { status: 'unsafe', detail: `${id} was deleted from the worktree and the manifest specs, but its snapshot copy ${snap.join('/')} could not be removed — remove it by hand` } : { status: 'deleted', workItemId: id };
   });
 }
