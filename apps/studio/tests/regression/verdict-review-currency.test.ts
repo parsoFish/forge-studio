@@ -150,3 +150,15 @@ test('the no-demo fallback and the verdict view apply the same currency (current
   // A failed attempt with NO findings ever on file is still "failed", never "did not run".
   expect(currentFindingsPanelProps(null, true, false, { doc: FAILED, error: false }).notCurrentNote).toMatch(/^No current findings — review failed at 39f76ac/);
 });
+
+test('a current review names the files it did not review, by reason (the I3a shape: 66 binary + the demo bundle)', async () => {
+  const notReviewed = [
+    ...Array.from({ length: 66 }, (_, i) => ({ path: `demo/x/.capture/after/f${i}.png`, reason: 'binary' as const })),
+    { path: 'demo/x/demo.json', reason: 'demo-bundle' as const },
+    { path: 'demo/x/DEMO.md', reason: 'demo-bundle' as const },
+  ];
+  await render({ doc: null, error: false }, { ...PRIOR, notReviewed });
+  const pane = q('[data-section="review-findings"]');
+  expect(pane.getAttribute('data-not-reviewed-count')).toBe('68');
+  expect(pane.textContent).toContain('68 files not reviewed (66 binary, 2 demo-bundle)');
+});

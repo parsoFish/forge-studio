@@ -10,7 +10,8 @@
  * so none is shown; resolution lives on the operator's comments.
  *
  * DOM: [data-section="review-findings"][data-findings-state][data-findings-count]
- * [data-review-stale], [data-finding-group], [data-finding][data-finding-severity]
+ * [data-review-stale][data-not-reviewed-count]; `data-findings-state="not-current"`
+ * + [data-review-failed-head] when the latest review failed (forge-nk1y.39); [data-finding-group], [data-finding][data-finding-severity]
  * [data-finding-category], [data-section="why-what-how"] > [data-www-group] >
  * [data-narrative="why|what|how"].
  */
@@ -32,6 +33,14 @@ export type ReviewFindingsState = {
 };
 
 const WWW = ['why', 'what', 'how'] as const;
+
+/** forge-nk1y.39: the changed paths the orchestrator did not derive for review, counted by reason. */
+function notReviewedLabel(rows: ReadonlyArray<{ reason?: string }>): string {
+  const binary = rows.filter((r) => r.reason === 'binary').length;
+  const bundle = rows.filter((r) => r.reason === 'demo-bundle').length;
+  const parts = [binary > 0 ? `${binary} binary` : '', bundle > 0 ? `${bundle} demo-bundle` : ''].filter(Boolean);
+  return `${rows.length} file${rows.length === 1 ? '' : 's'} not reviewed (${parts.join(', ')})`;
+}
 const SENTENCES_PER_BLOCK = 2;
 
 export function FindingsPane({
@@ -74,6 +83,7 @@ export function FindingsPane({
   const groups = groupFindings(doc);
   const count = doc.findings?.length ?? 0;
   const stale = reviewHeadIsStale(doc.headSha, headSha);
+  const notReviewed = doc.notReviewed ?? [];
   const title = (id: string): string => workItemTitle(id) || (id === 'unattributed' || id === '' ? 'Not tied to a work item' : id);
   const wwwSlices = WWW.map((k) => ({ k, slices: splitByWorkItem(doc.whyWhatHow?.[k]) }));
   const wwwIds = [...new Set(wwwSlices.flatMap((x) => x.slices.map((s) => s.id)))];
@@ -85,6 +95,7 @@ export function FindingsPane({
       data-findings-count={count}
       data-review-stale={stale ? 'true' : 'false'}
       data-review-lenses={(doc.lenses ?? []).join(',')}
+      data-not-reviewed-count={notReviewed.length}
       style={pane}
     >
       <header style={paneHeader}>
@@ -93,6 +104,7 @@ export function FindingsPane({
           {count === 0 ? 'clean pass — no findings' : `${count} finding${count === 1 ? '' : 's'}`}
           {doc.headSha ? ` · reviewed ${doc.headSha.slice(0, 7)}` : ''}
           {stale && headSha ? ` ≠ head ${headSha.slice(0, 7)}` : ''}
+          {notReviewed.length > 0 ? ` · ${notReviewedLabel(notReviewed)}` : ''}
         </span>
         <span role="tablist" style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-1)' }}>
           {(['findings', 'why-what-how'] as const).map((t) => (

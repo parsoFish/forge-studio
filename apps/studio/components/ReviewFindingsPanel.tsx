@@ -40,6 +40,8 @@ export type ReviewFindingsDoc = {
   acEvaluations?: Array<{ criterion?: string; verdict?: 'met' | 'partial' | 'missed'; evidence?: string }>;
   /** The reviewer's narrative of the change. */
   whyWhatHow?: { why?: string; what?: string; how?: string };
+  /** forge-nk1y.39: changed paths not derived for review — a binary, or the orchestrator's demo bundle. */
+  notReviewed?: Array<{ path?: string; reason?: 'binary' | 'demo-bundle' }>;
   findings?: Array<{
     id?: string;
     severity?: 'blocker' | 'major' | 'minor' | 'info';
