@@ -83,6 +83,8 @@
   --radius: 10px;
   --radius-sm: 6px;
 
+  /* the sticky nav's height — a sticky pane below it offsets by this */
+  --nav-height: 56px;
   /* density scale — dev/UI-CONSTRAINTS.md §2 (D-46). Pinned, values and
      use, by apps/studio/tests/contract/density-tokens.test.ts. */
   --space-1: 4px;
@@ -137,7 +139,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 28px;
-  height: 56px;
+  height: var(--nav-height);
   padding: 0 24px;
   background: linear-gradient(180deg, #10151f 0%, #0c1018 100%);
   border-bottom: 1px solid var(--line);
