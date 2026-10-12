@@ -4,7 +4,7 @@
 
 The stories drive Studio by reading `data-*` attributes; the convention (what to mirror, how `data-page-ready` is derived, the disabled-reason and boundary rules) lives in `.claude/rules/studio-ui.md`. This page is the generated inventory of attributes and the values source gives them.
 
-It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 740 attributes.
+It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 741 attributes.
 
 | attribute | values | files |
 |---|---|---|
@@ -687,6 +687,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-summary-tile` | (dynamic) | apps/studio/components/studio/MonitorSummaryStrip.tsx |
 | `data-tab` | `explore`, `health`, `ingest-activity`, (dynamic) | apps/studio/app/knowledge/page.tsx, apps/studio/components/studio/gate/FindingsPane.tsx, apps/studio/components/studio/project-builder/ProjectTabs.tsx |
 | `data-tab-active` | (dynamic) | apps/studio/app/knowledge/page.tsx, apps/studio/components/studio/project-builder/ProjectTabs.tsx |
+| `data-tab-body` | `explore`, `health` | apps/studio/app/knowledge/page.tsx |
 | `data-tail-count` | (dynamic) | apps/studio/components/studio/EventTail.tsx |
 | `data-tail-state` | (dynamic) | apps/studio/components/studio/EventTail.tsx |
 | `data-target-flow` | (dynamic) | apps/studio/components/studio/RepointConfirmBar.tsx |
