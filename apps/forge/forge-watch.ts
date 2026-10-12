@@ -29,6 +29,7 @@ import { existsSync, writeFileSync, renameSync, readdirSync, statSync, readFileS
 import { resolve } from 'node:path';
 
 import { isDryBridge } from '@forge/kernel';
+import { reapDeadBrainWriteLease, releaseHeldBrainWriteLeases } from '@forge/knowledge';
 import { startBridge } from './ui-bridge.ts';
 import {
   superviseServe,
@@ -279,11 +280,13 @@ function signalGroup(proc: ChildProcess, sig: NodeJS.Signals): void {
  */
 export async function runExitSequence(
   code: number,
-  deps: { stopServe: () => void; closeBridge: () => Promise<void>; exit: (code: number) => void },
+  deps: { stopServe: () => void; closeBridge: () => Promise<void>; releaseLeases?: () => Promise<number>; exit: (code: number) => void },
 ): Promise<void> {
   deps.stopServe();
   try {
     await deps.closeBridge();
+    // forge-nk1y.28: a reflector rerun in the bridge may hold the brain-write lease; release it on exit.
+    await deps.releaseLeases?.();
   } catch {
     /* ignore — exiting regardless */
   }
@@ -516,6 +519,8 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   //     browser tab pinned at http://localhost:4124 across re-runs and
   //     have it auto-reconnect via the bridge-client backoff.
   takeoverPort(bridgePort, 'bridge', label);
+  // forge-nk1y.28: clear a brain-write lease a dead holder left (a SIGKILLed bridge or daemon); a live one is named, never touched.
+  for (const r of reapDeadBrainWriteLease(forgeRoot)) console.log(`${label} brain-write-lease.${r.action === 'reaped' ? `reaped — holder pid ${r.pid} is dead; removed` : `reap-refused — ${r.reason}:`} ${r.lockPath}`);
   // M7-E row 205: the bridge's own GET /api/health reports serve's live
   // status (D-12) via a GETTER, not a snapshot — the supervisor is
   // created a few lines below, AFTER the bridge is already listening, so the
@@ -551,22 +556,16 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n${label} shutting down...`);
-    // Capture the child ONCE, locally — do NOT re-read the shared `uiProc`
-    // variable after the await inside terminateChild below. Review finding
-    // #2 (reproduced standalone): during the production build, `uiProc` IS
-    // the build child; that child's own 'exit' listener in the build
-    // continuation (step 2b, registered first, at spawn time) nulls the
-    // shared `uiProc` the moment 'exit' fires — the SAME event this
-    // function's own `terminateChild` awaits. Re-reading `uiProc` after that
-    // await raced `uiProc` already being null, throwing a TypeError on
-    // `.exitCode` and skipping `bridge.close()`/`process.exit(0)` entirely.
-    // Operating on a local capture instead is immune to that race.
+    // Capture the child ONCE (review finding #2): the build child's own 'exit' listener nulls the shared
+    // `uiProc` on the same event `terminateChild` awaits, so re-reading it after the await threw and
+    // skipped `bridge.close()`/`process.exit(0)`.
     const proc = uiProc;
     if (proc) await terminateChild(proc);
     // runExitSequence stops supervising before the bridge closes (M7-E row 205).
     await runExitSequence(code, {
       stopServe: () => serveSupervisor?.stop(),
       closeBridge: () => bridge.close(),
+      releaseLeases: releaseHeldBrainWriteLeases,
       exit: (code) => process.exit(code),
     });
   };
@@ -625,6 +624,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
             await runExitSequence(1, {
               stopServe: () => serveSupervisor?.stop(),
               closeBridge: () => bridge.close(),
+              releaseLeases: releaseHeldBrainWriteLeases,
               exit: (code) => process.exit(code),
             });
           }

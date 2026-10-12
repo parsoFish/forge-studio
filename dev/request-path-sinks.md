@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-252 files, 1435 sink calls; 182 classified (accidentally-safe 8, guarded 47, not-request-derived 35, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+252 files, 1439 sink calls; 182 classified (accidentally-safe 8, guarded 47, not-request-derived 35, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -125,7 +125,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/knowledge/brain-lint-theme-paths.ts` | 9 | unclassified |  |  |  |
 | `packages/knowledge/brain-lint.ts` | 3 | accidentally-safe |  | read | no request field |
 | `packages/knowledge/brain-paths.ts` | 4 | unguarded | `resolveGuardedPath` | exec | `:id` on every `/api/studio/kbs/*` route |
-| `packages/knowledge/brain-write-lease.ts` | 4 | not-request-derived |  | read | Not a route: the brain-write lease every brain writer (reflector, KB drain/consolidate/brain-fix) takes |
+| `packages/knowledge/brain-write-lease.ts` | 8 | not-request-derived |  | read | Not a route: the brain-write lease every brain writer (reflector, KB drain/consolidate/brain-fix) takes |
 | `packages/knowledge/bridge-studio-kb-consolidate.ts` | 5 | unclassified |  |  |  |
 | `packages/knowledge/bridge-studio-kb-routes-lifecycle.ts` | 8 | unclassified |  |  |  |
 | `packages/knowledge/bridge-studio-kb-routes-maintenance.ts` | 5 | unclassified |  |  |  |
