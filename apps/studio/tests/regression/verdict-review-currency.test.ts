@@ -139,6 +139,9 @@ test('an outcome read that FAILED is UNKNOWN — the findings are never presente
   await render({ doc: null, error: true });
   expect(q('[data-section="review-findings"]').getAttribute('data-findings-state')).toBe('error');
   expect(container.querySelectorAll('[data-finding]').length).toBe(0);
+  // code-review #2: hiding the findings must not hide their blocker — no rationale-free approve on UNKNOWN.
+  expect(q('[data-section="verdict-headline"]').textContent).toBe('Not ready: the review could not be read — reload the page');
+  expect(q<HTMLButtonElement>('[data-action="approve-and-merge"]').getAttribute('data-disabled-reason')).toBe('a rationale is required to approve without a current review');
 });
 
 test('the no-demo fallback and the verdict view apply the same currency (currentFindingsPanelProps)', () => {

@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { runAdversarialReview, type AdversarialReviewResult } from '../../phases/adversarial-review.ts';
 import { testClassProfilePort } from './class-profile-port-fixture.ts';
 import { canonicalDef } from './canonical-def-fixture.ts';
-import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { ORCHESTRATOR_GIT_IDENTITY, createLogger, type EventLogEntry } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows';
 import type { StreamQueryFn, HeartbeatTimers } from '@forge/agents';
 
@@ -115,10 +115,17 @@ export function makeFixture(extraFiles: readonly string[] = []): Fixture {
   // demo bundle above is the orchestrator's (D-15) and is never content-
   // derived for review (forge-nk1y.39), so it cannot play this part.
   writeFileSync(join(worktree, UNCLAIMED_FILE), 'release notes\n');
-  git(['add', '-A']);
-  git(['commit', '-q', '-m', 'feat: the change + demo']);
+  git(['add', '--', 'src.ts', UNCLAIMED_FILE, ...extraFiles]);
+  git(['commit', '-q', '-m', 'feat: the change']);
+  commitAsOrchestrator(git, 'chore(demo): orchestrated demo capture');
   git(['push', '-q', '-u', 'origin', `feat/${INIT_ID}`]);
   return { root, worktree, logsRoot: join(root, '_logs'), git, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+/** Commit everything left as the ORCHESTRATOR, the identity production's demo capture commits with (D-15). */
+export function commitAsOrchestrator(git: (args: string[]) => string, message: string): void {
+  git(['add', '-A']);
+  git(['-c', `user.name=${ORCHESTRATOR_GIT_IDENTITY.name}`, '-c', `user.email=${ORCHESTRATOR_GIT_IDENTITY.email}`, 'commit', '-q', '-m', message]);
 }
 
 /** Pull the injected identity back out of the rendered prompt (the stub echoes it). */

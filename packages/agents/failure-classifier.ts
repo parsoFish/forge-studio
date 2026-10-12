@@ -676,7 +676,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
 
   // forge-nk1y.39: the review could not derive its evidence (gitweave I3a round 3:
   // "spawnSync git ENOBUFS") — an environment failure, never a judgment of the work.
-  if (adversarialReviewDeriveFailed) return T('transient', 'the adversarial review could not derive its git evidence (the orchestrator\'s own git read failed — environment failure, NOT a judgment of the work; see the review.input.derive-error event for the read and its error) — auto-retry re-runs the review', evidence, true);
+  if (adversarialReviewDeriveFailed) return T('transient', 'the adversarial review could not derive its git evidence (the orchestrator\'s own git read failed — environment failure, NOT a judgment of the work; see the review.* error events for the read and its error) — auto-retry re-runs the review', evidence, true);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   // W8-A2 (ON-7 defect 2a): a CostCeilingError is the flow's OWN budget

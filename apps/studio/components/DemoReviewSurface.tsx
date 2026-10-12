@@ -153,7 +153,8 @@ export function DemoReviewSurface({
     error: reviewFindings.error || currency.kind === 'unknown',
     ...(currency.kind === 'not-current' ? { notCurrent: { headSha: currency.headSha, reason: currency.reason, priorSha: currency.priorSha } } : {}),
   };
-  const noCurrentReview = currency.kind === 'not-current' ? { headSha: currency.headSha } : undefined;
+  // UNKNOWN (the outcome read failed) never opens a rationale-free approve: the hidden findings may hold blockers.
+  const noCurrentReview = currency.kind === 'not-current' ? { headSha: currency.headSha } : currency.kind === 'unknown' ? { headSha: null, unread: true as const } : undefined;
   const criteria = joinCriteria(model.acceptanceCriteria ?? [], doc?.acEvaluations ?? []);
   const checkpoints = model.checkpoints;
   const severities = countBy(doc?.findings ?? [], (f) => f.severity ?? 'info');

@@ -787,11 +787,11 @@ function ArtifactPageInner() {
         // flow's own declaration or an authoritative 404 — a transient fetch
         // failure renders the explicit error note instead (never a fabricated
         // "no findings artifact was produced" for a cycle that has one).
-        const rf = findingsPossible
-          ? await fetchJsonArtifactChecked<ReviewFindingsDoc>(artifactId, 'review-findings.json')
-          : { doc: null, failed: false };
-        // forge-nk1y.39: read the latest attempt NOT behind the guard — a FAILED review never completed its node.
-        const ro = await fetchJsonArtifactChecked<ReviewOutcomeDoc>(artifactId, 'review-outcome.json');
+        // forge-nk1y.39: the latest attempt is read NOT behind the guard — a FAILED review never completed its node.
+        const [rf, ro] = await Promise.all([
+          findingsPossible ? fetchJsonArtifactChecked<ReviewFindingsDoc>(artifactId, 'review-findings.json') : { doc: null, failed: false },
+          fetchJsonArtifactChecked<ReviewOutcomeDoc>(artifactId, 'review-outcome.json'),
+        ]);
         if (!signal.cancelled) {
           setReviewState({ doc: rf.doc, absent: rf.doc === null && !rf.failed, error: rf.doc === null && rf.failed, outcome: { doc: ro.doc, error: ro.failed } });
         }

@@ -35,7 +35,7 @@ export const DEFAULT_APPROVE_RATIONALE = 'Approved on the visual review — no b
 export type ReviewClaims = {
   present: boolean; missed: number; major: number; blocker: number; reviewedSha?: string; headSha?: string; stale: boolean;
   /** forge-nk1y.39: the latest review attempt produced no findings for the change (it failed at this head). */
-  noCurrentReview?: { headSha: string | null };
+  noCurrentReview?: { headSha: string | null; unread?: true };
 };
 
 const plural = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
@@ -77,7 +77,9 @@ export function DecisionCard({
   const notReady = blocking > 0 || noReview !== undefined;
   const headline = blocking > 0
     ? `Not ready: ${plural(blocking, 'blocking finding', 'blocking findings')}`
-    : noReview
+    : noReview?.unread
+      ? 'Not ready: the review could not be read — reload the page'
+      : noReview
       ? `Not ready: no current review — it failed at ${noReview.headSha ? noReview.headSha.slice(0, 7) : 'an unknown head'}`
       : 'Ready to approve and merge';
   const primaryBtn: React.CSSProperties = { flex: 1, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-md)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2) var(--space-4)', border: '1px solid var(--ember)', background: 'var(--ember)', color: 'var(--accent-fg)' };
