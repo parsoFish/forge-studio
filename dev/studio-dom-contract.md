@@ -4,7 +4,7 @@
 
 The stories drive Studio by reading `data-*` attributes; the convention (what to mirror, how `data-page-ready` is derived, the disabled-reason and boundary rules) lives in `.claude/rules/studio-ui.md`. This page is the generated inventory of attributes and the values source gives them.
 
-It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 744 attributes.
+It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 746 attributes.
 
 | attribute | values | files |
 |---|---|---|
@@ -297,7 +297,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-finding-path` | (dynamic) | apps/studio/app/hooks/[id]/page.tsx |
 | `data-finding-severity` | (dynamic) | apps/studio/app/community/[kind]/[id]/page.tsx, apps/studio/app/hooks/[id]/page.tsx, apps/studio/components/ReviewFindingsPanel.tsx, apps/studio/components/studio/gate/FindingsPane.tsx |
 | `data-findings-count` | (dynamic) | apps/studio/components/ReviewFindingsPanel.tsx, apps/studio/components/studio/gate/FindingsPane.tsx |
-| `data-findings-state` | `absent`, `error`, `present`, `present/absent/error`, (dynamic) | apps/studio/components/ReviewFindingsPanel.tsx, apps/studio/components/studio/gate/FindingsPane.tsx |
+| `data-findings-state` | `absent`, `error`, `not-current`, `present`, `present/absent/error/not-current`, (dynamic) | apps/studio/components/ReviewFindingsPanel.tsx, apps/studio/components/studio/gate/FindingsPane.tsx |
 | `data-fix-round` | (dynamic) | apps/studio/components/studio/RoadmapCanvas.tsx |
 | `data-fix-round-state` | (dynamic) | apps/studio/components/studio/RoadmapCanvas.tsx |
 | `data-flagged` | (dynamic) | apps/studio/components/studio/LibraryCard.tsx |
@@ -454,7 +454,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-materials-declared` | (dynamic) | apps/studio/components/studio/agent-builder/RunPanel.tsx |
 | `data-media-kind` | (dynamic) | apps/studio/components/DemoComparison.tsx, apps/studio/components/studio/gate/DemoGallery.tsx |
 | `data-media-mode` | (dynamic) | apps/studio/components/studio/gate/DemoGallery.tsx |
-| `data-micro-badge` | `deps-count`, `wi-progress` | apps/studio/components/studio/RoadmapCanvas.tsx |
+| `data-micro-badge` | `blocked-by`, `deps-count`, `wi-progress` | apps/studio/components/studio/RoadmapCanvas.tsx |
 | `data-minted-session-id` | (dynamic) | apps/studio/components/AuthoringLauncher.tsx, apps/studio/lib/kickoff-view.ts |
 | `data-misconfigured-count` | (dynamic) | apps/studio/app/connections/page.tsx |
 | `data-mode` | (dynamic) | apps/studio/app/artifact/page.tsx, apps/studio/components/SessionBriefing.tsx |
@@ -492,6 +492,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-not-found-kind` | `<kind>`, `page`, (dynamic) | apps/studio/app/not-found.tsx, apps/studio/components/NotFound.tsx |
 | `data-not-found-variant` | `unknown`, (dynamic) | apps/studio/components/NotFound.tsx |
 | `data-not-installed-count` | (dynamic) | apps/studio/app/connections/page.tsx |
+| `data-not-reviewed-count` | (dynamic) | apps/studio/components/studio/gate/FindingsPane.tsx |
 | `data-ok` | (dynamic) | apps/studio/components/studio/agent-builder/ReadinessPanel.tsx |
 | `data-onboard-attaching` | (dynamic) | apps/studio/components/studio/project-builder/OnboardWithAgent.tsx |
 | `data-onboard-run-id` | (dynamic) | apps/studio/components/studio/project-builder/OnboardWithAgent.tsx |
@@ -587,6 +588,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-resolve-blocked` | (dynamic) | apps/studio/components/studio/project-builder/ContractResolutionPanel.tsx |
 | `data-resolve-clause-id` | (dynamic) | apps/studio/components/studio/project-builder/ContractResolutionPanel.tsx |
 | `data-resolved` | (dynamic) | apps/studio/components/studio/project-builder/SkillsBind.tsx |
+| `data-review-failed-head` | (dynamic) | apps/studio/components/studio/gate/FindingsPane.tsx |
 | `data-review-lenses` | (dynamic) | apps/studio/components/ReviewFindingsPanel.tsx, apps/studio/components/studio/gate/FindingsPane.tsx |
 | `data-review-round` | (dynamic) | apps/studio/components/studio/FlowRunDetail.tsx |
 | `data-review-stale` | (dynamic) | apps/studio/components/studio/gate/FindingsPane.tsx |

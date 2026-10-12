@@ -72,7 +72,7 @@ test('kills "a work item too large for one pass just fails": the chunk is re-rev
     const res = await run(fx, qf, logger);
     assert.equal(res.status, 'complete', `the split must rescue the review, got ${JSON.stringify(res)}`);
     // 1 whole-work-item pass that exhausted + 3 per-file passes + the
-    // `unattributed` chunk (the branch's seeded `demo/<init>/demo.json`, which
+    // `unattributed` chunk (the branch's `NOTES.md`, which
     // no work item claims). The split changes ONE chunk's shape and leaves the
     // partition around it alone — which is the other half of the claim.
     assert.equal(prompts.length, 5, 'one whole-work-item pass that exhausted, then one pass per file, then the unattributed chunk');
@@ -211,7 +211,7 @@ test('kills "a failed pass throws away the chunks that passed": the completed ch
   const fx = makeFixture();
   try {
     // Pass 1: the work-item chunk succeeds, the `unattributed` chunk (the
-    // seeded demo.json) exhausts on its single file — G2's shape exactly.
+    // NOTES.md) exhausts on its single file — G2's shape exactly.
     const { logger: l1, events: e1 } = collectLogger(fx.logsRoot);
     let seen = 0;
     const failing = ((params: { prompt: string }) => {

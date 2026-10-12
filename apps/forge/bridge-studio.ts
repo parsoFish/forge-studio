@@ -32,7 +32,7 @@ import { cachedListRuns, recordedPmValidationErrors } from '@forge/flows';
 import { eventToNodeId } from '@forge/flows';
 import { listPlannedInitiatives } from '@forge/flows';
 import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
-import { checkInitiativeDeps } from '@forge/flows';
+import { unmetBuildDeps } from '@forge/flows';
 import type { Run } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 import { loadFlowDefinition, listFlowIds } from '@forge/flows';
@@ -978,7 +978,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     const items = roadmapWorkItems(initId, manifest.cycle_id ?? null, { forgeRoot, logsRoot }, { atGate });
     const workItems = items.length > 0 ? items : undefined;
 
-    const blockedBy = checkInitiativeDeps(file, queuePaths);
+    const blockedBy = unmetBuildDeps(file, queuePaths); // forge-nk1y.38: kickoff-parked dependents read blocked
 
     return {
       initiativeId: initId,

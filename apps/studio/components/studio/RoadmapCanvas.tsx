@@ -605,10 +605,7 @@ function RoadmapCanvasNode({
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: colour, flexShrink: 0 }} />
           {queueStatusLabel(status, fixRound, fixRoundRunning === true ? { done: wiDone, total: wiTotal } : undefined)}
         </span>
-        {/* W7-B6 (projects-33): the completion-time badge takes the STATUS
-            colour and only earns a ✓ for a successful terminal state — a
-            FAILED card used to show a green "✓ HH:MM" because the badge was
-            keyed off completedAt's mere presence. */}
+        {/* W7-B6 (projects-33): STATUS colour; ✓ only for a successful terminal state (a FAILED card once read green). */}
         {completedAt !== undefined && (
           <span
             data-badge="completed-at"
@@ -622,6 +619,9 @@ function RoadmapCanvasNode({
         <span data-micro-badge="deps-count" data-badge-value={depsCount} style={microBadgeStyle}>
           {depsCount} dep{depsCount === 1 ? '' : 's'}
         </span>
+        {blockedBy.length > 0 && ( /* forge-nk1y.38: the build's unmet dependency, named — a Start would only queue behind it. */
+          <span data-micro-badge="blocked-by" data-badge-value={blockedBy.join(',')} title={`blocked by ${blockedBy.join(', ')}`} style={{ ...microBadgeStyle, color: 'var(--amber)' }}>
+            blocked by {blockedBy[0]!.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '')}{blockedBy.length > 1 ? ` +${blockedBy.length - 1}` : ''}</span>)}
         <span
           data-micro-badge="wi-progress"
           data-badge-value={`${wiDone}/${wiTotal}`}

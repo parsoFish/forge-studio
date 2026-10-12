@@ -77,7 +77,7 @@ export { enqueueFlowRun } from './enqueue-flow-run.ts';
 export { PLAN_FLOW_ID, enqueuePlanRun } from './enqueue-plan-run.ts';
 
 // ---- Scheduler and daemon --------------------------------------------------
-export { checkInitiativeDeps, serve } from './scheduler.ts';
+export { checkInitiativeDeps, serve, unmetBuildDeps } from './scheduler.ts';
 export { decideAutoRetry } from './scheduler-dispatch.ts';
 export {
   clearOwnPidFile, clearPidFile, daemonPaths, isAlive, markStopping, readPid,
@@ -95,7 +95,7 @@ export { add } from './worktree.ts';
 export { finalizeMergedReadyForReview } from './finalize-merged.ts';
 
 // ---- Artifacts, demo paths and budgets -------------------------------------
-export { type ReviewFinding, type ReviewFindingsRecord, type ReviewFindingsExpectation, reviewFindingsJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
+export { type NotReviewedPath, type ReviewFinding, type ReviewFindingsRecord, type ReviewFindingsExpectation, type ReviewOutcomeRecord, reviewFindingsJsonPath, reviewOutcomeJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson, writeReviewOutcomeJson } from './flow-artifacts.ts';
 export { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 export { CostCeilingError, WedgeDetector, WedgeKillError } from './flow-budgets.ts';
 export {

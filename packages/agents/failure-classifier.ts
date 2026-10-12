@@ -317,7 +317,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // R4-10-F1: the demo + adversarial-review nodes replaced the unifier on the
   // live develop flow; their delivery-gate throws must be diagnosed accurately,
   // not swept into the retired unifier / reviewer-Ralph vocabulary below.
-  let integrateBandFailed = false, adversarialReviewFailed = false;
+  let integrateBandFailed = false, adversarialReviewFailed = false, adversarialReviewDeriveFailed = false;
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false, transientLint = false;
@@ -514,6 +514,9 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       // unifier-no-demo branches for a node that isn't the unifier or reviewer.
       if (msg.includes('delivery gate: integrate band failed')) {
         integrateBandFailed = true; ev(e);
+      } else if (msg.includes('adversarial review pipeline failed (derive-failed')) {
+        // forge-nk1y.39: the ORCHESTRATOR's git read failed — nothing was judged.
+        adversarialReviewDeriveFailed = true; ev(e);
       } else if (msg.includes('adversarial review pipeline failed')) {
         adversarialReviewFailed = true; ev(e);
       // F1.I1: distinguish unifier-no-demo from generic reviewer failure.
@@ -670,6 +673,10 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       dnsFailureAtPrOpen ? 'pr-open' : undefined,
     );
   }
+
+  // forge-nk1y.39: the review could not derive its evidence (gitweave I3a round 3:
+  // "spawnSync git ENOBUFS") — an environment failure, never a judgment of the work.
+  if (adversarialReviewDeriveFailed) return T('transient', 'the adversarial review could not derive its git evidence (the orchestrator\'s own git read failed — environment failure, NOT a judgment of the work; see the review.* error events for the read and its error) — auto-retry re-runs the review', evidence, true);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   // W8-A2 (ON-7 defect 2a): a CostCeilingError is the flow's OWN budget
