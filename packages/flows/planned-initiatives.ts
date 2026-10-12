@@ -6,8 +6,7 @@
  * (`kickoff: { kind: initiative-select }`) lists those planned initiatives so
  * the operator can launch one into a develop run. Each is annotated `ready`
  * (dependencies satisfied) or `blockedBy` (prerequisite initiative ids not yet
- * in `done/`), reusing the scheduler's `checkInitiativeDeps` so the UI shows
- * exactly what the scheduler would actually claim.
+ * in `done/` ∪ `merged/`), from the scheduler's own derivation (`unmetBuildDeps`).
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,7 +14,7 @@ import { join } from 'node:path';
 import { parseManifest } from './manifest.ts';
 import { isRunnableSource } from '@forge/contracts';
 import { getPaths, listPending, listReadyForReview } from './queue.ts';
-import { checkInitiativeDeps } from './scheduler.ts';
+import { unmetBuildDeps } from './scheduler.ts';
 
 export type PlannedInitiative = {
   initiativeId: string;
@@ -87,7 +86,7 @@ export function listPlannedInitiatives(queueRoot = '_queue', targetFlowId: strin
     // offered only when `enqueueFlowRun` would actually claim it.
     const flowId = rawFrontmatter.match(/^flow_id:\s*(.+)$/m)?.[1]?.trim() ?? null;
     if (!isRunnableSource(state, flowId, targetFlowId)) continue;
-    const blockedBy = checkInitiativeDeps(filename, paths);
+    const blockedBy = unmetBuildDeps(filename, paths); // forge-nk1y.38: the BUILD's deps, wherever parked
     const blockedClauses = manifestBlockedClauses(rawFrontmatter);
     out.push({ initiativeId, project, title, ready: blockedBy.length === 0 && blockedClauses.length === 0, blockedBy, blockedClauses });
   }

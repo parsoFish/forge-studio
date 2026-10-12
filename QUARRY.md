@@ -417,7 +417,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 523 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 193 |
-| packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
+| packages/flows/planned-initiatives.ts | flows | verbatim | 95 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
 | packages/flows/pr-branch-sync.ts | flows | verbatim | 597 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
@@ -476,7 +476,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/run-model.ts | flows | verbatim | 646 |
 | packages/flows/run-model-flow-graph.ts | flows | verbatim | 248 |
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 254 |
-| packages/flows/scheduler.ts | flows | verbatim | 378 |
+| packages/flows/scheduler.ts | flows | verbatim | 379 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 204 |
 | packages/flows/orchestrator-event.ts | flows | rewritten | 42 **New file, forge-nk1y.20:** `emitOrchestratorEvent`, moved verbatim out of `scheduler-run-one.ts` so `scheduler-sweeps.ts` can emit its `worktree-path.refused` event without importing the file that imports it. |
 | packages/flows/scheduler-run-one.ts | flows | verbatim | 655 |

@@ -281,49 +281,50 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
 export const UNPARSEABLE_MANIFEST_BLOCKER = '<unparseable-manifest>';
 
 /**
- * F-25: read a pending manifest's `depends_on_initiatives` and return the
- * subset that are NOT yet in `_queue/done/`. An empty result means all deps
- * are satisfied (or there were no deps) and the scheduler may claim. A
- * manifest whose frontmatter fails to parse returns the blocking
- * `UNPARSEABLE_MANIFEST_BLOCKER` sentinel (fail safe — never dispatch what
- * we can't read) with a loud log. Exported for unit-test access — the
- * scheduler and the roadmap/planned-initiatives builders are the production
- * callers.
- *
- * plan-everything-before-kickoff: the gate applies only to build flows
- * (forge-develop). A decompose run (flow_id 'forge-architect') must be free
- * to draft its whole roadmap up front without waiting on a prerequisite
- * initiative's merge — only the later build kickoff respects merge order.
- * A manifest with no flow_id is treated as a build flow (the pre-existing,
- * safe default).
+ * F-25: the subset of a manifest's `depends_on_initiatives` NOT yet in
+ * `done/` ∪ `merged/` (R4-11-F1: `merged` is the same finished dependency on
+ * its way to `done/`). An unparseable manifest returns the blocking
+ * `UNPARSEABLE_MANIFEST_BLOCKER` sentinel with a loud log (fail safe — never
+ * dispatch, never offer, what we cannot read). THE one dependency derivation:
+ * the claim gate and the kickoff readiness below both read it.
  */
-export function checkInitiativeDeps(filename: string, paths: QueuePaths): string[] {
-  const pendingPath = join(paths.pending, filename);
-  if (!existsSync(pendingPath)) return [];
+function unmetDepsAt(manifestPath: string, filename: string, paths: QueuePaths, claimGate: boolean): string[] {
   let deps: string[];
   try {
-    const full = parseFullManifest(readFileSync(pendingPath, 'utf8'));
-    const flowId = full.flow_id ?? DEVELOP_FLOW_ID;
-    if (flowId !== DEVELOP_FLOW_ID) return [];
+    const full = parseFullManifest(readFileSync(manifestPath, 'utf8'));
+    // plan-everything-before-kickoff: the CLAIM gate holds builds only (no flow_id = a build); a
+    // decompose run (forge-architect) drafts its roadmap ahead of its deps.
+    if (claimGate && (full.flow_id ?? DEVELOP_FLOW_ID) !== DEVELOP_FLOW_ID) return [];
     deps = full.depends_on_initiatives ?? [];
   } catch (err) {
-    console.error(
-      `[scheduler] ${filename}: manifest frontmatter failed to parse — blocking claim (fail safe): ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    console.error(`[scheduler] ${filename}: manifest frontmatter failed to parse — blocking (fail safe): ${err instanceof Error ? err.message : String(err)}`);
     return [UNPARSEABLE_MANIFEST_BLOCKER];
   }
-  if (deps.length === 0) return [];
-  return deps.filter((depId) => {
-    // R4-11-F1: `merged` is a transient pass-through of the SAME finished
-    // dependency (it's promoted to `done/` in the same sweep) — a dependent
-    // must not stay blocked for the brief window a prerequisite sits in
-    // `merged/` before that promotion runs, so the gate accepts merged ∪ done.
-    const donePath = join(paths.done, `${depId}.md`);
-    const mergedPath = join(paths.merged, `${depId}.md`);
-    return !existsSync(donePath) && !existsSync(mergedPath);
-  });
+  return deps.filter((depId) => !existsSync(join(paths.done, `${depId}.md`)) && !existsSync(join(paths.merged, `${depId}.md`)));
+}
+
+/** The scheduler's CLAIM gate for a `pending/` manifest (exported for tests; the scheduler is the caller). */
+export function checkInitiativeDeps(filename: string, paths: QueuePaths): string[] {
+  const p = parkedAt(filename, [paths.pending]);
+  return p === null ? [] : unmetDepsAt(p, filename, paths, true);
+}
+
+/** The first of `dirs` holding `filename`, or null. */
+function parkedAt(filename: string, dirs: readonly string[]): string | null {
+  return dirs.map((d) => join(d, filename)).find((p) => existsSync(p)) ?? null;
+}
+
+/**
+ * forge-nk1y.38: kickoff READINESS — the dependencies the BUILD would wait on,
+ * for a planned initiative wherever it is parked (`pending/`, or
+ * `ready-for-review/` at the Kickoff gate) and whatever flow it last ran: a
+ * kickoff-parked manifest still carries `flow_id: forge-architect`, and the
+ * claim gate's decompose exemption made every such dependent read ready.
+ * Elsewhere there is no kickoff readiness to judge.
+ */
+export function unmetBuildDeps(filename: string, paths: QueuePaths): string[] {
+  const p = parkedAt(filename, [paths.pending, paths.readyForReview]);
+  return p === null ? [] : unmetDepsAt(p, filename, paths, false);
 }
 
 function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }, projectsRoot: string): void {

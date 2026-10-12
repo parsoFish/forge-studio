@@ -77,7 +77,7 @@ export { enqueueFlowRun } from './enqueue-flow-run.ts';
 export { PLAN_FLOW_ID, enqueuePlanRun } from './enqueue-plan-run.ts';
 
 // ---- Scheduler and daemon --------------------------------------------------
-export { checkInitiativeDeps, serve } from './scheduler.ts';
+export { checkInitiativeDeps, serve, unmetBuildDeps } from './scheduler.ts';
 export { decideAutoRetry } from './scheduler-dispatch.ts';
 export {
   clearOwnPidFile, clearPidFile, daemonPaths, isAlive, markStopping, readPid,
