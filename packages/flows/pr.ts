@@ -42,10 +42,13 @@ import { buildCaptureMediaBlock, encodeRelPath } from './pr-media.ts';
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 
@@ -380,13 +383,33 @@ export function prRef(worktreePath: string): PrRef | null {
  * block (F-09) — local branch deleted there, remote branch lingers
  * unless the GitHub repo has "auto-delete head branches" enabled.
  */
-export function mergePullRequest(worktreePath: string): boolean {
+/** forge-nk1y.34: the PR body with the operator's verdict appended (replacing an earlier one). */
+export function withVerdictNote(body: string, rationale: string): string {
+  const kept = body.split(VERDICT_HEADING)[0].replace(/\s*$/, '');
+  return `${kept}\n\n${VERDICT_HEADING}\n\nApproved by the operator: ${rationale.trim()}\n`;
+}
+const VERDICT_HEADING = '## Operator verdict';
+
+/** Read the PR body, append the verdict, write it back through a temp file; any gh failure throws. */
+export function writeVerdictToPrBody(gh: (args: string[]) => string, rationale: string): void {
+  const body = gh(['pr', 'view', '--json', 'body', '--jq', '.body']);
+  const dir = mkdtempSync(join(tmpdir(), 'forge-verdict-'));
+  try {
+    writeFileSync(join(dir, 'body.md'), withVerdictNote(body, rationale));
+    gh(['pr', 'edit', '--body-file', join(dir, 'body.md')]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+export function mergePullRequest(worktreePath: string, verdict?: { rationale: string }): boolean {
   try {
     // 597(a): pinned to the OWNER OF THE REMOTE THIS WORKTREE PUSHES TO, never
     // to whatever account happens to be active on the host. A pin that cannot be
     // made throws, and the catch below reports the merge as failed — which is
     // the right answer: not merging is better than merging as someone nobody named.
-    ghForWorktree(worktreePath)(['pr', 'merge', '--merge'], worktreePath);
+    const gh = ghForWorktree(worktreePath);
+    // forge-nk1y.34: the rationale lands in the PR body BEFORE the merge; a body that cannot be written fails the merge.
+    if (verdict) writeVerdictToPrBody((args) => gh(args, worktreePath), verdict.rationale);
+    gh(['pr', 'merge', '--merge'], worktreePath);
     return true;
   } catch (err) {
     // Surface the stderr for diagnostic visibility — the orchestrator's

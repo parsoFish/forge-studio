@@ -66,7 +66,7 @@ export function SkillsBind({
                 placeholder="Search skills…"
                 style={{ marginBottom: 8, fontSize: 13 }}
               />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto' }}>
+              <div data-section="skills-catalog" style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 'var(--pane-md)', overflowY: 'auto' }}>
                 {filtered.map((sk) => (
                   <div
                     key={sk.id}

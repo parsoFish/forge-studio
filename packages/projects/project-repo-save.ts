@@ -30,8 +30,11 @@ export type RecoverConfirmation = { localHead: string; resetTo: string };
  *  `recovery` is a proposal the operator must confirm before anything moves. */
 export type SaveResult = {
   merged: boolean; pushed: boolean; detail: string;
-  refused?: string[]; adopted?: string[]; prUrl?: string; prState?: PrState; recovery?: SaveRecovery;
+  refused?: string[]; adopted?: string[]; prUrl?: string; prState?: PrState; recovery?: SaveRecovery; remoteBranch?: RemoteBranchOutcome;
 };
+/** forge-mfv5.1.33 — what Save did to origin's forge-studio, by name: deleted after a confirmed merge,
+ *  deleted and recreated when a merged one blocked the push, or kept (with why). `sha` is UNKNOWN when unreadable. */
+export type RemoteBranchOutcome = { action: 'deleted' | 'recreated' | 'kept'; sha: string; reason: string };
 
 export type SaveOptions = { adopt?: readonly string[]; recover?: RecoverConfirmation; gh?: GhRunner };
 
@@ -231,11 +234,24 @@ function mergeAndPush(dir: string, base: string): { ok: true } | { ok: false; co
 
 /** Push forge-studio as a branch (never forced) and open/reuse its PR. Base untouched. */
 function publishViaPr(dir: string, base: string, gh: GhRunner, slug: string, why: string): SaveResult {
-  const pushed = tryGit(dir, ['push', 'origin', `refs/heads/${STUDIO_BRANCH}:refs/heads/${STUDIO_BRANCH}`]);
+  const pushed = tryGit(dir, ['push', 'origin', `${STUDIO_REF}:${STUDIO_REF}`]);
   if (!pushed.ok) {
-    const nonFf = /non-fast-forward|fetch first|rejected/.test(pushed.err) ? ' — origin has commits this one lacks (not a fast-forward; forge never force-pushes)' : '';
-    return notSaved(`refused — git push origin ${STUDIO_BRANCH} failed (${pushed.err})${nonFf}; ${STUDIO_BRANCH} and ${base} untouched`);
+    const isNonFf = /non-fast-forward|fetch first|rejected/.test(pushed.err);
+    const merged = isNonFf ? mergedRemoteStudio(dir, base, gh, slug) : undefined;
+    if (merged && merged.action === 'recreated') {
+      const dropped = deleteRemoteStudio(dir, merged.sha);
+      const again = dropped.ok ? tryGit(dir, ['push', 'origin', `${STUDIO_REF}:${STUDIO_REF}`]) : dropped;
+      if (again.ok) return withRemote(publishedPr(dir, base, gh, slug, why), merged);
+      const what = dropped.ok ? 'was deleted, but pushing the new one failed' : 'could not be deleted';
+      return { ...notSaved(`not saved — origin/${STUDIO_BRANCH} (${merged.reason}) ${what} (${again.err}); local ${STUDIO_BRANCH} and ${base} untouched; Save again`), remoteBranch: { ...merged, action: dropped.ok ? 'deleted' : 'kept' } };
+    }
+    const nonFf = isNonFf ? ' — origin has commits this one lacks (not a fast-forward; forge never force-pushes)' : '';
+    return { ...notSaved(`refused — git push origin ${STUDIO_BRANCH} failed (${pushed.err})${nonFf}; ${STUDIO_BRANCH} and ${base} untouched`), ...(merged ? { remoteBranch: merged } : {}) };
   }
+  return publishedPr(dir, base, gh, slug, why);
+}
+
+function publishedPr(dir: string, base: string, gh: GhRunner, slug: string, why: string): SaveResult {
   const pr = openOrReuseStudioPr(gh, dir, slug, base);
   if (!pr.ok) return notSaved(`not saved — ${pr.reason}; ${STUDIO_BRANCH} is on origin but no PR is open; ${STUDIO_BRANCH} and ${base} untouched`);
   return settlePr(dir, base, gh, slug, pr.url, `${pr.created ? 'opened' : 'updated open'} PR ${pr.url} (${why}) — ${STUDIO_BRANCH} → ${base}`);
@@ -269,14 +285,57 @@ function settlePr(dir: string, base: string, gh: GhRunner, slug: string, url: st
  *  fast-forward the base — refused by name unless it is an ancestor of origin — and drop forge-studio. */
 function finishMergedPr(dir: string, base: string, url: string | undefined): SaveResult {
   const name = `PR ${url ?? STUDIO_BRANCH}`;
+  const mergedTip = sha(dir, STUDIO_BRANCH);
   if (!tryGit(dir, ['merge-base', '--is-ancestor', base, tracking(base)]).ok) {
     return notSaved(`refused — ${name} merged, but local ${base} is not an ancestor of origin/${base} (${count(dir, `${tracking(base)}..${base}`)} local commit(s)): reconcile ${base} by hand, then Save again; nothing moved`);
   }
   if (currentBranch(dir) !== base) git(dir, ['checkout', base]);
   git(dir, ['merge', '--ff-only', tracking(base)]);
   git(dir, ['branch', '-D', STUDIO_BRANCH]);
+  const remoteBranch = dropMergedRemote(dir, base, mergedTip, `${name} merged`);
   git(dir, ['branch', '-dr', `origin/${STUDIO_BRANCH}`], { allowFail: true });
-  return { merged: true, pushed: true, detail: `${name} merged — ${base} fast-forwarded to origin/${base} ${sha(dir, base).slice(0, 7)}` };
+  const done: SaveResult = { merged: true, pushed: true, detail: `${name} merged — ${base} fast-forwarded to origin/${base} ${sha(dir, base).slice(0, 7)}` };
+  return remoteBranch ? withRemote(done, remoteBranch) : done;
+}
+
+const STUDIO_REF = `refs/heads/${STUDIO_BRANCH}`;
+const withRemote = (r: SaveResult, b: RemoteBranchOutcome): SaveResult => ({ ...r, detail: `${r.detail}; origin/${STUDIO_BRANCH} ${b.action} (${b.reason})`, remoteBranch: b });
+
+/** origin's forge-studio tip (fetched, so it can be judged): a sha, null when absent, or the error (§6.15: never deleted on it). */
+function remoteStudioTip(dir: string): { sha: string | null } | { error: string } {
+  const r = tryGit(dir, ['fetch', '--quiet', 'origin', `+${STUDIO_REF}:refs/remotes/origin/${STUDIO_BRANCH}`]);
+  if (!r.ok) return /couldn't find remote ref/i.test(r.err) ? { sha: null } : { error: r.err };
+  return { sha: sha(dir, `refs/remotes/origin/${STUDIO_BRANCH}`) };
+}
+
+/** Delete origin's forge-studio only at the tip judged merged: the lease refuses a branch that moved since. */
+function deleteRemoteStudio(dir: string, tip: string): { ok: true } | { ok: false; err: string } {
+  const r = tryGit(dir, ['push', `--force-with-lease=${STUDIO_REF}:${tip}`, 'origin', `:${STUDIO_REF}`]);
+  return r.ok ? { ok: true } : r;
+}
+
+/** After our PR merged: drop origin's forge-studio when it is the merged head (or already in the base). */
+function dropMergedRemote(dir: string, base: string, mergedTip: string, why: string): RemoteBranchOutcome | undefined {
+  const remote = remoteStudioTip(dir);
+  if ('error' in remote) return { action: 'kept', sha: 'UNKNOWN', reason: `origin/${STUDIO_BRANCH} unreadable (${remote.error})` };
+  if (remote.sha === null) return undefined;
+  if (remote.sha !== mergedTip && !tryGit(dir, ['merge-base', '--is-ancestor', remote.sha, tracking(base)]).ok) {
+    return { action: 'kept', sha: remote.sha, reason: `it moved past the merged head — unmerged commits, not deleted` };
+  }
+  const del = deleteRemoteStudio(dir, remote.sha);
+  return del.ok ? { action: 'deleted', sha: remote.sha, reason: why } : { action: 'kept', sha: remote.sha, reason: `delete refused (${del.err})` };
+}
+
+/** A push refused as non-fast-forward: is origin's forge-studio already merged? `recreated` = safe to replace. */
+function mergedRemoteStudio(dir: string, base: string, gh: GhRunner, slug: string): RemoteBranchOutcome {
+  const remote = remoteStudioTip(dir);
+  if ('error' in remote) return { action: 'kept', sha: 'UNKNOWN', reason: `origin/${STUDIO_BRANCH} unreadable (${remote.error})` };
+  if (remote.sha === null) return { action: 'kept', sha: 'none', reason: `origin/${STUDIO_BRANCH} vanished; Save again` };
+  const tip = remote.sha;
+  if (tryGit(dir, ['merge-base', '--is-ancestor', tip, tracking(base)]).ok) return { action: 'recreated', sha: tip, reason: `already in origin/${base}` };
+  if (sha(dir, `${tip}^{tree}`) === sha(dir, `${tracking(base)}^{tree}`)) return { action: 'recreated', sha: tip, reason: `its tree equals origin/${base}` };
+  const pr = mergedStudioPr(gh, dir, slug, base, tip);
+  return pr ? { action: 'recreated', sha: tip, reason: `PR ${pr} merged` } : { action: 'kept', sha: tip, reason: `it carries commits not merged (origin/${base} lacks them; no readable merged PR has this head)` };
 }
 
 /** Pending a Save: forge-studio has commits beyond the base, or the base sits

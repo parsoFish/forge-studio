@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
 import { sdkHooksForAgent } from '@forge/agents';
@@ -40,7 +40,10 @@ import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
 import { createWiWorktree, removeWiWorktree, wedgeKillRunnerError } from '@forge/flows';
-import { emitDepsLinkProblems, emitGateEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
+import { emitDepsLinkProblems, emitGateEvent, emitGateFeedbackEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
+import { createGateFeedbackTracker, writeMergeConflictFeedback } from './gate-feedback.ts';
+// forge-nk1y.35: the feedback writers moved to gate-feedback.ts; re-exported for their existing tests.
+export { GATE_FAILURE_FEEDBACK_HEADING, MERGE_CONFLICT_FEEDBACK_HEADING, writeGateFeedback, writeMergeConflictFeedback } from './gate-feedback.ts';
 import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows';
@@ -669,6 +672,11 @@ export async function runDeveloperLoop(
         // re-review #1: captured by the gate's onRun each run; read by the
         // runner's gateErrored predicate to stop early on a broken gate.
         let lastGateErrored = false;
+        // forge-nk1y.35: the brief carries the gate's own output at the HEAD it judged.
+        const gateFeedback = createGateFeedbackTracker({
+          worktreePath: wiWorktree.path,
+          emit: (event) => emitGateFeedbackEvent(logger, { initiativeId: input.initiativeId, parentEventId: wiStart.event_id, workItemId: wi.work_item_id, skill: agentDef.slug }, event),
+        });
         result = await runRalph(
         {
           workItemSpecPath: specPath,
@@ -720,7 +728,7 @@ export async function runDeveloperLoop(
               // doesn't fix machine load and burns agent spend) — but its
               // distinct gate.timeout event classifies as transient/environment
               // so the scheduler retries instead of failing the work as wrong.
-              onRun: (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(wiWorktree.path, gateInfo); },
+              onRun: (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); gateFeedback.onRun(gateInfo); },
             });
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut
@@ -758,6 +766,7 @@ export async function runDeveloperLoop(
             // Phase A — flush the per-tool sampler's coalesced remainder for
             // this iteration before the iteration-summary event.
             wiToolSink.flushIteration(iteration);
+            gateFeedback.noteAgentTurn(info.lastAssistantText);
             logger.emit({
               initiative_id: input.initiativeId,
               parent_event_id: wiStart.event_id,
@@ -1527,190 +1536,6 @@ export function assertOutcomesSettled(
     `developer-loop: internal error — incomplete outcome snapshot before summary ` +
       `(${outcomes.size}/${wisRun.length} settled)${missing.length > 0 ? `; missing: ${missing.join(', ')}` : ''}`,
   );
-}
-
-/**
- * The one scratch path both the live-gate-feedback loop (`writeGateFeedback`,
- * the unifier's composed-gate equivalent) and the fan-in merge-conflict loop
- * (`writeMergeConflictFeedback`, below) write into. `.forge/` is gitignored
- * on every onboarded project (contract C2) and stripped pre-PR, so this
- * scratch file never lands on a branch. Kept as a single named helper so the
- * seam both loops share is structural, not an incidentally-matching literal
- * repeated at each call site.
- */
-function lastGateFailurePath(worktreePath: string): string {
-  return join(worktreePath, '.forge', 'last-gate-failure.md');
-}
-
-/**
- * The two heading prefixes the shared feedback file can open with. Structural
- * — `writeGateFeedback`'s iteration-0 append path keys on them (a file that
- * STARTS with the merge-conflict heading is preserved; the gate detail is
- * spliced at the first gate-failure heading), so they live as named constants
- * rather than incidentally-matching literals in two bodies. Exported for the
- * integration tests that assert on the file's shape.
- */
-export const MERGE_CONFLICT_FEEDBACK_HEADING = '# MERGE CONFLICT';
-export const GATE_FAILURE_FEEDBACK_HEADING = '# Live quality-gate failure — AUTHORITATIVE';
-
-/**
- * S9 fix (2026-07-01): feed the authoritative LIVE gate failure back to the dev
- * agent. The orchestrator's quality gate runs the WI's `quality_gate_cmd` live
- * (secrets.env-injected, TF_ACC set) while the agent's own self-check runs
- * offline and can false-pass (acceptance tests silently skip without TF_ACC).
- * Persisting the live failure to `.forge/last-gate-failure.md` — which the dev
- * PROMPT tells the agent to read first — lets the next iteration fix the exact
- * live failure instead of re-confirming offline-green and burning the iteration
- * budget. `.forge/` is stripped pre-PR, so this scratch file never lands on the branch.
- *
- * Exported (2026-07-12, Wave 2 gate-feedback-loop conformance item) so the
- * integration test can drive the EXACT production write/clear path against a
- * real per-WI worktree and `runRalph` call, rather than re-implementing it —
- * behaviour is otherwise unchanged.
- *
- * Precedence vs. `writeMergeConflictFeedback` (below): both target the SAME
- * file. This is deliberate, not an oversight — a requeued WI's fresh worktree
- * gets the merge-conflict note written once, before ralph runs, so the
- * agent's first turn on the retry sees "sibling work already changed these
- * files, don't reproduce your last edit." The wrinkle (re-review CRITICAL,
- * 2026-07-12): the runner's iteration 0 is NOT the agent's first turn — it is
- * the sharp-gate pre-check (`failOnHollowIter0Gate`, default ON for per-WI
- * ralphs), which runs the REAL gate before the agent exists and delivers its
- * result here via `onRun`. On a fresh requeue fork that iter-0 gate almost
- * always FAILS, and a blind rewrite would delete the conflict note before the
- * agent ever read it — nullifying the injection on the exact path it exists
- * for. So the contract is three-cased:
- *
- * - FAILING gate at iteration 0 with a merge-conflict note already in the
- *   file → PRESERVE the note and append the gate detail beneath it (one
- *   file, conflict context first — it is the higher-signal instruction; the
- *   iter-0 gate failure on a fresh fork is expected, not news).
- * - FAILING gate at iteration ≥ 1 → replace the file entirely. The agent has
- *   had its first turn (which the dev prompt mandates opens by reading this
- *   file); from here on the live gate result is the freshest, most
- *   actionable signal — the file's existing "always reflects the freshest
- *   live truth, never accumulates history" contract (the 2026-07-04
- *   stale-last-gate-failure theme).
- * - PASSING gate at ANY iteration → delete, as always. If even the iter-0
- *   gate passes on a fresh fork, sibling merges already delivered the
- *   behavior (the runner classifies it `already-complete`/`gate-too-loose`)
- *   and the conflict note is moot.
- */
-export function writeGateFeedback(worktreePath: string, info: GateRunInfo): void {
-  const filePath = lastGateFailurePath(worktreePath);
-  try {
-    if (info.passed) {
-      if (existsSync(filePath)) unlinkSync(filePath);
-      return;
-    }
-    const gateBody = [
-      `${GATE_FAILURE_FEEDBACK_HEADING} (forge, iteration ${info.iteration ?? '?'})`,
-      '',
-      'This is the result of the SAME gate that decides whether this work item is done.',
-      'Your own offline test run can show a FALSE pass: live acceptance tests silently',
-      'skip without TF_ACC and print `ok ... 0.00s`. Fix EXACTLY what is below — the work',
-      'item is NOT done until this file disappears.',
-      '',
-      `Command: ${info.command ?? ''}`,
-      `Exit code: ${String(info.exitCode ?? '?')}${info.errored ? '  (gate ERRORED — could not run; fix the gate/build itself)' : ''}`,
-      '',
-      '## stdout (tail)',
-      '```',
-      info.stdoutTail ?? '',
-      '```',
-      '',
-      '## stderr (tail)',
-      '```',
-      info.stderrTail ?? '',
-      '```',
-      '',
-    ].join('\n');
-    // Iteration-0 append path (see the precedence contract in the doc
-    // comment): the sharp-gate pre-check fires before the agent's first
-    // turn, and on a requeued fork the file already holds the merge-conflict
-    // note. Preserve it — conflict context first, gate detail beneath.
-    // Splitting at the first gate-failure heading keeps a repeated iter-0
-    // write idempotent (fresh gate detail, never accumulated copies).
-    let body = gateBody;
-    if (info.iteration === 0 && existsSync(filePath)) {
-      const existing = readFileSync(filePath, 'utf8');
-      if (existing.startsWith(MERGE_CONFLICT_FEEDBACK_HEADING)) {
-        const spliceAt = existing.indexOf(GATE_FAILURE_FEEDBACK_HEADING);
-        const conflictNote = (spliceAt === -1 ? existing : existing.slice(0, spliceAt)).replace(/\s*$/, '');
-        body = `${conflictNote}\n\n${gateBody}`;
-      }
-    }
-    mkdirSync(join(worktreePath, '.forge'), { recursive: true });
-    writeFileSync(filePath, body);
-  } catch {
-    /* best-effort — never throw out of the gate sink */
-  }
-}
-
-/**
- * Conflict-context injection (Phase 4 step 7 follow-up, 2026-07-12): a WI
- * whose fan-in merge conflicted gets exactly ONE bounded requeue
- * (`DEV_WI_MERGE_CONFLICT_MAX_RETRIES`) against a fresh cycle-branch tip —
- * but a fresh per-WI worktree carries zero knowledge of WHY the previous
- * attempt conflicted, so ralph reliably reproduces the same overlapping
- * edit (proven live: 2026-07-11T14-57-10_INIT-2026-07-11-csv-output-flag's
- * WI-3 conflicted twice in a row, deterministically). This writes the
- * captured conflict detail (`captureMergeConflictDetail` in
- * `wi-merge-back.ts`) into the requeued attempt's fresh worktree, reusing
- * the SAME `.forge/last-gate-failure.md` seam `writeGateFeedback` uses — the
- * dev system prompt already mandates reading that file first, so no prompt
- * change is needed for the agent to see this on its very first turn.
- *
- * A distinct heading ("MERGE CONFLICT" vs. "Live quality-gate failure")
- * keeps the two kinds of feedback from reading as the same thing — this is
- * fan-in evidence about sibling work, not a report on the WI's own gate.
- * See `writeGateFeedback`'s doc comment above for the precedence decision
- * between the two writers.
- */
-export function writeMergeConflictFeedback(
-  worktreePath: string,
-  attempt: number,
-  conflict: MergeConflictDetail,
-): void {
-  try {
-    const fileList =
-      conflict.conflictingFiles.length > 0
-        ? conflict.conflictingFiles.map((f) => `- ${f}`).join('\n')
-        : '- (git reported no specific unmerged paths for this failure)';
-    const commitList =
-      conflict.siblingCommits.length > 0
-        ? conflict.siblingCommits.map((c) => `- ${c}`).join('\n')
-        : '- (none found — the conflict may be against a change forge has not recorded a commit for)';
-    const body = [
-      `${MERGE_CONFLICT_FEEDBACK_HEADING} (attempt ${attempt}) — forge fan-in, NOT a quality-gate failure`,
-      '',
-      'Your PREVIOUS attempt on this work item conflicted when forge tried to merge its',
-      'branch back into the cycle branch. Sibling work items already merged into the',
-      'cycle branch while you were working, and your edit overlapped theirs on the files',
-      'listed below. This is a FRESH worktree/branch forked from the CURRENT cycle tip —',
-      'do NOT reproduce your previous edit verbatim. Read the current state of these',
-      'files first and rebase your approach on top of what is already there.',
-      '',
-      `Your previous attempt's last commit: "${conflict.wiBranchTipSubject || '(unknown)'}"`,
-      '',
-      '## Files that conflicted',
-      '',
-      fileList,
-      ...(conflict.filesTruncated ? ['', '_(truncated — more files conflicted than listed above)_'] : []),
-      '',
-      '## Sibling commits already merged that touched those files',
-      '',
-      commitList,
-      ...(conflict.commitsTruncated
-        ? ['', '_(truncated — more sibling commits touched these files than listed above)_']
-        : []),
-      '',
-    ].join('\n');
-    mkdirSync(join(worktreePath, '.forge'), { recursive: true });
-    writeFileSync(lastGateFailurePath(worktreePath), body);
-  } catch {
-    /* best-effort — never throw out of the requeue path */
-  }
 }
 
 /**
