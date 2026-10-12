@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-250 files, 1425 sink calls; 180 classified (accidentally-safe 8, guarded 47, not-request-derived 33, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+253 files, 1441 sink calls; 183 classified (accidentally-safe 8, guarded 47, not-request-derived 36, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -78,7 +78,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/planned-initiatives.ts` | 1 | unclassified |  |  |  |
 | `packages/flows/pr-branch-sync.ts` | 23 | accidentally-safe |  |  | the dev-loop close, reached from the cycle |
 | `packages/flows/pr-media.ts` | 1 | not-request-derived |  | exec | `ref` (this same file's own `git rev-parse` result, see row above), `relDir` (`worktreeDemoRelDir`) |
-| `packages/flows/pr.ts` | 11 | not-request-derived |  | exec | no request field |
+| `packages/flows/pr.ts` | 13 | not-request-derived |  | exec | no request field |
 | `packages/flows/promote-manifests.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/queue.ts` | 25 | not-request-derived |  | exec | `GET /api/runs/planned` (the forge-develop kickoff surface) via `listPlannedInitiatives` |
 | `packages/flows/requeue-resume.ts` | 9 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed |
@@ -125,7 +125,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/knowledge/brain-lint-theme-paths.ts` | 9 | unclassified |  |  |  |
 | `packages/knowledge/brain-lint.ts` | 3 | accidentally-safe |  | read | no request field |
 | `packages/knowledge/brain-paths.ts` | 4 | unguarded | `resolveGuardedPath` | exec | `:id` on every `/api/studio/kbs/*` route |
-| `packages/knowledge/brain-write-lease.ts` | 4 | not-request-derived |  | read | Not a route: the brain-write lease every brain writer (reflector, KB drain/consolidate/brain-fix) takes |
+| `packages/knowledge/brain-write-lease.ts` | 8 | not-request-derived |  | read | Not a route: the brain-write lease every brain writer (reflector, KB drain/consolidate/brain-fix) takes |
 | `packages/knowledge/bridge-studio-kb-consolidate.ts` | 5 | unclassified |  |  |  |
 | `packages/knowledge/bridge-studio-kb-routes-lifecycle.ts` | 8 | unclassified |  |  |  |
 | `packages/knowledge/bridge-studio-kb-routes-maintenance.ts` | 5 | unclassified |  |  |  |
@@ -189,7 +189,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/projects/preflight-instructions.ts` | 3 | unclassified |  |  |  |
 | `packages/projects/preflight-release.ts` | 1 | unclassified |  |  |  |
 | `packages/projects/preflight-repo.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
-| `packages/projects/preflight.ts` | 6 | guarded |  | read | bridge preflight routes (via the validated project dir) |
+| `packages/projects/preflight.ts` | 7 | guarded |  | read | bridge preflight routes (via the validated project dir) |
 | `packages/projects/project-config-write.ts` | 4 | guarded | `resolveGuardedPath` |  | `projectRoot` (the PUT route's discovered project dir; the demo lock's `status.project_repo_path`, validated at `/start` by… |
 | `packages/projects/project-contract-scaffold.ts` | 18 | unclassified |  |  |  |
 | `packages/projects/project-create.ts` | 24 | guarded |  | read | `POST` body `name`, `appType` |
@@ -209,6 +209,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/sessions/interactive-agent-step.ts` | 7 | unclassified |  |  |  |
 | `packages/sessions/interactive-finalizers.ts` | 8 | guarded | `resolveGuardedPath` | read | no request field |
 | `packages/sessions/interactive-session.ts` | 5 | guarded |  | read | `dirname(candidatePath)`, where `candidatePath` is the GATED tool's own input (`file_path`/`notebook_path`/`path`) |
+| `packages/sessions/kinds/architect-brain-read.ts` | 1 | not-request-derived |  | read | reads the session's own events.jsonl through the logger's logFilePath (the session dir the architect runner already resolved); no request field reaches the path (forge-mfv5.1.24) |
 | `packages/sessions/kinds/architect-critic.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/sessions/kinds/architect-plan.ts` | 2 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/sessions/kinds/architect-session.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
@@ -232,16 +233,17 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/sessions/turn-cost-rows.ts` | 1 | not-request-derived |  | read | Not a route: the session/story spend emitters' FAILURE path |
 | `packages/stations/cycle-recap.ts` | 17 | unclassified |  |  |  |
 | `packages/stations/demo-delta.ts` | 2 | guarded |  | read | `bundleDir` (`before`/`after` `.out` or `.filmstrip.png`) |
-| `packages/stations/demo-model.ts` | 9 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `packages/stations/demo-model.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/demo-planner-port.ts` | 2 | not-request-derived |  | read | `worktreeDemoDir(input.worktreePath, input.initiativeId)` — the same flow-input demo dir integrate.ts writes demo.json into; no request value reaches it |
 | `packages/stations/gates/docs-gate.ts` | 3 | guarded |  | read | the markdown paths in the branch diff |
 | `packages/stations/phases/adversarial-review.ts` | 15 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/agent-skill-text.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/capture-nonce.ts` | 1 | unclassified |  |  |  |
 | `packages/stations/phases/dev-binding.ts` | 7 | unclassified |  |  |  |
-| `packages/stations/phases/developer-loop.ts` | 13 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `packages/stations/phases/developer-loop.ts` | 5 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/executor-deps.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/executor-table.ts` | 5 | not-request-derived |  | exec | forge-mfv5.1.27 `worktreeHead`: `git rev-parse HEAD` with cwd = the cycle's own scheduler-created worktree (`CycleInput.worktreePath`), never a request field |
+| `packages/stations/phases/gate-feedback.ts` | 11 | not-request-derived |  | read | no request field: every path is `<per-WI worktree>/.forge/last-gate-failure.md` and the git exec reads that worktree's HEAD; the worktree path is the orchestrator's own (moved from developer-loop.ts, forge-nk1y.35) |
 | `packages/stations/phases/integrate.ts` | 12 | guarded |  | read | `demoJsonAbs` |
 | `packages/stations/phases/merge-boundary.ts` | 1 | guarded |  | exec | `input.worktreePath` as `cwd` |
 | `packages/stations/phases/pm-acceptance-gate.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
@@ -251,8 +253,9 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/stations/phases/pm-set-repair.ts` | 4 | not-request-derived |  | read | Not a route: the project-manager phase's repair turns read `.forge/work-items` and `_needs-replan.md` under `input.worktreePath` (D-49) |
 | `packages/stations/phases/project-manager.ts` | 7 | not-request-derived |  | read | Not a route: the project-manager phase; every path is under `input.worktreePath/.forge` (D-49 repair mode restores the newest `work-items-rejected-*` set by rename) |
 | `packages/stations/phases/reflector-brain-writes.ts` | 6 | unclassified |  |  |  |
+| `packages/stations/phases/reflector-fold.ts` | 5 | not-request-derived |  | read | reads theme files under the forge root's own brain theme dirs (project from the closed manifest, `brain/cycles/themes`); the cycleId it matches on is the one `bridge-reflect.ts` already resolved with resolveGuardedPath, and it is matched as text, never joined into a path (forge-nk1y.27) |
 | `packages/stations/phases/reflector-questions.ts` | 3 | not-request-derived |  | read | `user-questions.md`/`.json` under the reflector's own `cycleLogDir`, resolved by runReflector from the cycle id it was dispatched with (moved out of reflector.ts, forge-nk1y.3) |
-| `packages/stations/phases/reflector.ts` | 20 | guarded | `resolveGuardedPath` | read | the reflector rerun fired by `POST /api/reflect/<id>/answer` (`apps/forge/bridge-reflect.ts`), and the post-merge reflector |
+| `packages/stations/phases/reflector.ts` | 21 | guarded | `resolveGuardedPath` | read | the reflector rerun fired by `POST /api/reflect/<id>/answer` (`apps/forge/bridge-reflect.ts`), and the post-merge reflector |
 | `packages/stations/phases/release-finalize.ts` | 3 | unclassified |  |  |  |
 | `packages/stations/phases/review-refusal.ts` | 2 | not-request-derived |  | read | Not a route: the adversarial-review phase's findings harvest |
 | `packages/stations/reflect-reconcile.ts` | 8 | unclassified |  |  |  |

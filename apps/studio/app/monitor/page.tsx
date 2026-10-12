@@ -63,9 +63,6 @@ const MONITOR_SESSION_CARDS = 12;
 /** How many ledger rows a page of Monitor's activity list holds. */
 const MONITOR_LEDGER_PAGE = 25;
 
-/** Flow runs are already grouped by status inside the rail; bound its height
- *  so the rail scrolls internally instead of pushing the ledger off-screen. */
-const RUN_RAIL_HEIGHT = 420;
 
 export default function MonitorPage() {
   const { agents, kbs, runs, attention, reflections, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
@@ -120,6 +117,9 @@ export default function MonitorPage() {
         </Link>
       }
     >
+      {/* forge-nk1y.15 (D-46 §3): three groups — summary (the counts and
+          every notice), the run rail, the activity ledger. */}
+      <section data-page-section="summary" aria-label="Summary">
       {error ? (
         <div style={{ marginBottom: 24 }}>
           <FetchErrorState what="the fleet" error={error.message} status={error.status} onRetry={reload} />
@@ -156,7 +156,7 @@ export default function MonitorPage() {
             {ready ? 'Nothing is waiting on you right now.' : 'Reading…'}
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div data-component="monitor-attention-list" style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'var(--pane-md)', overflowY: 'auto' }}>
             {attentionItems.map((item) => (
               <Link
                 key={`${item.kind}:${item.id}`}
@@ -193,12 +193,13 @@ export default function MonitorPage() {
         lastCancel={lastCancel}
         onCancelled={(row, outcome) => { setLastCancel({ row, outcome }); void refreshSessions(); }}
       />
+      </section>
 
       {/* Flow runs, grouped by the rail's own status vocabulary — NEEDS YOU /
           ACTIVE / FAILED / QUEUED / COMPLETE. A failed run reads as failed
           here because it is the same component, and the same
           `run.status === 'failed'` treatment, the flow page uses. */}
-      <section data-section="monitor-runs" aria-label="Flow runs" data-run-count={runs.length} style={{ marginBottom: 24 }}>
+      <section data-page-section="rail" data-section="monitor-runs" aria-label="Flow runs" data-run-count={runs.length} style={{ marginBottom: 24 }}>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 8px' }}>
           Flow runs
         </h2>
@@ -210,7 +211,8 @@ export default function MonitorPage() {
             {ready ? 'No flow runs recorded yet.' : 'Reading…'}
           </p>
         ) : (
-          <div style={{ display: 'flex', height: RUN_RAIL_HEIGHT, border: '1px solid var(--line)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+          // Grouped by status inside the rail, which scrolls inside its pane.
+          <div data-component="monitor-run-rail" style={{ display: 'flex', height: 'var(--pane-xl)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             <RunRail runs={runs} activeRunId={selectedRunId} onSelect={setSelectedRunId} />
             <div style={{ flex: '1 1 auto', padding: 16, overflowY: 'auto' }}>
               <p style={{ fontSize: 12.5, color: 'var(--faint)', margin: 0 }}>
@@ -227,6 +229,7 @@ export default function MonitorPage() {
           newest-first list, paged (never silently truncated). This is the list
           the headline counts above are computed from. */}
       <section
+        data-page-section="ledger"
         data-section="activity"
         aria-label="Recent activity"
         data-recent-runs-unresolved={ledger.agentRowsReady ? ledger.unresolved : 0}

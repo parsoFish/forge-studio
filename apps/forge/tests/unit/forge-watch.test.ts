@@ -390,14 +390,15 @@ test('terminateChild: resolves cleanly when a DIFFERENT listener on the same "ex
 // bridge closes, so none of them leaves a live `forge serve` behind.
 // ---------------------------------------------------------------------------
 
-test('runExitSequence: stops serve, closes the bridge, then exits — in that order', async () => {
+test('runExitSequence: stops serve, closes the bridge, releases held brain leases, then exits — in that order (forge-nk1y.28)', async () => {
   const calls: string[] = [];
   await runExitSequence(1, {
     stopServe: () => calls.push('stop'),
     closeBridge: async () => { calls.push('close'); },
+    releaseLeases: async () => { calls.push('release'); return 1; },
     exit: (code) => calls.push(`exit:${code}`),
   });
-  assert.deepEqual(calls, ['stop', 'close', 'exit:1']);
+  assert.deepEqual(calls, ['stop', 'close', 'release', 'exit:1']);
 });
 
 test('runExitSequence: still stops serve and exits with the given code when closeBridge rejects', async () => {

@@ -863,6 +863,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/sessions/kinds/architect-brain-read.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "reads the session's own events.jsonl through the logger's logFilePath (the session dir the architect runner already resolved); no request field reaches the path (forge-mfv5.1.24)"
+ },
  "packages/sessions/kinds/architect-steps.ts": {
   "class": "guarded",
   "guard": null,
@@ -995,6 +1001,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/stations/phases/gate-feedback.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field: every path is `<per-WI worktree>/.forge/last-gate-failure.md` and the git exec reads that worktree's HEAD; the worktree path is the orchestrator's own (moved from developer-loop.ts, forge-nk1y.35)"
+ },
  "packages/stations/phases/executor-deps.ts": {
   "class": "other",
   "guard": null,
@@ -1060,6 +1072,12 @@
   "guard": null,
   "verified": "read",
   "note": "`user-questions.md`/`.json` under the reflector's own `cycleLogDir`, resolved by runReflector from the cycle id it was dispatched with (moved out of reflector.ts, forge-nk1y.3)"
+ },
+ "packages/stations/phases/reflector-fold.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "reads theme files under the forge root's own brain theme dirs (project from the closed manifest, `brain/cycles/themes`); the cycleId it matches on is the one `bridge-reflect.ts` already resolved with resolveGuardedPath, and it is matched as text, never joined into a path (forge-nk1y.27)"
  },
  "packages/stations/phases/reflector.ts": {
   "class": "guarded",

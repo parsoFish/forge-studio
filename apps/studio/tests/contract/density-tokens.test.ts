@@ -43,7 +43,6 @@ const OFF_SCALE: readonly string[] = [
   'app/artifact/page.tsx|height|340',
   'app/connections/[id]/page.tsx|maxHeight|200',
   'app/connections/[id]/page.tsx|maxHeight|200',
-  'app/monitor/page.tsx|RUN_RAIL_HEIGHT|420',
   'components/studio/ActivityLog.tsx|maxHeight|260',
   'components/studio/FlowTopology.tsx|minHeight|260',
   'components/studio/HistoryLedger.tsx|maxHeight|220',
@@ -53,8 +52,6 @@ const OFF_SCALE: readonly string[] = [
   'components/studio/artifact/VerdictRenderer.tsx|height|160',
   'components/studio/knowledge/KbDrainPanel.tsx|maxHeight|260',
   'components/studio/knowledge/ThemeList.tsx|maxHeight|260',
-  'components/studio/project-builder/Instructions.tsx|maxHeight|460',
-  'components/studio/project-builder/SkillsBind.tsx|maxHeight|220',
 ];
 
 function sourceFiles(dir: string): string[] {

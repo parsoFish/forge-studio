@@ -95,7 +95,7 @@ export function deriveUserQuestionsJson(mdPath: string, jsonPath: string, mode: 
   }
 }
 
-type UserQuestion = {
+export type UserQuestion = {
   question: string;
   header: string;
   options: Array<{ label: string; description: string }>;
@@ -103,7 +103,12 @@ type UserQuestion = {
   answer?: string;
   /** R4-09-F3: true when `answer` was inferred (no human), for UI provenance. */
   inferred?: boolean;
+  /** forge-nk1y.26: the choices are not exclusive — a `Choose any:` line above them; the gate renders checkboxes. */
+  multi?: boolean;
 };
+
+/** forge-nk1y.26: the line the reflector writes above a non-exclusive choice list. */
+const MULTI_MARKER_RE = /^\s*choose any:\s*$/i;
 
 /** R4-09-F3: the self-describing marker the automated prompt writes per question. */
 const INFERRED_ANSWER_RE = /^\s*\*\*Inferred answer:\*\*\s*(.+)$/i;
@@ -142,7 +147,8 @@ export function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interacti
         contentLines = bodyLines.filter((_, i) => i !== idx);
       }
     }
-    const body = contentLines.join('\n').trim();
+    const multi = contentLines.some((l) => MULTI_MARKER_RE.test(l));
+    const body = contentLines.filter((l) => !MULTI_MARKER_RE.test(l)).join('\n').trim();
     // The question text is the body with any parsed option lines stripped, so
     // the freeform/options content isn't duplicated into the prompt.
     const question = stripOptionLines(body) || heading;
@@ -151,6 +157,7 @@ export function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interacti
     const entry: UserQuestion = { question, header, options };
     if (answer !== undefined) entry.answer = answer;
     if (inferred) entry.inferred = true;
+    if (multi && options.length > 0) entry.multi = true;
     out.push(entry);
   }
   return out;

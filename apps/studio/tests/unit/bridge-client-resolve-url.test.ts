@@ -1,9 +1,9 @@
 /**
- * bridge-client-resolve-url.test.ts — W6-P4 (redesigned per review): pins
- * `resolveBridgeUrl()`'s resolution order (the OPTIMISTIC fixed-port
- * default first — global-or-DEFAULT_BRIDGE_PORT, zero fetch calls — the
- * authoritative `/api/forge-config` fetch ONLY on re-resolution after an
- * invalidation) and the WSL2 host rule
+ * bridge-client-resolve-url.test.ts — W6-P4, amended by forge-nk1y.29: pins
+ * `resolveBridgeUrl()`'s resolution order (the port the serve-time script set
+ * first — zero fetch calls; with no script-set global, the authoritative
+ * `/api/forge-config` BEFORE the first call; re-resolution after an
+ * invalidation always authoritative) and the WSL2 host rule
  * (brain/cycles/themes/windows-browser-to-wsl-via-window-location.md) — the
  * URL's HOST segment must ALWAYS come from `window.location.hostname`,
  * NEVER from the global or the fixed-port default.
@@ -70,17 +70,26 @@ test('global present: resolves the OPTIMISTIC URL with ZERO fetch calls', async 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-test('global absent: falls back to DEFAULT_BRIDGE_PORT — STILL zero fetch calls (no /api/forge-config round trip on the first resolution)', async () => {
+test('global absent (the serve-time script has not run): the FIRST resolution asks /api/forge-config — never a default guess (forge-nk1y.29)', async () => {
   stubWindow({ hostname: 'my-wsl-host' }); // no __FORGE_BRIDGE_PORT__ property at all
-  const fetchSpy = vi.fn();
+  const fetchSpy = vi.fn(async () => ({ ok: true, json: async () => ({ bridgePort: 4423 }) }) as Response);
   globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
   const { resolveBridgeUrl } = await import('../../lib/bridge-client.ts');
-  const { DEFAULT_BRIDGE_PORT } = await import('../../lib/bridge-port.ts');
   const url = await resolveBridgeUrl();
 
-  expect(url).toBe(`http://my-wsl-host:${DEFAULT_BRIDGE_PORT}`);
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(url).toBe('http://my-wsl-host:4423');
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(String((fetchSpy.mock.calls[0] as unknown[])[0])).toBe('/api/forge-config');
+});
+
+test('global absent and /api/forge-config unreachable: falls back to DEFAULT_BRIDGE_PORT, not a broken URL', async () => {
+  stubWindow({ hostname: 'my-wsl-host' });
+  globalThis.fetch = vi.fn(async () => { throw new TypeError('Failed to fetch'); }) as unknown as typeof fetch;
+
+  const { resolveBridgeUrl } = await import('../../lib/bridge-client.ts');
+  const { DEFAULT_BRIDGE_PORT } = await import('../../lib/bridge-port.ts');
+  expect(await resolveBridgeUrl()).toBe(`http://my-wsl-host:${DEFAULT_BRIDGE_PORT}`);
 });
 
 test('global present but null: falls back to DEFAULT_BRIDGE_PORT, not a broken URL', async () => {

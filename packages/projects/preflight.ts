@@ -41,6 +41,7 @@
  * `preflight-repo.ts`'s header for the rest of the reasoning.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -190,6 +191,11 @@ function checkBrainStaleness(
   } catch {
     return { ...base, pass: true, detail: 'project themes unreadable — skipped' };
   }
+  // forge-nk1y.10: a cited path resolves against the GROUND's own tree — at its root, or as the tail
+  // of a file it tracks (a package-relative citation: `tests/x.py` for `metrics/tests/x.py`). An
+  // unreadable file list leaves only the exact check, never a looser pass.
+  const tracked = groundTrackedFiles(dir);
+  const inGround = (cited: string): boolean => existsSync(join(dir, cited)) || (tracked?.some((t) => t.endsWith(`/${cited}`)) ?? false);
   for (const f of themeFiles) {
     let content: string;
     try {
@@ -200,7 +206,7 @@ function checkBrainStaleness(
     for (const m of content.matchAll(pathRe)) {
       const cited = m[1];
       if (missing.has(cited)) continue;
-      if (!existsSync(join(dir, cited))) missing.set(cited, f);
+      if (!inGround(cited)) missing.set(cited, f);
     }
   }
   if (missing.size === 0) {
@@ -222,6 +228,15 @@ function checkBrainStaleness(
       `will mislead the planner (PM/architect read the brain first). Reconcile against the code ` +
       `(or run a reflection pass). Sample: ${sample}`,
   };
+}
+
+/** The ground's tracked files (`git ls-files`), or null when git cannot list them. */
+function groundTrackedFiles(dir: string): string[] | null {
+  try {
+    return execFileSync('git', ['-C', dir, 'ls-files', '-z'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }).split('\0').filter(Boolean);
+  } catch {
+    return null;
+  }
 }
 
 /** True when every authored `## ` section's first line is TODO (the constraint-block

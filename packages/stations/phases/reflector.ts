@@ -47,6 +47,7 @@ import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/k
 import { getPaths, type QueuePaths } from '@forge/flows';
 import { emitReflectionLost, runReflectorBrainWrites, listFreshThemes } from './reflector-brain-writes.ts';
 import { deriveUserQuestionsJson, emitUnasked, unaskedReason } from './reflector-questions.ts';
+import { cycleThemeSnapshot, emitFoldOutcome } from './reflector-fold.ts';
 
 export { parseUserQuestionsMd } from './reflector-questions.ts';
 
@@ -245,6 +246,9 @@ async function reflectFromStart(
     mkdirSync(cycleLogDir, { recursive: true });
     writeFileSync(brainGapsPath, '');
   }
+  // forge-nk1y.27: a rerun after the operator answered folds the answers into the cycle's themes.
+  const feedbackPath = resolve(cycleLogDir, 'user-feedback.md');
+  const foldBefore = reflectMode === 'interactive' && existsSync(feedbackPath) ? cycleThemeSnapshot([themesDir, forgeThemesDir], cycleId) : undefined;
   const prompt = renderReflectorUserPrompt({
     initiativeId: input.initiativeId,
     cycleId,
@@ -263,6 +267,7 @@ async function reflectFromStart(
     themesDirRelPath: themesDir,
     forgeThemesDirRelPath: forgeThemesDir,
     mode: reflectMode,
+    ...(foldBefore ? { foldThemes: [...foldBefore.keys()] } : {}),
   });
 
   // forge-8vfn.8.1.37 / ruling 1770 (row 147): user-questions.md may already
@@ -310,6 +315,7 @@ async function reflectFromStart(
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
   const { costUsd, durationMs, resultSubtype, retention, toolUseSummary } = brainWrites;
+  if (foldBefore) emitFoldOutcome(logger, { initiativeId: input.initiativeId, parentEventId: start.event_id, skill: def.slug, feedbackPath }, foldBefore);
 
   // S6A — brain-lint trigger. Run AFTER themes + archive are written (and after
   // the KB-health consolidate above) so the cycle-touched-themes scope sees the

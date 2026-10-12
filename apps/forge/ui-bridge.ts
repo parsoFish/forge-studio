@@ -130,7 +130,7 @@ export type BridgeOptions = {
    * Injectable for tests — defaults to the real `mergePullRequest` from
    * packages/flows/pr.ts. Called by the POST /api/verdict 'approve' handler.
    */
-  mergePr?: (worktreePath: string) => boolean;
+  mergePr?: (worktreePath: string, verdict?: { rationale: string }) => boolean;
   /**
    * Injectable for tests — defaults to the real `finalizeMergedReadyForReview`
    * from packages/flows/finalize-merged.ts. Fired (void, non-blocking) on approve.
@@ -581,7 +581,7 @@ type HttpContext = {
    *  fires when the LAST WS client disconnects. */
   releaseAgentRunTail: (runId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
-  mergePr: (worktreePath: string) => boolean;
+  mergePr: (worktreePath: string, verdict?: { rationale: string }) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /**

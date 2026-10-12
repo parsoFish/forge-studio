@@ -6,6 +6,7 @@ import type { EventLogger } from '@forge/kernel';
 import type { GateRunInfo } from '@forge/agents';
 
 import type { WiGateTemplateSkipped } from './wi-quality-gate.ts';
+import type { GateFeedbackEvent } from './gate-feedback.ts';
 
 /**
  * G1 rescope (plan item 2.6): one autocommit-sweep observation. The safety
@@ -164,4 +165,16 @@ export function emitWiGateTemplateSkipped(
     message: 'gate.template-skipped',
     metadata: { work_item_id: ctx.workItemId, reason: ctx.skipped.reason, paths: [...ctx.skipped.paths], gate_source: 'project' },
   });
+}
+
+/** forge-nk1y.35: the gate-feedback tracker's named events (repeat, refused stale claim, unwritable brief). */
+export function emitGateFeedbackEvent(
+  logger: EventLogger,
+  ctx: { initiativeId: string; parentEventId: string; workItemId: string; skill: string },
+  event: GateFeedbackEvent,
+): void {
+  const { message, level: event_type } = event;
+  const metadata = { work_item_id: ctx.workItemId, ...event.metadata };
+  const route = { initiative_id: ctx.initiativeId, parent_event_id: ctx.parentEventId, phase: 'developer-loop' as const, skill: ctx.skill };
+  logger.emit({ ...route, event_type, input_refs: [], output_refs: [], message, metadata });
 }
