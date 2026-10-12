@@ -618,11 +618,7 @@ export default function AgentBuilderPage() {
         <CatalogPalette catalog={catalog} usedIds={usedIds} onAddToZone={addToZone} />
 
         {/* ══ CENTER: Agent Definition ══ */}
-        {/* W7-C3 review (A-H1/A-H2): a <div>, not a second <main>. The page's
-            ONE landmark is the [data-page] root above (a route's root IS its
-            landmark — scripts/e2e-deadpaths.mjs asserts rootTag === 'MAIN'),
-            and this column keeps the `#col-center` id its own selectors and
-            scripts/journeys/agents.mjs query. */}
+        {/* W7-C3: a <div>, not a second <main> — the [data-page] root is the one landmark. */}
         <div
           className="col-center"
           id="col-center"
@@ -630,6 +626,8 @@ export default function AgentBuilderPage() {
           data-dirty={dirty ? 'true' : 'false'}
         >
 
+          {/* forge-nk1y.14 (D-46 §3): five groups; `display: contents` keeps layout and the run pin. */}
+          <section data-page-section="identity" aria-label="Identity" style={{ display: 'contents' }}>
           {/* Agent header */}
           <div className="agent-header">
             <div className="row">
@@ -670,19 +668,21 @@ export default function AgentBuilderPage() {
           </div>
 
           {/* New agent → pick a starter first (or start blank) */}
-          {isNew && !starterChosen ? (
+          {isNew && !starterChosen && (
             <StarterPicker starters={starters} onPick={applyStarter} onBlank={applyBlank} />
-          ) : (
-          <>
-          {isNew && (
+          )}
+          {isNew && starterChosen && (
             <div className="new-agent-banner visible">
               Starter applied. Fill in the essentials below — name, purpose, process — then click{' '}
               <strong>Save agent</strong>. Everything else has a working default under{' '}
               <strong>Advanced</strong>.
             </div>
           )}
+          </section>
 
-          <div className="agent-body">
+          {!(isNew && !starterChosen) && (
+          <>
+          <section data-page-section="materials" aria-label="Materials" className="agent-body">
 
             {/* Purpose (required) */}
             <div className="field-group">
@@ -725,7 +725,9 @@ export default function AgentBuilderPage() {
                 this agent declares it accepts. Surfaced on the agent's kickoff
                 screen; ENFORCEMENT happens at R6-04-F2's upload seam, not here. */}
             <MaterialsPicker materials={state.materials} onToggle={toggleMaterialInState} />
+          </section>
 
+          <section data-page-section="runtime" aria-label="Runtime" style={{ padding: '0 var(--space-5) var(--space-5)' }}>
             {/* ── Advanced (progressive disclosure) ── */}
             <details
               data-section="advanced"
@@ -778,8 +780,7 @@ export default function AgentBuilderPage() {
                 />
               </div>
             </details>
-
-          </div>{/* /.agent-body */}
+          </section>
 
           {/* Save bar */}
           <div className="save-bar">
@@ -837,15 +838,8 @@ export default function AgentBuilderPage() {
 
         {/* ══ RIGHT: Preview + Readiness + Flows ══ */}
         <aside className="col-right" id="col-right">
-          {/* W8-B1 (ON-8): Run comes FIRST in this column and stays pinned.
-              It used to render third, below the full YAML preview and the
-              readiness list, so on any real agent the one control the page
-              exists for sat off-screen — the operator's own note. The fix is
-              the codebase's existing pinned-CTA idiom (GateBar's fixed bar,
-              DemoReviewSurface's sticky verdict form, whose comment names
-              this exact problem), applied to the panel itself rather than
-              minting a SECOND run control: two controls for one action is
-              its own defect. */}
+          {/* W8-B1 (ON-8): Run comes FIRST in this column and stays pinned (the
+              pinned-CTA idiom) — never a second run control. */}
           {/* W7-B5 (agents-21/36): defaultCostCeilingUsd — the agent's OWN
               declared ceiling wins the seed slot, the run-level policy
               default is the fallback; standaloneBlockedReason — a
@@ -853,6 +847,7 @@ export default function AgentBuilderPage() {
               the dispatch), say so up front instead of minting a run that
               always fails; unreadyConnectionIds — link the blocked
               connections straight to /connections/<id>. */}
+          <section data-page-section="evidence" aria-label="Evidence" style={{ display: 'contents' }}>
           <RunPanel
             slug={state.slug}
             interactive={state.capability?.interactive === true}
@@ -879,6 +874,9 @@ export default function AgentBuilderPage() {
               chain, project-scoped-review's operator entry, reflector's
               on-merged standing trigger) from reading as an orphan. */}
           <UsedInFlows agentSlug={state.slug} flows={flows} dispatchNote={dispatchProvenanceNote(state.phase || undefined)} />
+          </section>
+
+          <section data-page-section="history" aria-label="History" style={{ display: 'contents' }}>
 
           {/* R6-06 WI-3 — this agent's own run-history ledger, joined across
               all three execution paths (flow-node / standalone / session) by
@@ -904,12 +902,11 @@ export default function AgentBuilderPage() {
               Could not load run history — try again shortly.
             </div>
           )}
-          {/* W7-B5 (agents-32): paged + status-filterable instead of 77
-              rows crammed into a 220px scroller with a mixed, unfiltered
-              vocabulary. */}
+          {/* W7-B5 (agents-32): paged + status-filterable. */}
           {!isNew && (historyResolution?.kind === 'found' || historyResolution?.kind === 'not-found') && (
             <HistoryLedger rows={historyRows} nowMs={Date.now()} pageSize={15} filterable />
           )}
+          </section>
         </aside>
 
       </div>{/* /.workbench */}

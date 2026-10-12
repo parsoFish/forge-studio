@@ -19,11 +19,7 @@ import {
   filterByKind,
   filterByHub,
   filterCommunityItems,
-  installStateLabel,
-  signalsLabel,
-  hubLabel,
   sortCommunityItems,
-  freshnessBadge,
   lastRefreshLabel,
   isHubDeclaredOnly,
   communityEmptyState,
@@ -35,6 +31,7 @@ import {
   declaredOnlyLabel,
 } from '@/lib/community-view';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { CommunityItemGrid } from '@/components/studio/CommunityItemGrid';
 import {
   parseCommunityViewState,
   communityHrefFor,
@@ -249,6 +246,8 @@ function CommunityBrowserInner() {
   const byHub = filterByHub(byKind, hubFilter);
   const searched = filterCommunityItems(byHub, queryDraft);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
+  // forge-nk1y.17: a new result set restarts the grid's paging at page 1.
+  const resultKey = [kind, hubFilter ?? 'all', queryDraft, sortKey, sortDir].join('|');
   const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
   // 608(i): the region states the IN-FLIGHT refresh too, not only its outcome.
   const refreshView = refreshRegionView(refreshResult, { refreshing, postWriteReloadFailed });
@@ -343,6 +342,7 @@ function CommunityBrowserInner() {
       }
     >
 
+        <section data-page-section="registry" aria-label="Registry">
         {status === 'ready' && (
           <section
             data-section="refresh-registry-state"
@@ -400,7 +400,7 @@ function CommunityBrowserInner() {
                 <div style={{ color: 'var(--text)' }}>
                   {discovered.length} row(s) the declared sources publish that this registry does not carry.
                 </div>
-                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, maxHeight: 'var(--pane-md)', overflowY: 'auto' }}>
                   {discovered.map((d) => (
                     <li key={`${d.sourceUrl} ${d.id}`} data-discovered-id={d.id} data-discovered-source={d.sourceUrl} data-discovered-path={d.path}>
                       <code style={{ fontSize: 11.5 }}>{d.id}</code>{' '}
@@ -419,7 +419,9 @@ function CommunityBrowserInner() {
             )}
           </section>
         )}
+        </section>
 
+        <section data-page-section="hubs" aria-label="Sources">
         {status === 'ready' && (
           <div data-component="hub-strip" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
             {hubs.map((hub) => {
@@ -480,8 +482,9 @@ function CommunityBrowserInner() {
             })}
           </div>
         )}
+        </section>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24, alignItems: 'center' }}>
+        <section data-page-section="filters" aria-label="Filters" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24, alignItems: 'center' }}>
           {/* W8-B5 (community-32): a placeholder is not an accessible name — it
               vanishes the moment anything is typed, and assistive tech is not
               required to announce it. The sibling sort <select> already carried
@@ -537,7 +540,9 @@ function CommunityBrowserInner() {
           >
             {sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>
-        </div>
+        </section>
+
+        <section data-page-section="items" aria-label="Items">
 
         {status === 'loading' && (
           <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading the community index…</div>
@@ -564,12 +569,9 @@ function CommunityBrowserInner() {
         )}
 
         {status === 'ready' && filtered.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            {filtered.map((item) => (
-              <CommunityCard key={`${item.kind}/${item.id}`} item={item} nowMs={nowMs} />
-            ))}
-          </div>
+          <CommunityItemGrid key={resultKey} items={filtered} nowMs={nowMs} />
         )}
+        </section>
     </StudioPage>
   );
 }
@@ -588,50 +590,5 @@ export default function CommunityBrowserPage() {
     >
       <CommunityBrowserInner />
     </Suspense>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// CommunityCard
-// ---------------------------------------------------------------------------
-
-function CommunityCard({ item, nowMs }: { item: CommunityItem; nowMs: number }) {
-  const freshness = freshnessBadge(item.fetchedAt, nowMs);
-  return (
-    <Link
-      href={`/community/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`}
-      className="lib-card"
-      data-card-type="community-item"
-      data-item-id={item.id}
-      data-item-kind={item.kind}
-      data-item-hub={item.hub?.id}
-      // W8-B5 (community-05): ABSENT for an item with no registry row — the
-      // same discipline data-item-hub / data-fetched-at already hold, never a
-      // fabricated attribute value.
-      data-item-category={item.category ?? undefined}
-      data-install-state={item.installState}
-      data-has-signals={item.signals !== null ? 'true' : 'false'}
-      data-fetched-at={item.fetchedAt ?? undefined}
-      style={{ display: 'block' }}
-    >
-      <div className="card-top">
-        <span className="card-name">{item.name}</span>
-        <span className="badge">{item.kind}</span>
-      </div>
-      <p className="card-body">{item.desc}</p>
-      <div className="card-meta">
-        <span className="card-stat">{hubLabel(item.hub)}</span>
-        <span className="card-stat">{signalsLabel(item.signals)}</span>
-        <span className="card-stat">{installStateLabel(item.installState)}</span>
-        <span
-          className="card-stat"
-          data-component="freshness-badge"
-          data-freshness={freshness.state}
-          style={freshness.state === 'seed' ? { color: 'var(--faint)', fontStyle: 'italic' } : undefined}
-        >
-          {freshness.label}
-        </span>
-      </div>
-    </Link>
   );
 }

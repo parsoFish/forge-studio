@@ -43,7 +43,6 @@ const OFF_SCALE: readonly string[] = [
   'app/artifact/page.tsx|height|340',
   'app/connections/[id]/page.tsx|maxHeight|200',
   'app/connections/[id]/page.tsx|maxHeight|200',
-  'app/monitor/page.tsx|RUN_RAIL_HEIGHT|420',
   'components/studio/ActivityLog.tsx|maxHeight|260',
   'components/studio/FlowTopology.tsx|minHeight|260',
   'components/studio/HistoryLedger.tsx|maxHeight|220',

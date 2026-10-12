@@ -20,8 +20,8 @@ import {
   BrainWriteLeaseContentionError,
   BRAIN_WRITE_LEASE_STALE_MS,
   BRAIN_WRITE_LEASE_PID_TRUST_MS,
+  brainWriteLockPath,
 } from '../../brain-write-lease.ts';
-import { brainRootDir } from '../../kb-drain-edit-soundness.ts';
 
 function buildForgeRoot(): string {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'brain-write-lease-test-'));
@@ -92,7 +92,7 @@ test('forge-ler4: acquireBrainWriteLease(forgeRoot, { lockfilePath }) holds its 
   const forgeRoot = buildForgeRoot();
   try {
     const customLockPath = join(forgeRoot, 'private.lock');
-    const defaultLockPath = `${brainRootDir(forgeRoot)}.lock`;
+    const defaultLockPath = brainWriteLockPath(forgeRoot);
     assert.ok(!existsSync(defaultLockPath), 'sanity: no default lock exists yet');
 
     const release = await acquireBrainWriteLease(forgeRoot, { lockfilePath: customLockPath });
@@ -118,8 +118,8 @@ test('forge-ler4: a lock directory left behind by a killed process (mtime older 
     // exists on disk (proper-lockfile's lock is a directory, created via an
     // atomic mkdir) but nothing is alive to keep refreshing its mtime every
     // `stale / 2` ms the way a live holder does.
-    const orphanedLockPath = `${brainRootDir(forgeRoot)}.lock`;
-    mkdirSync(orphanedLockPath);
+    const orphanedLockPath = brainWriteLockPath(forgeRoot);
+    mkdirSync(orphanedLockPath, { recursive: true });
     const longDead = new Date(Date.now() - BRAIN_WRITE_LEASE_STALE_MS - 5_000);
     utimesSync(orphanedLockPath, longDead, longDead);
 
@@ -146,7 +146,7 @@ test('forge-ler4: a live holder lease is never reclaimed on mtime staleness alon
       // stale bound under a starved event loop, without waiting out a real
       // stall: back-date the REAL lock directory this `release` owns. The
       // holder (this same process) never crashed and never released.
-      const lockDir = `${brainRootDir(forgeRoot)}.lock`;
+      const lockDir = brainWriteLockPath(forgeRoot);
       const longAgo = new Date(Date.now() - BRAIN_WRITE_LEASE_STALE_MS - 5_000);
       utimesSync(lockDir, longAgo, longAgo);
 
@@ -173,8 +173,8 @@ test('forge-ler4: a live holder lease is never reclaimed on mtime staleness alon
 // forge-8vfn.8.1.21 (§6.15) — a hand-built lock whose holder record says something about a LIVE
 // process: the lease is refused while the record is inside its trust window, whatever mtime says.
 function heldLock(forgeRoot: string, pidFile: string | null, ageMs: number): void {
-  const lockDir = `${brainRootDir(forgeRoot)}.lock`;
-  mkdirSync(lockDir);
+  const lockDir = brainWriteLockPath(forgeRoot);
+  mkdirSync(lockDir, { recursive: true });
   if (pidFile !== null) writeFileSync(`${lockDir}.holder-pid`, pidFile);
   const when = new Date(Date.now() - ageMs);
   utimesSync(lockDir, when, when);
@@ -195,7 +195,7 @@ test('forge-8vfn.8.1.21: an unreadable holder record is UNKNOWN, and UNKNOWN ref
   const forgeRoot = buildForgeRoot();
   try {
     heldLock(forgeRoot, null, BRAIN_WRITE_LEASE_STALE_MS + 5_000);
-    mkdirSync(`${brainRootDir(forgeRoot)}.lock.holder-pid`);
+    mkdirSync(`${brainWriteLockPath(forgeRoot)}.holder-pid`);
     assert.equal(await acquireOutcome(forgeRoot), 'refused');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });

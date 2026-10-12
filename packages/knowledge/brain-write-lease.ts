@@ -5,7 +5,8 @@
  * other. Rationale, the race, and why `proper-lockfile` (reused, not new):
  * `design.md`'s "Brain-write lease (forge-ler4)" section.
  */
-import { readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
@@ -56,6 +57,58 @@ const HOLDER_PID_SUFFIX = '.holder-pid';
 
 const errCode = (err: unknown): string | undefined => (err as NodeJS.ErrnoException).code;
 
+/** forge-nk1y.28: the lease lives under the gitignored `_logs/`, never beside `brain/` in the repo root. */
+export function brainWriteLockPath(forgeRoot: string): string {
+  return join(forgeRoot, '_logs', 'brain.lock');
+}
+
+/** The leases this process holds, so a shutdown (`forge studio`'s SIGTERM path) can release them. */
+const HELD = new Set<() => Promise<void>>();
+
+/** Release every lease this process holds; resolves to how many. The bridge's exit sequence calls it. */
+export async function releaseHeldBrainWriteLeases(): Promise<number> {
+  const all = [...HELD];
+  await Promise.allSettled(all.map((release) => release()));
+  return all.length;
+}
+
+export type LeaseReap =
+  | { action: 'reaped'; lockPath: string; pid: number }
+  | { action: 'refused'; lockPath: string; reason: string };
+
+/**
+ * forge-nk1y.28 — a starting bridge clears a lease whose holder is DEAD (a SIGKILLed or crashed
+ * writer), at `_logs/brain.lock` and at the old repo-root `brain.lock`. A live holder, or a holder
+ * record that cannot be read as a pid, is refused by name and left alone (§6.15: never delete on
+ * UNKNOWN). A lock with no holder record is left to the mtime staleness path.
+ */
+export function reapDeadBrainWriteLease(forgeRoot: string): LeaseReap[] {
+  const out: LeaseReap[] = [];
+  for (const lockPath of [brainWriteLockPath(forgeRoot), `${brainRootDir(forgeRoot)}.lock`]) {
+    const pidPath = `${lockPath}${HOLDER_PID_SUFFIX}`;
+    let raw: string;
+    try {
+      raw = readFileSync(pidPath, 'utf8').trim();
+    } catch (err) {
+      if (errCode(err) !== 'ENOENT') out.push({ action: 'refused', lockPath, reason: `holder record UNKNOWN (${errCode(err) ?? String(err)})` });
+      continue;
+    }
+    const pid = Number(raw);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      out.push({ action: 'refused', lockPath, reason: `holder record UNKNOWN (${JSON.stringify(raw.slice(0, 20))} is not a pid)` });
+      continue;
+    }
+    if (isPidAlive(pid)) {
+      out.push({ action: 'refused', lockPath, reason: `holder pid ${pid} is alive` });
+      continue;
+    }
+    rmSync(lockPath, { recursive: true, force: true });
+    rmSync(pidPath, { force: true });
+    out.push({ action: 'reaped', lockPath, pid });
+  }
+  return out;
+}
+
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -96,7 +149,8 @@ function heldByLiveHolder(lockfilePath: string, pidFilePath: string): boolean {
  * directory behind the refusal.
  */
 export async function acquireBrainWriteLease(forgeRoot: string, opts: BrainWriteLeaseOptions = {}): Promise<() => Promise<void>> {
-  const target = brainRootDir(forgeRoot), lockfilePath = opts.lockfilePath ?? `${target}.lock`;
+  const target = brainRootDir(forgeRoot), lockfilePath = opts.lockfilePath ?? brainWriteLockPath(forgeRoot);
+  mkdirSync(join(lockfilePath, '..'), { recursive: true });
   const pidFilePath = `${lockfilePath}${HOLDER_PID_SUFFIX}`;
   const contentionError = () =>
     new BrainWriteLeaseContentionError(
@@ -116,7 +170,11 @@ export async function acquireBrainWriteLease(forgeRoot: string, opts: BrainWrite
       },
     });
     writeFileSync(pidFilePath, String(process.pid));
-    return async () => {
+    let released = false;
+    const releaseOnce = async (): Promise<void> => {
+      if (released) return;
+      released = true;
+      HELD.delete(releaseOnce);
       try {
         await release();
       } finally {
@@ -130,6 +188,8 @@ export async function acquireBrainWriteLease(forgeRoot: string, opts: BrainWrite
         }
       }
     };
+    HELD.add(releaseOnce);
+    return releaseOnce;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ELOCKED') throw contentionError();
     throw err;
