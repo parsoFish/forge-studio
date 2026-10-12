@@ -8,20 +8,29 @@
  * acceptance criterion the fix loop runs in place. With no blocker the
  * operator may still send back typed work items (forge-mfv5.1.28) — the
  * typed form REPLACES this card's controls so the page keeps exactly one
- * `verdict-form`. The reviewer's open claims are named beside the derived
- * verdict but never counted into it (R4-08-F3: claims, not a gate). After an
- * approve the card is the payoff: reflect on the cycle (`open-reflect`).
+ * `verdict-form`. forge-nk1y.33: the HEADLINE counts both sources — open
+ * blocking comments and the reviewer's blockers — so it never reads "ready"
+ * over an open blocker; the derived verdict still counts comments only, and
+ * approve stays possible over a reviewer blocker, de-emphasised, behind the
+ * operator's rationale (forge-nk1y.34, REQUIRED then, optional otherwise).
+ * After an approve the card is the payoff: reflect on the cycle (`open-reflect`).
  *
  * Contract: [data-component="verdict-form"][data-form-state][data-form-kind]
- * [data-initiative-id][data-ac-count][data-submit-error]; actions
- * `approve-and-merge` | `send-back`, `compose-send-back`, `open-reflect`.
+ * [data-initiative-id][data-ac-count][data-blocking-count][data-submit-error];
+ * [data-section="verdict-headline"][data-headline=ready|not-ready]; field
+ * `approve-rationale`; actions `approve-and-merge` (data-emphasis) | `send-back`,
+ * `compose-send-back`, `open-reflect`.
  */
 import Link from 'next/link';
+import { useState } from 'react';
 
 import type { DerivedVerdict } from '@/lib/review-comments-client';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { eyebrow, miniBtn } from './styles';
+
+/** The approve rationale when the operator writes none and nothing blocks (forge-nk1y.34: never the old canned line). */
+export const DEFAULT_APPROVE_RATIONALE = 'Approved on the visual review — no blocking comments and no reviewer blockers open.';
 
 export type ReviewClaims = { present: boolean; missed: number; major: number; blocker: number; reviewedSha?: string; headSha?: string; stale: boolean };
 
@@ -40,7 +49,8 @@ export function DecisionCard({
   error: string | null;
   composing: boolean;
   onCompose: () => void;
-  onSubmit: () => void;
+  /** The operator's approve rationale, trimmed ('' when none); ignored for a send-back. */
+  onSubmit: (rationale: string) => void;
   onTypedSubmitted: (kind: 'approve' | 'send-back') => void;
   reflectHref?: string;
   claims: ReviewClaims;
@@ -49,7 +59,14 @@ export function DecisionCard({
   /** Select / scroll to the first open blocker (absent when there is none). */
   onJumpToBlocker?: () => void;
 }): JSX.Element {
+  const [rationale, setRationale] = useState('');
   const blockedReason = loadError ? `${loadError} — reload the page; the verdict cannot be derived without them` : submitting ? 'the verdict is being submitted' : null;
+  const reviewerBlockers = claims.present ? claims.blocker : 0;
+  const blocking = blockerCount + reviewerBlockers;
+  const overBlocker = derived.kind === 'approve' && reviewerBlockers > 0;
+  const approveReason = blockedReason ?? (overBlocker && rationale.trim() === '' ? `a rationale is required to approve over ${plural(reviewerBlockers, 'open reviewer blocker', 'open reviewer blockers')}` : null);
+  const primaryBtn: React.CSSProperties = { flex: 1, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-md)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2) var(--space-4)', border: '1px solid var(--ember)', background: 'var(--ember)', color: 'var(--accent-fg)' };
+  const secondaryBtn: React.CSSProperties = { ...miniBtn, flex: 1, fontSize: 'var(--text-md)', fontWeight: 600, padding: 'var(--space-2) var(--space-4)', color: 'var(--text)' };
   const card: React.CSSProperties = {
     border: `1px solid ${submitted === 'approve' ? 'var(--green)' : 'var(--ember)'}`, borderRadius: 'var(--radius)',
     background: 'linear-gradient(180deg, rgba(255,158,74,.08), rgba(255,158,74,.02))',
@@ -74,6 +91,7 @@ export function DecisionCard({
       data-form-kind={submitted ?? derived.kind}
       data-initiative-id={initiativeId}
       data-ac-count={blockerCount}
+      data-blocking-count={blocking}
       data-submit-error={error ?? ''}
       style={card}
     >
@@ -100,11 +118,12 @@ export function DecisionCard({
         </>
       ) : (
         <>
-          <h2 style={title}>
-            {derived.kind === 'approve' ? 'Ready to approve and merge' : `${plural(blockerCount, 'blocking comment', 'blocking comments')} — send back`}
+          <h2 data-section="verdict-headline" data-headline={blocking > 0 ? 'not-ready' : 'ready'} style={{ ...title, color: blocking > 0 ? 'var(--amber)' : undefined }}>
+            {blocking > 0 ? `Not ready: ${plural(blocking, 'blocking finding', 'blocking findings')}` : 'Ready to approve and merge'}
           </h2>
           <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
-            Derived from your comments: <strong style={{ color: blockerCount > 0 ? 'var(--amber)' : 'var(--green)' }}>{blockerCount} blocking open</strong> · {resolvedCount} resolved.
+            Your comments: <strong style={{ color: blockerCount > 0 ? 'var(--amber)' : 'var(--green)' }}>{blockerCount} blocking open</strong> · {resolvedCount} resolved · the review: <strong style={{ color: reviewerBlockers > 0 ? 'var(--amber)' : 'var(--green)' }}>{plural(reviewerBlockers, 'blocker', 'blockers')}</strong>.
+            {overBlocker && ' Send back, or approve over it with your reason below.'}
             {derived.kind === 'approve' ? ' Comment on a criterion or checkpoint below to block it.' : ' Each blocker becomes an acceptance criterion the fix loop runs in place.'}
             {onJumpToBlocker && (
               <>{' '}<button data-action="jump-to-blocking" onClick={onJumpToBlocker} style={{ ...miniBtn, color: 'var(--amber)' }}>Show the first blocker ↓</button></>
@@ -114,23 +133,35 @@ export function DecisionCard({
           {derived.kind === 'send-back' && derived.rationale && (
             <pre style={{ margin: 0, maxHeight: 'var(--pane-xs)', overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontFamily: 'inherit', fontSize: 'var(--text-sm)', color: 'var(--dim)' }}>{derived.rationale}</pre>
           )}
-          {claims.present && (claims.missed > 0 || claims.major > 0 || claims.blocker > 0 || claims.stale) && (
+          {claims.present && (claims.missed > 0 || claims.major > 0 || claims.stale) && (
             <p data-section="review-claims" style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--amber)', borderLeft: '2px solid var(--amber)', paddingLeft: 'var(--space-2)' }}>
-              The reviewer&apos;s claims are not counted here: {plural(claims.missed, 'criterion missed', 'criteria missed')}, {plural(claims.blocker, 'blocker', 'blockers')}, {plural(claims.major, 'major finding', 'major findings')}
+              The reviewer also reports {plural(claims.missed, 'criterion missed', 'criteria missed')} and {plural(claims.major, 'major finding', 'major findings')}
               {claims.stale && claims.reviewedSha && claims.headSha ? `, judged at ${claims.reviewedSha.slice(0, 7)} — not the head ${claims.headSha.slice(0, 7)}` : ''}. Read them below before you decide.
             </p>
           )}
+          {derived.kind === 'approve' && (
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--dim)' }}>
+              {overBlocker ? 'Why approve over the review\'s blocker — required, recorded in the verdict and the PR' : 'Why approve — optional, recorded in the verdict and the PR'}
+              <textarea data-field="approve-rationale" value={rationale} onChange={(e) => setRationale(e.target.value)} rows={2} disabled={submitting} style={{ font: 'inherit', fontSize: 'var(--text-sm)', resize: 'vertical' }} />
+            </label>
+          )}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            {overBlocker && (
+              <button data-action="compose-send-back" onClick={onCompose} {...disabledAttrs(blockedReason)} style={primaryBtn}>
+                Send back with work items
+              </button>
+            )}
             <button
-              onClick={onSubmit}
-              {...disabledAttrs(blockedReason)}
+              onClick={() => onSubmit(rationale.trim())}
+              {...disabledAttrs(derived.kind === 'approve' ? approveReason : blockedReason)}
               data-action={derived.kind === 'approve' ? 'approve-and-merge' : 'send-back'}
-              style={{ flex: 1, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-md)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2) var(--space-4)', border: '1px solid var(--ember)', background: 'var(--ember)', color: 'var(--accent-fg)' }}
+              data-emphasis={overBlocker ? 'secondary' : 'primary'}
+              style={overBlocker ? secondaryBtn : primaryBtn}
             >
-              {submitting ? 'Submitting…' : derived.kind === 'approve' ? 'Approve and merge' : 'Send back (add work items)'}
+              {submitting ? 'Submitting…' : derived.kind === 'send-back' ? 'Send back (add work items)' : overBlocker ? 'Approve anyway and merge' : 'Approve and merge'}
             </button>
-            {derived.kind === 'approve' && (
-              <button data-action="compose-send-back" onClick={onCompose} {...disabledAttrs(blockedReason)} style={{ ...miniBtn, flex: 1, fontSize: 'var(--text-md)', fontWeight: 600, padding: 'var(--space-2) var(--space-4)', color: 'var(--text)' }}>
+            {derived.kind === 'approve' && !overBlocker && (
+              <button data-action="compose-send-back" onClick={onCompose} {...disabledAttrs(blockedReason)} style={secondaryBtn}>
                 Send back with work items
               </button>
             )}

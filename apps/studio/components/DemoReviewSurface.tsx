@@ -33,7 +33,7 @@ import { summarizeReview } from '@/lib/demo-review-view';
 import { countBy, joinCriteria, parseDiffStat, reviewHeadIsStale } from '@/lib/gate-view';
 import { GateBand } from './studio/gate/GateBand';
 import { StoryBand } from './studio/gate/StoryBand';
-import { DecisionCard } from './studio/gate/DecisionCard';
+import { DecisionCard, DEFAULT_APPROVE_RATIONALE } from './studio/gate/DecisionCard';
 import { CriteriaPane } from './studio/gate/CriteriaPane';
 import { FindingsPane, type ReviewFindingsState } from './studio/gate/FindingsPane';
 import { DemoGallery } from './studio/gate/DemoGallery';
@@ -111,13 +111,19 @@ export function DemoReviewSurface({
     comments,
   ).firstBlockingRegion;
 
-  async function onSubmit(): Promise<void> {
+  async function onSubmit(approveRationale: string): Promise<void> {
     setError(null);
+    // forge-nk1y.34: approving over a reviewer blocker needs the operator's reason — refused by name, never defaulted.
+    const reviewerBlockers = doc ? severities.blocker ?? 0 : 0;
+    if (derived.kind === 'approve' && reviewerBlockers > 0 && approveRationale === '') {
+      setError(`refused — a rationale is required to approve over ${reviewerBlockers} open reviewer blocker${reviewerBlockers === 1 ? '' : 's'}`);
+      return;
+    }
     setSubmitting(true);
     try {
       const result =
         derived.kind === 'approve'
-          ? await submitVerdict({ kind: 'approve', initiativeId: verdictInitiativeId, rationale: 'Approved on the visual review — no blocking comments.' })
+          ? await submitVerdict({ kind: 'approve', initiativeId: verdictInitiativeId, rationale: approveRationale || DEFAULT_APPROVE_RATIONALE })
           : await submitVerdict({
               kind: 'send-back',
               initiativeId: verdictInitiativeId,
@@ -173,7 +179,7 @@ export function DemoReviewSurface({
           error={error}
           composing={composing}
           onCompose={() => setComposing(true)}
-          onSubmit={() => void onSubmit()}
+          onSubmit={(rationale) => void onSubmit(rationale)}
           onTypedSubmitted={(kind) => { setSubmitted(kind); onSubmitted?.(kind); }}
           reflectHref={reflectHref}
           loadError={loadError}

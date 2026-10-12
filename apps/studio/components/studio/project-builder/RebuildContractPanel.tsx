@@ -180,7 +180,7 @@ export function RebuildContractPanel({
               {drift.appTypeNote}
             </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          <div data-section="contract-drift-rows" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8, maxHeight: 'var(--pane-lg)', overflowY: 'auto' }}>
             {drift.rows.map((row) => (
               <div
                 key={row.section}
