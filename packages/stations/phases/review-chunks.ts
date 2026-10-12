@@ -100,7 +100,7 @@ export function partitionChangedFiles(
  */
 export function mergeChunkRecords(
   chunks: ReadonlyArray<{ label: string; record: ReviewFindingsRecord }>,
-  unjudgedCriteria: ReadonlyArray<{ criterion: string; workItemId: string; verdict?: 'met' | 'missed'; evidence?: string }>,
+  unjudgedCriteria: ReadonlyArray<{ criterion: string; workItemId: string; verdict?: 'met' | 'partial' | 'missed'; evidence?: string }>,
 ): ReviewFindingsRecord {
   const first = chunks[0]?.record;
   if (first === undefined) {

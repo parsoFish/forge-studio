@@ -60,7 +60,11 @@
 import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 
-import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import { ReviewFindingsPanel, currentFindingsPanelProps, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import type { ReviewOutcomeDoc } from '@/lib/gate-view';
+
+/** The run's findings read, with the review's latest attempt (forge-nk1y.39) when it was read. */
+export type RunFindings = { doc: ReviewFindingsDoc | null; failed: boolean; outcome?: { doc: ReviewOutcomeDoc | null; error: boolean } };
 import { gateArtifactHref } from '@/lib/gate-artifact-href';
 import { RunLog } from '@/components/studio/RunLog';
 import { RunControls } from '@/components/studio/RunControls';
@@ -79,7 +83,7 @@ export type FlowRunDetailProps = {
    *  distinguish "the review has not run" from "the fetch failed", so the page
    *  rendered nothing for both and the panel's own `absent`/`error` vocabulary
    *  went unused. Derivation matches `app/artifact/page.tsx:775-776`. */
-  findings: { doc: ReviewFindingsDoc | null; failed: boolean };
+  findings: RunFindings;
   /** R6-01 WI-3 / F5 — which row (if any) is expanded. Optional/defaulted so
    *  every existing caller (WI-2's own pinned render tests) that never sets
    *  it keeps rendering exactly as before: fully collapsed. */
@@ -258,11 +262,9 @@ export function FlowRunDetail({
             {/* forge-nk1y.18: findings scroll inside their pane, never the page. */}
             <section data-page-section="findings" aria-label="Review findings">
               <div data-section="run-findings-pane" style={{ maxHeight: 'var(--pane-xl)', overflowY: 'auto' }}>
-                <ReviewFindingsPanel
-                  doc={findings.doc}
-                  absentNote={findings.doc === null && !findings.failed}
-                  errorNote={findings.doc === null && findings.failed}
-                />
+                <ReviewFindingsPanel {...currentFindingsPanelProps({
+                  doc: findings.doc, absent: findings.doc === null && !findings.failed, error: findings.doc === null && findings.failed, outcome: findings.outcome,
+                })} />
               </div>
             </section>
           </>

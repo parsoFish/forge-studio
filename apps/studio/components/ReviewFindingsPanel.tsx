@@ -18,9 +18,13 @@
  * failure must never render the fabricated claim that the review did not run.
  *
  * DOM-as-metrics: [data-section="review-findings"][data-findings-count]
- * [data-findings-state="present|absent|error"], per-row
- * [data-finding][data-finding-severity][data-finding-category].
+ * [data-findings-state="present|absent|error|not-current"], per-row
+ * [data-finding][data-finding-severity][data-finding-category];
+ * `data-findings-state="not-current"` when the latest review attempt produced no
+ * findings for the change (forge-nk1y.39).
  */
+
+import { reviewCurrency, type ReviewOutcomeDoc } from '@/lib/gate-view';
 
 export type ReviewFindingsDoc = {
   initiative_id?: string;
@@ -36,6 +40,8 @@ export type ReviewFindingsDoc = {
   acEvaluations?: Array<{ criterion?: string; verdict?: 'met' | 'partial' | 'missed'; evidence?: string }>;
   /** The reviewer's narrative of the change. */
   whyWhatHow?: { why?: string; what?: string; how?: string };
+  /** forge-nk1y.39: changed paths not derived for review — a binary, or the orchestrator's demo bundle. */
+  notReviewed?: Array<{ path?: string; reason?: 'binary' | 'demo-bundle' }>;
   findings?: Array<{
     id?: string;
     severity?: 'blocker' | 'major' | 'minor' | 'info';
@@ -62,7 +68,30 @@ const SEVERITY_COLOURS: Record<string, string> = {
 
 const SEVERITY_ORDER = ['blocker', 'major', 'minor', 'info'];
 
-export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false }: { doc: ReviewFindingsDoc | null; absentNote?: boolean; errorNote?: boolean }) {
+/**
+ * forge-nk1y.39: the panel's props with the review's CURRENCY applied — findings that are not the
+ * review of the change (the latest attempt failed, or completed at another head) are never passed
+ * as `doc`; an outcome read that failed is UNKNOWN and renders the error note.
+ */
+export function currentFindingsPanelProps(
+  { doc, absent, error, outcome }: { doc: ReviewFindingsDoc | null; absent: boolean; error: boolean; outcome?: { doc: ReviewOutcomeDoc | null; error: boolean } },
+): { doc: ReviewFindingsDoc | null; absentNote: boolean; errorNote: boolean; notCurrentNote?: string } {
+  const c = reviewCurrency(doc, outcome);
+  if (c.kind === 'unknown') return { doc: null, absentNote: false, errorNote: true };
+  if (c.kind === 'not-current') {
+    return { doc: null, absentNote: false, errorNote: false, notCurrentNote: `No current findings — review failed at ${c.headSha ? c.headSha.slice(0, 7) : 'an unknown head'} (${c.reason}).` };
+  }
+  return { doc, absentNote: absent, errorNote: error };
+}
+
+export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false, notCurrentNote }: { doc: ReviewFindingsDoc | null; absentNote?: boolean; errorNote?: boolean; notCurrentNote?: string }) {
+  if (notCurrentNote) {
+    return (
+      <div data-section="review-findings" data-findings-state="not-current" style={{ fontSize: 'var(--text-sm)', color: 'var(--amber)' }}>
+        {notCurrentNote}
+      </div>
+    );
+  }
   if (!doc) {
     // Review r1: error beats absence — a failed fetch says NOTHING about
     // whether the artifact exists, so the fabricated "did not run" claim is

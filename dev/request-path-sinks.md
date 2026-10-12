@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-253 files, 1441 sink calls; 183 classified (accidentally-safe 8, guarded 47, not-request-derived 36, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+253 files, 1437 sink calls; 183 classified (accidentally-safe 8, guarded 47, not-request-derived 36, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -57,7 +57,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/enqueue-plan-run.ts` | 9 | guarded |  | read | body `initiativeId` / `initiativeIds[]` |
 | `packages/flows/finalize-merged.ts` | 11 | guarded | `isContainedWorktreePath` | exec | `POST /api/verdict` approve → `finalizeAfterMerge` → `pruneMergedWorktrees`: manifest `worktree_path` + `initiative_id` |
 | `packages/flows/fix-work-items.ts` | 1 | other | `resolveGuardedPath` | read | forge-mfv5.1.27 `readPendingFixWorkItems`: the manifest `worktree_path` (contained by every caller: the drain's `isContainedWorktreePath`, `runRequeue`'s `assertManifestPathFields`, the scheduler's own worktree) is read only after `guardedFile(worktree, ['.forge','work-items'], 'readdir')` passes; the one `existsSync` only names a guard rejection |
-| `packages/flows/flow-artifacts.ts` | 10 | other | `isSafeCycleId` | exec | `manifest.cycle_id` |
+| `packages/flows/flow-artifacts.ts` | 6 | other | `isSafeCycleId` | exec | `manifest.cycle_id` |
 | `packages/flows/flow-run-requests.ts` | 13 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/flow-runner.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/forge-metrics.ts` | 31 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

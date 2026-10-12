@@ -11,15 +11,8 @@
  * (review-input dir + worktree findings copy deleted — nothing untracked is
  * ever left to block a later merge).
  *
- * historical: mechanical guards mirror the demo-agent pipeline (same review-lesson class):
- * a pre/post `git status` diff hard-fails any write outside the findings file
- * (`review.scope-violation`); budget-killed spawns (`error_max_*`) fail loud,
- * never retried; declared budget caps + the no-Edit tool posture are asserted
- * fail-loud at startup.
- *
  * The findings are agent CLAIMS weighed by the operator at the verdict gate —
- * never a gate by themselves (D-07: approve IS the merge). Not wired into
- * any seed flow; R4-10 assembles. Input mirrors the flow-node executor shape.
+ * never a gate by themselves (D-07: approve IS the merge).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -27,14 +20,16 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, 
 import { join } from 'node:path';
 
 import { requireClassProfiles, type ChangeClass, type ClassProfilePort } from '../class-profile-port.ts';
-import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
+import { reviewCeilingUsd } from './review-budget.ts';
 import { requireCycleId } from './cycle-id.ts';
 import { writeRootFenceOptions } from '@forge/sessions';
 import { projectBrainDir } from '@forge/knowledge';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,
+  writeReviewOutcomeJson,
   readWorkItemsFromDir,
+  worktreeDemoRelDir,
   type ReviewFindingsRecord,
   type WorkItem,
 } from '@forge/flows';
@@ -59,6 +54,7 @@ import {
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
 import { trackSpawnRefusal, spawnRefusalFailure, harvestFindings } from './review-refusal.ts';
+import { REVIEW_GIT_MAX_BUFFER_BYTES, agentTouchedPaths, parseNumstatZ, scopeChunks } from './review-input-scope.ts';
 
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;
@@ -93,7 +89,6 @@ export type AdversarialReviewResult =
       detail: string;
     };
 
-/** SPEC §1 declared-data fail-loud guard (exported so tests pin the throws). */
 /**
  * The reviewer's entire tool set. Read-only by construction: it can look at the
  * tree and write its one findings file, and there is nothing here through which
@@ -141,14 +136,8 @@ export function assertAdversarialReviewDeclaration(def: {
     );
   }
 
-  // ALLOWLIST, not a denylist of three names (spec §5 item 5, containment review
-  // 2026-09-05). The previous guard refused `Edit`, `MultiEdit` and `Bash` — and
-  // would have passed `Task` or `Agent`, either of which reaches execution by
-  // DELEGATION to a subagent that has Bash, and `NotebookEdit`, which executes
-  // cells. A denylist over an open tool vocabulary is decorative: every tool the
-  // SDK gains is granted by default until someone remembers to name it. This
-  // closes the class instead of chasing it — anything not on the read-only set
-  // is refused, including a tool that does not exist yet.
+  // ALLOWLIST, not a denylist (spec §5 item 5, containment review 2026-09-05): a denylist over an
+  // open tool vocabulary passes `Task`/`Agent` (execution by delegation) and every tool the SDK gains.
   const extra = def.allowedTools.filter((t) => !REVIEW_ALLOWED_TOOLS.includes(t));
   if (extra.length > 0) {
     throw new Error(
@@ -166,26 +155,56 @@ export function assertAdversarialReviewDeclaration(def: {
 
 function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: string; err: string } {
   try {
-    const out = execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8', timeout: 60_000 });
+    const out = execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8', timeout: 60_000, maxBuffer: REVIEW_GIT_MAX_BUFFER_BYTES });
     return { ok: true, out, err: '' };
   } catch (e) {
-    const err = e as { stderr?: Buffer | string; message?: string };
+    const err = e as { stderr?: Buffer | string; message?: string; code?: string };
+    if (err.code === 'ENOBUFS') {
+      return { ok: false, out: '', err: `git ${args.find((a) => !a.startsWith('-'))} output exceeded the review's ${REVIEW_GIT_MAX_BUFFER_BYTES / (1024 * 1024)} MiB buffer (ENOBUFS)` };
+    }
     const stderr = err.stderr ? (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString('utf8')) : (err.message ?? '');
     return { ok: false, out: '', err: stderr.slice(-500) };
   }
 }
 
+type ReviewOpts = {
+  queryFn?: StreamQueryFn;
+  signal?: AbortSignal;
+  classProfiles?: ClassProfilePort;
+  agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
+  // 8.1.30 — test-injection, mirrors RunContext.heartbeatTimers.
+  heartbeatTimers?: HeartbeatTimers;
+};
+
+/** The review, its OUTCOME recorded on every attempt — findings are written only on success (forge-nk1y.39). */
 export async function runAdversarialReview(
   input: AdversarialReviewInput,
   logger: EventLogger,
-  opts: {
-    queryFn?: StreamQueryFn;
-    signal?: AbortSignal;
-    classProfiles?: ClassProfilePort;
-    agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
-    // 8.1.30 — test-injection, mirrors RunContext.heartbeatTimers.
-    heartbeatTimers?: HeartbeatTimers;
-  },
+  opts: ReviewOpts,
+): Promise<AdversarialReviewResult> {
+  const head = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
+  const record = (status: 'complete' | 'failed', reason: string | null, detail: string | null): void => {
+    const at = writeReviewOutcomeJson(input.logsRoot, { cycleId: input.cycleId, headSha: head.ok ? head.out.trim() : null, status, reason, detail, at: new Date().toISOString() });
+    if (at === null) {
+      logger.emit({ initiative_id: input.initiativeId, phase: 'orchestrator', skill: opts.agentDef.slug, event_type: 'error', input_refs: [], output_refs: [],
+        message: 'review.outcome.write-error', metadata: { status, reason } });
+    }
+  };
+  let result: AdversarialReviewResult;
+  try {
+    result = await reviewInitiative(input, logger, opts);
+  } catch (err) {
+    record('failed', 'threw', err instanceof Error ? err.message : String(err)); // a throw is a failed attempt too
+    throw err;
+  }
+  record(result.status, result.status === 'failed' ? result.reason : null, result.status === 'failed' ? result.detail : null);
+  return result;
+}
+
+async function reviewInitiative(
+  input: AdversarialReviewInput,
+  logger: EventLogger,
+  opts: ReviewOpts,
 ): Promise<AdversarialReviewResult> {
   const def = opts.agentDef;
   // The one port (items 81/83): the class table is the example's. Read once, so
@@ -220,20 +239,15 @@ export async function runAdversarialReview(
 
   assertAdversarialReviewDeclaration(def);
 
-  // Band 1 — assemble the review inputs (orchestrator-owned; full stdout).
-  // The DIFF itself is captured per chunk, not here: the whole-initiative patch
-  // this used to write was overwritten by the first chunk's before any agent
-  // read it (bead forge-8vfn.6.10.24), so writing it was three dead file writes
-  // and three extra request-reachable path sinks for a file nobody consumed.
-  const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', `${BASE_REF}...HEAD`]);
-  // The initiative's CHANGE SIZE, for the review ceiling below. `--numstat` and
-  // not the patch itself: bead `forge-8vfn.6.10.24` removed the whole-initiative
-  // patch write, and re-adding it to count its lines would restore three dead
-  // file writes and three request-reachable path sinks for a file nobody reads.
-  const numstatRes = gitCapture(input.worktreePath, ['diff', '--numstat', `${BASE_REF}...HEAD`]);
+  // Band 1 — assemble the review inputs (orchestrator-owned). The diff is captured per chunk (bead forge-8vfn.6.10.24).
+  // `-z`: unquoted paths, so a name with unusual bytes reaches the pathspec as itself.
+  const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', '-z', `${BASE_REF}...HEAD`]);
+  // The CHANGE SIZE (review ceiling, bead forge-8vfn.6.10.24: never the patch itself) and the binaries, in one read.
+  const numstatRes = gitCapture(input.worktreePath, ['diff', '--numstat', '-z', `${BASE_REF}...HEAD`]);
+  const logRes = gitCapture(input.worktreePath, ['log', '--no-merges', '--format=%x01%ae', '--name-only', '-z', `${BASE_REF}..HEAD`]);
   const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
-  if (!changedFilesRes.ok || !headShaRes.ok) {
-    const detail = `git derivation error: ${[changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
+  if (!changedFilesRes.ok || !headShaRes.ok || !numstatRes.ok || !logRes.ok) {
+    const detail = `git derivation error: ${[changedFilesRes, headShaRes, numstatRes, logRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
     // Event name deliberately avoids the 'review'+'failed' substring pair —
     // failure-classifier.ts's reviewer signature would misclassify it as a
     // terminal reviewer-convergence failure (adversarial review finding #12).
@@ -241,7 +255,8 @@ export async function runAdversarialReview(
     return { status: 'failed', reason: 'derive-failed', detail };
   }
   const headSha = headShaRes.out.trim();
-  const changedFiles = changedFilesRes.out.trim().split('\n').filter(Boolean);
+  const changedFiles = changedFilesRes.out.split('\0').filter(Boolean);
+  const numstat = parseNumstatZ(numstatRes.out);
   const inputDirAbs = join(input.worktreePath, REVIEW_INPUT_REL_DIR);
   mkdirSync(inputDirAbs, { recursive: true });
   emit('review.input.assembled', { changed_files: changedFiles.length, head_sha: headSha, base_ref: BASE_REF });
@@ -252,15 +267,9 @@ export async function runAdversarialReview(
   // 290's byte-identical option bags are preserved exactly. `undefined` when
   // the agent declares no flat budget: nothing is invented and
   // `resolveOneShotBudgetUsd`'s share-based resolution stands, as before.
-  //
-  // A numstat that could not be read is NOT treated as a zero-line change: that
-  // would silently hand every chunk the bare floor and reintroduce the wall
-  // this closes. It falls back to the declared budget's own resolution.
-  const initiativeChangedLines = numstatRes.ok ? changedLinesFromNumstat(numstatRes.out) : null;
-  const ceilingUsd =
-    initiativeChangedLines === null
-      ? undefined
-      : reviewCeilingUsd(def.budgets.maxBudgetUsd, initiativeChangedLines, classProfiles.profileFor(input.changeClass).reviewCeilingUsd);
+  // A numstat that could not be read is a derive failure above — never a zero-line change.
+  const initiativeChangedLines = numstat.changedLines;
+  const ceilingUsd = reviewCeilingUsd(def.budgets.maxBudgetUsd, initiativeChangedLines, classProfiles.profileFor(input.changeClass).reviewCeilingUsd);
   emit('review.ceiling', {
     declared_usd: def.budgets.maxBudgetUsd ?? null,
     changed_lines: initiativeChangedLines,
@@ -372,16 +381,20 @@ export async function runAdversarialReview(
 
     const systemPrompt = buildAdversarialReviewSystemPrompt(def);
 
-    // ── Bounded by construction: one review per WORK ITEM (bead 6.10.24) ─────
-    //
-    // G2 died here — `error_max_turns`, no findings artifact, no verdict gate,
-    // no merge — because one spawn read the whole initiative's diff: its work
-    // scaled with the change while its budget did not. The chunk is the work
-    // item, which introduces NO NEW NUMBER: the PM already bounded it, one agent
-    // authored it, and its gate already ran over it. Files no work item claims
-    // become one `unattributed` chunk, so nothing in the diff escapes review.
-    const planned = partitionChangedFiles(changedFiles, wiRecords.map((w) =>
-      (w.origin === undefined ? w : { ...w, delivered: delivered.get(w.work_item_id) ?? [] })));
+    // Bounded by construction: one review per WORK ITEM (bead 6.10.24 — G2's one whole-diff spawn
+    // hit error_max_turns); unclaimed files form one `unattributed` chunk. forge-nk1y.39: cut by
+    // CLAIM over every changed file, THEN strip what is named, not derived.
+    const scope = scopeChunks(partitionChangedFiles(changedFiles, wiRecords.map((w) =>
+      (w.origin === undefined ? w : { ...w, delivered: delivered.get(w.work_item_id) ?? [] }))), {
+      binaries: numstat.binaries, demoRelDir: worktreeDemoRelDir(input.worktreePath, input.initiativeId), agentTouched: agentTouchedPaths(logRes.out),
+    });
+    const planned = scope.chunks;
+    const emptied = new Map(scope.emptied.map((e) => [e.workItemId, e.files] as const));
+    emit('review.input.excluded', {
+      binary: scope.notReviewed.filter((n) => n.reason === 'binary').length,
+      demo_bundle: scope.notReviewed.filter((n) => n.reason === 'demo-bundle').length,
+      emptied_work_items: [...emptied.keys()],
+    });
     // An empty diff keeps the pre-chunking shape — one chunk of nothing, which
     // the prompt renderer already words as "empty diff — say so in the summary".
     const chunks: ReviewChunk[] = planned.length > 0 ? planned : [{ workItemId: null, files: [] }];
@@ -399,7 +412,8 @@ export async function runAdversarialReview(
     const unjudgedCriteria = [
       ...wiRecords.filter((w) => !chunked.has(w.work_item_id)).flatMap((w) => agentCriteriaOf(w).map((criterion) => ({
         criterion, workItemId: w.work_item_id,
-        ...(w.origin === undefined ? {} : { evidence: `no \`wi(${w.work_item_id}): merge\` commit on ${BASE_REF}..HEAD changed a file in this diff — the dev loop recorded no delivery for this fix work item (verdict authored by the orchestrator, not by a review agent)` }),
+        ...(emptied.has(w.work_item_id) ? { verdict: 'partial' as const, evidence: `not judged: every file ${w.work_item_id} changed is a binary or the orchestrator's demo bundle (${emptied.get(w.work_item_id)!.join(', ')}) — weigh it at the gate (verdict authored by the orchestrator, not by a review agent)` } : {}),
+        ...(w.origin === undefined || emptied.has(w.work_item_id) ? {} : { evidence: `no \`wi(${w.work_item_id}): merge\` commit on ${BASE_REF}..HEAD changed a file in this diff — the dev loop recorded no delivery for this fix work item (verdict authored by the orchestrator, not by a review agent)` }),
       }))),
       ...[...ran].map(([criterion, r]) => ({ criterion, ...r })),
     ];
@@ -418,10 +432,11 @@ export async function runAdversarialReview(
       label: string,
     ): { ok: true; diff: string; stat: string } | { ok: false; failure: AdversarialReviewResult } => {
       const d = chunk.files.length > 0
-        ? gitCapture(input.worktreePath, ['diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        // Agent-authored names are paths, never pathspec magic (`:(exclude)…`, `*`).
+        ? gitCapture(input.worktreePath, ['--literal-pathspecs', 'diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
         : { ok: true, out: '', err: '' };
       const st = chunk.files.length > 0
-        ? gitCapture(input.worktreePath, ['diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        ? gitCapture(input.worktreePath, ['--literal-pathspecs', 'diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
         : { ok: true, out: '', err: '' };
       if (!d.ok || !st.ok) {
         const detail = `git derivation error for chunk ${label}: ${[d, st].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
@@ -706,7 +721,10 @@ export async function runAdversarialReview(
     // Band 5 — merge into the ONE artifact the verdict gate reads, validate the
     // MERGED record against the whole initiative's criteria (each chunk was only
     // validated against its own), persist, scrub.
-    const merged = mergeChunkRecords(chunkRecords, unjudgedCriteria);
+    const merged: ReviewFindingsRecord = {
+      ...mergeChunkRecords(chunkRecords, unjudgedCriteria),
+      ...(scope.notReviewed.length > 0 ? { notReviewed: scope.notReviewed } : {}),
+    };
     const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria, scope: 'the initiative' });
     if (mergedErrors.length > 0) {
       emit('review.merged.invalid', { errors: mergedErrors, chunks: chunkRecords.length }, { event_type: 'error' });

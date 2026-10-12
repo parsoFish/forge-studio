@@ -26,7 +26,7 @@
  */
 
 import { test, expect } from 'vitest';
-import { fetchReviewFindingsChecked } from '../../lib/flow-run-detail-client.ts';
+import { fetchReviewFindingsChecked, fetchReviewOutcomeChecked } from '../../lib/flow-run-detail-client.ts';
 
 const doc = { findings: [] };
 const res = (status: number, body: unknown = null) => async () => ({
@@ -64,4 +64,12 @@ test('the run id is URL-encoded into the artifact path', async () => {
   const spy = async (path: string) => { seen = path; return { status: 404, ok: false, json: async () => null } as unknown as Pick<Response, 'status' | 'ok' | 'json'>; };
   await fetchReviewFindingsChecked('a/b:c', spy);
   expect(seen).toBe('/api/artifact/a%2Fb%3Ac/review-findings.json');
+});
+
+test('forge-nk1y.39: the review outcome read — 404 is no attempt on file, a failed read is UNKNOWN (error), never "none"', async () => {
+  const outcome = { headSha: 'abc', status: 'failed', reason: 'derive-failed', detail: 'x' };
+  expect(await fetchReviewOutcomeChecked('CYCLE-1', res(200, outcome))).toEqual({ doc: outcome, error: false });
+  expect(await fetchReviewOutcomeChecked('CYCLE-1', res(404))).toEqual({ doc: null, error: false });
+  expect(await fetchReviewOutcomeChecked('CYCLE-1', res(500))).toEqual({ doc: null, error: true });
+  expect(await fetchReviewOutcomeChecked('CYCLE-1', async () => { throw new Error('down'); })).toEqual({ doc: null, error: true });
 });
