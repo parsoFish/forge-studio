@@ -129,6 +129,46 @@ export function reviewHeadIsStale(reviewedSha: string | undefined, headSha: stri
   return reviewedSha.slice(0, n) !== headSha.slice(0, n);
 }
 
+/** The review's LATEST attempt (`review-outcome.json`, forge-nk1y.39): written on every attempt, complete or failed. */
+export type ReviewOutcomeDoc = {
+  cycleId?: string;
+  headSha: string | null;
+  status: 'complete' | 'failed';
+  reason: string | null;
+  detail: string | null;
+  at?: string;
+};
+
+export type ReviewCurrency =
+  | { kind: 'current' }
+  /** The outcome could not be read: whether the findings are current is UNKNOWN (§6.15) — never "current". */
+  | { kind: 'unknown' }
+  | { kind: 'not-current'; headSha: string | null; reason: string; priorSha: string | null };
+
+/**
+ * forge-nk1y.39: are the findings on file the review of the change? `review-findings.json` is
+ * written only when a review completes, so after a failed round it still holds the PREVIOUS
+ * round's findings. The latest attempt's outcome decides: failed ⇒ no current findings;
+ * complete at another head ⇒ the file is not that review's. No outcome on file (a cycle whose
+ * reviews predate the record, or none ran) leaves the findings as they are.
+ */
+export function reviewCurrency(
+  doc: { headSha?: string } | null,
+  outcome: { doc: ReviewOutcomeDoc | null; error: boolean } | undefined,
+): ReviewCurrency {
+  if (outcome?.error) return { kind: 'unknown' };
+  const o = outcome?.doc ?? null;
+  if (o === null) return { kind: 'current' };
+  const priorSha = doc?.headSha ?? null;
+  if (o.status === 'failed') {
+    return { kind: 'not-current', headSha: o.headSha, priorSha, reason: o.detail ? `${o.reason ?? 'failed'}: ${o.detail}` : (o.reason ?? 'failed') };
+  }
+  if (doc !== null && o.headSha !== null && reviewHeadIsStale(doc.headSha, o.headSha)) {
+    return { kind: 'not-current', headSha: o.headSha, priorSha, reason: 'the latest review completed, but the findings on file are from another head' };
+  }
+  return { kind: 'current' };
+}
+
 export type SideMode = 'output' | 'frame' | 'video' | 'note';
 
 /** Captured stdout is the readable evidence for a command checkpoint (forge-nk1y.30: frames are 320 px stills). */

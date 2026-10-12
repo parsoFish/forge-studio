@@ -95,7 +95,7 @@ export { add } from './worktree.ts';
 export { finalizeMergedReadyForReview } from './finalize-merged.ts';
 
 // ---- Artifacts, demo paths and budgets -------------------------------------
-export { type ReviewFinding, type ReviewFindingsRecord, type ReviewFindingsExpectation, reviewFindingsJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
+export { type NotReviewedPath, type ReviewFinding, type ReviewFindingsRecord, type ReviewFindingsExpectation, type ReviewOutcomeRecord, reviewFindingsJsonPath, reviewOutcomeJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson, writeReviewOutcomeJson } from './flow-artifacts.ts';
 export { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 export { CostCeilingError, WedgeDetector, WedgeKillError } from './flow-budgets.ts';
 export {

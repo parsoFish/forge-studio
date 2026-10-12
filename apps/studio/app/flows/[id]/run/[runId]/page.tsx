@@ -43,13 +43,12 @@ import { useParams } from 'next/navigation';
 
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
-import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
+import { FlowRunDetail, type RunFindings } from '@/components/studio/FlowRunDetail';
 import { useDocumentTitle } from '@/lib/document-title';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
-import { fetchFlowRunDetail, fetchReviewFindingsChecked, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
+import { fetchFlowRunDetail, fetchReviewFindingsChecked, fetchReviewOutcomeChecked, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
 import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchStudioFlows, type Flow, type Run } from '@/lib/studio-client';
-import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import type { RunLogLine } from '@/lib/run-log-line';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
@@ -62,7 +61,7 @@ export default function FlowRunPage() {
 
   const [resolution, setResolution] = useState<FlowRunDetailResolution | null>(null);
   const [flow, setFlow] = useState<Flow | null>(null);
-  const [findings, setFindings] = useState<{ doc: ReviewFindingsDoc | null; failed: boolean }>({ doc: null, failed: false });
+  const [findings, setFindings] = useState<RunFindings>({ doc: null, failed: false });
   // Distinct from `resolution?.kind === 'found'` — the fetch simply hasn't
   // resolved yet, so the page must not render either the timeline or the
   // not-found body for a run it hasn't actually checked yet (mirrors
@@ -102,11 +101,15 @@ export default function FlowRunPage() {
     // review node — only fetch once it completed (no 404 spam). W7-FIX-A3
     // (A3-11): the producer is derived from the flow definition, not a
     // literal node id.
-    const findingsDoc = res.kind === 'found' && shouldFetchReviewFindings(res.run, flowDef) ? await fetchReviewFindingsChecked(res.run.id) : { doc: null, failed: false };
+    const [findingsDoc, outcome] = await Promise.all([
+      res.kind === 'found' && shouldFetchReviewFindings(res.run, flowDef) ? fetchReviewFindingsChecked(res.run.id) : { doc: null, failed: false },
+      // forge-nk1y.39: NOT behind the guard — a review that failed never completed its node.
+      res.kind === 'found' ? fetchReviewOutcomeChecked(res.run.id) : { doc: null, error: false },
+    ]);
     if (signal.cancelled) return;
     setResolution(res);
     setFlow(flowDef);
-    setFindings(findingsDoc);
+    setFindings({ ...findingsDoc, outcome });
     setLoaded(true);
   }, [flowId, runId]);
 

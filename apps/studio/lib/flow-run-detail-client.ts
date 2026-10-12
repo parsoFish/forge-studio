@@ -43,6 +43,7 @@
 import { bridgeFetch } from './bridge-client';
 import { parseRun, type Flow, type Run } from './studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import type { ReviewOutcomeDoc } from './gate-view';
 
 export type FlowRunDetailResolution =
   | { kind: 'found'; run: Run }
@@ -143,6 +144,21 @@ export async function fetchReviewFindingsChecked(
     return { doc: (await res.json()) as ReviewFindingsDoc, failed: false };
   } catch {
     return { doc: null, failed: true };
+  }
+}
+
+/** forge-nk1y.39: the review's latest attempt; read failure ⇒ `error` (UNKNOWN), a 404 ⇒ no attempt on file. */
+export async function fetchReviewOutcomeChecked(
+  runId: string,
+  fetchImpl: (path: string) => Promise<Pick<Response, 'status' | 'ok' | 'json'>> = bridgeFetch,
+): Promise<{ doc: ReviewOutcomeDoc | null; error: boolean }> {
+  try {
+    const res = await fetchImpl(`/api/artifact/${encodeURIComponent(runId)}/review-outcome.json`);
+    if (res.status === 404) return { doc: null, error: false };
+    if (!res.ok) return { doc: null, error: true };
+    return { doc: (await res.json()) as ReviewOutcomeDoc, error: false };
+  } catch {
+    return { doc: null, error: true };
   }
 }
 

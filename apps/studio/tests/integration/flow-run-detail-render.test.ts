@@ -573,3 +573,11 @@ test('W7-FIX-A3: reached by INITIATIVE id, the artifacts link carries the run\'s
   expect(html).toMatch(/<main[^>]*data-run-id="INIT-done-2"/);
   expect(html).toContain('2026-01-01T00-00-00_INIT-done-2 · flow forge-develop');
 });
+
+test('forge-nk1y.39: after a FAILED review round the run page never lists the previous round\'s findings as the run\'s review', () => {
+  const failed = { headSha: '39f76ac7e37e260bc160d9b8b0a3ec3430748a16', status: 'failed' as const, reason: 'derive-failed', detail: 'spawnSync git ENOBUFS' };
+  const html = render({ findings: { doc: FINDINGS_DOC, failed: false, outcome: { doc: failed, error: false } } });
+  expect(html).toContain('data-findings-state="not-current"');
+  expect(html).toContain('No current findings — review failed at 39f76ac (derive-failed: spawnSync git ENOBUFS).');
+  expect(html).not.toContain('data-finding="RF-1"');
+});
