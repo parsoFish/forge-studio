@@ -80,6 +80,7 @@ test('control — the scheduler claim gate is unchanged: a pending decompose run
   const paths = getPaths(q);
   writeFileSync(join(q, 'pending', `${I3B}.md`), manifest(I3B, 'forge-architect', [I3A]));
   assert.deepEqual(checkInitiativeDeps(`${I3B}.md`, paths), [], 'plan-everything-before-kickoff stands');
+  assert.deepEqual(unmetBuildDeps(`${I3B}.md`, paths), [], 'a pending decompose run reads ready: the scheduler WILL claim it');
   writeFileSync(join(q, 'pending', `${I3B}.md`), manifest(I3B, DEVELOP_FLOW_ID, [I3A]));
   assert.deepEqual(checkInitiativeDeps(`${I3B}.md`, paths), [I3A]);
 }));

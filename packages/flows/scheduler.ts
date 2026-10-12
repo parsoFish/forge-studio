@@ -315,15 +315,13 @@ function parkedAt(filename: string, dirs: readonly string[]): string | null {
 }
 
 /**
- * forge-nk1y.38: kickoff READINESS — the dependencies the BUILD would wait on,
- * for a planned initiative wherever it is parked (`pending/`, or
- * `ready-for-review/` at the Kickoff gate) and whatever flow it last ran: a
- * kickoff-parked manifest still carries `flow_id: forge-architect`, and the
- * claim gate's decompose exemption made every such dependent read ready.
- * Elsewhere there is no kickoff readiness to judge.
+ * forge-nk1y.38: READINESS — the deps the NEXT claim waits on. In `pending/`, the claim gate
+ * itself. At the Kickoff gate (`ready-for-review/`) the next claim is the BUILD, whatever flow
+ * the manifest last ran (it still carries forge-architect). Elsewhere: nothing to judge.
  */
 export function unmetBuildDeps(filename: string, paths: QueuePaths): string[] {
-  const p = parkedAt(filename, [paths.pending, paths.readyForReview]);
+  if (parkedAt(filename, [paths.pending]) !== null) return checkInitiativeDeps(filename, paths);
+  const p = parkedAt(filename, [paths.readyForReview]);
   return p === null ? [] : unmetDepsAt(p, filename, paths, false);
 }
 
