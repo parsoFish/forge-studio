@@ -673,7 +673,7 @@ packages/stations/cycle-recap.ts statSync 1
 packages/stations/cycle-recap.ts writeFileSync 1
 packages/stations/demo-delta.ts readFileSync 2
 packages/stations/demo-model.ts existsSync 1
-packages/stations/demo-model.ts readdirSync 2
+packages/stations/demo-model.ts readdirSync 1
 packages/stations/demo-model.ts readFileSync 4
 packages/stations/demo-model.ts writeFileSync 2
 packages/stations/demo-planner-port.ts mkdirSync 1
@@ -735,10 +735,13 @@ packages/stations/phases/reflector-brain-writes.ts existsSync 2
 packages/stations/phases/reflector-brain-writes.ts readdirSync 1
 packages/stations/phases/reflector-brain-writes.ts readFileSync 2
 packages/stations/phases/reflector-brain-writes.ts statSync 1
+packages/stations/phases/reflector-fold.ts existsSync 2
+packages/stations/phases/reflector-fold.ts readdirSync 1
+packages/stations/phases/reflector-fold.ts readFileSync 2
 packages/stations/phases/reflector-questions.ts existsSync 1
 packages/stations/phases/reflector-questions.ts readFileSync 1
 packages/stations/phases/reflector-questions.ts writeFileSync 1
-packages/stations/phases/reflector.ts existsSync 6
+packages/stations/phases/reflector.ts existsSync 7
 packages/stations/phases/reflector.ts mkdirSync 7
 packages/stations/phases/reflector.ts readFileSync 2
 packages/stations/phases/reflector.ts writeFileSync 5

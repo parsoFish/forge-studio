@@ -166,7 +166,9 @@ export function resolveBridgeUrl(): Promise<string> {
   cachedBridgeUrl = (async () => {
     const loc = typeof window !== 'undefined' ? window.location : null;
     if (!loc) return ''; // SSR — client-only code path
-    if (useOptimisticDefault) return defaultBridgeUrl(loc);
+    // forge-nk1y.29: the serve-time script set the LAUNCHED port (a number, or null = no env).
+    // Absent, the first call asks the authoritative route — never a guess at the default.
+    if (useOptimisticDefault && window.__FORGE_BRIDGE_PORT__ !== undefined) return defaultBridgeUrl(loc);
     const authoritative = await fetchAuthoritativeBridgeUrl(loc);
     return authoritative || defaultBridgeUrl(loc);
   })();

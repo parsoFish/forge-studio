@@ -384,31 +384,28 @@ function pngToDataUri(file: string): string | null {
  * keyed by filename stem. Used by `forge demo capture` to back-fill
  * `demo.json`. Best-effort; never throws.
  */
-export function collectCapturedMedia(bundleDir: string): CapturedMedia[] {
+export function collectCapturedMedia(bundleDir: string, readNames: (dir: string) => string[] = readdirSync): CapturedMedia[] {
   const byLabel = new Map<string, CapturedMedia>();
-  // A `.filmstrip.png` always wins over a plain `.png` of the same label
-  // (it composes the whole take, not one frame), regardless of directory
-  // read order — tracked so a plain `.png` seen AFTER the filmstrip cannot
-  // clobber it back.
-  const filmstripWon = new Set<string>();
+  // forge-nk1y.30: the plain `.png` — the native-resolution last still demo-capture writes — always
+  // wins over the `.filmstrip.png` of the same label (a 320-px-column grid, illegible as a frame; it
+  // stays the PR thumbnail), whatever the listing order. A bundle with only a filmstrip (recorded
+  // before the still existed) still binds it.
   const scan = (side: 'before' | 'after'): void => {
     const dir = join(bundleDir, side);
     let names: string[] = [];
-    try { names = readdirSync(dir); } catch { return; }
+    try { names = readNames(dir); } catch { return; }
     for (const name of names) {
       const lower = name.toLowerCase();
       if (lower.endsWith('.filmstrip.png') || lower.endsWith('.png')) {
         const isFilmstrip = lower.endsWith('.filmstrip.png');
         const label = name.replace(isFilmstrip ? /\.filmstrip\.png$/i : /\.png$/i, '');
-        const key = `${side}:${label}`;
-        if (!isFilmstrip && filmstripWon.has(key)) continue;
+        if (isFilmstrip && names.some((n) => n.toLowerCase() === `${label}.png`.toLowerCase())) continue;
         const uri = pngToDataUri(join(dir, name));
         if (!uri) continue;
         const entry = byLabel.get(label) ?? { label };
         if (side === 'before') entry.beforeImage = uri;
         else entry.afterImage = uri;
         byLabel.set(label, entry);
-        if (isFilmstrip) filmstripWon.add(key);
       } else if (lower.endsWith('.webm')) {
         // `bundleDir` is always `<demoDir>/.capture` (the only caller,
         // `forge demo capture`, hardcodes that join), mirrored WHOLESALE into

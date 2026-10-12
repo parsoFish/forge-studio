@@ -34,6 +34,55 @@ const ROWS: Row[] = [
       contract: ['<ContractReadiness', '<RebuildContractPanel', '<ContractPanelMount', '<OnboardWithAgent', '<OpenSessionsPanel'],
     },
   },
+  {
+    route: '/flows/[id]/run/[runId]',
+    file: 'components/studio/FlowRunDetail.tsx',
+    max: 5,
+    groups: ['status', 'timeline', 'findings'],
+    wraps: {
+      status: ['data-section="run-breadcrumb"', '<RunTrigger', '<GateLink', '<RunControls'],
+      timeline: ['<RunTimeline'],
+      findings: ['<ReviewFindingsPanel'],
+    },
+  },
+  {
+    // The catalog palette is the left tool rail (layout chrome, like the nav)
+    // and the save bar is the page's action bar — neither is a section.
+    route: '/agents/[id]',
+    file: 'app/agents/[id]/page.tsx',
+    max: 5,
+    groups: ['identity', 'materials', 'runtime', 'evidence', 'history'],
+    wraps: {
+      identity: ['<StarterPicker', 'data-field="agent-name"'],
+      materials: ['data-field="purpose"', '<InstructionsField', 'data-field="interactivity"', '<MaterialsPicker'],
+      runtime: ['data-section="advanced"', '<RuntimePicker', '<ReadOnlyFields'],
+      evidence: ['<RunPanel', '<YamlPreview', '<ReadinessPanel', '<UsedInFlows'],
+      history: ['<HistoryLedger'],
+    },
+  },
+  {
+    route: '/monitor',
+    file: 'app/monitor/page.tsx',
+    max: 3,
+    groups: ['summary', 'rail', 'ledger'],
+    wraps: {
+      summary: ['<MonitorSummaryStrip', 'data-section="serve-status"', 'data-section="monitor-attention"', '<HomeSessionsStrip'],
+      rail: ['<RunRail'],
+      ledger: ['<UnresolvedHistoriesNotice', '<HistoryLedger'],
+    },
+  },
+  {
+    route: '/community',
+    file: 'app/community/page.tsx',
+    max: 5,
+    groups: ['registry', 'hubs', 'filters', 'items'],
+    wraps: {
+      registry: ['data-section="refresh-registry-state"', 'data-section="refresh-result"'],
+      hubs: ['data-component="hub-strip"'],
+      filters: ['data-field="community-search"', 'data-action="toggle-sort-direction"'],
+      items: ['data-component="fetch-error"', 'data-component="community-empty"', '<CommunityItemGrid'],
+    },
+  },
 ];
 
 function pageSections(file: string): string[] {

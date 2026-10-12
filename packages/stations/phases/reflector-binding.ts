@@ -146,7 +146,28 @@ export type ReflectorUserPromptInput = {
    * provenance — no human round-trip.
    */
   mode: 'interactive' | 'automated';
+  /**
+   * forge-nk1y.27: set on a rerun after the operator answered (interactive, user-feedback.md present) —
+   * the theme files that cite this cycle. The turn becomes a FOLD of the answers into them.
+   */
+  foldThemes?: readonly string[];
 };
+
+/** forge-nk1y.27: the fold section a rerun after the operator's answers leads with. */
+function foldSection(input: ReflectorUserPromptInput): string[] {
+  if (!input.foldThemes) return [];
+  const themes = input.foldThemes.length > 0 ? input.foldThemes.map((t) => `- \`${t}\``) : ['- _(no theme cites this cycle — write one only if an answer is a lesson)_'];
+  return [
+    "## Fold the operator's answers (this turn)",
+    '',
+    `The operator has answered: \`${input.userFeedbackRelPath}\`. This turn FOLDS those answers — do not redo Stage 1 or write new questions.`,
+    'Amend each theme below that an answer corrects or extends: an operator correction overrides your earlier claim (rewrite the claim, do not leave both),',
+    'and add or update a `## Operator answers` section quoting the answer you folded. Then do Stage 3. Forge checks which themes changed.',
+    '',
+    ...themes,
+    '',
+  ];
+}
 
 /**
  * Render the per-cycle prompt body the reflector reads. Walks the agent through
@@ -158,7 +179,7 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
   const stage2 =
     input.mode === 'automated'
       ? `3. **Stage 2 (INFER the answers — AUTOMATED mode, R4-09-F3)**: write \`${input.userQuestionsRelPath}\` with the SAME up-to-4 \`## N. <header>\` questions you would ask a human (same format: heading + one-line body + optional bullet options), grounded in Stage 1 + the PR — BUT there is no operator to answer them. For EACH question, ALSO write one \`**Inferred answer:** <chosen option label, or a one-line answer for a freeform question> — <citation>\` line immediately under its body, where the answer is INFERRED from the evidence (the event log, \`dev-loop.delivered\` stats, the demo artifacts, the PR description + shipped diff) and the citation is a concrete anchor (a changed file, an event count, a PR claim). Cap at 4. Never invent an answer the evidence doesn't support — if the evidence is genuinely silent, say so in the inferred-answer line ("_insufficient evidence — flag for operator_").`
-      : `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. Cap at 4. **Ground each non-freeform question in the PR/logs with a concrete citation** — a specific changed file, a PR claim, or an event count from Stage 1 — never a generic template question.`;
+      : `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. When a question's choices are not exclusive (several may apply), put the line \`Choose any:\` directly above its bullets — the gate renders checkboxes; without it the operator picks exactly one. Cap at 4. **Ground each non-freeform question in the PR/logs with a concrete citation** — a specific changed file, a PR claim, or an event count from Stage 1 — never a generic template question.`;
   const stage3 =
     input.mode === 'automated'
       ? `4. **Stage 3 (self-answer — AUTOMATED mode)**: there is no human, so WRITE \`${input.userFeedbackRelPath}\` YOURSELF (machine-authored) — answer each numbered Stage-2 question with its inferred answer, then add any inferred general notes. Prefix the file with a first line \`_(inferred by the reflector — no operator feedback this cycle)_\` so the provenance is unmistakable. Then distil those inferred answers into Section 2 of \`${input.retroRelPath}\` and the free-form notes into Section 3, exactly as the interactive path would from real feedback.`
@@ -168,6 +189,7 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     '',
     `> Initiative: **${input.initiativeId}** · Cycle: **${input.cycleId}** · Project: **${input.projectName}**`,
     '',
+    ...foldSection(input),
     '## Inputs',
     '',
     `- Closed manifest: \`${input.manifestRelPath}\``,

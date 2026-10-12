@@ -18,7 +18,7 @@
  */
 
 import { chromium, type Browser, type BrowserContext, type Page, type Video } from 'playwright-core';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { installForgeOverlay, type OverlayRegion, type ForgeOverlayHandle } from './demo-overlay.ts';
@@ -82,6 +82,8 @@ function assertSide(value: string, who: string): RecordSide {
 export type RecordResult = {
   webm: string;
   filmstrip: string;
+  /** forge-nk1y.30: the last still at native capture resolution — the checkpoint's frame (the filmstrip is a thumbnail). */
+  still: string;
   /** The `data:image/png;base64,...` stills the filmstrip was composed from. */
   stills: string[];
 };
@@ -192,6 +194,12 @@ async function writeArtifacts(opts: {
   const webm = join(sideDir, `${label}.webm`);
   await video.saveAs(webm);
 
+  // forge-nk1y.30: the last still, at the capture viewport's native size, is the checkpoint frame.
+  const lastStill = stills.at(-1);
+  if (!lastStill) throw new DemoRecordError(`demo-capture: no still was taken for ${side}/${label}`);
+  const still = join(sideDir, `${label}.png`);
+  writeFileSync(still, Buffer.from(lastStill.replace(/^data:image\/png;base64,/, ''), 'base64'));
+
   const filmstrip = join(sideDir, `${label}.filmstrip.png`);
   const cols = Math.max(1, Math.min(stills.length, FILMSTRIP_COLUMNS));
   const gridPage = await browser.newPage({
@@ -203,7 +211,7 @@ async function writeArtifacts(opts: {
   } finally {
     await gridPage.close();
   }
-  return { webm, filmstrip, stills };
+  return { webm, filmstrip, still, stills };
 }
 
 // ── recordTerminal ───────────────────────────────────────────────────────────
