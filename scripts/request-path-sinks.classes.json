@@ -1001,6 +1001,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/stations/phases/gate-feedback.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "no request field: every path is `<per-WI worktree>/.forge/last-gate-failure.md` and the git exec reads that worktree's HEAD; the worktree path is the orchestrator's own (moved from developer-loop.ts, forge-nk1y.35)"
+ },
  "packages/stations/phases/executor-deps.ts": {
   "class": "other",
   "guard": null,

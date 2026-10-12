@@ -1,0 +1,1470 @@
+{
+ "initiative_id": "INIT-2026-10-11-i2-apply-engine-terraform-retired",
+ "cycleId": "2026-10-11T02-16-05_INIT-2026-10-11-i2-apply-engine-terraform-retired",
+ "baseRef": "main",
+ "headSha": "1ee7c951c69ea0903008b24a080d412ee9eb37b4",
+ "reviewedAt": "2026-10-11T00:00:00Z",
+ "summary": "[WI-1] WI-1 delivers a well-structured Python package scaffold with correct pyproject.toml, a functional CLI, and four new tests. Two substantive gaps: the new test file is never wired into CI (all three tests are dead in automation), and t…",
+ "lenses": [
+  "correctness",
+  "containment",
+  "test-strength",
+  "boundary"
+ ],
+ "findings": [
+  {
+   "id": "WI-1/RF-1",
+   "severity": "major",
+   "category": "containment",
+   "title": "New test file not wired into CI; tests are dead in automation",
+   "detail": "ci.yaml's two jobs install only `pytest pyyaml yamllint jsonschema` (no `pip install -e .`) and run only four pre-existing test files. `tests/test_package_structure.py` is never invoked. This means all three WI-1 acceptance-criterion tests …",
+   "evidence": [
+    {
+     "file": ".github/workflows/ci.yaml",
+     "line": 29,
+     "excerpt": "run: pip install pytest pyyaml yamllint jsonschema"
+    },
+    {
+     "file": ".github/workflows/ci.yaml",
+     "line": 31,
+     "excerpt": "run: pytest tests/test_structure.py tests/test_overlay_schema.py"
+    },
+    {
+     "file": "tests/test_package_structure.py",
+     "line": 1,
+     "excerpt": "\"\"\"Package structure tests for WI-1 acceptance criteria.\"\"\""
+    }
+   ],
+   "acRef": "(WI-1) GIVEN a clean checkout with no gitweave package installed WHEN pip install -e . runs from the repo root THEN exits 0 and the gw entry point is registered on PATH"
+  },
+  {
+   "id": "WI-1/RF-2",
+   "severity": "major",
+   "category": "test-strength",
+   "title": "Help tests invoke `-m gitweave.cli`, not the `gw` entry-point; AC3 unvalidated",
+   "detail": "`test_gw_help_exits_zero` and `test_gw_help_lists_verbs` run `python3 -m gitweave.cli --help`. This exercises the module's `__main__` path but bypasses the installed `gw` script entirely. A malformed `[project.scripts]` declaration — e.g., …",
+   "evidence": [
+    {
+     "file": "tests/test_package_structure.py",
+     "line": 16,
+     "excerpt": "result = subprocess.run(\n        [\"python3\", \"-m\", \"gitweave.cli\", \"--help\"],"
+    },
+    {
+     "file": "tests/test_package_structure.py",
+     "line": 23,
+     "excerpt": "result = subprocess.run(\n        [\"python3\", \"-m\", \"gitweave.cli\", \"--help\"],"
+    }
+   ],
+   "acRef": "(WI-1) GIVEN the installed package WHEN gw --help runs THEN exits 0 and prints usage with at least the plan, apply, reset verbs listed"
+  },
+  {
+   "id": "WI-1/RF-3",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "`cmd_org_*` functions have no exception handling; missing env vars produce raw tracebacks",
+   "detail": "`cmd_org_show`, `cmd_org_repos`, `cmd_org_teams`, and `cmd_org_rulesets` call `_get_org_client()` directly without a try/except. `get_github_client()` raises `EnvironmentError` when any of `GW_APP_ID`, `GW_APP_PRIVATE_KEY_PATH`, `GW_APP_INS…",
+   "evidence": [
+    {
+     "file": "gitweave/cli.py",
+     "line": 62,
+     "excerpt": "def cmd_org_show(args):\n    gh_org = _get_org_client()"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 34,
+     "excerpt": "def cmd_plan(args):\n    try:\n        result = plan(fixture_path=getattr(args, \"fixture\", None))\n    ...\n    except EnvironmentError as e:"
+    }
+   ]
+  },
+  {
+   "id": "WI-1/RF-4",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "`test_pyproject_declares_gw_entrypoint` reads pyproject.toml via CWD-relative path",
+   "detail": "`pathlib.Path(\"pyproject.toml\").read_text()` resolves against the process working directory at test time. pytest run from a sub-directory (or via an IDE that sets CWD to the test file's directory) raises `FileNotFoundError` rather than an a…",
+   "evidence": [
+    {
+     "file": "tests/test_package_structure.py",
+     "line": 36,
+     "excerpt": "data = tomllib.loads(pathlib.Path(\"pyproject.toml\").read_text())"
+    }
+   ],
+   "acRef": "(WI-1) GIVEN a clean checkout with no gitweave package installed WHEN pip install -e . runs from the repo root THEN exits 0 and the gw entry point is registered on PATH"
+  },
+  {
+   "id": "WI-2/RF-1",
+   "severity": "major",
+   "category": "boundary",
+   "title": "int() cast on GW_APP_ID and GW_APP_INSTALLATION_ID raises unhandled ValueError on malformed input",
+   "detail": "Lines 43 and 48 call int() on env var values without catching ValueError. If either var is set to a non-integer string (e.g. GW_APP_ID=app-123), the cast raises ValueError, not EnvironmentError. Callers in cli.py (cmd_plan line 24, cmd_appl…",
+   "evidence": [
+    {
+     "file": "gitweave/auth.py",
+     "line": 43,
+     "excerpt": "app_id=int(env[\"GW_APP_ID\"]),"
+    },
+    {
+     "file": "gitweave/auth.py",
+     "line": 48,
+     "excerpt": "installation_id=int(env[\"GW_APP_INSTALLATION_ID\"]),"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 24,
+     "excerpt": "except EnvironmentError as e:"
+    }
+   ]
+  },
+  {
+   "id": "WI-2/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "AC3 test assertion is vacuous — only checks message is non-empty",
+   "detail": "test_raises_when_key_file_absent asserts len(str(exc_info.value)) > 0, which passes for any non-empty exception message. The AC requires a 'descriptive message'; the test does not verify the message contains the path or the env var name. An…",
+   "evidence": [
+    {
+     "file": "tests/test_auth.py",
+     "line": 160,
+     "excerpt": "assert len(str(exc_info.value)) > 0"
+    }
+   ],
+   "acRef": "(WI-2) GIVEN GW_APP_PRIVATE_KEY_PATH points to a file that does not exist WHEN gitweave.auth.get_github_client() is called THEN raises FileNotFoundError or EnvironmentError with a descriptive message"
+  },
+  {
+   "id": "WI-2/RF-3",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "os.path.exists() check does not guard against directory path — IsADirectoryError escapes the declared contract",
+   "detail": "If GW_APP_PRIVATE_KEY_PATH is set to a directory (e.g. /tmp), os.path.exists() returns True so the FileNotFoundError guard is skipped. open('/tmp', 'r') then raises IsADirectoryError (a subclass of OSError, not FileNotFoundError). The decla…",
+   "evidence": [
+    {
+     "file": "gitweave/auth.py",
+     "line": 34,
+     "excerpt": "if not os.path.exists(key_path):"
+    }
+   ]
+  },
+  {
+   "id": "WI-2/RF-4",
+   "severity": "info",
+   "category": "boundary",
+   "title": "GW_ORG validated in auth module but never used there — couples auth to caller config",
+   "detail": "REQUIRED_ENV includes GW_ORG (auth.py line 10), so get_github_client() raises EnvironmentError if GW_ORG is absent even though the function never references it. GW_ORG is only used by callers (cli.py:16). Requiring it here means the auth mo…",
+   "evidence": [
+    {
+     "file": "gitweave/auth.py",
+     "line": 10,
+     "excerpt": "\"GW_ORG\","
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 16,
+     "excerpt": "return gh.get_organization(os.environ[\"GW_ORG\"])"
+    }
+   ]
+  },
+  {
+   "id": "WI-2/RF-5",
+   "severity": "info",
+   "category": "test-strength",
+   "title": "unittest imported but unused in test_auth.py",
+   "detail": "Line 6 imports unittest; no TestCase subclasses or unittest assertions are used. The test classes are plain pytest classes. The dead import adds noise.",
+   "evidence": [
+    {
+     "file": "tests/test_auth.py",
+     "line": 6,
+     "excerpt": "import unittest"
+    }
+   ]
+  },
+  {
+   "id": "WI-3a/RF-1",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "org-ruleset.schema.json missing additionalProperties:false at top-level and item level",
+   "detail": "org.schema.json (line 83) and teams.schema.json (lines 119, 123) both close their objects with `\"additionalProperties\": false`. org-ruleset.schema.json has no such constraint at the top-level object (line 1-30) nor on the ruleset item objec…",
+   "evidence": [
+    {
+     "file": "schemas/org-ruleset.schema.json",
+     "line": 4,
+     "excerpt": "\"required\": [\"rulesets\"],\n  \"properties\": {\n    \"rulesets\": {"
+    },
+    {
+     "file": "schemas/org.schema.json",
+     "line": 83,
+     "excerpt": "\"additionalProperties\": false"
+    },
+    {
+     "file": "schemas/teams.schema.json",
+     "line": 119,
+     "excerpt": "\"additionalProperties\": false"
+    }
+   ]
+  },
+  {
+   "id": "WI-3a/RF-2",
+   "severity": "info",
+   "category": "test-strength",
+   "title": "No negative-path test for extra top-level keys in rulesets YAML",
+   "detail": "tests/test_gw_schemas.py validates valid YAML against each schema (positive path). The overlay schema tests (test_overlay_schema.py line 12, test_validate_overlay_configs_script.py line 30) explicitly test that unknown top-level keys are re…",
+   "evidence": [
+    {
+     "file": "tests/test_gw_schemas.py",
+     "line": 26,
+     "excerpt": "def test_ruleset_schema_validates_rulesets_yaml():\n    jsonschema.validate(\n        _load_yaml(\"config/rulesets.yaml\"), _load_schema(\"org-ruleset.schema.json\")\n    )"
+    },
+    {
+     "file": "tests/test_overlay_schema.py",
+     "line": 12,
+     "excerpt": "- rejects extra top-level properties (additionalProperties: false at top level)"
+    }
+   ],
+   "acRef": "(WI-3a) GIVEN schemas/org-ruleset.schema.json exists WHEN python3 loads it as JSON THEN exits 0 — valid JSON with a 'rulesets' array property"
+  },
+  {
+   "id": "WI-3b/RF-1",
+   "severity": "major",
+   "category": "containment",
+   "title": "test_gw_schemas.py excluded from CI pytest invocations",
+   "detail": "The CI structural-tests job runs two explicit pytest commands. The first (line 31) targets test_structure.py and test_overlay_schema.py; the second (line 34) targets test_copier_schema.py and test_copier_schema_ci.py. test_gw_schemas.py is …",
+   "evidence": [
+    {
+     "file": ".github/workflows/ci.yaml",
+     "line": 31,
+     "excerpt": "run: pytest tests/test_structure.py tests/test_overlay_schema.py"
+    },
+    {
+     "file": ".github/workflows/ci.yaml",
+     "line": 34,
+     "excerpt": "run: pytest tests/test_copier_schema.py tests/test_copier_schema_ci.py"
+    }
+   ],
+   "acRef": "(WI-3b) GIVEN schemas/org.schema.json exists and config/org.yaml exists WHEN jsonschema validates config/org.yaml against schemas/org.schema.json THEN exits 0 with no validation errors"
+  },
+  {
+   "id": "WI-3b/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "Fixture test never asserts org_settings emptiness; AC says 'all present as empty collections'",
+   "detail": "test_org_empty_fixture_is_valid_json_with_expected_keys asserts teams == [], repos == [], rulesets == [], but never checks org_settings. The AC states 'org_settings, teams, repos, rulesets all present as empty collections.' org_settings in …",
+   "evidence": [
+    {
+     "file": "tests/test_gw_schemas.py",
+     "line": 34,
+     "excerpt": "for key in (\"org_settings\", \"teams\", \"repos\", \"rulesets\"):"
+    },
+    {
+     "file": "tests/fixtures/org-empty.json",
+     "line": 2,
+     "excerpt": "\"org_settings\": { \"description\": \"\", \"default_repository_permission\": \"read\", ... }"
+    }
+   ],
+   "acRef": "(WI-3b) GIVEN tests/fixtures/org-empty.json exists WHEN the file is parsed as JSON THEN it represents an empty org state with keys: org_settings, teams, repos, rulesets all present as empty collections"
+  },
+  {
+   "id": "WI-3b/RF-3",
+   "severity": "info",
+   "category": "boundary",
+   "title": "requirements.txt missing jsonschema; local install diverges from CI",
+   "detail": "requirements.txt lists only pytest>=7.0.0 and pyyaml>=6.0. jsonschema is in pyproject.toml dependencies and in the CI pip install command (ci.yaml:28: 'pip install pytest pyyaml yamllint jsonschema'). A developer who runs 'pip install -r re…",
+   "evidence": [
+    {
+     "file": "requirements.txt",
+     "line": 1,
+     "excerpt": "pytest>=7.0.0\npyyaml>=6.0"
+    },
+    {
+     "file": ".github/workflows/ci.yaml",
+     "line": 28,
+     "excerpt": "run: pip install pytest pyyaml yamllint jsonschema"
+    }
+   ]
+  },
+  {
+   "id": "WI-4/RF-1",
+   "severity": "major",
+   "category": "test-strength",
+   "title": "AC2 assertion dead OR — field-identification clause never evaluated",
+   "detail": "The assertion is `assert \"invalid\" in str(exc_info.value).lower() or \"default_repository_permission\" in str(exc_info.value)`. When the invalid value in the YAML is the string \"invalid\", the first disjunct is always true (jsonschema echoes t…",
+   "evidence": [
+    {
+     "file": "tests/test_config.py",
+     "line": 204,
+     "excerpt": "assert \"invalid\" in str(exc_info.value).lower() or \"default_repository_permission\" in str(exc_info.value)"
+    }
+   ],
+   "acRef": "(WI-4) GIVEN a config/org.yaml with an invalid field (e.g. default_repository_permission: invalid) WHEN gitweave.config.load_config() is called THEN raises jsonschema.ValidationError identifying the invalid field"
+  },
+  {
+   "id": "WI-4/RF-2",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "SCHEMA_MAP defined but never used — dead code",
+   "detail": "SCHEMA_MAP maps the three section names to their schema paths but load_config does not reference it; schema paths are hardcoded inline in the three jsonschema.validate calls. The dict will mislead a future maintainer who adds a new section:…",
+   "evidence": [
+    {
+     "file": "gitweave/config.py",
+     "line": 11,
+     "excerpt": "SCHEMA_MAP = {\n    \"org_settings\": \"schemas/org.schema.json\",\n    \"teams\": \"schemas/teams.schema.json\",\n    \"rulesets\": \"schemas/org-ruleset.schema.json\",\n}"
+    }
+   ]
+  },
+  {
+   "id": "WI-4/RF-3",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "Non-dict repo YAML crashes load_config with AttributeError",
+   "detail": "config/repos/*.yaml files are loaded with `repo_cfg = yaml.safe_load(f.read_text()) or {}`. The `or {}` guard only replaces falsy values (None, empty string, 0); a list or scalar at the document root is truthy and passes through unchanged. …",
+   "evidence": [
+    {
+     "file": "gitweave/config.py",
+     "line": 51,
+     "excerpt": "repo_cfg = yaml.safe_load(f.read_text()) or {}\n            repo_cfg.setdefault(\"slug\", f.stem)"
+    }
+   ]
+  },
+  {
+   "id": "WI-4/RF-4",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "_load_schema raises raw FileNotFoundError without descriptive message",
+   "detail": "_load_yaml wraps its file access with an explicit exist-check and raises FileNotFoundError(f\"Config file not found: {path}\"). _load_schema does no such check; (root / rel).read_text() raises a raw FileNotFoundError whose message is just the…",
+   "evidence": [
+    {
+     "file": "gitweave/config.py",
+     "line": 32,
+     "excerpt": "def _load_schema(rel: str, root: pathlib.Path = REPO_ROOT) -> dict:\n    return json.loads((root / rel).read_text())"
+    }
+   ]
+  },
+  {
+   "id": "WI-5a/RF-1",
+   "severity": "major",
+   "category": "boundary",
+   "title": "apply() forwards caller dict to GitHub PATCH with no internal key allowlist",
+   "detail": "OrgSettingsManager.apply() passes the 'desired' dict verbatim as the PATCH body for /orgs/{org}. The only schema guard (additionalProperties: false, four declared fields) lives in load_config() at config.py:32, not in the manager. Any direc…",
+   "evidence": [
+    {
+     "file": "gitweave/managers/org.py",
+     "line": 43,
+     "excerpt": "self._org._requester.requestJsonAndCheck(\n    \"PATCH\", self._org.url, input=desired\n)"
+    },
+    {
+     "file": "gitweave/config.py",
+     "line": 32,
+     "excerpt": "jsonschema.validate(org_raw, _load_schema(\"schemas/org.schema.json\", root))"
+    }
+   ]
+  },
+  {
+   "id": "WI-5a/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "AC1 and AC2 cite 'calls org.edit()' but implementation uses _requester; criterion text is stale",
+   "detail": "Both AC1 and AC2 specify the mechanism as 'calls org.edit()'. The implementation deliberately avoids org.edit() — the docstring at org.py:35 explains why — and uses _requester.requestJsonAndCheck instead. The tests correctly assert on _requ…",
+   "evidence": [
+    {
+     "file": "tests/test_manager_org.py",
+     "line": 35,
+     "excerpt": "mock_org._requester.requestJsonAndCheck.assert_called_once_with(\n    \"PATCH\", mock_org.url, input=settings\n)"
+    },
+    {
+     "file": "gitweave/managers/org.py",
+     "line": 35,
+     "excerpt": "\"\"\"Apply org settings via PATCH /orgs/{org}; return ResourceStatus.\n\n    Uses the requester directly because PyGithub's Organization.edit()\n    only exposes a limited subset of fields\""
+    }
+   ],
+   "acRef": "(WI-5a) GIVEN a mocked Github client and org_settings config dict WHEN OrgSettingsManager.apply(org_settings) is called THEN calls org.edit() with the declared settings and returns status ok"
+  },
+  {
+   "id": "WI-5b/RF-1",
+   "severity": "major",
+   "category": "containment",
+   "title": "apply() does not enforce prefix — silently creates unmanaged resources",
+   "detail": "All three managers gate list_managed() behind the prefix filter but place no equivalent guard in apply(). A caller passing {'name': 'unmanaged-team'} to TeamsManager.apply() will call org.create_team('unmanaged-team', ...) and return status…",
+   "evidence": [
+    {
+     "file": "gitweave/managers/teams.py",
+     "line": 190,
+     "excerpt": "name = team_cfg[\"name\"]  # no prefix validation before create_team() at line 200"
+    },
+    {
+     "file": "gitweave/managers/repos.py",
+     "line": 33,
+     "excerpt": "slug = repo_cfg[\"slug\"]  # no prefix validation before create_repo() at line 44"
+    },
+    {
+     "file": "gitweave/managers/rulesets.py",
+     "line": 120,
+     "excerpt": "name = ruleset_cfg[\"name\"]  # no prefix validation before POST at line 131"
+    }
+   ]
+  },
+  {
+   "id": "WI-5b/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "No test guards against apply() accepting a non-prefixed name",
+   "detail": "Given RF-1, there is no test that passes a non-prefixed resource name to apply() and asserts it is rejected (or at minimum documents the accepted behaviour). Without such a test, the containment gap is invisible to CI and will survive futur…",
+   "evidence": [
+    {
+     "file": "tests/test_manager_resources.py",
+     "line": 325,
+     "excerpt": "cfg = {\"name\": \"forge-backend\", ...}  # all apply() tests use prefixed names; no non-prefixed case"
+    }
+   ]
+  },
+  {
+   "id": "WI-5b/RF-3",
+   "severity": "info",
+   "category": "boundary",
+   "title": "RulesetsManager couples to PyGithub private requester (_requester)",
+   "detail": "list_managed() and apply() reach through to org._requester, a private implementation detail of PyGithub. The docstring acknowledges this and the workaround is necessary (no public API exists). Worth noting: a PyGithub minor version that ren…",
+   "evidence": [
+    {
+     "file": "gitweave/managers/rulesets.py",
+     "line": 105,
+     "excerpt": "_, data = self._org._requester.requestJsonAndCheck("
+    }
+   ]
+  },
+  {
+   "id": "WI-6/RF-1",
+   "severity": "major",
+   "category": "correctness",
+   "title": "Live plan crashes with undocumented EnvironmentError when FORGE_RESOURCE_PREFIX is unset",
+   "detail": "plan() reads FORGE_RESOURCE_PREFIX at line 70, defaulting to empty string — treating the var as optional. But _live_snapshot() constructs TeamsManager(gh_org), whose __init__ calls _get_prefix() which re-reads FORGE_RESOURCE_PREFIX from env…",
+   "evidence": [
+    {
+     "file": "gitweave/plan.py",
+     "line": 70,
+     "excerpt": "prefix = os.environ.get(\"FORGE_RESOURCE_PREFIX\", \"\")"
+    },
+    {
+     "file": "gitweave/managers/teams.py",
+     "line": 8,
+     "excerpt": "def _get_prefix() -> str:\n    prefix = os.environ.get(\"FORGE_RESOURCE_PREFIX\", \"\")\n    if not prefix:\n        raise EnvironmentError(\"FORGE_RESOURCE_PREFIX must be set and non-empty\")"
+    }
+   ]
+  },
+  {
+   "id": "WI-6/RF-2",
+   "severity": "major",
+   "category": "correctness",
+   "title": "_live_snapshot returns hardcoded empty stubs — live plan silently produces false output",
+   "detail": "_live_snapshot always returns org_settings: {}, repos: [], rulesets: []. Consequence: (a) org_settings will always be reported as \"update\" in live mode because cfg[\"org_settings\"] is almost never {}; (b) all existing repos and rulesets in t…",
+   "evidence": [
+    {
+     "file": "gitweave/plan.py",
+     "line": 53,
+     "excerpt": "return {\n    \"org_settings\": {},\n    \"teams\": [...]  ,\n    \"repos\": [],\n    \"rulesets\": [],\n}"
+    }
+   ]
+  },
+  {
+   "id": "WI-6/RF-3",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "repos resource type has no non-empty test scenario",
+   "detail": "All seven tests — including the direct _diff unit test — use repos: [] in both config and snapshot. The repos code path in _diff (the \"repo\" branch of type_map) is never exercised with actual data. A bug in repo name extraction via _resourc…",
+   "evidence": [
+    {
+     "file": "tests/test_plan.py",
+     "line": 185,
+     "excerpt": "\"repos\": [],  # empty in all test scenarios"
+    },
+    {
+     "file": "gitweave/plan.py",
+     "line": 93,
+     "excerpt": "return r.get(\"name\") or r.get(\"metadata\", {}).get(\"name\", \"\")  # metadata.name path untested"
+    }
+   ]
+  },
+  {
+   "id": "WI-6/RF-4",
+   "severity": "minor",
+   "category": "containment",
+   "title": "_live_snapshot accepts prefix parameter but never uses it",
+   "detail": "_live_snapshot(gh_org, prefix) receives prefix from plan() but the body never references it. Team filtering is performed internally by TeamsManager via its own env-var read. A reader would reasonably expect prefix to be applied at the point…",
+   "evidence": [
+    {
+     "file": "gitweave/plan.py",
+     "line": 55,
+     "excerpt": "def _live_snapshot(gh_org: object, prefix: str) -> dict:  # prefix never referenced in body"
+    }
+   ]
+  },
+  {
+   "id": "WI-6/RF-5",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "_load_fixture performs no schema validation — wrong-type fixture yields AttributeError",
+   "detail": "_load_fixture returns json.loads() without checking the result is a dict. If the fixture file contains a JSON array (or any non-object), _diff() will call snapshot.get(\"org_settings\", {}) on line 107 and raise AttributeError: 'list' object …",
+   "evidence": [
+    {
+     "file": "gitweave/plan.py",
+     "line": 51,
+     "excerpt": "def _load_fixture(fixture_path: str) -> dict:\n    return json.loads(pathlib.Path(fixture_path).read_text())"
+    },
+    {
+     "file": "gitweave/plan.py",
+     "line": 107,
+     "excerpt": "live_org = snapshot.get(\"org_settings\", {})  # AttributeError if snapshot is not a dict"
+    }
+   ]
+  },
+  {
+   "id": "WI-7/RF-1",
+   "severity": "major",
+   "category": "correctness",
+   "title": "_read_state() returns stale org settings: PyGithub attribute cache not invalidated after PATCH",
+   "detail": "After apply() sends PATCH /orgs/{org} via org._requester.requestJsonAndCheck(), the PyGithub Organization object's attributes (description, default_repository_permission, etc.) are NOT refreshed — they remain at the values loaded before the…",
+   "evidence": [
+    {
+     "file": "gitweave/managers/org.py",
+     "line": 27,
+     "excerpt": "def current(self) -> dict:\n    return {\n        \"description\": self._org.description or \"\",\n        \"default_repository_permission\": self._org.default_repository_permission,"
+    },
+    {
+     "file": "gitweave/managers/org.py",
+     "line": 43,
+     "excerpt": "self._org._requester.requestJsonAndCheck(\n    \"PATCH\", self._org.url, input=desired\n)"
+    },
+    {
+     "file": "gitweave/apply.py",
+     "line": 64,
+     "excerpt": "def _read_state(gh_org) -> dict:\n    return {\n        \"org_settings\": OrgSettingsManager(gh_org).current(),"
+    }
+   ],
+   "acRef": "(WI-7) GIVEN GW_* set WHEN apply(json_mode=True) is called THEN first calls reset() to delete all prefixed resources, then applies the full declaration, then returns JSON-serialisable state dict"
+  },
+  {
+   "id": "WI-7/RF-2",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "apply() in non-json_mode silently requires FORGE_RESOURCE_PREFIX via manager constructors",
+   "detail": "TeamsManager.__init__, ReposManager.__init__, and RulesetsManager.__init__ each call _get_prefix() which raises EnvironmentError if FORGE_RESOURCE_PREFIX is unset or empty. apply() constructs all three managers unconditionally (lines 46-55)…",
+   "evidence": [
+    {
+     "file": "gitweave/managers/teams.py",
+     "line": 21,
+     "excerpt": "def __init__(self, gh_org):\n    self._org = gh_org\n    self._prefix = _get_prefix()"
+    },
+    {
+     "file": "gitweave/apply.py",
+     "line": 46,
+     "excerpt": "teams_mgr = TeamsManager(gh_org)\nfor team in cfg[\"teams\"]:\n    result.statuses.append(teams_mgr.apply(team))"
+    }
+   ]
+  },
+  {
+   "id": "WI-7/RF-3",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "404-as-success is tested only for TeamsManager.delete; ReposManager path untested",
+   "detail": "test_reset_404_treated_as_success patches only a team object's delete() side effect. ReposManager.delete() has identical 404 handling (repos.py:56-57) but no test exercises it. RulesetsManager.delete() uses a list-before-delete pattern (rul…",
+   "evidence": [
+    {
+     "file": "tests/test_apply_reset.py",
+     "line": 301,
+     "excerpt": "def test_reset_404_treated_as_success(self):\n    \"\"\"AC4: 404 on delete treated as success.\"\"\"\n    org = _make_org(teams=[\"gw-test-devs\"])\n    team_mock = _make_team(\"gw-test-devs\")"
+    },
+    {
+     "file": "gitweave/managers/repos.py",
+     "line": 54,
+     "excerpt": "except Exception as exc:\n    if \"404\" in str(exc):\n        return ResourceStatus(name=slug, status=\"ok\")"
+    }
+   ],
+   "acRef": "(WI-7) GIVEN a mocked org with prefixed resources only WHEN reset() is called THEN deletes every prefixed team/repo/ruleset and restores org settings to safe defaults; 404s treated as success"
+  },
+  {
+   "id": "WI-7/RF-4",
+   "severity": "minor",
+   "category": "containment",
+   "title": "reset() error statuses silently discarded when called from apply() in json_mode",
+   "detail": "apply() line 44 calls reset(gh_org) but ignores the returned ResetResult. If any resource deletion returns status='error', those statuses are never added to ApplyResult.statuses and never surfaced to the caller. apply() then continues to ap…",
+   "evidence": [
+    {
+     "file": "gitweave/apply.py",
+     "line": 43,
+     "excerpt": "if json_mode:\n    reset(gh_org)"
+    }
+   ],
+   "acRef": "(WI-7) GIVEN GW_* set WHEN apply(json_mode=True) is called THEN first calls reset() to delete all prefixed resources, then applies the full declaration, then returns JSON-serialisable state dict"
+  },
+  {
+   "id": "WI-7/RF-5",
+   "severity": "info",
+   "category": "test-strength",
+   "title": "to_json() test exercises only json_mode=False (state=None); populated-state serialisation path untested",
+   "detail": "test_apply_result_to_json_serialisable calls apply(json_mode=False), so result.state is None and to_json() emits {\"statuses\":[...], \"state\": null}. The test only asserts 'statuses' in parsed. The path where state is a non-trivial dict (json…",
+   "evidence": [
+    {
+     "file": "tests/test_apply_reset.py",
+     "line": 289,
+     "excerpt": "def test_apply_result_to_json_serialisable(self, mock_config):\n    ...\n    with patch(\"gitweave.apply.load_config\", return_value=mock_config):\n        result = apply(org, json_mode=False)"
+    }
+   ]
+  },
+  {
+   "id": "WI-8/RF-1",
+   "severity": "minor",
+   "category": "containment",
+   "title": "TestOrgShowJson inner monkey-patch captures MagicMock as 'original', not the real class",
+   "detail": "Inside the outer 'patch(\"gitweave.managers.org.OrgSettingsManager\", return_value=mock_mgr)' context, the attribute is already a MagicMock when 'original = org_mod.OrgSettingsManager' executes (line 165). The finally block then restores to t…",
+   "evidence": [
+    {
+     "file": "tests/test_cli.py",
+     "line": 163,
+     "excerpt": "with patch.dict(\"sys.modules\", {}):"
+    },
+    {
+     "file": "tests/test_cli.py",
+     "line": 165,
+     "excerpt": "original = org_mod.OrgSettingsManager"
+    },
+    {
+     "file": "tests/test_cli.py",
+     "line": 173,
+     "excerpt": "org_mod.OrgSettingsManager = original"
+    }
+   ],
+   "acRef": "(WI-8) GIVEN the installed package WHEN gw org show --json runs with GW_* set THEN exits 0 and stdout is valid JSON"
+  },
+  {
+   "id": "WI-8/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "AC2 assertion checks '+' anywhere in stdout, not a create-formatted output line",
+   "detail": "self.assertIn('+', result.stdout) at line 96 would pass if any plus character appeared anywhere in stdout, including in error messages or diagnostic text. The AC requires 'at least one + create line'. The plan output format is '  + resource…",
+   "evidence": [
+    {
+     "file": "tests/test_cli.py",
+     "line": 96,
+     "excerpt": "self.assertIn(\"+\", result.stdout)"
+    },
+    {
+     "file": "gitweave/plan.py",
+     "line": 39,
+     "excerpt": "f\"  {sym} {item.resource_type}/{item.name}\""
+    }
+   ],
+   "acRef": "(WI-8) GIVEN tests/fixtures/org-empty.json exists WHEN gw plan --fixture tests/fixtures/org-empty.json runs THEN exits 0 and stdout contains at least one + create line"
+  },
+  {
+   "id": "WI-8/RF-3",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "_invoke_main only catches SystemExit; non-SystemExit exceptions from main() propagate uncaught",
+   "detail": "The try/except in _invoke_main at line 54 catches only SystemExit. If main() or any command function raises a different exception (e.g., KeyError, AttributeError, or an unhandled EnvironmentError from cmd_org_show which has no try/except at…",
+   "evidence": [
+    {
+     "file": "tests/test_cli.py",
+     "line": 54,
+     "excerpt": "except SystemExit as exc:"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 62,
+     "excerpt": "def cmd_org_show(args):"
+    }
+   ]
+  },
+  {
+   "id": "WI-8/RF-4",
+   "severity": "info",
+   "category": "correctness",
+   "title": "cmd_org_show ignores the --json flag; test cannot detect this",
+   "detail": "cli.py line 117 registers --json on the org show subparser, but cmd_org_show at line 62 does not read args.json and always emits JSON output. The test invokes 'org show --json' (line 168) and asserts valid JSON output, which passes because …",
+   "evidence": [
+    {
+     "file": "gitweave/cli.py",
+     "line": 62,
+     "excerpt": "def cmd_org_show(args):"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 65,
+     "excerpt": "print(json.dumps(OrgSettingsManager(gh_org).current(), indent=2))"
+    },
+    {
+     "file": "tests/test_cli.py",
+     "line": 168,
+     "excerpt": "exit_code, output = _invoke_main([\"org\", \"show\", \"--json\"],"
+    }
+   ],
+   "acRef": "(WI-8) GIVEN the installed package WHEN gw org show --json runs with GW_* set THEN exits 0 and stdout is valid JSON"
+  },
+  {
+   "id": "WI-9a/RF-1",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "bootstrap.sh calls bare pip but only verifies python3 is present",
+   "detail": "The script guards with `command -v python3` (line 7) but then invokes `pip install -e .` (line 10-11). pip is a separate binary from python3; it is absent on systems that install Python from source without ensurepip, via some package manage…",
+   "evidence": [
+    {
+     "file": "scripts/bootstrap.sh",
+     "line": 10,
+     "excerpt": "pip install -e . --quiet --break-system-packages 2>/dev/null \\"
+    },
+    {
+     "file": "scripts/bootstrap.sh",
+     "line": 11,
+     "excerpt": "  || pip install -e . --quiet"
+    }
+   ]
+  },
+  {
+   "id": "WI-9b/RF-1",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "Fixture-plan assertion uses any() — doesn't enforce per-resource-type coverage",
+   "detail": "The AC requires 'at least one + create line for each declared resource type'. The assertion uses any(line.strip().startswith('+ ') for line in ...) which checks that at least ONE create line appears anywhere in output. With the current conf…",
+   "evidence": [
+    {
+     "file": "tests/test_gw_teams.py",
+     "line": 47,
+     "excerpt": "assert any(line.strip().startswith(\"+ \") for line in result.stdout.splitlines()),"
+    }
+   ],
+   "acRef": "(WI-9b) GIVEN tests/fixtures/org-empty.json and the gw CLI installed WHEN gw plan --fixture tests/fixtures/org-empty.json runs THEN exits 0 and stdout contains at least one '+ create' line for each declared resource type"
+  },
+  {
+   "id": "WI-10/RF-1",
+   "severity": "blocker",
+   "category": "containment",
+   "title": "dry-run-smoke job unintentionally runs live apply on every PR",
+   "detail": "The `pull_request` trigger was added at the workflow level (lines 9-12) without adding an `if:` guard to the `dry-run-smoke` job. That job runs `python3 scripts/apply-overlays.py config/repos/` with no `--dry-run` flag, under `permissions: …",
+   "evidence": [
+    {
+     "file": ".github/workflows/gitweave-apply.yaml",
+     "line": 9,
+     "excerpt": "  pull_request:\n    branches: [\"main\"]\n    paths:\n      - \"config/**\""
+    },
+    {
+     "file": ".github/workflows/gitweave-apply.yaml",
+     "line": 20,
+     "excerpt": "  dry-run-smoke:\n    name: Apply Configuration\n    runs-on: ubuntu-latest"
+    },
+    {
+     "file": ".github/workflows/gitweave-apply.yaml",
+     "line": 40,
+     "excerpt": "          python3 scripts/apply-overlays.py config/repos/"
+    }
+   ],
+   "acRef": "(WI-10) GIVEN the existing dry-run-smoke job in gitweave-apply.yaml WHEN the workflow is inspected THEN the dry-run-smoke job and apply-overlays.py references are unchanged (I4 scope)"
+  },
+  {
+   "id": "WI-10/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "Negative assertions in test_private_key_written_to_temp_file_not_echoed pass vacuously",
+   "detail": "The test checks two patterns to verify the private key is never directly echoed: `'echo $GW_APP_PRIVATE_KEY\\n'` and `'echo \"$GW_APP_PRIVATE_KEY\"\\n'`. The actual workflow line is `echo \"$GW_APP_PRIVATE_KEY\" > \"$KEY_FILE\"` (with the redirect …",
+   "evidence": [
+    {
+     "file": "tests/test_gw_apply_workflow.py",
+     "line": 40,
+     "excerpt": "    assert \"echo $GW_APP_PRIVATE_KEY\\n\" not in content\n    assert 'echo \"$GW_APP_PRIVATE_KEY\"\\n' not in content"
+    },
+    {
+     "file": ".github/workflows/gitweave-apply.yaml",
+     "line": 71,
+     "excerpt": "          echo \"$GW_APP_PRIVATE_KEY\" > \"$KEY_FILE\""
+    }
+   ],
+   "acRef": "(WI-10) GIVEN the rewritten workflow WHEN grep 'GW_APP_PRIVATE_KEY' .github/workflows/gitweave-apply.yaml runs THEN the key is written to a temp file (mktemp pattern) and never echoed or logged"
+  },
+  {
+   "id": "WI-11/RF-1",
+   "severity": "major",
+   "category": "correctness",
+   "title": "gw plan expected output in demo-guide.md fabricated — does not match PlanResult.print()",
+   "detail": "demo-guide.md section 5 shows a 'GitWeave — plan' banner followed by 'Reading config/org.yaml ... ok' lines and 'No changes. Your organisation matches the configuration.' PlanResult.print() (gitweave/plan.py:34-42) emits no banner, no readi…",
+   "evidence": [
+    {
+     "file": "docs/demo-guide.md",
+     "line": 143,
+     "excerpt": "GitWeave — plan\nReading config/org.yaml ... ok\nReading config/teams.yaml ... ok\nReading config/rulesets.yaml ... ok\n\nNo changes. Your organisation matches the configuration."
+    },
+    {
+     "file": "gitweave/plan.py",
+     "line": 34,
+     "excerpt": "def print(self) -> None:\n    \"\"\"Print human-readable diff: + create, ~ update, - delete, = unchanged.\"\"\"\n    symbols = {\"create\": \"+\", \"update\": \"~\", \"delete\": \"-\", \"unchanged\": \"=\"}\n    for item in self.items:\n        sym = symbols[item.ac…"
+    }
+   ],
+   "acRef": "(WI-11) GIVEN docs/demo-guide.md after WI-11 WHEN grep 'gw apply' docs/demo-guide.md runs THEN returns a match — gw apply usage is documented in demo guide"
+  },
+  {
+   "id": "WI-11/RF-2",
+   "severity": "major",
+   "category": "correctness",
+   "title": "gw apply expected output in demo-guide.md fabricated — does not match cmd_apply output",
+   "detail": "demo-guide.md section 5 shows 'GitWeave — apply' banner, 'Reading config/...' lines, and 'Apply complete! Resources: 0 added, 0 changed, 0 destroyed.' cmd_apply in gitweave/cli.py:36-40 emits no banner, no reading lines — it iterates result…",
+   "evidence": [
+    {
+     "file": "docs/demo-guide.md",
+     "line": 160,
+     "excerpt": "GitWeave — apply\nReading config/org.yaml ... ok\nReading config/teams.yaml ... ok\nReading config/rulesets.yaml ... ok\n\nApply complete! Resources: 0 added, 0 changed, 0 destroyed."
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 36,
+     "excerpt": "for s in result.statuses:\n    print(\n        f\"  {'ok' if s.status == 'ok' else 'ERROR'}: {s.name}\"\n        + (f\" — {s.error}\" if s.error else \"\")\n    )"
+    }
+   ]
+  },
+  {
+   "id": "WI-11/RF-3",
+   "severity": "major",
+   "category": "boundary",
+   "title": "demo-guide section 5 presents gw plan / gw apply as fresh-clone-runnable without documenting GW_ORG or credential prerequisites",
+   "detail": "The guide introduction (line 4) promises 'A second developer following this guide from a **fresh clone** will be able to exercise... `gw apply` — and see passing results for each.' But gw plan (without --fixture) raises EnvironmentError 'GW…",
+   "evidence": [
+    {
+     "file": "docs/demo-guide.md",
+     "line": 4,
+     "excerpt": "A second developer following this guide from a **fresh clone** will be able to exercise bootstrap, overlay config validation, apply-overlays dry-run, and `gw apply` — and see passing results for each."
+    },
+    {
+     "file": "gitweave/plan.py",
+     "line": 75,
+     "excerpt": "gw_org = os.environ.get(\"GW_ORG\")\nif not gw_org:\n    raise EnvironmentError(\n        \"GW_ORG is required for live plan (or use --fixture)\"\n    )"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 16,
+     "excerpt": "return gh.get_organization(os.environ[\"GW_ORG\"])"
+    }
+   ]
+  },
+  {
+   "id": "WI-11/RF-4",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "Bootstrap expected output in demo-guide.md does not match scripts/bootstrap.sh actual output",
+   "detail": "demo-guide.md section 2 shows emoji-based output (🚀/✅/🎉 lines with directory checks). The actual scripts/bootstrap.sh outputs '==> Checking prerequisites...', '==> Installing gitweave (gw) CLI...', '==> Bootstrap complete. Run gw --help t…",
+   "evidence": [
+    {
+     "file": "docs/demo-guide.md",
+     "line": 52,
+     "excerpt": "🚀 Starting GitWeave Bootstrap...\nChecking prerequisites...\n✅ git found\n✅ python3 found\nVerifying directory structure...\n✅ modules exists\n✅ config exists\n✅ .github/workflows exists\n🎉 Bootstrap check complete! You can now proceed to run `gw…"
+    },
+    {
+     "file": "scripts/bootstrap.sh",
+     "line": 4,
+     "excerpt": "echo \"==> Checking prerequisites...\"\n...\necho \"==> Installing gitweave (gw) CLI...\"\n...\necho \"==> Bootstrap complete. Run 'gw --help' to get started.\""
+    }
+   ]
+  },
+  {
+   "id": "WI-12/RF-1",
+   "severity": "major",
+   "category": "test-strength",
+   "title": "AC 1 idempotency check ignores statuses — only state is compared",
+   "detail": "apply.to_json() emits {statuses, state}. The AC says 'their JSON output is identical after stripping'. test_apply_json_twice_identical_state extracts data['state'] and compares it, leaving data['statuses'] entirely unchecked. If one run err…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 87,
+     "excerpt": "state1 = _strip_volatile(data1[\"state\"])\n        state2 = _strip_volatile(data2[\"state\"])"
+    },
+    {
+     "file": "gitweave/apply.py",
+     "line": 22,
+     "excerpt": "def to_json(self) -> str:\n        return json.dumps(\n            {\n                \"statuses\": [...],\n                \"state\": self.state,\n            },"
+    }
+   ],
+   "acRef": "(WI-12) GIVEN GW_* set and the throwaway org after a gw apply run WHEN gw apply --json runs twice in sequence THEN both runs exit 0 and their JSON output is identical after stripping id, node_id, created_at, updated_at keys"
+  },
+  {
+   "id": "WI-12/RF-2",
+   "severity": "major",
+   "category": "containment",
+   "title": "TestExtraTeamAbsentAfterApply has no tearDown — org left dirty on failure",
+   "detail": "setUp creates a prefixed stale team in the real GitHub org (line 111). If the test fails after team creation but before gw apply runs (e.g., the assertIn on teams_before fails at line 125, or the apply itself errors), the stale team remains…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 109,
+     "excerpt": "def setUp(self):\n        from gitweave.auth import get_github_client\n        ...\n        self._extra_team = f\"{self._prefix}extra-stale-team\""
+    },
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 119,
+     "excerpt": "self._gh_org.create_team(\n                self._extra_team,\n                description=\"stale team for acceptance test\","
+    }
+   ],
+   "acRef": "(WI-12) GIVEN GW_* set and the throwaway org after a gw apply run WHEN gw apply --json runs twice in sequence THEN both runs exit 0 and their JSON output is identical after stripping id, node_id, created_at, updated_at keys"
+  },
+  {
+   "id": "WI-12/RF-3",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "_VOLATILE_KEYS strips 6 extra fields beyond the 4 the AC specifies",
+   "detail": "AC 1 says strip id, node_id, created_at, updated_at. _VOLATILE_KEYS additionally strips source, source_type, url, html_url, links, _links. If the apply engine begins returning different URLs or link maps between runs (e.g., after a paginati…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 28,
+     "excerpt": "_VOLATILE_KEYS = frozenset({\n    \"id\", \"node_id\", \"created_at\", \"updated_at\",\n    \"source\", \"source_type\", \"url\", \"html_url\",\n    \"links\", \"_links\",\n})"
+    }
+   ],
+   "acRef": "(WI-12) GIVEN GW_* set and the throwaway org after a gw apply run WHEN gw apply --json runs twice in sequence THEN both runs exit 0 and their JSON output is identical after stripping id, node_id, created_at, updated_at keys"
+  },
+  {
+   "id": "WI-12/RF-4",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "_run_gw has no timeout — live test suite can hang indefinitely",
+   "detail": "subprocess.run([\"gw\", *args], capture_output=True, text=True) passes no timeout argument. If the gw command blocks (network stall, GitHub rate-limit pause, deadlock), every test class in both acceptance files hangs forever. The pre-existing…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 62,
+     "excerpt": "def _run_gw(*args) -> subprocess.CompletedProcess:\n    return subprocess.run(\n        [\"gw\", *args],\n        capture_output=True,\n        text=True,\n    )"
+    }
+   ]
+  },
+  {
+   "id": "WI-12/RF-5",
+   "severity": "info",
+   "category": "correctness",
+   "title": "import sys is unused",
+   "detail": "sys is imported at line 21 but never referenced in the module. Harmless but leaves stale dead import.",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 21,
+     "excerpt": "import sys"
+    }
+   ]
+  },
+  {
+   "id": "WI-13/RF-1",
+   "severity": "major",
+   "category": "test-strength",
+   "title": "Idempotency test doesn't pre-seed dirty state — 'Nothing changed' assertion is trivially satisfied when org is already clean",
+   "detail": "test_reset_twice_second_run_changes_nothing calls gw reset twice with no setUp that creates prefixed resources first. If the org is already clean before the test runs, the first reset is also a no-op (nothing_changed=True, prints 'Nothing c…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_reset_before_apply.py",
+     "line": 54,
+     "excerpt": "def test_reset_twice_second_run_changes_nothing(self):\n        # First reset — may or may not change anything\n        r1 = _run_gw(\"reset\")"
+    }
+   ]
+  },
+  {
+   "id": "WI-13/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "File name and WI-13 context claim 'reset before apply' proof but file contains only standalone reset tests",
+   "detail": "The file is named test_gw_reset_before_apply.py and WI-13 describes 'Live proof that gw apply --json resets before applying'. No test in this file exercises gw apply --json or asserts that apply invokes reset as a precondition. The actual p…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_reset_before_apply.py",
+     "line": 1,
+     "excerpt": "\"\"\"tests/acceptance/test_gw_reset_before_apply.py — live acceptance: gw reset idempotency."
+    },
+    {
+     "file": "tests/acceptance/test_gw_workflow.py",
+     "line": 97,
+     "excerpt": "class TestExtraTeamAbsentAfterApply(unittest.TestCase):\n    \"\"\"A prefixed team NOT in the declaration is absent after gw apply --json.\"\"\""
+    }
+   ]
+  },
+  {
+   "id": "WI-13/RF-3",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "subprocess.run has no timeout — acceptance tests can hang indefinitely on GitHub API failures",
+   "detail": "_run_gw calls subprocess.run([\"gw\", ...], capture_output=True, text=True) with no timeout argument. A live acceptance test that hits the GitHub API will block the process forever if the API is unreachable, rate-limited and sleeping, or if g…",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_reset_before_apply.py",
+     "line": 43,
+     "excerpt": "    return subprocess.run(\n        [\"gw\", *args],\n        capture_output=True,\n        text=True,\n    )"
+    }
+   ]
+  },
+  {
+   "id": "WI-13/RF-4",
+   "severity": "info",
+   "category": "correctness",
+   "title": "json.loads called without guard — JSONDecodeError on unexpected non-JSON stdout gives no diagnostic context",
+   "detail": "At lines 78, 88, and 99, json.loads is called directly on the subprocess stdout after only checking returncode==0. If the gw command exits 0 but emits non-JSON output (e.g. a deprecation warning line prepended to JSON, or a partial write), …",
+   "evidence": [
+    {
+     "file": "tests/acceptance/test_gw_reset_before_apply.py",
+     "line": 78,
+     "excerpt": "        teams = json.loads(rt.stdout)"
+    },
+    {
+     "file": "tests/acceptance/test_gw_reset_before_apply.py",
+     "line": 88,
+     "excerpt": "        repos = json.loads(rr.stdout)"
+    },
+    {
+     "file": "tests/acceptance/test_gw_reset_before_apply.py",
+     "line": 99,
+     "excerpt": "        rulesets = json.loads(rul.stdout)"
+    }
+   ]
+  },
+  {
+   "id": "WI-14/RF-1",
+   "severity": "major",
+   "category": "containment",
+   "title": ".github/agents/copilot-instructions.md still carries Terraform tokens — outside test scope",
+   "detail": "WI-14 is described as 'No Terraform references left in agent context or docs'. `.github/agents/copilot-instructions.md` is squarely an agent-context file (Copilot instructions injected into IDE sessions) and contains four separate Terraform…",
+   "evidence": [
+    {
+     "file": ".github/agents/copilot-instructions.md",
+     "line": 6,
+     "excerpt": "- HCL (Terraform), YAML, Python 3.11+ (Metrics Service), Bash + GitHub Actions, Terraform CLI, Python (requests, prometheus_client) (001-control-repo-structure)"
+    },
+    {
+     "file": ".github/agents/copilot-instructions.md",
+     "line": 18,
+     "excerpt": "# Add commands for HCL (Terraform), YAML, Python, Bash"
+    },
+    {
+     "file": ".github/agents/copilot-instructions.md",
+     "line": 22,
+     "excerpt": "HCL (Terraform), YAML, Python, Bash: Follow standard conventions"
+    },
+    {
+     "file": "tests/test_docs_no_terraform_tokens.py",
+     "line": 43,
+     "excerpt": "EXPLICIT_FILES = [\n    ROOT / \".github\" / \"copilot-context.md\",\n    ROOT / \"README.md\",\n]"
+    }
+   ]
+  },
+  {
+   "id": "WI-14/RF-2",
+   "severity": "minor",
+   "category": "test-strength",
+   "title": "EXPLICIT_FILES module-level constant defined but never consumed",
+   "detail": "`EXPLICIT_FILES` is declared at module level (lines 21-24) but no test method iterates over it. Both `test_readme_no_terraform_tokens` and `test_copilot_context_no_terraform_tokens` re-construct their paths inline. The constant does no work…",
+   "evidence": [
+    {
+     "file": "tests/test_docs_no_terraform_tokens.py",
+     "line": 21,
+     "excerpt": "EXPLICIT_FILES = [\n    ROOT / \".github\" / \"copilot-context.md\",\n    ROOT / \"README.md\",\n]"
+    },
+    {
+     "file": "tests/test_docs_no_terraform_tokens.py",
+     "line": 68,
+     "excerpt": "def test_readme_no_terraform_tokens(self):\n        path = ROOT / \"README.md\""
+    }
+   ]
+  },
+  {
+   "id": "WI-15/RF-1",
+   "severity": "minor",
+   "category": "boundary",
+   "title": "gw org subcommands don't catch EnvironmentError from get_github_client()",
+   "detail": "auth.py's _check_env() raises EnvironmentError when any of GW_APP_ID, GW_APP_PRIVATE_KEY_PATH, GW_APP_INSTALLATION_ID, or GW_ORG is unset. cmd_apply and cmd_reset in cli.py both wrap _get_org_client() in try/except EnvironmentError and prin…",
+   "evidence": [
+    {
+     "file": "gitweave/auth.py",
+     "line": 24,
+     "excerpt": "raise EnvironmentError(f\"Missing required environment variable(s): {', '.join(missing)}\")"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 62,
+     "excerpt": "def cmd_org_show(args):\n    gh_org = _get_org_client()  # EnvironmentError propagates uncaught"
+    },
+    {
+     "file": "gitweave/cli.py",
+     "line": 29,
+     "excerpt": "def cmd_apply(args):\n    try:\n        gh_org = _get_org_client()\n        ...\n    except EnvironmentError as e:\n        print(f\"Error: {e}\", file=sys.stderr)\n        sys.exit(1)"
+    }
+   ]
+  },
+  {
+   "id": "WI-15/RF-2",
+   "severity": "minor",
+   "category": "correctness",
+   "title": "RulesetsManager discriminates HTTP 403 by substring '403' in str(exc)",
+   "detail": "list_managed() and apply() catch any exception and check 'if \"403\" in str(exc)' to detect org-plan-level HTTP 403s and return early (empty list / skipped status). PyGithub's GithubException renders as '403 {body_dict}' so the check works fo…",
+   "evidence": [
+    {
+     "file": "gitweave/managers/rulesets.py",
+     "line": 159,
+     "excerpt": "except Exception as exc:\n    if \"403\" in str(exc):\n        return []\n    raise"
+    },
+    {
+     "file": "gitweave/managers/rulesets.py",
+     "line": 188,
+     "excerpt": "except Exception as exc:\n    if \"403\" in str(exc):\n        return ResourceStatus(name=name, status=\"skipped\", ...)"
+    }
+   ]
+  },
+  {
+   "id": "unattributed/RF-1",
+   "severity": "minor",
+   "category": "containment",
+   "title": "gitweave.egg-info/ committed — generated build artifact not gitignored",
+   "detail": "The `gitweave.egg-info/` directory is created by `pip install -e .` (or `python -m build`). It is a generated artifact that will drift out of sync with `pyproject.toml` whenever dependencies or entry points change, and it has no place in ve…",
+   "evidence": [
+    {
+     "file": ".gitignore",
+     "line": 20,
+     "excerpt": "# Python\n__pycache__/\n*.py[cod]\n*.class\n.venv/\nvenv/\n(no *.egg-info/ entry)"
+    },
+    {
+     "file": "gitweave.egg-info/PKG-INFO",
+     "line": 1,
+     "excerpt": "Metadata-Version: 2.4\nName: gitweave\nVersion: 0.1.0"
+    }
+   ]
+  },
+  {
+   "id": "unattributed/RF-2",
+   "severity": "info",
+   "category": "test-strength",
+   "title": "WI-12 and WI-13 acceptance tests skip rather than fail — silently pass CI",
+   "detail": "DEMO.md records WI-12 ('Acceptance tests: live apply idempotency + reset idempotency') and WI-13 ('Live proof that gw apply --json resets before applying') as `[failed]`. The captured after-output for Plan-8/WI-13 and Plan-9/WI-12 shows `ss…",
+   "evidence": [
+    {
+     "file": "demo/INIT-2026-10-11-i2-apply-engine-terraform-retired/DEMO.md",
+     "line": 27,
+     "excerpt": "- WI-12 [failed] # WI-12: Acceptance tests (live: apply idempotency + reset idempotency)\n- WI-13 [failed] Live proof that gw apply --json resets before applying"
+    },
+    {
+     "file": "demo/INIT-2026-10-11-i2-apply-engine-terraform-retired/.capture/after/Plan-8-WI-13-19e6e6.out",
+     "line": 8,
+     "excerpt": "tests/acceptance/test_gw_reset_before_apply.py ss   [100%]\n2 skipped in 0.02s"
+    },
+    {
+     "file": "demo/INIT-2026-10-11-i2-apply-engine-terraform-retired/.capture/after/Plan-9-WI-12-36ot9w.out",
+     "line": 8,
+     "excerpt": "tests/acceptance/test_gw_reset_before_apply.py ss\ntests/acceptance/test_gw_workflow.py sss\n5 skipped in 0.02s"
+    }
+   ]
+  }
+ ],
+ "acEvaluations": [
+  {
+   "criterion": "(WI-1) GIVEN a clean checkout with no gitweave package installed WHEN pip install -e . runs from the repo root THEN exits 0 and the gw entry point is registered on PATH",
+   "verdict": "partial",
+   "evidence": "pyproject.toml lines 13-14 declare `gw = \"gitweave.cli:main\"` under `[project.scripts]` and the build-system block (lines 16-18) specifies setuptools>=68, which is sufficient for pip to register the entry point. However, no CI step runs `pi…"
+  },
+  {
+   "criterion": "(WI-1) GIVEN the installed package WHEN python3 -c 'import gitweave; from gitweave.cli import main' runs THEN exits 0 with no ImportError",
+   "verdict": "partial",
+   "evidence": "test_package_structure.py line 10-12 (`test_gitweave_importable`) directly covers this criterion. The import chain is clean: `gitweave/__init__.py` exports `__version__`, and `gitweave/cli.py` top-level imports (`plan`, `apply`, `reset`, `a…"
+  },
+  {
+   "criterion": "(WI-1) GIVEN the installed package WHEN gw --help runs THEN exits 0 and prints usage with at least the plan, apply, reset verbs listed",
+   "verdict": "partial",
+   "evidence": "tests/test_package_structure.py lines 15-32 (`test_gw_help_exits_zero`, `test_gw_help_lists_verbs`) invoke `python3 -m gitweave.cli --help`, not the `gw` entry-point script. The argparse setup (cli.py lines 109-121) does register `plan`, `a…"
+  },
+  {
+   "criterion": "(WI-2) GIVEN GW_APP_ID, GW_APP_PRIVATE_KEY_PATH, GW_APP_INSTALLATION_ID, GW_ORG are all set WHEN gitweave.auth.get_github_client() is called THEN returns a PyGithub Github object authenticated as the installation",
+   "verdict": "met",
+   "evidence": "test_returns_github_instance (tests/test_auth.py:23-52) sets all four env vars, writes a real key file, mocks Auth.AppAuth / Auth.AppInstallationAuth / Github, and asserts the returned value is the mocked Github instance with correct call s…"
+  },
+  {
+   "criterion": "(WI-2) GIVEN any one of GW_APP_ID, GW_APP_PRIVATE_KEY_PATH, GW_APP_INSTALLATION_ID, GW_ORG is unset WHEN gitweave.auth.get_github_client() is called THEN raises EnvironmentError naming the missing variable",
+   "verdict": "met",
+   "evidence": "test_raises_env_error_for_each_missing_var (tests/test_auth.py:59-74) parametrizes over all four REQUIRED_ENV entries, removes each one, and asserts the missing var name appears in the exception message. test_raises_env_error_all_missing (t…"
+  },
+  {
+   "criterion": "(WI-2) GIVEN GW_APP_PRIVATE_KEY_PATH points to a file that does not exist WHEN gitweave.auth.get_github_client() is called THEN raises FileNotFoundError or EnvironmentError with a descriptive message",
+   "verdict": "met",
+   "evidence": "Implementation raises FileNotFoundError with path and var name in the message (gitweave/auth.py:35-37). test_raises_when_key_file_absent (tests/test_auth.py:90-98) uses path /nonexistent/path/key.pem and catches (FileNotFoundError, Environm…"
+  },
+  {
+   "criterion": "(WI-3a) GIVEN schemas/org.schema.json exists WHEN python3 loads it as JSON THEN exits 0 — valid JSON with required, properties, additionalProperties fields",
+   "verdict": "met",
+   "evidence": "schemas/org.schema.json line 1-20: valid JSON object with top-level keys `required` (array of 4 fields), `properties` (object with 4 typed entries), and `additionalProperties: false`. jsonschema.validate in tests/test_gw_schemas.py line 19 …"
+  },
+  {
+   "criterion": "(WI-3a) GIVEN schemas/teams.schema.json exists WHEN python3 loads it as JSON THEN exits 0 — valid JSON with a 'teams' array property",
+   "verdict": "met",
+   "evidence": "schemas/teams.schema.json line 5-7: `\"properties\": { \"teams\": { \"type\": \"array\", ... } }`. Validated by tests/test_gw_schemas.py line 23 and tests/test_gw_teams.py line 18-22 against config/teams.yaml."
+  },
+  {
+   "criterion": "(WI-3a) GIVEN schemas/org-ruleset.schema.json exists WHEN python3 loads it as JSON THEN exits 0 — valid JSON with a 'rulesets' array property",
+   "verdict": "met",
+   "evidence": "schemas/org-ruleset.schema.json line 5-7: `\"properties\": { \"rulesets\": { \"type\": \"array\", ... } }`. Validated by tests/test_gw_schemas.py line 26-29 against config/rulesets.yaml."
+  },
+  {
+   "criterion": "(WI-3b) GIVEN tests/fixtures/org-empty.json exists WHEN the file is parsed as JSON THEN it represents an empty org state with keys: org_settings, teams, repos, rulesets all present as empty collections",
+   "verdict": "partial",
+   "evidence": "tests/fixtures/org-empty.json line 2-6: org_settings contains four keys with non-empty values (description, default_repository_permission, web_commit_signoff_required, members_can_create_repositories). The AC states 'all present as empty co…"
+  },
+  {
+   "criterion": "(WI-3b) GIVEN schemas/org.schema.json exists and config/org.yaml exists WHEN jsonschema validates config/org.yaml against schemas/org.schema.json THEN exits 0 with no validation errors",
+   "verdict": "met",
+   "evidence": "schemas/org.schema.json requires description, default_repository_permission, web_commit_signoff_required, members_can_create_repositories; config/org.yaml supplies all four with correct types. test_gw_schemas.py:18-19 calls jsonschema.valid…"
+  },
+  {
+   "criterion": "(WI-3b) GIVEN schemas/teams.schema.json exists and config/teams.yaml exists WHEN jsonschema validates config/teams.yaml against schemas/teams.schema.json THEN exits 0 with no validation errors",
+   "verdict": "met",
+   "evidence": "schemas/teams.schema.json requires a top-level 'teams' array; config/teams.yaml has teams: with two entries each bearing name (required), privacy, members with username+role. All required fields present, no additionalProperties violations. …"
+  },
+  {
+   "criterion": "(WI-3b) GIVEN schemas/org-ruleset.schema.json exists and config/rulesets.yaml exists WHEN jsonschema validates config/rulesets.yaml against schemas/org-ruleset.schema.json THEN exits 0 with no validation errors",
+   "verdict": "met",
+   "evidence": "schemas/org-ruleset.schema.json requires rulesets array with items having name, target, enforcement, rules. config/rulesets.yaml has one entry: name=forge-main-protection, target=branch, enforcement=active, rules=[{type: required_linear_his…"
+  },
+  {
+   "criterion": "(WI-4) GIVEN config/org.yaml, config/teams.yaml, config/rulesets.yaml exist WHEN gitweave.config.load_config() is called from the repo root THEN returns a dict with keys org_settings, teams, repos, rulesets; each validated against its JSON …",
+   "verdict": "partial",
+   "evidence": "gitweave/config.py line 38–44 validates org, teams, and rulesets against their JSON schemas. Lines 47–47 scan config/repos/*.yaml with the inline comment 'no top-level schema enforced yet'; no repos schema exists in schemas/. AC says 'each …"
+  },
+  {
+   "criterion": "(WI-4) GIVEN a config/org.yaml with an invalid field (e.g. default_repository_permission: invalid) WHEN gitweave.config.load_config() is called THEN raises jsonschema.ValidationError identifying the invalid field",
+   "verdict": "met",
+   "evidence": "gitweave/config.py line 38 calls jsonschema.validate(org_raw, ...) against schemas/org.schema.json which enumerates allowed values for default_repository_permission; jsonschema raises ValidationError with a path that identifies the field. T…"
+  },
+  {
+   "criterion": "(WI-4) GIVEN config/org.yaml is missing WHEN gitweave.config.load_config() is called THEN raises FileNotFoundError with a descriptive message",
+   "verdict": "met",
+   "evidence": "gitweave/config.py line 21: raises FileNotFoundError(f\"Config file not found: {path}\") which includes the full absolute path. Test at tests/test_config.py line 217 asserts 'org.yaml' in the error string, confirming the message is descriptiv…"
+  },
+  {
+   "criterion": "(WI-5a) GIVEN a mocked Github client and org_settings config dict WHEN OrgSettingsManager.apply(org_settings) is called THEN calls org.edit() with the declared settings and returns status ok",
+   "verdict": "partial",
+   "evidence": "test_calls_requester_patch_with_declared_settings (tests/test_manager_org.py:35) confirms the PATCH is made with the exact settings dict and test_returns_status_ok_on_success (line 39) confirms status=ok. The mechanism diverges from the AC:…"
+  },
+  {
+   "criterion": "(WI-5a) GIVEN an org already at GitHub safe defaults WHEN OrgSettingsManager.reset() is called THEN calls org.edit() with description='', default_repository_permission='read', web_commit_signoff_required=False, members_can_create_repositori…",
+   "verdict": "partial",
+   "evidence": "test_calls_patch_with_org_defaults (tests/test_manager_org.py:70) and test_reset_defaults_are_correct (line 77) confirm the four field values are sent correctly via _requester.requestJsonAndCheck. ORG_DEFAULTS (org.py:5-10) matches all four…"
+  },
+  {
+   "criterion": "(WI-5a) GIVEN org.edit() raises a GitHub API exception WHEN OrgSettingsManager.apply() is called THEN returns status error with the exception message rather than propagating",
+   "verdict": "met",
+   "evidence": "test_returns_status_error_on_exception (tests/test_manager_org.py:48) raises GithubException(422, {\"message\": \"Validation failed\"}) and asserts result.status==\"error\" with result.error containing \"422\" or \"Validation\". test_does_not_propaga…"
+  },
+  {
+   "criterion": "(WI-5b) GIVEN FORGE_RESOURCE_PREFIX is set and a mocked Github org WHEN TeamsManager.list_managed() is called THEN returns only teams whose name starts with FORGE_RESOURCE_PREFIX",
+   "verdict": "met",
+   "evidence": "test_list_managed_returns_prefix_teams (tests/test_manager_resources.py:297) sets prefix to 'forge-', mocks three teams, asserts only the two prefixed ones are returned. list_managed() in teams.py:187 filters via _is_managed."
+  },
+  {
+   "criterion": "(WI-5b) GIVEN a team config entry and mocked Github org WHEN TeamsManager.apply(team_config) is called and team does not exist THEN calls org.create_team() and returns ResourceStatus(status='ok')",
+   "verdict": "met",
+   "evidence": "test_apply_creates_team_when_absent (tests/test_manager_resources.py:325) passes empty get_teams list, asserts create_team called with correct name/description/privacy and result.status == 'ok'."
+  },
+  {
+   "criterion": "(WI-5b) GIVEN FORGE_RESOURCE_PREFIX is unset or empty WHEN any of TeamsManager, ReposManager, RulesetsManager is instantiated THEN raises EnvironmentError naming FORGE_RESOURCE_PREFIX",
+   "verdict": "met",
+   "evidence": "test_instantiation_raises_when_prefix_unset and test_instantiation_raises_when_prefix_empty (tests/test_manager_resources.py:276-289) are parametrized over all three Manager classes; both unset and empty-string cases covered."
+  },
+  {
+   "criterion": "(WI-5b) GIVEN a repo slug not yet present in the org WHEN ReposManager.apply(repo_config) is called THEN calls org.create_repo() with the declared settings and returns status ok",
+   "verdict": "met",
+   "evidence": "test_repos_apply_creates_repo_when_absent (tests/test_manager_resources.py:382) passes empty get_repos list, asserts create_repo called with slug, description, private, has_issues, has_projects and result.status == 'ok'."
+  },
+  {
+   "criterion": "(WI-5b) GIVEN a ruleset not yet present and mocked Github org WHEN RulesetsManager.apply(ruleset_config) is called THEN calls the org rulesets API and returns status ok",
+   "verdict": "met",
+   "evidence": "test_rulesets_apply_creates_when_absent (tests/test_manager_resources.py:448) mocks empty ruleset list, calls apply(), asserts exactly one POST to '/orgs/my-org/rulesets' and result.status == 'ok'."
+  },
+  {
+   "criterion": "(WI-6) GIVEN tests/fixtures/org-empty.json exists and config declares teams + rulesets WHEN plan(fixture_path='tests/fixtures/org-empty.json') is called THEN returns a PlanResult with all declared resources listed as 'create' actions and ma…",
+   "verdict": "met",
+   "evidence": "test_plan_empty_fixture_all_create (tests/test_plan.py:56) asserts actions[(\"team\",\"engineering\")]==\"create\" and actions[(\"ruleset\",\"forge-main-protection\")]==\"create\". test_plan_empty_fixture_zero_network_calls (tests/test_plan.py:80) patc…"
+  },
+  {
+   "criterion": "(WI-6) GIVEN the fixture represents an org that already has all declared resources WHEN plan(fixture_path=...) is called THEN returns a PlanResult with all resources listed as 'unchanged'",
+   "verdict": "met",
+   "evidence": "test_plan_matching_snapshot_all_unchanged (tests/test_plan.py:97) builds _matching_snapshot(cfg) — a snapshot that exactly mirrors declared config — writes it to tmp_path, calls plan(), and asserts all(a == \"unchanged\" for a in actions). Th…"
+  },
+  {
+   "criterion": "(WI-6) GIVEN both fixture_path is provided AND GW_* env vars are set WHEN plan(fixture_path=...) is called THEN uses the fixture exclusively — no network calls — fixture and live auth are mutually exclusive",
+   "verdict": "met",
+   "evidence": "test_plan_fixture_exclusive_when_gw_vars_set (tests/test_plan.py:117) sets GW_ORG and GW_APP_ID via monkeypatch, patches get_github_client, calls plan(fixture_path=...), and asserts mock_gh.assert_not_called(). Enforced by plan() line 72: t…"
+  },
+  {
+   "criterion": "(WI-6) GIVEN GW_ORG is unset and no fixture_path provided WHEN plan() is called THEN raises EnvironmentError naming GW_ORG",
+   "verdict": "met",
+   "evidence": "test_plan_raises_env_error_without_gw_org (tests/test_plan.py:141) monkeypatches away GW_ORG and asserts pytest.raises(EnvironmentError, match=\"GW_ORG\"). Implemented at gitweave/plan.py:82-85: raises EnvironmentError(\"GW_ORG is required for…"
+  },
+  {
+   "criterion": "(WI-7) GIVEN GW_* set and a mocked Github org with no managed resources WHEN apply(json_mode=False) is called THEN calls each manager's apply() for every declared resource; returns ApplyResult with per-resource status",
+   "verdict": "met",
+   "evidence": "test_apply_calls_each_manager (test_apply_reset.py:328) asserts len(result.statuses)==4 (org_settings+1 team+1 repo+1 ruleset) and all ok. apply() in apply.py:43-56 iterates cfg[teams], cfg[repos], cfg[rulesets] calling each manager's apply…"
+  },
+  {
+   "criterion": "(WI-7) GIVEN one resource apply fails mid-run (manager returns status='error') WHEN apply() is called THEN continues applying remaining resources (best-effort), exits non-zero, reports per-resource status including the failure",
+   "verdict": "met",
+   "evidence": "test_apply_continues_after_error (test_apply_reset.py:350) makes PATCH fail; asserts len==4, has_errors==True, org_settings status=='error', all others 'ok'. Each manager wraps its body in try/except (org.py:42-48, teams.py:26-44), returnin…"
+  },
+  {
+   "criterion": "(WI-7) GIVEN GW_* set WHEN apply(json_mode=True) is called THEN first calls reset() to delete all prefixed resources, then applies the full declaration, then returns JSON-serialisable state dict",
+   "verdict": "partial",
+   "evidence": "test_apply_json_mode_calls_reset_first asserts reset called once; test_apply_json_mode_returns_state_dict asserts state is non-None dict and json.dumps succeeds. However _read_state() (apply.py:64-71) builds org_settings from OrgSettingsMan…"
+  },
+  {
+   "criterion": "(WI-7) GIVEN a mocked org with prefixed resources only WHEN reset() is called THEN deletes every prefixed team/repo/ruleset and restores org settings to safe defaults; 404s treated as success",
+   "verdict": "met",
+   "evidence": "test_reset_deletes_all_managed_resources asserts all three resource names appear in statuses. test_reset_calls_org_reset verifies PATCH /orgs payload contains safe defaults. test_reset_404_treated_as_success shows a team delete raising '404…"
+  },
+  {
+   "criterion": "(WI-7) GIVEN a mocked org already at defaults with no prefixed resources WHEN reset() is called twice THEN both calls exit 0 and the second reports nothing changed",
+   "verdict": "met",
+   "evidence": "test_reset_nothing_changed_when_clean: reset on _make_org() (all defaults, empty resources) returns nothing_changed=True. test_reset_idempotent_second_call_nothing_changed: two sequential reset() calls on the same mock org both return nothi…"
+  },
+  {
+   "criterion": "(WI-8) GIVEN GW_ORG is unset and --fixture is not provided WHEN gw plan runs THEN exits non-zero and stderr contains 'GW_ORG'",
+   "verdict": "met",
+   "evidence": "TestPlanNoOrg.test_plan_without_fixture_and_no_gw_org at line 82 runs _subprocess_run('plan') with clean env (no GW_* vars). plan() raises EnvironmentError('GW_ORG is required for live plan (or use --fixture)') at plan.py:77; cmd_plan catch…"
+  },
+  {
+   "criterion": "(WI-8) GIVEN tests/fixtures/org-empty.json exists WHEN gw plan --fixture tests/fixtures/org-empty.json runs THEN exits 0 and stdout contains at least one + create line",
+   "verdict": "partial",
+   "evidence": "TestPlanFixture.test_plan_fixture_exits_zero_with_create_lines at line 93 checks returncode 0 and assertIn('+', result.stdout). The fixture exists at tests/fixtures/org-empty.json. The assertion verifies '+' appears anywhere in stdout rathe…"
+  },
+  {
+   "criterion": "(WI-8) GIVEN GW_* are set WHEN gw apply --json runs THEN exits 0 and stdout is valid JSON with 'statuses' and 'state' keys",
+   "verdict": "met",
+   "evidence": "TestApplyJson.test_apply_json_structure at line 98 mocks get_github_client and apply, invokes _invoke_main(['apply', '--json'], env_overrides={'GW_ORG': 'test-org', 'FORGE_RESOURCE_PREFIX': 'test-'}). Asserts exit_code 0, parses stdout as J…"
+  },
+  {
+   "criterion": "(WI-8) GIVEN GW_* are set WHEN gw reset runs THEN exits 0",
+   "verdict": "met",
+   "evidence": "TestReset.test_reset_exits_zero at line 130 mocks get_github_client and reset with ResetResult(statuses=[], nothing_changed=True), invokes _invoke_main(['reset'], env_overrides set). Asserts exit_code 0."
+  },
+  {
+   "criterion": "(WI-8) GIVEN the installed package WHEN gw org show --json runs with GW_* set THEN exits 0 and stdout is valid JSON",
+   "verdict": "met",
+   "evidence": "TestOrgShowJson.test_org_show_json at line 151 mocks get_github_client and OrgSettingsManager.current(), invokes _invoke_main(['org', 'show', '--json'], env_overrides set). Asserts exit_code 0 and parses stdout as JSON dict. cmd_org_show al…"
+  },
+  {
+   "criterion": "(WI-8) GIVEN the installed package WHEN gw --help runs THEN exits 0 and all verbs (plan, apply, reset, org) appear in output",
+   "verdict": "met",
+   "evidence": "TestHelp.test_help_exits_zero at line 67 and test_help_mentions_all_verbs at line 71 run _subprocess_run('--help'). Argparse exits 0 on --help. Test iterates over ('plan', 'apply', 'reset', 'org') and asserts each in result.stdout."
+  },
+  {
+   "criterion": "(WI-9a) GIVEN the worktree after WI-9a completes WHEN find infra/ is run THEN the infra/ directory does not exist",
+   "verdict": "met",
+   "evidence": "Glob('infra/**') returns no files. All seven infra/ paths deleted in diff: branch_protection.tf, main.tf, outputs.tf, variables.tf, examples/branch_protection_override.tfvars, demo.tfvars.example, bootstrap/README.md."
+  },
+  {
+   "criterion": "(WI-9a) GIVEN the worktree after WI-9a completes WHEN ls .github/workflows/gitweave-infra.yaml is run THEN the file does not exist",
+   "verdict": "met",
+   "evidence": "Glob('.github/workflows/*.yaml') returns [module-update-propagation.yaml, module-calver.yaml, overlay-validate.yaml, ci.yaml, gitweave-apply.yaml]. gitweave-infra.yaml is absent. Diff confirms deletion of the 84-line file."
+  },
+  {
+   "criterion": "(WI-9a) GIVEN git prereq present and python3 present WHEN bash scripts/bootstrap.sh runs from the repo root THEN exits 0 — no Terraform check, pip install -e . succeeds",
+   "verdict": "partial",
+   "evidence": "bootstrap.sh (scripts/bootstrap.sh line 6-7) correctly checks git and python3 with command -v. Terraform check is gone. However line 10-11 calls bare `pip install -e .`, not `python3 -m pip install -e .`. The AC precondition guarantees pyth…"
+  },
+  {
+   "criterion": "(WI-9a) GIVEN hashicorp/setup-terraform@v3 is absent from ci.yaml WHEN grep 'setup-terraform' .github/workflows/ci.yaml runs THEN returns no matches",
+   "verdict": "met",
+   "evidence": "Read .github/workflows/ci.yaml: the file contains no setup-terraform string. Diff confirms removal of the 4-line 'Set up Terraform' step block (lines 9-13 in the ci.yaml hunk). Grep for 'setup-terraform' across all .yaml/.sh/.py files confi…"
+  },
+  {
+   "criterion": "(WI-9a) GIVEN the repository after I2 merges WHEN it is read and python3 -m pytest tests/ runs THEN infra/ and every Terraform file and workflow are absent, and pytest reports zero failures",
+   "verdict": "partial",
+   "evidence": "infra/ absent (confirmed). gitweave-infra.yaml absent (confirmed). All Terraform test files deleted: test_tf_teams_structure.py, test_tf_teams_validate.py, test_tf_teams_plan.py, test_terraform_demo_config.py, test_infra_workflow_gates.py. …"
+  },
+  {
+   "criterion": "(WI-9b) GIVEN schemas/teams.schema.json and config/teams.yaml exist WHEN test_teams_yaml_validates_against_schema runs THEN passes — config/teams.yaml conforms to the schema",
+   "verdict": "met",
+   "evidence": "schemas/teams.schema.json exists (requires 'teams' array, each item needs 'name', optional description/privacy/parent_team/members, additionalProperties:false). config/teams.yaml declares two teams (engineering, platform) using only those a…"
+  },
+  {
+   "criterion": "(WI-9b) GIVEN tests/fixtures/org-empty.json and the gw CLI installed WHEN gw plan --fixture tests/fixtures/org-empty.json runs THEN exits 0 and stdout contains at least one '+ create' line for each declared resource type",
+   "verdict": "partial",
+   "evidence": "CLI invocation is correct (sys.executable -m gitweave.cli plan --fixture <path>); returncode==0 assertion is present. The output format from PlanResult.print() is '  + {type}/{name}', which after strip() starts with '+ '. With the empty fix…"
+  },
+  {
+   "criterion": "(WI-9b) GIVEN no TF team test files remain WHEN find tests/ -name 'test_tf_teams_*.py' runs THEN returns no results (all TF team tests are deleted)",
+   "verdict": "met",
+   "evidence": "Glob for tests/test_tf_teams_*.py returned no files in the worktree. tests/test_gw_teams.py:54 performs the equivalent check via pathlib glob and asserts the list is empty. Test would pass."
+  },
+  {
+   "criterion": "(WI-10) GIVEN .github/workflows/gitweave-apply.yaml after WI-10 WHEN the file is parsed as YAML THEN it is valid YAML with a pull_request trigger running 'gw plan --fixture' and a push-to-main trigger running 'gw apply'",
+   "verdict": "met",
+   "evidence": "Workflow parses cleanly as YAML. `pull_request` trigger present at line 9. `plan` job (line 43) runs `gw plan --fixture tests/fixtures/org-empty.json` and is gated `if: github.event_name == 'pull_request'`. `apply` job (line 57) runs `gw ap…"
+  },
+  {
+   "criterion": "(WI-10) GIVEN the rewritten workflow WHEN grep 'gw plan --fixture' .github/workflows/gitweave-apply.yaml runs THEN returns a match — the PR job uses fixture-mode plan",
+   "verdict": "met",
+   "evidence": ".github/workflows/gitweave-apply.yaml line 55: `run: gw plan --fixture tests/fixtures/org-empty.json` — exact match for `gw plan --fixture`."
+  },
+  {
+   "criterion": "(WI-10) GIVEN the rewritten workflow WHEN grep 'GW_APP_PRIVATE_KEY' .github/workflows/gitweave-apply.yaml runs THEN the key is written to a temp file (mktemp pattern) and never echoed or logged",
+   "verdict": "met",
+   "evidence": "Lines 70-75: `KEY_FILE=$(mktemp)` creates temp file; `echo \"$GW_APP_PRIVATE_KEY\" > \"$KEY_FILE\"` redirects to file (not stdout/stderr). GitHub Actions masks the secret value in logs because it is supplied via `env: GW_APP_PRIVATE_KEY: ${{ se…"
+  },
+  {
+   "criterion": "(WI-10) GIVEN the existing dry-run-smoke job in gitweave-apply.yaml WHEN the workflow is inspected THEN the dry-run-smoke job and apply-overlays.py references are unchanged (I4 scope)",
+   "verdict": "partial",
+   "evidence": "The job body is byte-for-byte unchanged: same steps, same `python3 scripts/apply-overlays.py config/repos/` invocation, same GITHUB_TOKEN env, same runner. However, the job's execution context has materially changed: the new top-level `pull…"
+  },
+  {
+   "criterion": "(WI-11) GIVEN README.md and docs/demo-guide.md after WI-11 WHEN grep -in 'terraform' README.md docs/demo-guide.md runs THEN returns no matches — all Terraform references removed",
+   "verdict": "met",
+   "evidence": "Read README.md and docs/demo-guide.md in full; no occurrence of 'terraform' (any case) found in either file. The diff removes all prior references (Platform as Code bullet, Automation Model bullet, section 5 Terraform Plan, bootstrap step 3…"
+  },
+  {
+   "criterion": "(WI-11) GIVEN README.md after WI-11 WHEN grep -in 'infra/' README.md runs THEN returns no matches — infra/ directory references removed",
+   "verdict": "met",
+   "evidence": "Read README.md in full; no 'infra/' string found. The diff removes the 'infra/' row from the project structure tree (line -52 in the patch) and the bootstrap step that cd'd into infra/."
+  },
+  {
+   "criterion": "(WI-11) GIVEN README.md after WI-11 WHEN grep 'gw plan' README.md runs THEN returns a match — gw usage is documented",
+   "verdict": "met",
+   "evidence": "README.md line 21: '**Local Reproducibility**: CLI tools must support local dry-runs (`gw plan`).' and line 99: 'gw plan' in the bootstrap step 3 code block."
+  },
+  {
+   "criterion": "(WI-11) GIVEN docs/demo-guide.md after WI-11 WHEN grep 'gw apply' docs/demo-guide.md runs THEN returns a match — gw apply usage is documented in demo guide",
+   "verdict": "met",
+   "evidence": "docs/demo-guide.md contains 'gw apply' at lines 154, 168, 170 (note text), and 182 (summary table)."
+  },
+  {
+   "criterion": "(WI-12) GIVEN GW_* set and the throwaway org after a gw apply run WHEN gw apply --json runs twice in sequence THEN both runs exit 0 and their JSON output is identical after stripping id, node_id, created_at, updated_at keys",
+   "verdict": "partial",
+   "evidence": "test_apply_json_twice_identical_state (test_gw_workflow.py:65-95) runs apply twice and checks exit 0 on both; but it compares only data['state'] (not the full JSON which also includes data['statuses']). _VOLATILE_KEYS (lines 28-41) strips 1…"
+  },
+  {
+   "criterion": "(WI-12) GIVEN the throwaway org after a gw apply run with GW_* set WHEN gw reset runs twice in sequence THEN both runs exit 0; the second run prints 'Nothing changed' and no resources matching FORGE_RESOURCE_PREFIX remain",
+   "verdict": "met",
+   "evidence": "test_gw_reset_before_apply.py (on HEAD, not in this diff) contains TestResetIdempotency.test_reset_twice_second_run_changes_nothing (lines 48-59): runs reset twice, checks exit 0 both times, assertIn('Nothing changed', r2.stdout). cli.py li…"
+  },
+  {
+   "criterion": "(WI-12) GIVEN tests/fixtures/org-empty.json exists and GW_* irrelevant (fixture mode) WHEN gw plan --fixture tests/fixtures/org-empty.json runs THEN exits 0 and stdout contains + create lines for each declared resource type with zero networ…",
+   "verdict": "partial",
+   "evidence": "tests/fixtures/org-empty.json exists (confirmed). test_gw_teams.py:test_gw_plan_fixture_exits_zero (lines 25-43) checks exit 0 and asserts any(line.strip().startswith('+ ') ...) — but 'any' is not 'for each declared resource type'. test_pla…"
+  },
+  {
+   "criterion": "(WI-15) GIVEN a fresh checkout with the package installed (`pip install -e .`) WHEN `gw plan --fixture tests/fixtures/org-empty.json` runs with GW_* unset THEN it exits 0 and lists a creation line for every declared org setting, team, repos…",
+   "verdict": "partial",
+   "evidence": "gw plan --fixture credential-free: plan.py:72 guards the fixture path, load_config() is purely file-based (config.py:29-54), and the org-empty.json fixture exists. test_plan.py:56 covers this scenario. Teams/repos/rulesets correctly show as…"
+  },
+  {
+   "criterion": "(WI-13) GIVEN a FORGE_RESOURCE_PREFIX-named team that is NOT in the declaration exists in the throwaway org (created by the test via the API) and GW_* are set WHEN `python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py` runs `gw …",
+   "verdict": "met",
+   "evidence": "`python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py`: exit 0 at 1ee7c951c69e (run by the orchestrator, not judged by a review agent)"
+  },
+  {
+   "criterion": "(WI-14) GIVEN the repository after I2 (infra/ removed) WHEN `python3 -m pytest tests/test_docs_no_terraform_tokens.py` runs THEN no file under docs/ and neither .github/copilot-context.md nor README.md contains the tokens terraform, infra/ …",
+   "verdict": "met",
+   "evidence": "`python3 -m pytest tests/test_docs_no_terraform_tokens.py`: exit 0 at 1ee7c951c69e (run by the orchestrator, not judged by a review agent)"
+  },
+  {
+   "criterion": "(WI-15) GIVEN the plan engine WHEN `python3 -m pytest tests/test_plan.py` runs THEN all tests pass: a declared resource absent from the snapshot is \"create\", a snapshot resource not declared is \"delete\", an identical one is \"unchanged\"",
+   "verdict": "met",
+   "evidence": "`python3 -m pytest tests/test_plan.py`: exit 0 at 1ee7c951c69e (run by the orchestrator, not judged by a review agent)"
+  },
+  {
+   "criterion": "(WI-15) GIVEN the throwaway org dave-parso and GW_* set WHEN `python3 -m pytest tests/acceptance` runs THEN it passes live: `gw apply --json` twice prints identical state (volatile keys ignored), `gw reset` twice leaves no FORGE_RESOURCE_PR…",
+   "verdict": "met",
+   "evidence": "`python3 -m pytest tests/acceptance`: exit 0 at 1ee7c951c69e (run by the orchestrator, not judged by a review agent)"
+  },
+  {
+   "criterion": "(WI-15) GIVEN the PR head WHEN GitHub Actions runs THEN the \"gw plan (credential-free)\" job, \"Apply Configuration\", Structural Tests and Dry-Run Smoke Test are all green, and `python3 -m pytest tests/` has zero failures",
+   "verdict": "met",
+   "evidence": "`python3 -m pytest tests/`: exit 0 at 1ee7c951c69e (run by the orchestrator, not judged by a review agent)"
+  }
+ ]
+}

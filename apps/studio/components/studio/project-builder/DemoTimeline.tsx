@@ -241,8 +241,8 @@ export function DemoTimeline({
             Each step picks which forge element renders it (or stays free text). They run top-to-bottom — this is the demo composition order.
           </div>
 
-          {/* Timeline */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {/* Timeline — contained (D-46 §3): the steps never set the page height */}
+          <div data-section="demo-steps" style={{ display: 'flex', flexDirection: 'column', gap: 0, maxHeight: 'var(--pane-lg)', overflowY: 'auto' }}>
             {internal.map((step, i) => {
               const el = elementById(step.element);
               const composed = !!step.element;

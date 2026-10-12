@@ -488,6 +488,8 @@ export const REVIEW_LOOP = [
       // wait's terminal is satisfied, `expect.data`'s `gate-state: approved`
       // is already true on the page the runner is still standing on.
       act: 'Approve — which is the merge',
+      // forge-nk1y.34: with an open REVIEWER blocker, approve needs a typed rationale (`approve-rationale`) first;
+      // every recorded S10 review (8 runs, 2026-09-28..10-06) carried 0 blockers, so this beat presses it bare.
       do: [{ press: 'approve-and-merge' }],
       wait: {
         for: 'agent', anchor: 'approve-and-merge',
