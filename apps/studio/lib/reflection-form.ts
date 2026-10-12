@@ -9,11 +9,15 @@
 import type { ArchitectQuestion, ReflectionQuestion } from './bridge-client.ts';
 
 /** Every question must have a recorded choice before submit unlocks. */
+/** A choice is recorded: a non-empty string, or (a `multi` question) a non-empty list of picks. */
+export type ReflectionChoice = string | string[];
+const isAnswered = (c: ReflectionChoice | undefined): boolean => (Array.isArray(c) ? c.length > 0 : Boolean(c));
+
 export function reflectionAllAnswered(
   questions: ArchitectQuestion[],
-  choices: Record<number, string>,
+  choices: Record<number, ReflectionChoice>,
 ): boolean {
-  return questions.length > 0 && questions.every((_, i) => Boolean(choices[i]));
+  return questions.length > 0 && questions.every((_, i) => isAnswered(choices[i]));
 }
 
 /**
@@ -24,9 +28,15 @@ export function reflectionAllAnswered(
  */
 export function reflectionAnsweredCount(
   questions: ArchitectQuestion[],
-  choices: Record<number, string>,
+  choices: Record<number, ReflectionChoice>,
 ): number {
-  return questions.reduce((n, _q, i) => n + (choices[i] ? 1 : 0), 0);
+  return questions.reduce((n, _q, i) => n + (isAnswered(choices[i]) ? 1 : 0), 0);
+}
+
+/** forge-nk1y.26: tick or untick one pick of a `multi` question (a new list, never a mutation). */
+export function togglePick(current: ReflectionChoice | undefined, label: string): string[] {
+  const list = Array.isArray(current) ? current : [];
+  return list.includes(label) ? list.filter((l) => l !== label) : [...list, label];
 }
 
 /**
@@ -42,10 +52,10 @@ export function hasInferredAnswers(questions: ReflectionQuestion[]): boolean {
 /** Assemble the answer payload from questions + choices; unanswered → skipped marker. */
 export function buildReflectionAnswers(
   questions: ArchitectQuestion[],
-  choices: Record<number, string>,
-): { question: string; answer: string }[] {
+  choices: Record<number, ReflectionChoice>,
+): { question: string; answer: ReflectionChoice }[] {
   return questions.map((q, i) => ({
     question: q.question,
-    answer: choices[i] ?? '[operator skipped]',
+    answer: isAnswered(choices[i]) ? choices[i] : '[operator skipped]',
   }));
 }

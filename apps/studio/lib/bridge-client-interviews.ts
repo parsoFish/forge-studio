@@ -514,6 +514,8 @@ export async function demoBuilderLock(input: {
 export type ReflectionQuestion = ArchitectQuestion & {
   answer?: string;
   inferred?: boolean;
+  /** forge-nk1y.26: the choices are not exclusive — checkboxes, answered with a list. */
+  multi?: boolean;
 };
 
 export type ReflectionData = {
@@ -543,7 +545,8 @@ export async function fetchReflection(cycleId: string): Promise<ReflectionData |
 
 export async function postReflectionAnswers(input: {
   cycleId: string;
-  answers: { question: string; answer: string }[];
+  /** forge-nk1y.26: a `multi` question's answer is its list of picks. */
+  answers: { question: string; answer: string | string[] }[];
   freeform?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/reflect/${encodeURIComponent(input.cycleId)}/answer`, {

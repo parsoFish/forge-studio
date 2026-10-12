@@ -1,0 +1,28 @@
+## 1. Was the work-item decomposition the right size?
+
+The initial PM run produced 5 WIs; 3 send-backs added WI-6, WI-7, WI-8. Final count: 8 WIs. Most of the extra WIs covered scope the first decomposition missed (failing tests not in the architect's "known list", docs cleanup, CLA.md verbatim requirement).
+
+- Too few initial WIs — the 5-WI first pass was undescoped, causing 3 send-backs
+- Right-sized for the final 8-WI set
+- Too many — should have been one big WI
+
+## 2. Did the implementation match the design intent and stay on the initiative's goals?
+
+The core pruning (archive, delete retiring artefacts, fix bootstrap, remove example-template stub, add legal files) was delivered as designed. Three scope gaps required send-back WIs: 13+ test files not in the initial deletion list, docs/demo-guide.md still referencing metrics, and CLA.md written as paraphrase rather than verbatim ASF ICLA v2.0 text. Post-merge, the `GitWeave Apply` CI workflow failed on `Apply Configuration` — unrelated to the pruning work.
+
+- Exact match — delivered what was designed
+- Minor divergence — gaps caught by adversarial review, all resolved before merge
+- Scope drift — substantive work landed outside the stated goals
+
+## 3. Which roadblock is worth a forge fix or new tool?
+
+Three patterns each cost multiple re-runs: (a) 18 zero-commit WI sessions because send-backs re-run the full WI chain from WI-1 rather than skipping already-green WIs; (b) adversarial review ran 3 full passes ($9.25) because the initial scope was incomplete — a pre-dev-loop "full failing test audit" step in the PM spec could prevent this; (c) CLA.md verbatim requirement wasn't enforced at the WI gate — the gate only ran `python3 -m pytest tests/test_legal_files.py`, but that test didn't exist until WI-5 wrote it, so the first write of CLA.md had no verbatim check until the adversarial review.
+
+- (a) Skip already-green WIs on send-back — add a checkpoint/skip mechanism to the dev-loop runner
+- (b) Full failing-test audit before PM decomposition — add a pre-PM gate step or brain constraint
+- (c) Per-WI legal-text verification anchor — require a URL or hash in the AC, not just "verbatim"
+- None — leave all three as-is
+
+## 4. General notes
+
+Any other operator notes on this initiative — quality of the final output, post-merge CI failure investigation, anything the event log doesn't capture.
