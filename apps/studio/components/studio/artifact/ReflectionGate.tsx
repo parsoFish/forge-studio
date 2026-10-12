@@ -37,7 +37,7 @@ import {
   postReflectionClose,
   type ReflectionData,
 } from '@/lib/bridge-client';
-import { reflectionAllAnswered, reflectionAnsweredCount, buildReflectionAnswers, hasInferredAnswers } from '@/lib/reflection-form';
+import { reflectionAllAnswered, reflectionAnsweredCount, buildReflectionAnswers, hasInferredAnswers, togglePick, type ReflectionChoice } from '@/lib/reflection-form';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { GateBand, decisionCard, gateButton } from '@/components/studio/gate/GateBand';
 import { pane, paneHeader, paneTitle, meta, eyebrow, input } from '@/components/studio/gate/styles';
@@ -51,7 +51,7 @@ export function ReflectionGate({
   data: ReflectionData | null;
   onSubmitted?: () => void;
 }): JSX.Element {
-  const [choices, setChoices] = useState<Record<number, string>>({});
+  const [choices, setChoices] = useState<Record<number, ReflectionChoice>>({});
   const [freeform, setFreeform] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -315,12 +315,15 @@ export function ReflectionGate({
         <div data-pane-body style={{ height: 'var(--pane-xl)', overflowY: 'auto', padding: 'var(--space-3) var(--space-4)' }}>
           {questions.map((q, i) => {
             const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+            // forge-nk1y.26: a `multi` question's choices are not exclusive — checkboxes, answered with a list.
+            const multi = hasOptions && (q as { multi?: boolean }).multi === true;
+            const picked = choices[i];
             return (
               <fieldset
                 key={i}
                 data-question-index={i}
-                data-question-resolved={choices[i] ? 'true' : 'false'}
-                data-question-mode={hasOptions ? 'options' : 'freeform'}
+                data-question-resolved={(Array.isArray(picked) ? picked.length > 0 : Boolean(picked)) ? 'true' : 'false'}
+                data-question-mode={multi ? 'multi' : hasOptions ? 'options' : 'freeform'}
                 data-question-inferred="false"
                 style={{ border: 'none', padding: 0, margin: '0 0 var(--space-4)' }}
               >
@@ -330,7 +333,7 @@ export function ReflectionGate({
                 {hasOptions ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                     {(q.options ?? []).map((opt) => {
-                      const selected = choices[i] === opt.label;
+                      const selected = multi ? Array.isArray(picked) && picked.includes(opt.label) : picked === opt.label;
                       return (
                         <label
                           key={opt.label}
@@ -342,7 +345,9 @@ export function ReflectionGate({
                             padding: 'var(--space-2) var(--space-3)', background: selected ? 'rgba(255,158,74,.08)' : 'transparent',
                           }}
                         >
-                          <input type="radio" name={`rq-${i}`} checked={selected} onChange={() => setChoices((c) => ({ ...c, [i]: opt.label }))} />
+                          {multi
+                            ? <input type="checkbox" checked={selected} onChange={() => setChoices((c) => ({ ...c, [i]: togglePick(c[i], opt.label) }))} />
+                            : <input type="radio" name={`rq-${i}`} checked={selected} onChange={() => setChoices((c) => ({ ...c, [i]: opt.label }))} />}
                           <span>
                             <span style={{ fontSize: 'var(--text-base)', color: 'var(--text)', fontWeight: 500 }}>{opt.label}</span>
                             {opt.description ? <span style={{ display: 'block', fontSize: 'var(--text-sm)', color: 'var(--dim)' }}>{opt.description}</span> : null}
@@ -353,7 +358,7 @@ export function ReflectionGate({
                   </div>
                 ) : (
                   <textarea
-                    value={choices[i] ?? ''}
+                    value={typeof picked === 'string' ? picked : ''}
                     onChange={(e) => setChoices((c) => ({ ...c, [i]: e.target.value }))}
                     placeholder="Your answer…"
                     rows={2}
