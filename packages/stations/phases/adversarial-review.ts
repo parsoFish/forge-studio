@@ -169,13 +169,12 @@ export function assertAdversarialReviewDeclaration(def: {
 
 function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: string; err: string } {
   try {
-    // forge-nk1y.39: an EXPLICIT bound — the 1 MiB default died on I3a's demo bundle.
     const out = execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8', timeout: 60_000, maxBuffer: REVIEW_GIT_MAX_BUFFER_BYTES });
     return { ok: true, out, err: '' };
   } catch (e) {
     const err = e as { stderr?: Buffer | string; message?: string; code?: string };
     if (err.code === 'ENOBUFS') {
-      return { ok: false, out: '', err: `git ${args[0]} output exceeded the review's ${REVIEW_GIT_MAX_BUFFER_BYTES / (1024 * 1024)} MiB buffer (ENOBUFS)` };
+      return { ok: false, out: '', err: `git ${args.find((a) => !a.startsWith('-'))} output exceeded the review's ${REVIEW_GIT_MAX_BUFFER_BYTES / (1024 * 1024)} MiB buffer (ENOBUFS)` };
     }
     const stderr = err.stderr ? (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString('utf8')) : (err.message ?? '');
     return { ok: false, out: '', err: stderr.slice(-500) };
@@ -455,10 +454,11 @@ async function reviewInitiative(
       label: string,
     ): { ok: true; diff: string; stat: string } | { ok: false; failure: AdversarialReviewResult } => {
       const d = chunk.files.length > 0
-        ? gitCapture(input.worktreePath, ['diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        // Agent-authored names are paths, never pathspec magic (`:(exclude)…`, `*`).
+        ? gitCapture(input.worktreePath, ['--literal-pathspecs', 'diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
         : { ok: true, out: '', err: '' };
       const st = chunk.files.length > 0
-        ? gitCapture(input.worktreePath, ['diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        ? gitCapture(input.worktreePath, ['--literal-pathspecs', 'diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
         : { ok: true, out: '', err: '' };
       if (!d.ok || !st.ok) {
         const detail = `git derivation error for chunk ${label}: ${[d, st].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();

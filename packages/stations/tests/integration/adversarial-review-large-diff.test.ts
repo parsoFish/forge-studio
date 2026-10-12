@@ -146,3 +146,32 @@ test('forge-nk1y.39 refusal path: a derivation failure records a FAILED outcome 
     restore();
   }
 });
+
+test('security: an agent-authored file named like pathspec magic cannot hide another file from the review', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    // Both unclaimed, so both land in the `unattributed` chunk. As a PATHSPEC,
+    // `:(exclude)evil.ts` drops evil.ts from that chunk's diff (probed on git:
+    // `git diff -- a b ':(exclude)b'` lists only a); as a path it is just a file.
+    writeFileSync(join(fx.worktree, 'evil.ts'), 'export const payload = "hidden";\n');
+    writeFileSync(join(fx.worktree, ':(exclude)evil.ts'), 'decoy\n');
+    fx.git(['add', '--', 'evil.ts', ':(literal):(exclude)evil.ts']);
+    fx.git(['commit', '-q', '-m', 'odd names']);
+    const { logger } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    const diffs: string[] = [];
+    const qf = stubQueryFn([(prompt) => {
+      diffs.push(readFileSync(join(fx.worktree, '.forge', 'review-input', 'diff.patch'), 'utf8'));
+      writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(prompt));
+    }], prompts);
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'complete', JSON.stringify(res));
+    const chunk = diffs[prompts.findIndex((p) => p.includes('evil.ts'))] ?? '';
+    assert.match(chunk, /payload = "hidden"/, 'evil.ts is in the diff the reviewer is shown');
+    assert.match(chunk, /\+decoy/, 'the oddly named file is diffed as itself');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
