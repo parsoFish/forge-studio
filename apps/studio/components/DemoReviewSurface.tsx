@@ -30,7 +30,7 @@ import {
 } from '@/lib/review-comments-client';
 import { effectiveInitiativeId } from '@/lib/initiative-id';
 import { summarizeReview } from '@/lib/demo-review-view';
-import { countBy, joinCriteria, parseDiffStat, reviewHeadIsStale } from '@/lib/gate-view';
+import { countBy, joinCriteria, parseDiffStat, reviewCurrency, reviewHeadIsStale } from '@/lib/gate-view';
 import { GateBand } from './studio/gate/GateBand';
 import { StoryBand } from './studio/gate/StoryBand';
 import { DecisionCard, DEFAULT_APPROVE_RATIONALE } from './studio/gate/DecisionCard';
@@ -119,6 +119,10 @@ export function DemoReviewSurface({
       setError(`refused — a rationale is required to approve over ${reviewerBlockers} open reviewer blocker${reviewerBlockers === 1 ? '' : 's'}`);
       return;
     }
+    if (derived.kind === 'approve' && noCurrentReview && approveRationale === '') {
+      setError('refused — a rationale is required to approve without a current review');
+      return;
+    }
     setSubmitting(true);
     try {
       const result =
@@ -140,7 +144,16 @@ export function DemoReviewSurface({
     }
   }
 
-  const doc = reviewFindings.doc;
+  // forge-nk1y.39: a prior round's findings are never presented as the review of this change.
+  const currency = reviewCurrency(reviewFindings.doc, reviewFindings.outcome);
+  const doc = currency.kind === 'current' ? reviewFindings.doc : null;
+  const findingsState: ReviewFindingsState = {
+    ...reviewFindings,
+    doc,
+    error: reviewFindings.error || currency.kind === 'unknown',
+    ...(currency.kind === 'not-current' ? { notCurrent: { headSha: currency.headSha, reason: currency.reason, priorSha: currency.priorSha } } : {}),
+  };
+  const noCurrentReview = currency.kind === 'not-current' ? { headSha: currency.headSha } : undefined;
   const criteria = joinCriteria(model.acceptanceCriteria ?? [], doc?.acEvaluations ?? []);
   const checkpoints = model.checkpoints;
   const severities = countBy(doc?.findings ?? [], (f) => f.severity ?? 'info');
@@ -192,13 +205,14 @@ export function DemoReviewSurface({
             reviewedSha: doc?.headSha,
             headSha: model.changedRef,
             stale: reviewHeadIsStale(doc?.headSha, model.changedRef),
+            ...(noCurrentReview ? { noCurrentReview } : {}),
           }}
         />}
       />
 
       <section data-section="review" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--space-5)' }}>
         <CriteriaPane criteria={criteria} comments={comments} disabled={locked} handlers={handlers} focusRegion={focusRegion} />
-        <FindingsPane state={reviewFindings} headSha={model.changedRef} workItemTitle={workItemTitle} />
+        <FindingsPane state={findingsState} headSha={model.changedRef} workItemTitle={workItemTitle} />
       </section>
 
       <DemoGallery checkpoints={checkpoints} apiDiff={model.apiDiff ?? []} cycleId={cycleId} bridgeBase={bridgeBase} comments={comments} disabled={locked} handlers={handlers} focusRegion={focusRegion} />

@@ -55,7 +55,8 @@ import { GateBar, type GateState } from '@/components/studio/artifact/GateBar';
 import { WorkItemsRenderer, type WorkItemEntry } from '@/components/studio/artifact/WorkItemsRenderer';
 import { PrRenderer, type PrDoc } from '@/components/studio/artifact/PrRenderer';
 import { VerdictRenderer, verdictRecordToDoc, type VerdictDoc } from '@/components/studio/artifact/VerdictRenderer';
-import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import { ReviewFindingsPanel, currentFindingsPanelProps, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import type { ReviewOutcomeDoc } from '@/lib/gate-view';
 import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/artifact/ReflectionRenderer';
 import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
@@ -579,6 +580,10 @@ function ArtifactPageInner() {
   // Review r1: a transient findings-fetch failure is an ERROR state, distinct
   // from the authoritative "did not run" absence claim.
   const [reviewFindingsError, setReviewFindingsError] = useState(false);
+  // forge-nk1y.39: the review's LATEST attempt — read on its own, never behind the
+  // findings guard: a review that FAILED never completed its node, and that is
+  // exactly when the gate must say so instead of "did not run".
+  const [reviewOutcome, setReviewOutcome] = useState<{ doc: ReviewOutcomeDoc | null; error: boolean }>({ doc: null, error: false });
   // W7-B7 (artifact-plan-32): the DEMO.md narrative on the demo-evidence VIEW
   // page (rendered+sanitized srcDoc — same pipeline as the gate surface).
   const [demoMarkdownDoc, setDemoMarkdownDoc] = useState('');
@@ -791,10 +796,12 @@ function ArtifactPageInner() {
         const rf = findingsPossible
           ? await fetchJsonArtifactChecked<ReviewFindingsDoc>(artifactId, 'review-findings.json')
           : { doc: null, failed: false };
+        const ro = await fetchJsonArtifactChecked<ReviewOutcomeDoc>(artifactId, 'review-outcome.json');
         if (!signal.cancelled) {
           setReviewFindings(rf.doc);
           setReviewFindingsAbsent(rf.doc === null && !rf.failed);
           setReviewFindingsError(rf.doc === null && rf.failed);
+          setReviewOutcome({ doc: ro.doc, error: ro.failed });
         }
       }
 
@@ -1159,7 +1166,7 @@ function ArtifactPageInner() {
                   model={demoModel}
                   cycleId={artifactRunId}
                   initiativeId={gateInitiativeId}
-                  reviewFindings={{ doc: reviewFindings, absent: reviewFindingsAbsent, error: reviewFindingsError }}
+                  reviewFindings={{ doc: reviewFindings, absent: reviewFindingsAbsent, error: reviewFindingsError, outcome: reviewOutcome }}
                   costUsd={run?.costUsd ?? null}
                   bridgeBase={bridgeBase}
                   reflectHref={reflectHref}
@@ -1170,7 +1177,7 @@ function ArtifactPageInner() {
               )}
               {type === 'verdict' && isGateMode && !demoModel && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
+                  <ReviewFindingsPanel {...currentFindingsPanelProps(reviewFindings, reviewFindingsAbsent, reviewFindingsError, reviewOutcome)} />
                   <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-3) var(--space-4)', background: 'var(--panel)', fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
                     No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
                   </div>
@@ -1322,7 +1329,7 @@ function ArtifactPageInner() {
                   {/* forge-nk1y.25: after an approve (the merge) the reflection is
                       one press away from the verdict, as the docs describe. */}
                   {artifact.doc.decision !== 'send-back' && <ReflectLink href={reflectHref} />}
-                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
+                  <ReviewFindingsPanel {...currentFindingsPanelProps(reviewFindings, reviewFindingsAbsent, reviewFindingsError, reviewOutcome)} />
                   <VerdictRenderer doc={artifact.doc} />
                 </div>
               )}

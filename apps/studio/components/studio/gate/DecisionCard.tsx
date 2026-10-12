@@ -32,7 +32,11 @@ import { eyebrow, miniBtn } from './styles';
 /** The approve rationale when the operator writes none and nothing blocks (forge-nk1y.34: never the old canned line). */
 export const DEFAULT_APPROVE_RATIONALE = 'Approved on the visual review — no blocking comments and no reviewer blockers open.';
 
-export type ReviewClaims = { present: boolean; missed: number; major: number; blocker: number; reviewedSha?: string; headSha?: string; stale: boolean };
+export type ReviewClaims = {
+  present: boolean; missed: number; major: number; blocker: number; reviewedSha?: string; headSha?: string; stale: boolean;
+  /** forge-nk1y.39: the latest review attempt produced no findings for the change (it failed at this head). */
+  noCurrentReview?: { headSha: string | null };
+};
 
 const plural = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
 
@@ -63,8 +67,19 @@ export function DecisionCard({
   const blockedReason = loadError ? `${loadError} — reload the page; the verdict cannot be derived without them` : submitting ? 'the verdict is being submitted' : null;
   const reviewerBlockers = claims.present ? claims.blocker : 0;
   const blocking = blockerCount + reviewerBlockers;
-  const overBlocker = derived.kind === 'approve' && reviewerBlockers > 0;
-  const approveReason = blockedReason ?? (overBlocker && rationale.trim() === '' ? `a rationale is required to approve over ${plural(reviewerBlockers, 'open reviewer blocker', 'open reviewer blockers')}` : null);
+  const noReview = claims.noCurrentReview;
+  // Approving over a reviewer blocker, or with no current review at all, is possible — de-emphasised, behind the operator's reason.
+  const overBlocker = derived.kind === 'approve' && (reviewerBlockers > 0 || noReview !== undefined);
+  const rationaleNeed = reviewerBlockers > 0
+    ? `approve over ${plural(reviewerBlockers, 'open reviewer blocker', 'open reviewer blockers')}`
+    : 'approve without a current review';
+  const approveReason = blockedReason ?? (overBlocker && rationale.trim() === '' ? `a rationale is required to ${rationaleNeed}` : null);
+  const notReady = blocking > 0 || noReview !== undefined;
+  const headline = blocking > 0
+    ? `Not ready: ${plural(blocking, 'blocking finding', 'blocking findings')}`
+    : noReview
+      ? `Not ready: no current review — it failed at ${noReview.headSha ? noReview.headSha.slice(0, 7) : 'an unknown head'}`
+      : 'Ready to approve and merge';
   const primaryBtn: React.CSSProperties = { flex: 1, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-md)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2) var(--space-4)', border: '1px solid var(--ember)', background: 'var(--ember)', color: 'var(--accent-fg)' };
   const secondaryBtn: React.CSSProperties = { ...miniBtn, flex: 1, fontSize: 'var(--text-md)', fontWeight: 600, padding: 'var(--space-2) var(--space-4)', color: 'var(--text)' };
   const card: React.CSSProperties = {
@@ -118,8 +133,8 @@ export function DecisionCard({
         </>
       ) : (
         <>
-          <h2 data-section="verdict-headline" data-headline={blocking > 0 ? 'not-ready' : 'ready'} style={{ ...title, color: blocking > 0 ? 'var(--amber)' : undefined }}>
-            {blocking > 0 ? `Not ready: ${plural(blocking, 'blocking finding', 'blocking findings')}` : 'Ready to approve and merge'}
+          <h2 data-section="verdict-headline" data-headline={notReady ? 'not-ready' : 'ready'} style={{ ...title, color: notReady ? 'var(--amber)' : undefined }}>
+            {headline}
           </h2>
           <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
             Your comments: <strong style={{ color: blockerCount > 0 ? 'var(--amber)' : 'var(--green)' }}>{blockerCount} blocking open</strong> · {resolvedCount} resolved · the review: <strong style={{ color: reviewerBlockers > 0 ? 'var(--amber)' : 'var(--green)' }}>{plural(reviewerBlockers, 'blocker', 'blockers')}</strong>.
@@ -141,7 +156,7 @@ export function DecisionCard({
           )}
           {derived.kind === 'approve' && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', fontSize: 'var(--text-sm)', color: 'var(--dim)' }}>
-              {overBlocker ? 'Why approve over the review\'s blocker — required, recorded in the verdict and the PR' : 'Why approve — optional, recorded in the verdict and the PR'}
+              {overBlocker ? `Why ${rationaleNeed} — required, recorded in the verdict and the PR` : 'Why approve — optional, recorded in the verdict and the PR'}
               <textarea data-field="approve-rationale" value={rationale} onChange={(e) => setRationale(e.target.value)} rows={2} disabled={submitting} style={{ font: 'inherit', fontSize: 'var(--text-sm)', resize: 'vertical' }} />
             </label>
           )}

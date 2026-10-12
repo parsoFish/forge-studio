@@ -17,11 +17,19 @@
 import { useState } from 'react';
 
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
-import { groupFindings, leadSentences, reviewHeadIsStale, splitByWorkItem } from '@/lib/gate-view';
+import { groupFindings, leadSentences, reviewHeadIsStale, splitByWorkItem, type ReviewOutcomeDoc } from '@/lib/gate-view';
 import { InlineCode } from './InlineCode';
 import { pane, paneHeader, paneTitle, meta, word, wiTag, miniBtn, SEVERITY_COLOUR } from './styles';
 
-export type ReviewFindingsState = { doc: ReviewFindingsDoc | null; absent: boolean; error: boolean };
+export type ReviewFindingsState = {
+  doc: ReviewFindingsDoc | null;
+  absent: boolean;
+  error: boolean;
+  /** The latest review attempt (forge-nk1y.39); `error` = the read failed, so currency is UNKNOWN. */
+  outcome?: { doc: ReviewOutcomeDoc | null; error: boolean };
+  /** Set by the surface when the findings on file are not the review of the change (forge-nk1y.39). */
+  notCurrent?: { headSha: string | null; reason: string; priorSha: string | null };
+};
 
 const WWW = ['why', 'what', 'how'] as const;
 const SENTENCES_PER_BLOCK = 2;
@@ -35,6 +43,19 @@ export function FindingsPane({
 }): JSX.Element {
   const [tab, setTab] = useState<'findings' | 'why-what-how'>('findings');
   const { doc } = state;
+
+  if (state.notCurrent) {
+    const { headSha: failedAt, reason, priorSha } = state.notCurrent;
+    return (
+      <div data-section="review-findings" data-findings-state="not-current" data-review-failed-head={failedAt ?? ''} style={pane}>
+        <header style={paneHeader}><h2 style={paneTitle}>Adversarial review</h2></header>
+        <p data-pane-body style={{ height: 'var(--pane-md)', margin: 0, padding: 'var(--space-3) var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--amber)' }}>
+          {`No current findings — review failed at ${failedAt ? failedAt.slice(0, 7) : 'an unknown head'} (${reason}).`}
+          {priorSha ? ` The findings on file were judged at ${priorSha.slice(0, 7)} and are not shown as the review of this change.` : ''}
+        </p>
+      </div>
+    );
+  }
 
   if (!doc) {
     const kind = state.error ? 'error' : 'absent';
