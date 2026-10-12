@@ -146,6 +146,8 @@ export function FlowRunDetail({
     >
       {nav}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
+        {/* forge-nk1y.18 (D-46 §3): three groups — status, timeline, findings. */}
+        <section data-page-section="status" aria-label="Run status" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {/* W7-A3 (crosscut-23): the run page is no longer a dead end — back to
             the flow monitor, into the run's artifacts, and to its project. */}
         <nav data-section="run-breadcrumb" aria-label="Run breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
@@ -240,17 +242,29 @@ export function FlowRunDetail({
                 call site: `run.id` flips on every claim and requeue, which would
                 remount this and discard the outcome line on success. */}
             <RunControls key={run?.initiativeId ?? runId} run={run} />
-            <RunTimeline
-              rows={rows}
-              expandedNodeId={expandedNodeId}
-              nodeLogLines={nodeLogLines}
-              onNodeClick={onNodeClick}
-            />
-            <ReviewFindingsPanel
-              doc={findings.doc}
-              absentNote={findings.doc === null && !findings.failed}
-              errorNote={findings.doc === null && findings.failed}
-            />
+          </>
+        )}
+        </section>
+        {found && (
+          <>
+            <section data-page-section="timeline" aria-label="Timeline">
+              <RunTimeline
+                rows={rows}
+                expandedNodeId={expandedNodeId}
+                nodeLogLines={nodeLogLines}
+                onNodeClick={onNodeClick}
+              />
+            </section>
+            {/* forge-nk1y.18: findings scroll inside their pane, never the page. */}
+            <section data-page-section="findings" aria-label="Review findings">
+              <div data-section="run-findings-pane" style={{ maxHeight: 'var(--pane-xl)', overflowY: 'auto' }}>
+                <ReviewFindingsPanel
+                  doc={findings.doc}
+                  absentNote={findings.doc === null && !findings.failed}
+                  errorNote={findings.doc === null && findings.failed}
+                />
+              </div>
+            </section>
           </>
         )}
       </div>
@@ -402,7 +416,7 @@ function NodeDetail({
         background: 'var(--surface-2, transparent)',
       }}
     >
-      <section data-section="node-log" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <section data-section="node-log" style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'var(--pane-lg)', overflowY: 'auto' }}>
         <h4 style={{ margin: 0, fontSize: 11.5, color: 'var(--faint)', textTransform: 'uppercase' }}>Log</h4>
         <RunLog lines={lines} />
       </section>

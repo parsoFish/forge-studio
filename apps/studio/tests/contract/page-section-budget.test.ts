@@ -34,6 +34,17 @@ const ROWS: Row[] = [
       contract: ['<ContractReadiness', '<RebuildContractPanel', '<ContractPanelMount', '<OnboardWithAgent', '<OpenSessionsPanel'],
     },
   },
+  {
+    route: '/flows/[id]/run/[runId]',
+    file: 'components/studio/FlowRunDetail.tsx',
+    max: 5,
+    groups: ['status', 'timeline', 'findings'],
+    wraps: {
+      status: ['data-section="run-breadcrumb"', '<RunTrigger', '<GateLink', '<RunControls'],
+      timeline: ['<RunTimeline'],
+      findings: ['<ReviewFindingsPanel'],
+    },
+  },
 ];
 
 function pageSections(file: string): string[] {
