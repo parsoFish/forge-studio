@@ -71,6 +71,18 @@ const ROWS: Row[] = [
       ledger: ['<UnresolvedHistoriesNotice', '<HistoryLedger'],
     },
   },
+  {
+    route: '/community',
+    file: 'app/community/page.tsx',
+    max: 5,
+    groups: ['registry', 'hubs', 'filters', 'items'],
+    wraps: {
+      registry: ['data-section="refresh-registry-state"', 'data-section="refresh-result"'],
+      hubs: ['data-component="hub-strip"'],
+      filters: ['data-field="community-search"', 'data-action="toggle-sort-direction"'],
+      items: ['data-component="fetch-error"', 'data-component="community-empty"', '<CommunityItemGrid'],
+    },
+  },
 ];
 
 function pageSections(file: string): string[] {
