@@ -71,6 +71,7 @@ import { ensureStudioBranch, commitStudioChange, PROJECT_CONFIG_REL_PATH, valida
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
+import { extractDrivableCommand } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // SPEC §1: spec derived from skills/demo-builder/SKILL.md (single source)
@@ -224,9 +225,11 @@ function runLockStep(args: {
   const demoExisted = guardedFile(status.project_repo_path, DEMO_HTML_REL_PATH.split('/'), 'read') !== null;
 
   // The ONE project.json writer — every other key survives as it was.
+  // forge-mfv5.1.32: this session OWNS demoMeans.commands — the commands its capture steps drive (the
+  // sample just ran them) join what was declared; routes and api means are the operator's and survive.
   writeProjectConfigPatch(
     status.project_repo_path,
-    () => ({ demoProcess: declaration.steps }),
+    (previous) => ({ demoProcess: declaration.steps, demoMeans: withCaptureCommands(previous['demoMeans'], declaration.steps) }),
     `forge-studio: demo declaration (session ${status.session_id})`,
   );
 
@@ -416,4 +419,12 @@ export async function handleDemoVerdict(
   ctx.spawnClaimedAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
   ctx.broadcastKindChanged('demo');
   sendJson(res, 200, { ok: true, phase: 'locking', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
+}
+
+/** `demoMeans` with the declaration's drivable capture commands added to `commands` (sorted, distinct). */
+function withCaptureCommands(previous: unknown, steps: ReadonlyArray<{ kind: string; text: string }>): Record<string, unknown> {
+  const means = typeof previous === 'object' && previous !== null && !Array.isArray(previous) ? (previous as Record<string, unknown>) : {};
+  const declared = Array.isArray(means['commands']) ? (means['commands'] as unknown[]).filter((c): c is string => typeof c === 'string') : [];
+  const captured = steps.filter((s) => s.kind === 'capture').map((s) => extractDrivableCommand(s.text)).flatMap((r) => (r.ok ? [r.command] : []));
+  return { ...means, commands: [...new Set([...declared, ...captured])].sort() };
 }

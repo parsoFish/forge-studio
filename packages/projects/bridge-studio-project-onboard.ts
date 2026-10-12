@@ -642,10 +642,13 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // file (AGENTS.md / CLAUDE.md), that file IS the instructions — never write a
       // divergent copy into project.json from the editor save (the UI binds the
       // panel read-only to AGENTS.md, but guard here too so any caller is safe).
+      // forge-mfv5.1.32: the page edits exactly `match` + `requiresEnv`; anything else is refused by name, never stored.
+      const stray = Object.keys(asObject(b['acceptance'])).filter((k) => k !== 'match' && k !== 'requiresEnv');
+      if (stray.length > 0) { sendJson(res, 400, { error: `acceptance carries ${stray.join(', ')} — only match and requiresEnv are edited here` }, origin); return true; }
       const hasAgentFile = readAgentInstructionsFile(projectRoot) !== null;
       let existingRaw: Record<string, unknown>;
       try {
-        ({ previous: existingRaw } = writeProjectConfigPatch(projectRoot, () => ({
+        ({ previous: existingRaw } = writeProjectConfigPatch(projectRoot, (previous) => ({
           ...(typeof b['name'] === 'string' ? { name: b['name'] } : {}),
           ...(typeof b['northStar'] === 'string' ? { northStar: b['northStar'] } : {}),
           ...(!hasAgentFile && typeof b['instructions'] === 'string' ? { instructions: b['instructions'] } : {}),
@@ -653,6 +656,10 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
           ...(Array.isArray(b['skills']) ? { skills: b['skills'] } : {}),
           // kb can be string or null
           ...(b['kb'] !== undefined ? { kb: b['kb'] } : {}),
+          // forge-mfv5.1.32: the demo means and the acceptance tier — null clears, absent leaves alone;
+          // the one writer validates both (an acceptance tier with no `match` is refused by name).
+          ...(b['demoMeans'] !== undefined ? { demoMeans: b['demoMeans'] ?? undefined } : {}),
+          ...(b['acceptance'] !== undefined ? { testProcess: { ...asObject(previous['testProcess']), acceptance: b['acceptance'] ?? undefined } } : {}),
         }), 'forge-studio: update .forge/project.json'));
       } catch (err) {
         if (err instanceof ProjectConfigWriteError && err.reason !== 'unreadable') {
@@ -694,3 +701,5 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
 
   return { handleProjectsCreate, handleProjectsOnboard, handleProjectPut };
 }
+
+const asObject = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});

@@ -16,6 +16,8 @@
  * session (`kbTouched`); an untouched binding — derived or not — is not
  * echoed back, because echoing it would freeze a live derivation.
  */
+import type { AcceptanceTier, DemoMeans } from './project-declarations';
+
 export type ProjectSaveFields = {
   name: string;
   northStar: string;
@@ -26,6 +28,8 @@ export type ProjectSaveFields = {
   kb: string | null;
   /** True only when the operator changed the binding via KbBind in this session. */
   kbTouched: boolean;
+  /** forge-mfv5.1.32: the edited demo means + acceptance tier, or null when the editor was not touched. */
+  declarations?: { demoMeans: DemoMeans | null; acceptance: AcceptanceTier | null } | null;
 };
 
 export type ProjectSavePayload = {
@@ -36,6 +40,9 @@ export type ProjectSavePayload = {
   skills: string[];
   /** Present ONLY when `kbTouched` — string = rebind, null = explicit unbind. */
   kb?: string | null;
+  /** Present ONLY when the declarations editor was touched — null clears. */
+  demoMeans?: DemoMeans | null;
+  acceptance?: AcceptanceTier | null;
 };
 
 export function buildProjectSavePayload(f: ProjectSaveFields): ProjectSavePayload {
@@ -50,5 +57,6 @@ export function buildProjectSavePayload(f: ProjectSaveFields): ProjectSavePayloa
     // undefined value anyway — but a present-with-undefined key would still
     // read as "the editor sent kb" to anyone diffing the object client-side.
     ...(f.kbTouched ? { kb: f.kb } : {}),
+    ...(f.declarations ? { demoMeans: f.declarations.demoMeans, acceptance: f.declarations.acceptance } : {}),
   };
 }

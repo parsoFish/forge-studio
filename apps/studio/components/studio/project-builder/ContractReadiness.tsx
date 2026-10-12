@@ -2,9 +2,20 @@
 
 import { projectReadiness } from '@forge/contracts';
 import type { DemoStep, PreflightResult } from '@/lib/studio-client';
+import type { AcceptanceTier, DemoMeans } from '@/lib/project-declarations';
+
+const n = (k: number, one: string): string => `${k} ${one}${k === 1 ? '' : 's'}`;
+/** forge-mfv5.1.32: the two declarations, shown (not counted toward readiness — both are optional). */
+function declarationRows(m: DemoMeans | undefined, a: AcceptanceTier | undefined): Array<{ item: string; declared: boolean; text: string }> {
+  const parts = m ? [n(m.commands?.length ?? 0, 'command'), n(m.routes?.length ?? 0, 'route'), n((m.api?.paths?.length ?? 0) + (m.api?.commands?.length ?? 0), 'API mean')] : [];
+  return [
+    { item: 'demo-means', declared: m !== undefined, text: m ? `Demo means: ${parts.join(', ')}` : 'Demo means: none declared — the demo builder adds its capture commands when it locks' },
+    { item: 'acceptance-tier', declared: a !== undefined, text: a ? `Acceptance tier: gates matching \`${a.match}\`${a.requiresEnv?.length ? `, requires ${a.requiresEnv.join(', ')}` : ''}` : 'Acceptance tier: none declared' },
+  ];
+}
 
 export function ContractReadiness({
-  northStar, instructions, demoSteps, skills, kb, preflight,
+  northStar, instructions, demoSteps, skills, kb, preflight, demoMeans, acceptance,
 }: {
   northStar: string;
   instructions: string;
@@ -12,6 +23,8 @@ export function ContractReadiness({
   skills: string[];
   kb: string | null;
   preflight: PreflightResult | null;
+  demoMeans?: DemoMeans;
+  acceptance?: AcceptanceTier;
 }) {
   // The ONE readiness rule (SPEC §6): `projectReadiness` in `@forge/contracts`,
   // the same function the scheduler's claim gate calls. Nothing is computed
@@ -69,6 +82,13 @@ export function ContractReadiness({
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: c.ok ? 'var(--text)' : 'var(--dim)' }}>
             <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{c.ok ? '✓' : '○'}</span>
             <span style={{ lineHeight: 1.4 }}>{c.text}</span>
+          </div>
+        ))}
+
+        {declarationRows(demoMeans, acceptance).map((r) => (
+          <div key={r.item} data-readiness-item={r.item} data-declared={r.declared ? 'true' : 'false'} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: r.declared ? 'var(--text)' : 'var(--dim)' }}>
+            <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{r.declared ? '◆' : '◇'}</span>
+            <span style={{ lineHeight: 1.4 }}>{r.text}</span>
           </div>
         ))}
 
