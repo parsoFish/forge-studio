@@ -62,13 +62,13 @@ operator-ratified new cap — never a silent raise.
 | `agents` | 44 | 12,506 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 65 | 21,281 | **21,245** | ratified 21,245 — forge-mfv5.1.15: the project-brain Revise with notes route, its verdict history, revise turn and no-change refusal; +151 on main 21,094, operator ruling 2026-10-10 (R43, T1 ask). |
 | `flows` | 94 | 26,019 | **25,820** | ratified 25,820 — forge-nk1y.34: the approve rationale is written into the PR body before the merge (`writeVerdictToPrBody`); +24 measured on main 25,796, lane-ratified (≤100, ruling 666). |
-| `factory` | 17 | 3,080 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 52 | 13,040 | **13,040** | ratified 13,040 — forge-nk1y.27 + .26: `reflector-fold.ts` (the fold turn after the operator answers, checked by name) and the `Choose any:` multi marker; +95 measured on main 12,945 (after #1192's +97), lane-ratified (≤100, ruling 666). |
+| `factory` | 17 | 3,088 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 52 | 13,037 | **13,040** | ratified 13,040 — forge-nk1y.27 + .26: `reflector-fold.ts` (the fold turn after the operator answers, checked by name) and the `Choose any:` multi marker; +95 measured on main 12,945 (after #1192's +97), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,171 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **525** | **136,783** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **525** | **136,788** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -198,7 +198,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/merge-boundary.ts | stations | verbatim | 116 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-overlay.ts | factory | rewritten | 195 |
-| packages/factory/demo-capture.ts | factory | rewritten | 331 |
+| packages/factory/demo-capture.ts | factory | rewritten | 339 |
 | packages/factory/demo-runtime.ts | factory | verbatim | 308 |
 | packages/stations/demo-types.ts | stations | verbatim | 115 |
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
@@ -463,7 +463,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-form.ts | stations | rewritten | 73 |
 | packages/stations/demo-planner-port.ts | stations | rewritten | 77 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 292 |
-| packages/stations/demo-model.ts | stations | verbatim | 794 |
+| packages/stations/demo-model.ts | stations | verbatim | 791 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 374 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
