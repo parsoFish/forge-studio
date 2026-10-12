@@ -186,7 +186,7 @@ export async function handleReflect(
     // route's normal 200 stays truthful ("feedback captured").
     const requestedCycleId = decodeUrlPart(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
     try {
-      const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string; close?: boolean };
+      const body = (await readJson(req)) as { answers?: { question: string; answer: string | string[] }[]; freeform?: string; close?: boolean };
       // Ruling 1736 (bead forge-8vfn.8.1.34) — same resolution as the GET
       // route above, and load-bearing here in a second way: `fireReflectorRerun`
       // below needs the REAL `_logs/<cycleId>/` dir name, not the initiativeId
@@ -262,9 +262,18 @@ export async function handleReflect(
         sendJson(res, 200, { ok: true, closed: true }, origin);
         return true;
       }
+      // forge-nk1y.26: a choice LIST is accepted only for a question the reflection marked multi, and only of its own options.
+      if ((body.answers ?? []).some((a) => Array.isArray(a.answer))) {
+        const refusal = choiceListRefusal(body.answers ?? [], guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']));
+        if (refusal) {
+          sendJson(res, 400, { error: refusal, cycleId: requestedCycleId }, origin);
+          return true;
+        }
+      }
       const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
       for (const a of body.answers ?? []) {
-        lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
+        const answer = Array.isArray(a.answer) ? a.answer.map((c) => `- ${c}`).join('\n') : a.answer;
+        lines.push(`### ${a.question}`, '', answer || '_(skipped)_', '');
       }
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
       // Route the leaf through the guard too: a symlinked user-feedback.md
@@ -300,4 +309,21 @@ export async function handleReflect(
   }
 
   return false;
+}
+
+/** forge-nk1y.26: why a choice-list answer is refused, or null. An unreadable question list refuses (§6.15). */
+export function choiceListRefusal(answers: ReadonlyArray<{ question: string; answer: string | string[] }>, questionsRaw: string | null): string | null {
+  const questions = questionsRaw === null ? null : safeParseJson<Array<{ question?: unknown; multi?: unknown; options?: Array<{ label?: unknown }> }>>(questionsRaw);
+  if (!Array.isArray(questions)) return 'refused — the reflection\'s question list is unreadable, so a choice list cannot be checked';
+  for (const a of answers) {
+    if (!Array.isArray(a.answer)) continue;
+    const q = questions.find((x) => x.question === a.question);
+    if (!q) return `refused — "${a.question}" is not one of this reflection's questions`;
+    if (q.multi !== true && a.answer.length !== 1) return `refused — "${a.question}" takes one choice; got ${a.answer.length}`;
+    if (new Set(a.answer).size !== a.answer.length) return `refused — "${a.question}" lists a choice twice`;
+    const labels = (q.options ?? []).map((o) => o.label);
+    const stray = a.answer.find((c) => typeof c !== 'string' || !labels.includes(c));
+    if (stray !== undefined) return `refused — "${String(stray)}" is not a choice of "${a.question}"`;
+  }
+  return null;
 }
