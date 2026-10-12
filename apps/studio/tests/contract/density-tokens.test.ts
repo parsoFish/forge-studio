@@ -53,8 +53,6 @@ const OFF_SCALE: readonly string[] = [
   'components/studio/artifact/VerdictRenderer.tsx|height|160',
   'components/studio/knowledge/KbDrainPanel.tsx|maxHeight|260',
   'components/studio/knowledge/ThemeList.tsx|maxHeight|260',
-  'components/studio/project-builder/Instructions.tsx|maxHeight|460',
-  'components/studio/project-builder/SkillsBind.tsx|maxHeight|220',
 ];
 
 function sourceFiles(dir: string): string[] {

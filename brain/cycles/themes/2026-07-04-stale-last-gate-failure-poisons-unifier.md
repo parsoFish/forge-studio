@@ -3,8 +3,9 @@ title: Stale .forge/last-gate-failure.md poisons unifier orientation
 description: .forge/last-gate-failure.md is gitignored and persists across unifier invocations; each new unifier session reads it as a live signal, spending ~15 tool calls re-orienting before determining it is a fossil from a prior run.
 category: antipattern
 created_at: 2026-07-04T01:02:34.000Z
-updated_at: 2026-07-04T01:02:34.000Z
+updated_at: 2026-10-12T00:00:00Z
 status: historical
+related_themes: [2026-10-11-stale-last-gate-failure-dev-loop-misdiagnosis]
 ---
 
 ## Observed pattern
@@ -33,6 +34,10 @@ Fix #1 (delete-at-start) is simplest and eliminates the class entirely. Fix #2 i
 
 - Orchestrator: unifier-invocation path
 - Unifier PROMPT.md / AGENT.md
+
+## See also
+
+- [[2026-10-11-stale-last-gate-failure-dev-loop-misdiagnosis]] — same artifact in ralph/dev-loop: agent declares WI done 8× while gate keeps failing; local test pass ≠ gate pass
 
 ## Sources
 
