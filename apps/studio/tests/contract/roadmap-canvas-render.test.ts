@@ -40,6 +40,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import type { ProjectRoadmap, RoadmapInitiative, RoadmapWorkItem } from '@/lib/bridge-client';
 import type { InitiativeGroup } from '@/lib/cycle-grouping';
+import { isStartEligible } from '@/lib/start-work-view';
 
 const NOW_MS = Date.parse('2026-06-10T00:00:00.000Z');
 
@@ -553,4 +554,21 @@ test('[7.6.26] a READY-FOR-REVIEW initiative WITHOUT a work-item snapshot reads 
   const tag = tagContaining(html, `data-initiative-id="${id}"`);
   expect(tag).toContain('data-initiative-status="ready-for-review"');
   expect(planStateOf(html, id)).toBe('unplanned');
+});
+
+test('forge-nk1y.38: a KICKOFF card blocked by an unmerged dependency names it, and is not Start-eligible', () => {
+  const i3a = 'INIT-2026-10-11-i3a-green-apply-path';
+  const id = 'INIT-2026-10-11-i3b-self-service';
+  const card = { initiativeId: id, status: 'awaiting-kickoff' as const, dependsOnInitiatives: [i3a], ready: false, blockedBy: [i3a], workItems: [wi('WI-1')] };
+  const html = render({ roadmap: oneInitiative(card), cycleGroups: [] });
+  const node = tagContaining(html, `data-initiative-id="${id}"`);
+  expect(node).toContain('data-initiative-ready="false"');
+  expect(node).toContain(`data-blocked-by="${i3a}"`);
+  expect(html).toContain(`data-micro-badge="blocked-by" data-badge-value="${i3a}"`);
+  expect(html).toContain('blocked by i3a-green-apply-path');
+  expect(isStartEligible(card)).toBe(false);
+  // Control: ready once the dependency merged — no badge, eligible.
+  const readyHtml = render({ roadmap: oneInitiative({ ...card, ready: true, blockedBy: [] }), cycleGroups: [] });
+  expect(readyHtml).not.toContain('data-micro-badge="blocked-by"');
+  expect(isStartEligible({ ...card, ready: true })).toBe(true);
 });

@@ -454,7 +454,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-materials-declared` | (dynamic) | apps/studio/components/studio/agent-builder/RunPanel.tsx |
 | `data-media-kind` | (dynamic) | apps/studio/components/DemoComparison.tsx, apps/studio/components/studio/gate/DemoGallery.tsx |
 | `data-media-mode` | (dynamic) | apps/studio/components/studio/gate/DemoGallery.tsx |
-| `data-micro-badge` | `deps-count`, `wi-progress` | apps/studio/components/studio/RoadmapCanvas.tsx |
+| `data-micro-badge` | `blocked-by`, `deps-count`, `wi-progress` | apps/studio/components/studio/RoadmapCanvas.tsx |
 | `data-minted-session-id` | (dynamic) | apps/studio/components/AuthoringLauncher.tsx, apps/studio/lib/kickoff-view.ts |
 | `data-misconfigured-count` | (dynamic) | apps/studio/app/connections/page.tsx |
 | `data-mode` | (dynamic) | apps/studio/app/artifact/page.tsx, apps/studio/components/SessionBriefing.tsx |
