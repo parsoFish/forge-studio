@@ -554,6 +554,7 @@ packages/projects/preflight-repo.ts existsSync 1
 packages/projects/preflight-repo.ts lstatSync 1
 packages/projects/preflight-repo.ts readFileSync 1
 packages/projects/preflight-repo.ts spawnSync 4
+packages/projects/preflight.ts execFileSync 1
 packages/projects/preflight.ts existsSync 4
 packages/projects/preflight.ts readdirSync 1
 packages/projects/preflight.ts readFileSync 1
