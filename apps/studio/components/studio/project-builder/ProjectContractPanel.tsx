@@ -147,7 +147,7 @@ function ContractChecklist({ rows }: { rows: ContractStageRow[] }): JSX.Element 
       className="readiness-list"
       data-section="contract-checklist"
       data-checklist-row-count={rows.length}
-      style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}
+      style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 'var(--pane-lg)', overflowY: 'auto' }}
     >
       {rows.map((row) => (
         <li

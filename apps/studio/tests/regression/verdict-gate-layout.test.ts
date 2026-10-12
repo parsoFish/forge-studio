@@ -216,7 +216,7 @@ test('enlarge opens a <dialog> with both sides and closes again', async () => {
 test('approve submits, and the card turns into the reflect payoff', async () => {
   await renderGate();
   await press('[data-action="approve-and-merge"]');
-  expect(submitMock).toHaveBeenCalledWith({ kind: 'approve', initiativeId: INIT, rationale: 'Approved on the visual review — no blocking comments.' });
+  expect(submitMock).toHaveBeenCalledWith({ kind: 'approve', initiativeId: INIT, rationale: 'Approved on the visual review — no blocking comments and no reviewer blockers open.' });
   expect(q('[data-component="verdict-form"]').getAttribute('data-form-state')).toBe('submitted');
   expect(q<HTMLAnchorElement>('[data-section="gate-decision"] [data-action="open-reflect"]').getAttribute('href'))
     .toBe(`/artifact?run=${CYCLE}&type=reflection&mode=view`);

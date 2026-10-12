@@ -153,7 +153,7 @@ export function Instructions({
                 fontFamily: 'var(--font-mono)', fontSize: 12.5, lineHeight: 1.5,
                 color: 'var(--text)', background: 'var(--bg-2)', border: '1px solid var(--line)',
                 borderRadius: 'var(--radius-sm)', padding: '12px 14px', margin: 0,
-                maxHeight: 460, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                maxHeight: 'var(--pane-xl)', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}
             >
               {value.trim() || `(${fileName} is empty)`}

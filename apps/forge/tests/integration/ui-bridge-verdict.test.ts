@@ -52,6 +52,7 @@ type Stubs = {
   mergeReturn: boolean;
   mergeCallCount: number;
   mergeLastArg: string;
+  mergeLastRationale: string | undefined;
   finalizeCallCount: number;
   /** WS-A: ordered call log so we can assert release-finalize runs BEFORE merge. */
   callOrder: string[];
@@ -59,21 +60,23 @@ type Stubs = {
 
 function makeStubs(): {
   stubs: Stubs;
-  mergePr: (wt: string) => boolean;
+  mergePr: (wt: string, verdict?: { rationale: string }) => boolean;
   finalizeAfterMerge: () => Promise<unknown[]>;
 } {
   const stubs: Stubs = {
     mergeReturn: true,
     mergeCallCount: 0,
     mergeLastArg: '',
+    mergeLastRationale: undefined,
     finalizeCallCount: 0,
     callOrder: [],
   };
   return {
     stubs,
-    mergePr(wt: string): boolean {
+    mergePr(wt: string, verdict?: { rationale: string }): boolean {
       stubs.mergeCallCount++;
       stubs.mergeLastArg = wt;
+      stubs.mergeLastRationale = verdict?.rationale;
       stubs.callOrder.push('merge');
       return stubs.mergeReturn;
     },
@@ -135,6 +138,8 @@ test('approve: 200, calls mergePr once with worktreePath, fires finalizeAfterMer
     );
     assert.equal(s.stubs.mergeCallCount, 1, 'mergePr should be called once');
     assert.equal(s.stubs.mergeLastArg, worktreePath, 'mergePr called with correct worktreePath');
+    // forge-nk1y.34: the operator's rationale travels to the PR, not only into verdict.json.
+    assert.equal(s.stubs.mergeLastRationale, 'looks good', 'mergePr carries the verdict rationale for the PR body');
     assert.equal(s.stubs.finalizeCallCount, 1, 'finalizeAfterMerge should be called once');
   } finally {
     await close();

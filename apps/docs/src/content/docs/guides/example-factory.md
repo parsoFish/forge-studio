@@ -31,7 +31,7 @@ After the merge, the reflector runs. Its reflection appears under **Waiting on y
 
 At the plan gate, an optional note goes with your choice; add one when you send back. **Send back** gives the architect another turn.
 
-At the verdict gate, read the review findings first. **approve and merge** merges the pull request. **add work items** writes new acceptance criteria and runs them in the same cycle; no new cycle starts. On the demo page, a **blocking** comment makes the verdict a send-back and no rationale is asked for; a run with no demo shows a plain form that needs one.
+At the verdict gate, read the review findings first. **approve and merge** merges the pull request. **add work items** writes new acceptance criteria and runs them in the same cycle; no new cycle starts. On the demo page, a **blocking** comment makes the verdict a send-back and no rationale is asked for; a run with no demo shows a plain form that needs one. The headline counts your open blocking comments and the reviewer's blockers together, so it reads *Not ready* while either is open. You can still approve over a reviewer blocker, but only with your reason. Any reason you give is recorded in the verdict and the pull request body.
 
 The reflection gate lists questions; answer all of them to submit. A question that allows several answers shows checkboxes. The reflector folds your answers into the themes it wrote for the run, and your corrections override its own claims. Agents read those themes in Knowledge before they act on later runs. If no theme changed, the run's log says so by name.
 
