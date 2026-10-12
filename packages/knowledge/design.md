@@ -197,7 +197,7 @@ refusing forever. Covered by
 lockfilePath })` lets a caller point the PHYSICAL lock file somewhere
 private while `forgeRoot` still names the conceptual target `proper-lockfile`
 validates exists — production call sites pass nothing and get the unchanged
-default (`${brainRootDir(forgeRoot)}.lock`). `runReflector` resolves its OWN
+default (`brainWriteLockPath(forgeRoot)` = `<forgeRoot>/_logs/brain.lock`, out of the repo root since forge-nk1y.28; a starting `forge studio` reaps a dead holder's lock there and at the old root path, and its exit sequence releases the leases it holds). `runReflector` resolves its OWN
 `forgeRoot` from `import.meta.dirname`, deliberately not injectable (always
 the real repo checkout — `reflector-spawn-capture.test.ts`'s own header), so
 every test that reaches it targets the SAME real `brain/`. Reproduced

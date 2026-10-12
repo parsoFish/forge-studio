@@ -43,7 +43,7 @@ Steps: [Create library components](/guides/how-to/create-library-components/).
 
 ## Install from Community
 
-Open **Community** to browse every source hub in one list. Open an item to read its source and install state.
+Open **Community** to browse every source hub in one list, 24 items at a time; **Show more** adds the next 24. Open an item to read its source and install state.
 
 - Press **Install** on an item. forge fetches it from the source it names, copies it into the matching local library with its provenance, and lands it unapproved.
 - Hooks show their security scan before you install. Review it, then approve the hook on its own page.

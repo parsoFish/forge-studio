@@ -588,18 +588,6 @@
     "count": 1
   },
   {
-    "file": "apps/studio/app/agents/[id]/page.tsx",
-    "kind": "path",
-    "cited": "scripts/e2e-deadpaths.mjs",
-    "count": 1
-  },
-  {
-    "file": "apps/studio/app/agents/[id]/page.tsx",
-    "kind": "path",
-    "cited": "scripts/journeys/agents.mjs",
-    "count": 1
-  },
-  {
     "file": "apps/studio/app/community/page.tsx",
     "kind": "path",
     "cited": "docs/forge-ui-dom-and-harness.md",

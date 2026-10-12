@@ -84,7 +84,7 @@ export {
 export type { ProjectBrainCommitInput } from './project-brain-build.ts';
 
 // --- the brain write lease (contended writers back off, never corrupt) ------
-export { acquireBrainWriteLease, BrainWriteLeaseContentionError } from './brain-write-lease.ts';
+export { acquireBrainWriteLease, BrainWriteLeaseContentionError, reapDeadBrainWriteLease, releaseHeldBrainWriteLeases, type LeaseReap } from './brain-write-lease.ts';
 
 // --- KB validation (the studio-lint entry point) -----------------------------
 export { validateKb } from './studio/validate-kb.ts';

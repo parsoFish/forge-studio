@@ -347,8 +347,8 @@ export async function captureCheckpoints(
               process.stderr.write(`[demo] refusing checkpoint ${side}/${label}: ${resolution.reason}\n`);
               continue;
             }
-            // recordBrowser's filmstrip (its last frame is the final outlined
-            // still) binds as the checkpoint's image; there is no separate PNG.
+            // recordBrowser writes the final outlined still at native resolution as
+            // `<label>.png` — the checkpoint's image (forge-nk1y.30); the filmstrip is a thumbnail.
             try {
               await recordBrowser({
                 side,
