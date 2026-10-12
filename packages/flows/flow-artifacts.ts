@@ -253,10 +253,51 @@ export type ReviewFindingsRecord = {
   acEvaluations: AcEvaluation[];
   /** The reviewer's Why / What / How of the change. */
   whyWhatHow: WhyWhatHow;
+  /**
+   * forge-nk1y.39: changed paths the orchestrator did NOT derive for review, each
+   * with its reason — a git-binary file, or the orchestrator's own demo bundle
+   * (D-15). Named here so "not reviewed" is a stated fact, never an absence.
+   */
+  notReviewed?: NotReviewedPath[];
 };
+
+export type NotReviewedPath = { path: string; reason: 'binary' | 'demo-bundle' };
 
 export function reviewFindingsJsonPath(logsRoot: string, cycleId: string): string {
   return resolve(logsRoot, cycleId, 'artifacts', 'review-findings.json');
+}
+
+/**
+ * forge-nk1y.39: the outcome of the LATEST review attempt for a cycle — written
+ * on every attempt, complete or failed, at the head it ran at. `review-findings.json`
+ * is only written on success, so after a failed round it still holds the previous
+ * round's findings; this record is how a reader tells current findings from stale.
+ */
+export type ReviewOutcomeRecord = {
+  cycleId: string;
+  /** The head the attempt ran at; null only when `git rev-parse HEAD` itself failed. */
+  headSha: string | null;
+  status: 'complete' | 'failed';
+  /** The pipeline's failure reason (e.g. `derive-failed`); null when complete. */
+  reason: string | null;
+  detail: string | null;
+  at: string;
+};
+
+export function reviewOutcomeJsonPath(logsRoot: string, cycleId: string): string {
+  return resolve(logsRoot, cycleId, 'artifacts', 'review-outcome.json');
+}
+
+/** Persist the review outcome. Always overwrites (latest attempt wins); returns the path, or null on an IO error. */
+export function writeReviewOutcomeJson(logsRoot: string, record: ReviewOutcomeRecord): string | null {
+  const p = reviewOutcomeJsonPath(logsRoot, record.cycleId);
+  try {
+    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
+    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    return p;
+  } catch {
+    return null;
+  }
 }
 
 const FINDING_SEVERITIES = ['blocker', 'major', 'minor', 'info'] as const;

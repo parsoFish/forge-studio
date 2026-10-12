@@ -34,7 +34,9 @@ import { projectBrainDir } from '@forge/knowledge';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,
+  writeReviewOutcomeJson,
   readWorkItemsFromDir,
+  worktreeDemoRelDir,
   type ReviewFindingsRecord,
   type WorkItem,
 } from '@forge/flows';
@@ -59,6 +61,7 @@ import {
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
 import { trackSpawnRefusal, spawnRefusalFailure, harvestFindings } from './review-refusal.ts';
+import { REVIEW_GIT_MAX_BUFFER_BYTES, binaryPathsFromNumstatZ, splitReviewable } from './review-input-scope.ts';
 
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;
@@ -166,26 +169,57 @@ export function assertAdversarialReviewDeclaration(def: {
 
 function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: string; err: string } {
   try {
-    const out = execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8', timeout: 60_000 });
+    // forge-nk1y.39: an EXPLICIT bound — the 1 MiB default died on I3a's demo bundle.
+    const out = execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8', timeout: 60_000, maxBuffer: REVIEW_GIT_MAX_BUFFER_BYTES });
     return { ok: true, out, err: '' };
   } catch (e) {
-    const err = e as { stderr?: Buffer | string; message?: string };
+    const err = e as { stderr?: Buffer | string; message?: string; code?: string };
+    if (err.code === 'ENOBUFS') {
+      return { ok: false, out: '', err: `git ${args[0]} output exceeded the review's ${REVIEW_GIT_MAX_BUFFER_BYTES / (1024 * 1024)} MiB buffer (ENOBUFS)` };
+    }
     const stderr = err.stderr ? (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString('utf8')) : (err.message ?? '');
     return { ok: false, out: '', err: stderr.slice(-500) };
   }
 }
 
+type ReviewOpts = {
+  queryFn?: StreamQueryFn;
+  signal?: AbortSignal;
+  classProfiles?: ClassProfilePort;
+  agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
+  // 8.1.30 — test-injection, mirrors RunContext.heartbeatTimers.
+  heartbeatTimers?: HeartbeatTimers;
+};
+
+/**
+ * The review, with its OUTCOME recorded on every attempt (forge-nk1y.39):
+ * `review-findings.json` is written only on success, so after a failed round it
+ * still holds the previous round's findings. `review-outcome.json` names the
+ * head this attempt ran at and whether it produced findings, so the verdict
+ * gate never presents a prior round's findings as current.
+ */
 export async function runAdversarialReview(
   input: AdversarialReviewInput,
   logger: EventLogger,
-  opts: {
-    queryFn?: StreamQueryFn;
-    signal?: AbortSignal;
-    classProfiles?: ClassProfilePort;
-    agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
-    // 8.1.30 — test-injection, mirrors RunContext.heartbeatTimers.
-    heartbeatTimers?: HeartbeatTimers;
-  },
+  opts: ReviewOpts,
+): Promise<AdversarialReviewResult> {
+  const head = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
+  const result = await reviewInitiative(input, logger, opts);
+  writeReviewOutcomeJson(input.logsRoot, {
+    cycleId: input.cycleId,
+    headSha: head.ok ? head.out.trim() : null,
+    status: result.status,
+    reason: result.status === 'failed' ? result.reason : null,
+    detail: result.status === 'failed' ? result.detail : null,
+    at: new Date().toISOString(),
+  });
+  return result;
+}
+
+async function reviewInitiative(
+  input: AdversarialReviewInput,
+  logger: EventLogger,
+  opts: ReviewOpts,
 ): Promise<AdversarialReviewResult> {
   const def = opts.agentDef;
   // The one port (items 81/83): the class table is the example's. Read once, so
@@ -225,15 +259,17 @@ export async function runAdversarialReview(
   // this used to write was overwritten by the first chunk's before any agent
   // read it (bead forge-8vfn.6.10.24), so writing it was three dead file writes
   // and three extra request-reachable path sinks for a file nobody consumed.
-  const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', `${BASE_REF}...HEAD`]);
+  // `-z`: unquoted paths, so a name with unusual bytes reaches the pathspec as itself.
+  const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', '-z', `${BASE_REF}...HEAD`]);
+  const binaryRes = gitCapture(input.worktreePath, ['diff', '--numstat', '-z', `${BASE_REF}...HEAD`]);
   // The initiative's CHANGE SIZE, for the review ceiling below. `--numstat` and
   // not the patch itself: bead `forge-8vfn.6.10.24` removed the whole-initiative
   // patch write, and re-adding it to count its lines would restore three dead
   // file writes and three request-reachable path sinks for a file nobody reads.
   const numstatRes = gitCapture(input.worktreePath, ['diff', '--numstat', `${BASE_REF}...HEAD`]);
   const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
-  if (!changedFilesRes.ok || !headShaRes.ok) {
-    const detail = `git derivation error: ${[changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
+  if (!changedFilesRes.ok || !headShaRes.ok || !binaryRes.ok) {
+    const detail = `git derivation error: ${[changedFilesRes, headShaRes, binaryRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
     // Event name deliberately avoids the 'review'+'failed' substring pair —
     // failure-classifier.ts's reviewer signature would misclassify it as a
     // terminal reviewer-convergence failure (adversarial review finding #12).
@@ -241,10 +277,17 @@ export async function runAdversarialReview(
     return { status: 'failed', reason: 'derive-failed', detail };
   }
   const headSha = headShaRes.out.trim();
-  const changedFiles = changedFilesRes.out.trim().split('\n').filter(Boolean);
+  const changedFiles = changedFilesRes.out.split('\0').filter(Boolean);
+  // forge-nk1y.39: binaries and the orchestrator's demo bundle are named, not derived.
+  const scope = splitReviewable(changedFiles, binaryPathsFromNumstatZ(binaryRes.out), worktreeDemoRelDir(input.worktreePath, input.initiativeId));
   const inputDirAbs = join(input.worktreePath, REVIEW_INPUT_REL_DIR);
   mkdirSync(inputDirAbs, { recursive: true });
   emit('review.input.assembled', { changed_files: changedFiles.length, head_sha: headSha, base_ref: BASE_REF });
+  emit('review.input.excluded', {
+    binary: scope.notReviewed.filter((n) => n.reason === 'binary').length,
+    demo_bundle: scope.notReviewed.filter((n) => n.reason === 'demo-bundle').length,
+    reviewable: scope.reviewable.length,
+  });
 
   // Beads `forge-gefz` / `forge-jb7i` (operator rulings 475 + 526). ONE ceiling
   // for the whole initiative, derived from its total change size and bounded by
@@ -380,7 +423,7 @@ export async function runAdversarialReview(
     // item, which introduces NO NEW NUMBER: the PM already bounded it, one agent
     // authored it, and its gate already ran over it. Files no work item claims
     // become one `unattributed` chunk, so nothing in the diff escapes review.
-    const planned = partitionChangedFiles(changedFiles, wiRecords.map((w) =>
+    const planned = partitionChangedFiles(scope.reviewable, wiRecords.map((w) =>
       (w.origin === undefined ? w : { ...w, delivered: delivered.get(w.work_item_id) ?? [] })));
     // An empty diff keeps the pre-chunking shape — one chunk of nothing, which
     // the prompt renderer already words as "empty diff — say so in the summary".
@@ -706,7 +749,10 @@ export async function runAdversarialReview(
     // Band 5 — merge into the ONE artifact the verdict gate reads, validate the
     // MERGED record against the whole initiative's criteria (each chunk was only
     // validated against its own), persist, scrub.
-    const merged = mergeChunkRecords(chunkRecords, unjudgedCriteria);
+    const merged: ReviewFindingsRecord = {
+      ...mergeChunkRecords(chunkRecords, unjudgedCriteria),
+      ...(scope.notReviewed.length > 0 ? { notReviewed: scope.notReviewed } : {}),
+    };
     const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria, scope: 'the initiative' });
     if (mergedErrors.length > 0) {
       emit('review.merged.invalid', { errors: mergedErrors, chunks: chunkRecords.length }, { event_type: 'error' });

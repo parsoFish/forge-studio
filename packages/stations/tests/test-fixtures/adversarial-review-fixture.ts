@@ -33,6 +33,8 @@ import type { StreamQueryFn, HeartbeatTimers } from '@forge/agents';
 
 export const INIT_ID = 'INIT-2026-07-24-rev';
 export const CYCLE_ID = 'CY-rev-1';
+/** The branch's one changed file no work item claims (the `unattributed` chunk). */
+export const UNCLAIMED_FILE = 'NOTES.md';
 
 export function withoutSpawnSuppressionEnv(): () => void {
   const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
@@ -109,6 +111,10 @@ export function makeFixture(extraFiles: readonly string[] = []): Fixture {
       acEvaluations: [{ criterion: '(WI-1) GIVEN a request WHEN handled THEN it returns 200', verdict: 'met', evidence: 'the checkpoint shows 200' }],
     }),
   );
+  // A changed text file no work item claims — the `unattributed` chunk. The
+  // demo bundle above is the orchestrator's (D-15) and is never content-
+  // derived for review (forge-nk1y.39), so it cannot play this part.
+  writeFileSync(join(worktree, UNCLAIMED_FILE), 'release notes\n');
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'feat: the change + demo']);
   git(['push', '-q', '-u', 'origin', `feat/${INIT_ID}`]);

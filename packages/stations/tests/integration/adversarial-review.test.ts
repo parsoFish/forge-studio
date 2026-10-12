@@ -18,7 +18,7 @@ import { reviewFindingsJsonPath, validateReviewFindings } from '@forge/flows';
 import { classifyCycleFailure, type StreamQueryFn } from '@forge/agents';
 
 import {
-  CODE_LENSES, CYCLE_ID, EXPECTED, INIT_ID, collectLogger, makeFixture, run, stubQueryFn,
+  CODE_LENSES, CYCLE_ID, EXPECTED, INIT_ID, UNCLAIMED_FILE, collectLogger, makeFixture, run, stubQueryFn,
   validFindingsJson, withoutSpawnSuppressionEnv,
 } from '../test-fixtures/adversarial-review-fixture.ts';
 import { assertAdversarialReviewDeclaration } from '../../phases/adversarial-review.ts';
@@ -39,7 +39,8 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     const rec = JSON.parse(readFileSync(p, 'utf8'));
     assert.deepEqual(validateReviewFindings(rec, EXPECTED), []);
     // Two chunks: WI-1 (its declared `src.ts`) and the unattributed remainder
-    // (`demo/…/demo.json`, which no work item claims). Ids are namespaced by
+    // (`NOTES.md`, which no work item claims — the demo bundle is the
+    // orchestrator's and is named, not reviewed: forge-nk1y.39). Ids are namespaced by
     // their chunk, so a merged list can still refer to a finding and a reader
     // can see which work item it is about (bead forge-8vfn.6.10.24).
     assert.deepEqual(rec.findings.map((f: { id: string }) => f.id), ['WI-1/RF-1', 'unattributed/RF-1']);
@@ -47,8 +48,10 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     assert.ok(planned, 'the chunk plan is evented — a review whose shape is invisible cannot be audited');
     assert.deepEqual((planned!.metadata as Record<string, unknown>).labels, ['WI-1', 'unattributed']);
     // Each chunk is briefed with ONLY its own files.
-    assert.ok(prompts[0]!.includes('src.ts') && !prompts[0]!.includes('demo.json'));
-    assert.ok(prompts[1]!.includes('demo.json') && !prompts[1]!.includes('- `src.ts`'));
+    assert.ok(prompts[0]!.includes('src.ts') && !prompts[0]!.includes(UNCLAIMED_FILE));
+    assert.ok(prompts[1]!.includes(UNCLAIMED_FILE) && !prompts[1]!.includes('- `src.ts`'));
+    assert.ok(!prompts.some((p) => p.includes('demo.json')), 'the demo bundle is never briefed');
+    assert.deepEqual(rec.notReviewed, [{ path: `demo/${INIT_ID}/demo.json`, reason: 'demo-bundle' }]);
     // Worktree scrubbed — nothing untracked left to block a later merge.
     assert.ok(!existsSync(join(fx.worktree, '.forge', 'review-findings.json')), 'findings worktree copy deleted');
     assert.ok(!existsSync(join(fx.worktree, '.forge', 'review-input')), 'review-input dir deleted');
