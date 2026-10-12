@@ -45,6 +45,21 @@ const ROWS: Row[] = [
       findings: ['<ReviewFindingsPanel'],
     },
   },
+  {
+    // The catalog palette is the left tool rail (layout chrome, like the nav)
+    // and the save bar is the page's action bar — neither is a section.
+    route: '/agents/[id]',
+    file: 'app/agents/[id]/page.tsx',
+    max: 5,
+    groups: ['identity', 'materials', 'runtime', 'evidence', 'history'],
+    wraps: {
+      identity: ['<StarterPicker', 'data-field="agent-name"'],
+      materials: ['data-field="purpose"', '<InstructionsField', 'data-field="interactivity"', '<MaterialsPicker'],
+      runtime: ['data-section="advanced"', '<RuntimePicker', '<ReadOnlyFields'],
+      evidence: ['<RunPanel', '<YamlPreview', '<ReadinessPanel', '<UsedInFlows'],
+      history: ['<HistoryLedger'],
+    },
+  },
 ];
 
 function pageSections(file: string): string[] {
