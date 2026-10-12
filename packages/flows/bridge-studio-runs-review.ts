@@ -39,7 +39,8 @@ export type StudioPostContext = StudioContext & {
   readBody: () => Promise<unknown>;
   queueRoot: string;
   projectsRoot: string;
-  mergePr: (worktreePath: string) => boolean;
+  /** forge-nk1y.34: `verdict.rationale` is written into the PR body before the merge. */
+  mergePr: (worktreePath: string, verdict?: { rationale: string }) => boolean;
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /**
    * WS-A (release): post-approval, pre-merge release finalisation. Injectable
@@ -238,11 +239,11 @@ export async function applyReviewVerdict(
       // point), it must keep the run's state moving without the real gh call.
       merged = true;
     } else {
-      merged = ctx.mergePr(approveWorktreePath);
+      merged = ctx.mergePr(approveWorktreePath, { rationale });
     }
     if (!merged) {
       sendJson(res, 409, {
-        error: 'gh pr merge failed — merge the PR manually on GitHub',
+        error: 'gh pr merge failed, or the PR body could not carry the verdict rationale (see the bridge log) — merge the PR manually on GitHub',
         initiativeId,
       }, origin);
       return;
