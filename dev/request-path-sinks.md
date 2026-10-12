@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-251 files, 1428 sink calls; 181 classified (accidentally-safe 8, guarded 47, not-request-derived 34, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+251 files, 1430 sink calls; 181 classified (accidentally-safe 8, guarded 47, not-request-derived 34, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -78,7 +78,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/planned-initiatives.ts` | 1 | unclassified |  |  |  |
 | `packages/flows/pr-branch-sync.ts` | 23 | accidentally-safe |  |  | the dev-loop close, reached from the cycle |
 | `packages/flows/pr-media.ts` | 1 | not-request-derived |  | exec | `ref` (this same file's own `git rev-parse` result, see row above), `relDir` (`worktreeDemoRelDir`) |
-| `packages/flows/pr.ts` | 11 | not-request-derived |  | exec | no request field |
+| `packages/flows/pr.ts` | 13 | not-request-derived |  | exec | no request field |
 | `packages/flows/promote-manifests.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/flows/queue.ts` | 25 | not-request-derived |  | exec | `GET /api/runs/planned` (the forge-develop kickoff surface) via `listPlannedInitiatives` |
 | `packages/flows/requeue-resume.ts` | 9 | other |  | exec | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed |
