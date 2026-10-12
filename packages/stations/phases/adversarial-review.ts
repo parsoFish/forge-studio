@@ -191,13 +191,7 @@ type ReviewOpts = {
   heartbeatTimers?: HeartbeatTimers;
 };
 
-/**
- * The review, with its OUTCOME recorded on every attempt (forge-nk1y.39):
- * `review-findings.json` is written only on success, so after a failed round it
- * still holds the previous round's findings. `review-outcome.json` names the
- * head this attempt ran at and whether it produced findings, so the verdict
- * gate never presents a prior round's findings as current.
- */
+/** The review, its OUTCOME recorded on every attempt — findings are written only on success (forge-nk1y.39). */
 export async function runAdversarialReview(
   input: AdversarialReviewInput,
   logger: EventLogger,

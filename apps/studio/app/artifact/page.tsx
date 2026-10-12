@@ -57,6 +57,9 @@ import { PrRenderer, type PrDoc } from '@/components/studio/artifact/PrRenderer'
 import { VerdictRenderer, verdictRecordToDoc, type VerdictDoc } from '@/components/studio/artifact/VerdictRenderer';
 import { ReviewFindingsPanel, currentFindingsPanelProps, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import type { ReviewOutcomeDoc } from '@/lib/gate-view';
+import type { ReviewFindingsState } from '@/components/studio/gate/FindingsPane';
+
+const NO_REVIEW_STATE: ReviewFindingsState = { doc: null, absent: false, error: false, outcome: { doc: null, error: false } };
 import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/artifact/ReflectionRenderer';
 import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
@@ -571,19 +574,10 @@ function ArtifactPageInner() {
   const [verdictDoc, setVerdictDoc] = useState<VerdictDoc | null>(null);
   // For verdict gate-mode: the demo evidence shown above the verdict form
   const [demoModel,  setDemoModel]  = useState<DemoModel | null>(null);
-  // R4-08-F3: adversarial-review findings for the verdict surface (both modes).
-  const [reviewFindings, setReviewFindings] = useState<ReviewFindingsDoc | null>(null);
-  // W7-B7 (artifact-plan-16): the findings artifact is known-ABSENT for this
-  // run (the producer node never completed, or the file 404'd) — rendered as
-  // an explicit one-liner, distinguishable from a clean pass (doc with []).
-  const [reviewFindingsAbsent, setReviewFindingsAbsent] = useState(false);
-  // Review r1: a transient findings-fetch failure is an ERROR state, distinct
-  // from the authoritative "did not run" absence claim.
-  const [reviewFindingsError, setReviewFindingsError] = useState(false);
-  // forge-nk1y.39: the review's LATEST attempt — read on its own, never behind the
-  // findings guard: a review that FAILED never completed its node, and that is
-  // exactly when the gate must say so instead of "did not run".
-  const [reviewOutcome, setReviewOutcome] = useState<{ doc: ReviewOutcomeDoc | null; error: boolean }>({ doc: null, error: false });
+  // R4-08-F3: adversarial-review findings for the verdict surface (both modes). `absent`
+  // (W7-B7 artifact-plan-16): known-ABSENT, distinct from a clean pass; `error` (review r1):
+  // a failed fetch, never the "did not run" claim; `outcome` (forge-nk1y.39): the latest attempt.
+  const [reviewState, setReviewState] = useState<ReviewFindingsState>(NO_REVIEW_STATE);
   // W7-B7 (artifact-plan-32): the DEMO.md narrative on the demo-evidence VIEW
   // page (rendered+sanitized srcDoc — same pipeline as the gate surface).
   const [demoMarkdownDoc, setDemoMarkdownDoc] = useState('');
@@ -796,12 +790,10 @@ function ArtifactPageInner() {
         const rf = findingsPossible
           ? await fetchJsonArtifactChecked<ReviewFindingsDoc>(artifactId, 'review-findings.json')
           : { doc: null, failed: false };
+        // forge-nk1y.39: read the latest attempt NOT behind the guard — a FAILED review never completed its node.
         const ro = await fetchJsonArtifactChecked<ReviewOutcomeDoc>(artifactId, 'review-outcome.json');
         if (!signal.cancelled) {
-          setReviewFindings(rf.doc);
-          setReviewFindingsAbsent(rf.doc === null && !rf.failed);
-          setReviewFindingsError(rf.doc === null && rf.failed);
-          setReviewOutcome({ doc: ro.doc, error: ro.failed });
+          setReviewState({ doc: rf.doc, absent: rf.doc === null && !rf.failed, error: rf.doc === null && rf.failed, outcome: { doc: ro.doc, error: ro.failed } });
         }
       }
 
@@ -835,9 +827,7 @@ function ArtifactPageInner() {
     // W7-B7: per-type sidecar state must not leak across a type/run switch.
     setVerdictDoc(null);
     setDemoModel(null);
-    setReviewFindings(null);
-    setReviewFindingsAbsent(false);
-    setReviewFindingsError(false);
+    setReviewState(NO_REVIEW_STATE);
     setDemoMarkdownDoc('');
     // W8-A2: a stale error from a PREVIOUS run/type must not paint over a
     // fresh load-in-progress for a new one (Retry / bridge recovery bump
@@ -1166,7 +1156,7 @@ function ArtifactPageInner() {
                   model={demoModel}
                   cycleId={artifactRunId}
                   initiativeId={gateInitiativeId}
-                  reviewFindings={{ doc: reviewFindings, absent: reviewFindingsAbsent, error: reviewFindingsError, outcome: reviewOutcome }}
+                  reviewFindings={reviewState}
                   costUsd={run?.costUsd ?? null}
                   bridgeBase={bridgeBase}
                   reflectHref={reflectHref}
@@ -1177,7 +1167,7 @@ function ArtifactPageInner() {
               )}
               {type === 'verdict' && isGateMode && !demoModel && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-                  <ReviewFindingsPanel {...currentFindingsPanelProps(reviewFindings, reviewFindingsAbsent, reviewFindingsError, reviewOutcome)} />
+                  <ReviewFindingsPanel {...currentFindingsPanelProps(reviewState)} />
                   <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-3) var(--space-4)', background: 'var(--panel)', fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
                     No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
                   </div>
@@ -1329,7 +1319,7 @@ function ArtifactPageInner() {
                   {/* forge-nk1y.25: after an approve (the merge) the reflection is
                       one press away from the verdict, as the docs describe. */}
                   {artifact.doc.decision !== 'send-back' && <ReflectLink href={reflectHref} />}
-                  <ReviewFindingsPanel {...currentFindingsPanelProps(reviewFindings, reviewFindingsAbsent, reviewFindingsError, reviewOutcome)} />
+                  <ReviewFindingsPanel {...currentFindingsPanelProps(reviewState)} />
                   <VerdictRenderer doc={artifact.doc} />
                 </div>
               )}

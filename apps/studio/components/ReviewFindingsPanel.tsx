@@ -74,17 +74,14 @@ const SEVERITY_ORDER = ['blocker', 'major', 'minor', 'info'];
  * as `doc`; an outcome read that failed is UNKNOWN and renders the error note.
  */
 export function currentFindingsPanelProps(
-  doc: ReviewFindingsDoc | null,
-  absentNote: boolean,
-  errorNote: boolean,
-  outcome: { doc: ReviewOutcomeDoc | null; error: boolean },
+  { doc, absent, error, outcome }: { doc: ReviewFindingsDoc | null; absent: boolean; error: boolean; outcome?: { doc: ReviewOutcomeDoc | null; error: boolean } },
 ): { doc: ReviewFindingsDoc | null; absentNote: boolean; errorNote: boolean; notCurrentNote?: string } {
   const c = reviewCurrency(doc, outcome);
   if (c.kind === 'unknown') return { doc: null, absentNote: false, errorNote: true };
   if (c.kind === 'not-current') {
     return { doc: null, absentNote: false, errorNote: false, notCurrentNote: `No current findings — review failed at ${c.headSha ? c.headSha.slice(0, 7) : 'an unknown head'} (${c.reason}).` };
   }
-  return { doc, absentNote, errorNote };
+  return { doc, absentNote: absent, errorNote: error };
 }
 
 export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false, notCurrentNote }: { doc: ReviewFindingsDoc | null; absentNote?: boolean; errorNote?: boolean; notCurrentNote?: string }) {

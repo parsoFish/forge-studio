@@ -142,13 +142,13 @@ test('an outcome read that FAILED is UNKNOWN — the findings are never presente
 });
 
 test('the no-demo fallback and the verdict view apply the same currency (currentFindingsPanelProps)', () => {
-  const failed = currentFindingsPanelProps(PRIOR, false, false, { doc: FAILED, error: false });
+  const failed = currentFindingsPanelProps({ doc: PRIOR, absent: false, error: false, outcome: { doc: FAILED, error: false } });
   expect(failed.doc).toBeNull();
   expect(failed.notCurrentNote).toBe('No current findings — review failed at 39f76ac (derive-failed: git derivation error for chunk unattributed: spawnSync git ENOBUFS).');
-  expect(currentFindingsPanelProps(PRIOR, false, false, { doc: null, error: true })).toEqual({ doc: null, absentNote: false, errorNote: true });
-  expect(currentFindingsPanelProps(PRIOR, false, false, { doc: null, error: false }).doc).toBe(PRIOR);
+  expect(currentFindingsPanelProps({ doc: PRIOR, absent: false, error: false, outcome: { doc: null, error: true } })).toEqual({ doc: null, absentNote: false, errorNote: true });
+  expect(currentFindingsPanelProps({ doc: PRIOR, absent: false, error: false, outcome: { doc: null, error: false } }).doc).toBe(PRIOR);
   // A failed attempt with NO findings ever on file is still "failed", never "did not run".
-  expect(currentFindingsPanelProps(null, true, false, { doc: FAILED, error: false }).notCurrentNote).toMatch(/^No current findings — review failed at 39f76ac/);
+  expect(currentFindingsPanelProps({ doc: null, absent: true, error: false, outcome: { doc: FAILED, error: false } }).notCurrentNote).toMatch(/^No current findings — review failed at 39f76ac/);
 });
 
 test('a current review names the files it did not review, by reason (the I3a shape: 66 binary + the demo bundle)', async () => {

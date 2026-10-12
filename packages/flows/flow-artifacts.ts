@@ -170,13 +170,7 @@ export function writeVerdictJson(
 ): string | null {
   const p = verdictJsonPath(logsRoot, record.cycleId);
   if (!opts.overwrite && existsSync(p)) return null;
-  try {
-    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
-    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
-    return p;
-  } catch {
-    return null;
-  }
+  return writeCycleJson(logsRoot, record.cycleId, p, record);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,13 +285,7 @@ export function reviewOutcomeJsonPath(logsRoot: string, cycleId: string): string
 /** Persist the review outcome. Always overwrites (latest attempt wins); returns the path, or null on an IO error. */
 export function writeReviewOutcomeJson(logsRoot: string, record: ReviewOutcomeRecord): string | null {
   const p = reviewOutcomeJsonPath(logsRoot, record.cycleId);
-  try {
-    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
-    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
-    return p;
-  } catch {
-    return null;
-  }
+  return writeCycleJson(logsRoot, record.cycleId, p, record);
 }
 
 const FINDING_SEVERITIES = ['blocker', 'major', 'minor', 'info'] as const;
@@ -427,13 +415,7 @@ export function validateReviewFindings(raw: unknown, expected: ReviewFindingsExp
  */
 export function writeReviewFindingsJson(logsRoot: string, record: ReviewFindingsRecord): string | null {
   const p = reviewFindingsJsonPath(logsRoot, record.cycleId);
-  try {
-    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
-    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
-    return p;
-  } catch {
-    return null;
-  }
+  return writeCycleJson(logsRoot, record.cycleId, p, record);
 }
 
 // ---------------------------------------------------------------------------
@@ -471,8 +453,13 @@ export function writeReleaseJson(
 ): string | null {
   const p = releaseJsonPath(logsRoot, record.cycleId);
   if (!opts.overwrite && existsSync(p)) return null;
+  return writeCycleJson(logsRoot, record.cycleId, p, record);
+}
+
+/** The ONE cycle-artifact JSON write (each writer above names only its path): the path written, or null on an IO error. */
+function writeCycleJson(logsRoot: string, cycleId: string, p: string, record: unknown): string | null {
   try {
-    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
+    mkdirSync(resolve(logsRoot, cycleId, 'artifacts'), { recursive: true });
     writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
     return p;
   } catch {
