@@ -8,7 +8,7 @@ keywords:
   - severity
   - agent-brief
   - immutable-gates
-related_themes: [2026-08-22-progressive-disclosure-breaks-link-crawlers]
+related_themes: [2026-08-22-progressive-disclosure-breaks-link-crawlers, 2026-10-10-adversarial-review-stale-findings-after-send-back]
 created_at: "2026-08-22"
 updated_at: "2026-08-22"
 status: historical
@@ -69,3 +69,8 @@ A verification pass is only as good as the artifact its brief demands. Ask for a
 verdict and you get a verdict; ask for a runnable reproduction and its captured
 output and you get verification. Watch the refute rate: **a pass that refutes
 almost nothing has not verified anything** — it has agreed.
+
+## See also
+
+- [[2026-08-22-progressive-disclosure-breaks-link-crawlers]] — same wave; coverage regression from UI paging
+- [[2026-10-10-adversarial-review-stale-findings-after-send-back]] — related class: review re-runs per send-back round and reports stale/false findings
