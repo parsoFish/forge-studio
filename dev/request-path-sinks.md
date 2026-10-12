@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-252 files, 1440 sink calls; 182 classified (accidentally-safe 8, guarded 47, not-request-derived 35, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+253 files, 1441 sink calls; 183 classified (accidentally-safe 8, guarded 47, not-request-derived 36, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -209,6 +209,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/sessions/interactive-agent-step.ts` | 7 | unclassified |  |  |  |
 | `packages/sessions/interactive-finalizers.ts` | 8 | guarded | `resolveGuardedPath` | read | no request field |
 | `packages/sessions/interactive-session.ts` | 5 | guarded |  | read | `dirname(candidatePath)`, where `candidatePath` is the GATED tool's own input (`file_path`/`notebook_path`/`path`) |
+| `packages/sessions/kinds/architect-brain-read.ts` | 1 | not-request-derived |  | read | reads the session's own events.jsonl through the logger's logFilePath (the session dir the architect runner already resolved); no request field reaches the path (forge-mfv5.1.24) |
 | `packages/sessions/kinds/architect-critic.ts` | 8 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/sessions/kinds/architect-plan.ts` | 2 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/sessions/kinds/architect-session.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

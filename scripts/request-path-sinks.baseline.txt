@@ -615,6 +615,7 @@ packages/sessions/interactive-session.ts existsSync 2
 packages/sessions/interactive-session.ts mkdirSync 1
 packages/sessions/interactive-session.ts readFileSync 1
 packages/sessions/interactive-session.ts writeFileSync 1
+packages/sessions/kinds/architect-brain-read.ts readFileSync 1
 packages/sessions/kinds/architect-critic.ts existsSync 3
 packages/sessions/kinds/architect-critic.ts readdirSync 1
 packages/sessions/kinds/architect-critic.ts readFileSync 4

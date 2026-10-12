@@ -863,6 +863,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/sessions/kinds/architect-brain-read.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "read",
+  "note": "reads the session's own events.jsonl through the logger's logFilePath (the session dir the architect runner already resolved); no request field reaches the path (forge-mfv5.1.24)"
+ },
  "packages/sessions/kinds/architect-steps.ts": {
   "class": "guarded",
   "guard": null,
