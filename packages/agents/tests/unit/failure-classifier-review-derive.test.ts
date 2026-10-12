@@ -15,6 +15,7 @@ import { classifyCycleFailure } from '../../failure-classifier.ts';
 function cycleError(message: string): EventLogEntry {
   return {
     event_id: 'e1',
+    cycle_id: 'CY-x',
     initiative_id: 'INIT-x',
     started_at: '2026-10-12T11:40:44.831Z',
     phase: 'orchestrator',
