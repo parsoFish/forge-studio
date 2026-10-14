@@ -12,7 +12,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { FlowRunDetail, type FlowRunDetailProps } from '@/components/studio/FlowRunDetail';
 import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import { InitiativeDetail } from '@/components/studio/InitiativeDetail';
-import type { ProjectRoadmap, Run } from '@/lib/bridge-client';
+import type { ProjectRoadmap } from '@/lib/bridge-client';
+import type { Run } from '@/lib/studio-client';
 
 const BASE_SHA = '93fbaec2a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
