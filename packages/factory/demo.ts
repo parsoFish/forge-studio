@@ -264,6 +264,10 @@ export async function captureCheckpoints(
 
   const beforeDir = join(bundleDir, 'before');
   const afterDir = join(bundleDir, 'after');
+  // forge-nk1y.43: every capture starts empty — media an earlier capture left
+  // under another plan's labels would merge back in as unplanned checkpoints
+  // (gitweave I3a: five, read as "changed", over an all-unchanged capture).
+  for (const d of [beforeDir, afterDir]) rmSync(d, { recursive: true, force: true });
   for (const d of [bundleDir, beforeDir, afterDir]) mkdirSync(d, { recursive: true });
 
   const wtRoot = join(bundleDir, '_trees');

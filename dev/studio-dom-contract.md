@@ -4,7 +4,7 @@
 
 The stories drive Studio by reading `data-*` attributes; the convention (what to mirror, how `data-page-ready` is derived, the disabled-reason and boundary rules) lives in `.claude/rules/studio-ui.md`. This page is the generated inventory of attributes and the values source gives them.
 
-It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 746 attributes.
+It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 747 attributes.
 
 | attribute | values | files |
 |---|---|---|
@@ -197,6 +197,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-demo-element` | (dynamic) | apps/studio/components/studio/project-builder/DemoTimeline.tsx |
 | `data-demo-locked` | `false`, `true` | apps/studio/components/studio/project-builder/DemoTimeline.tsx |
 | `data-demo-mode` | (dynamic) | apps/studio/components/studio/project-builder/DemoTimeline.tsx |
+| `data-demo-outcome` | (dynamic) | apps/studio/components/studio/gate/DecisionCard.tsx |
 | `data-demo-output-count` | (dynamic) | apps/studio/app/templates/page.tsx |
 | `data-demo-region` | `checkpoint-<n>`, (dynamic) | apps/studio/components/studio/gate/CriteriaPane.tsx, apps/studio/components/studio/gate/DemoGallery.tsx |
 | `data-demo-session-id` | (dynamic) | apps/studio/components/studio/project-builder/ContractResolutionPanel.tsx, apps/studio/components/studio/project-builder/DemoTimeline.tsx, apps/studio/components/studio/session/DemoStageHandoff.tsx |

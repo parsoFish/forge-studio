@@ -95,10 +95,13 @@ describe('derivePrBody — delta honesty (forge-mfv5.1.7, CONTROL RED)', () => {
       checkpoints: derived.model.checkpoints.map((c) => ({ ...c, delta: 'unchanged' as const })),
     };
     const body = derivePrBody(model, input());
-    assert.ok(
-      body.includes('No observable behaviour change was captured.'),
+    assert.match(
+      body,
+      /Demo captured no behaviour change — (\d+)\/\1 checkpoints identical\./,
       'a byte-identical before/after capture must say so in the PR body, not leave the reader to assume something changed',
     );
+    // forge-nk1y.43: named at the top of the body, before any section, never only in the evidence list.
+    assert.match(body.split('## Why')[0]!, /> \*\*Demo captured no behaviour change — \d+\/\d+ checkpoints identical\.\*\* The verdict gate asks for your reason before this merges\./);
   });
 
   it('kills "the flag never reaches the reader": each evidence row names its own checkpoint\'s delta in words', () => {
@@ -121,7 +124,8 @@ describe('derivePrBody — delta honesty (forge-mfv5.1.7, CONTROL RED)', () => {
       checkpoints: derived.model.checkpoints.map((c, i) => ({ ...c, delta: i === 0 ? ('changed' as const) : ('unchanged' as const) })),
     };
     const body = derivePrBody(model, input());
-    assert.ok(body.includes('1 of 2 captured checkpoints changed behaviour.'), body);
+    assert.ok(body.includes('1 of 2 checkpoints changed behaviour.'), body);
+    assert.doesNotMatch(body.split('## Why')[0]!, /> \*\*/, 'a changed demo carries no outcome warning');
   });
 
   it('kills "unknown counts as a claim of change": an unknown checkpoint is NAMED, and no "no change" claim is made', () => {
@@ -134,7 +138,8 @@ describe('derivePrBody — delta honesty (forge-mfv5.1.7, CONTROL RED)', () => {
     };
     const body = derivePrBody(model, input());
     assert.ok(body.includes(`checkpoint(s) could not be compared: ${model.checkpoints[0]?.label}`), body);
-    assert.doesNotMatch(body, /No observable behaviour change was captured\./, 'unknown must never be read as "no change"');
+    assert.doesNotMatch(body, /Demo captured no behaviour change/, 'unknown must never be read as "no change"');
+    assert.match(body.split('## Why')[0]!, /> \*\*Demo compared no checkpoint — 1\/1 could not be compared\.\*\*/);
     assert.doesNotMatch(body, /captured checkpoints changed behaviour/, 'unknown must never be counted as a "changed" checkpoint');
   });
 });

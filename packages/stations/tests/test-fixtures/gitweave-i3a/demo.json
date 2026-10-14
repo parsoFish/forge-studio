@@ -1,0 +1,132 @@
+{
+  "title": "I3a \u2014 Green Apply Path",
+  "essence": "I3a \u2014 Green Apply Path \u2014 6 work items delivered against 19 acceptance criteria, 2 merge-boundary gates run. 5 of 11 captured checkpoints changed behaviour. Command output compared after normalising: tap-duration, duration, iso-timestamp, worktree path. API bodies compared as JSON after dropping volatile JSON keys (ids, timestamps, urls, etags, sizes, watchers) and declared ignoreKeys.",
+  "project": "gitweave",
+  "initiativeId": "INIT-2026-10-11-i3a-green-apply-path",
+  "changedRef": "93528a00fd8c2dd485df8c27bd7b5f4168aca018",
+  "diffStat": "69 files changed, 1473 insertions(+), 159 deletions(-)",
+  "acceptanceCriteria": [
+    "(WI-1) GIVEN GW_RESOURCE_PREFIX is set in the environment and FORGE_RESOURCE_PREFIX is unset WHEN plan() is called in fixture mode THEN resources are scoped to names starting with GW_RESOURCE_PREFIX; plan() completes without EnvironmentError and returns a PlanResult",
+    "(WI-1) GIVEN both GW_RESOURCE_PREFIX and FORGE_RESOURCE_PREFIX are set, where FORGE_RESOURCE_PREFIX starts with GW_RESOURCE_PREFIX WHEN plan() is called in fixture mode THEN only resources matching FORGE_RESOURCE_PREFIX (the narrower prefix) are included; a resource matching GW_RESOURCE_PREFIX but not FORGE_RESOURCE_PREFIX is absent from the result",
+    "(WI-1) GIVEN GW_RESOURCE_PREFIX is unset (empty string) and FORGE_RESOURCE_PREFIX is also unset WHEN plan() is called in fixture mode THEN plan() includes all declared resources (prefix is empty string, so all names start with it)",
+    "(WI-2) GIVEN the gitweave-apply.yaml workflow file after this WI WHEN its dry-run-smoke job (name: 'Apply Configuration') is inspected THEN it does NOT invoke scripts/apply-overlays.py; it either runs gw plan --fixture or is rewired to a gw command, or is removed entirely",
+    "(WI-2) GIVEN the gitweave-apply.yaml workflow file after this WI WHEN the apply job env block is inspected THEN GW_RESOURCE_PREFIX is set (e.g. from secrets.GW_RESOURCE_PREFIX or a static value) so gw apply scopes by the ownership marker",
+    "(WI-2) GIVEN the ci.yaml workflow file after this WI WHEN its job names are listed THEN jobs named exactly 'Structural Tests' and 'Dry-Run Smoke Test' exist and are not renamed",
+    "(WI-3) GIVEN GW_RESOURCE_PREFIX is set and the live org is accessible via GW_APP_ID / GW_APP_INSTALLATION_ID / GW_APP_PRIVATE_KEY_PATH WHEN gw apply runs against the live throwaway org THEN exits 0; only resources whose names start with GW_RESOURCE_PREFIX are touched; the org API is called with valid auth",
+    "(WI-3) GIVEN GW_RESOURCE_PREFIX and FORGE_RESOURCE_PREFIX are both set (forge test-isolation mode) WHEN gw apply runs against the live throwaway org THEN exits 0; only resources matching FORGE_RESOURCE_PREFIX are touched (narrowed scope); no resource outside FORGE_RESOURCE_PREFIX is mutated",
+    "(WI-3) GIVEN the live apply acceptance test has run successfully WHEN gw reset runs with GW_RESOURCE_PREFIX set THEN managed resources created by gw apply are removed; exits 0",
+    "(WI-4) GIVEN WI-1 and WI-2 changes are applied to the repository WHEN python3 -m pytest tests/ runs THEN zero test failures; all offline tests pass or skip; no existing test is regressed",
+    "(WI-5) GIVEN FORGE_RESOURCE_PREFIX explicitly unset in the test process (monkeypatch.delenv or env -u) and GW_RESOURCE_PREFIX set WHEN `gw plan`, `gw apply` and `gw reset` run THEN all three succeed and scope every resource decision by GW_RESOURCE_PREFIX; every manager (teams, repos, rulesets, org) uses GitWeave's marker and none references FORGE_RESOURCE_PREFIX as a requirement",
+    "(WI-5) GIVEN FORGE_RESOURCE_PREFIX is set WHEN any gw command runs THEN it must start with GW_RESOURCE_PREFIX and only narrows the scope; a value that does not start with it is refused by name and nothing is changed",
+    "(WI-5) GIVEN the throwaway org after `gw apply` WHEN `gw reset` runs THEN an API read-back (GET of teams, repos and rulesets) shows no resource carrying the GitWeave marker remains \u2014 not exit code alone",
+    "(WI-5) GIVEN the test suite WHEN it is read THEN no autouse fixture sets FORGE_RESOURCE_PREFIX for every test; tests that need it set it explicitly",
+    "(WI-5) GIVEN the PR head WHEN GitHub Actions runs THEN the GitWeave Apply workflow runs on the PR (its path filter covers gitweave/** and the workflow file) and every job, including the live gw apply, is green; Structural Tests and Dry-Run Smoke Test stay green",
+    "(WI-6) GIVEN .github/workflows/gitweave-apply.yaml WHEN its live apply job runs THEN GW_RESOURCE_PREFIX comes from config/org.yaml (read by gw) or a plain workflow value \u2014 never a secret \u2014 and the \"gw apply (live)\" job is green on the PR head",
+    "(WI-6) GIVEN the throwaway org after `gw apply` WHEN `gw reset` runs in the live acceptance test THEN GET of the org's teams, repos and rulesets shows no resource carrying the GitWeave marker remains, asserted on the API response, not on exit code or stdout",
+    "(WI-6) GIVEN the live acceptance tests WHEN they check containment THEN containment is asserted on API state (only marker-owned resources were created or changed), not by scraping gw stdout, and org_settings changes are handled as the declared org-level settings they are",
+    "(WI-6) GIVEN the PR head WHEN GitHub Actions runs THEN every job in GitWeave Apply (Apply Configuration, gw plan, gw apply live) plus Structural Tests and Dry-Run Smoke Test is green, and `python3 -m pytest tests/` has zero failures with no ambient GW_RESOURCE_PREFIX"
+  ],
+  "narrative": "GitWeave now owns its resource scope with GW_RESOURCE_PREFIX as its primary ownership marker. Operators can run gw plan, apply, and reset using only GitWeave's own env var; FORGE_RESOURCE_PREFIX narrows scope in test-isolation runs but is no longer required. The Apply workflow CI is green, the offline suite passes without ambient forge variables, and live apply is verified credential-free in PRs.",
+  "checkpoints": [
+    {
+      "label": "Plan 1: WI-1",
+      "form": "cli-before-after",
+      "caption": "gw plan scopes by GW_RESOURCE_PREFIX alone (FORGE_RESOURCE_PREFIX absent)",
+      "command": "gw plan",
+      "kind": "video",
+      "beforeOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty",
+      "afterOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty",
+      "delta": "unchanged"
+    },
+    {
+      "label": "Plan 2: WI-1",
+      "form": "api-before-after",
+      "caption": "org teams read-back shows only GW_RESOURCE_PREFIX-owned resources",
+      "command": "gw org teams --json",
+      "kind": "video",
+      "beforeOutput": "[stderr] Traceback (most recent call last):\n  File \"/home/parso/.local/bin/gw\", line 8, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 121, in main\n    args.func(args)\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 82, in cmd_org_teams\n    [{\"name\": t.name} for t in TeamsManager(_get_org_client()).list_managed()],\n                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/teams.py\", line 40, in __init__\n    self._prefix = _get_prefix()\n                   ^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/teams.py\", line 21, in _get_prefix\n    raise EnvironmentError(\"GW_RESOURCE_PREFIX must be set and non-empty\")\nOSError: GW_RESOURCE_PREFIX must be set and non-empty",
+      "afterOutput": "[stderr] Traceback (most recent call last):\n  File \"/home/parso/.local/bin/gw\", line 8, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 121, in main\n    args.func(args)\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 82, in cmd_org_teams\n    [{\"name\": t.name} for t in TeamsManager(_get_org_client()).list_managed()],\n                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/teams.py\", line 40, in __init__\n    self._prefix = _get_prefix()\n                   ^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/teams.py\", line 21, in _get_prefix\n    raise EnvironmentError(\"GW_RESOURCE_PREFIX must be set and non-empty\")\nOSError: GW_RESOURCE_PREFIX must be set and non-empty",
+      "delta": "unchanged"
+    },
+    {
+      "label": "Plan 3: WI-1",
+      "form": "api-before-after",
+      "caption": "org rulesets read-back shows only GW_RESOURCE_PREFIX-owned resources",
+      "command": "gw org rulesets --json",
+      "kind": "video",
+      "beforeOutput": "[stderr] Traceback (most recent call last):\n  File \"/home/parso/.local/bin/gw\", line 8, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 121, in main\n    args.func(args)\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 90, in cmd_org_rulesets\n    print(json.dumps(RulesetsManager(_get_org_client()).list_managed(), indent=2))\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 43, in __init__\n    self._prefix = _get_prefix()\n                   ^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 24, in _get_prefix\n    raise EnvironmentError(\"GW_RESOURCE_PREFIX must be set and non-empty\")\nOSError: GW_RESOURCE_PREFIX must be set and non-empty",
+      "afterOutput": "[stderr] Traceback (most recent call last):\n  File \"/home/parso/.local/bin/gw\", line 8, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 121, in main\n    args.func(args)\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 90, in cmd_org_rulesets\n    print(json.dumps(RulesetsManager(_get_org_client()).list_managed(), indent=2))\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 43, in __init__\n    self._prefix = _get_prefix()\n                   ^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 24, in _get_prefix\n    raise EnvironmentError(\"GW_RESOURCE_PREFIX must be set and non-empty\")\nOSError: GW_RESOURCE_PREFIX must be set and non-empty",
+      "delta": "unchanged"
+    },
+    {
+      "label": "Plan 4: WI-6",
+      "form": "cli-before-after",
+      "caption": "gw reset leaves no marker-owned resources in the org",
+      "command": "gw reset",
+      "kind": "video",
+      "beforeOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty for reset",
+      "afterOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty for reset",
+      "delta": "unchanged"
+    },
+    {
+      "label": "Plan 5: WI-4",
+      "form": "cli-before-after",
+      "caption": "offline suite passes with zero failures and no ambient GW_RESOURCE_PREFIX",
+      "command": "python3 -m pytest tests/test_structure.py tests/test_overlay_schema.py tests/test_copier_schema.py tests/test_copier_schema_ci.py --deselect tests/test_structure.py::TestRepoStructure::test_bootstrap_script_exits_zero -q",
+      "kind": "video",
+      "beforeOutput": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed, 1 deselected in 0.21s\n",
+      "afterOutput": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed, 1 deselected in 0.21s\n",
+      "delta": "unchanged"
+    },
+    {
+      "label": "Plan 6: WI-6",
+      "form": "api-before-after",
+      "caption": "apply outputs scoped JSON with GW_RESOURCE_PREFIX; no resources outside marker",
+      "command": "gw apply --json",
+      "kind": "video",
+      "beforeOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty for reset",
+      "afterOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty for reset",
+      "delta": "unchanged"
+    },
+    {
+      "label": "Plan-1-WI-5-1yki11",
+      "kind": "video",
+      "caption": "Plan-1-WI-5-1yki11",
+      "beforeOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty",
+      "afterOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty",
+      "delta": "changed"
+    },
+    {
+      "label": "Plan-2-WI-4-e7s9a2",
+      "kind": "video",
+      "caption": "Plan-2-WI-4-e7s9a2",
+      "beforeOutput": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed, 1 deselected in 0.21s\n",
+      "afterOutput": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed, 1 deselected in 0.21s\n",
+      "delta": "changed"
+    },
+    {
+      "label": "Plan-2-WI-5-e7s9a3",
+      "kind": "video",
+      "caption": "Plan-2-WI-5-e7s9a3",
+      "beforeOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty for reset",
+      "afterOutput": "[stderr] Error: GW_RESOURCE_PREFIX must be set and non-empty for reset",
+      "delta": "changed"
+    },
+    {
+      "label": "Plan-3-WI-2-sw6ji1",
+      "kind": "video",
+      "caption": "Plan-3-WI-2-sw6ji1",
+      "beforeOutput": "[stderr] Traceback (most recent call last):\n  File \"/home/parso/.local/bin/gw\", line 8, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 121, in main\n    args.func(args)\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 90, in cmd_org_rulesets\n    print(json.dumps(RulesetsManager(_get_org_client()).list_managed(), indent=2))\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 27, in __init__\n    self._prefix = _get_prefix()\n                   ^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 16, in _get_prefix\n    raise EnvironmentError(\"FORGE_RESOURCE_PREFIX must be set and non-empty\")\nOSError: FORGE_RESOURCE_PREFIX must be set and non-empty",
+      "afterOutput": "[stderr] Traceback (most recent call last):\n  File \"/home/parso/.local/bin/gw\", line 8, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 121, in main\n    args.func(args)\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/cli.py\", line 90, in cmd_org_rulesets\n    print(json.dumps(RulesetsManager(_get_org_client()).list_managed(), indent=2))\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 27, in __init__\n    self._prefix = _get_prefix()\n                   ^^^^^^^^^^^^^\n  File \"/home/parso/forge/_worktrees/INIT-2026-10-11-i3a-green-apply-path/gitweave/managers/rulesets.py\", line 16, in _get_prefix\n    raise EnvironmentError(\"FORGE_RESOURCE_PREFIX must be set and non-empty\")\nOSError: FORGE_RESOURCE_PREFIX must be set and non-empty",
+      "delta": "changed"
+    },
+    {
+      "label": "Plan-3-WI-4-sw6ji3",
+      "kind": "video",
+      "caption": "Plan-3-WI-4-sw6ji3",
+      "beforeOutput": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed, 1 deselected in 0.21s\n",
+      "afterOutput": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed, 1 deselected in 0.21s\n",
+      "delta": "changed"
+    }
+  ]
+}

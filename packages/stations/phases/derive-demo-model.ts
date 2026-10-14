@@ -23,7 +23,7 @@
  */
 
 import type { DemoStep } from '@forge/contracts';
-import { extractDrivableCommand, extractDemoRoute } from '@forge/contracts';
+import { demoOutcomeHeadline, demoOutcomeOf, extractDrivableCommand, extractDemoRoute } from '@forge/contracts';
 import type { MergeGateEvidence } from '@forge/flows';
 
 import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
@@ -198,15 +198,11 @@ function testEvidenceRows(gateEvidence: readonly GateEvidenceRow[]): TestResultR
 export function deriveDeltaSummary(checkpoints: readonly DemoModelCheckpoint[]): string | null {
   const withDelta = checkpoints.filter((c) => c.delta !== undefined);
   if (withDelta.length === 0) return null;
-  const n = withDelta.length;
-  const changed = withDelta.filter((c) => c.delta === 'changed');
   const unknown = withDelta.filter((c) => c.delta === 'unknown');
   const sentences: string[] = [];
-  if (changed.length > 0) {
-    sentences.push(`${changed.length} of ${n} captured checkpoints changed behaviour.`);
-  } else if (unknown.length === 0) {
-    sentences.push('No observable behaviour change was captured.');
-  }
+  // forge-nk1y.43: the same named outcome the verdict gate heads with.
+  const outcome = demoOutcomeOf(withDelta);
+  if (outcome) sentences.push(`${demoOutcomeHeadline(outcome)}.`);
   if (unknown.length > 0) {
     sentences.push(`${unknown.length} checkpoint(s) could not be compared: ${unknown.map((c) => c.label).join(', ')}`);
   }

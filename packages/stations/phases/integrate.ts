@@ -41,7 +41,7 @@ import {
   runOrchestratorCommand,
 } from '@forge/flows';
 import { loadProjectConfig } from '@forge/projects';
-import type { AgentDefinition } from '@forge/contracts';
+import { demoOutcomeHeadline, demoOutcomeOf, type AgentDefinition, type DemoOutcome } from '@forge/contracts';
 
 import { renderDemoBundle, stripScratchFromDiffStat, type DemoModel } from '../demo-model.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
@@ -120,7 +120,7 @@ function readDelivered(
   return { workItems, acceptanceCriteria };
 }
 
-export type ReviseAfterCaptureResult = { ok: true } | { ok: false; reason: 'delta-revise-failed'; detail: string };
+export type ReviseAfterCaptureResult = { ok: true; outcome: DemoOutcome | null } | { ok: false; reason: 'delta-revise-failed'; detail: string };
 
 /**
  * Delta honesty (forge-mfv5.1.7). `forge demo capture` tags every checkpoint
@@ -167,12 +167,13 @@ export function reviseAfterCapture(
   }
   const deltaSummary = deriveDeltaSummary(model.checkpoints);
   const essence = deltaSummary ? `${baseEssence} ${deltaSummary}`.trim() : baseEssence;
-  const revised: DemoModel = { ...model, essence };
+  const outcome = demoOutcomeOf(model.checkpoints);
+  const revised: DemoModel = { ...model, essence, ...(outcome ? { outcome } : {}) };
   writeFileSync(demoJsonAbs, `${JSON.stringify(revised, null, 2)}\n`);
   renderDemoBundle(demoDirAbs, worktreePath); // re-render DEMO.md from the revised essence
   writeFileSync(prDescriptionAbs, derivePrBody(revised, derivedInput));
-  emit('demo.delta-revised', { delta_summary: deltaSummary });
-  return { ok: true };
+  emit('demo.delta-revised', { delta_summary: deltaSummary, outcome: outcome?.kind ?? null });
+  return { ok: true, outcome };
 }
 
 /** Run the integrate band. Only the planner (when a factory wires one) waits on a model. */
@@ -369,6 +370,10 @@ export async function runIntegrateBand(
     return { status: 'failed', reason: revised.reason, detail: revised.detail };
   }
   const commitResult = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
+  // forge-nk1y.43: a capture that showed no change is a named outcome the verdict gate heads with.
+  if (revised.outcome && revised.outcome.kind !== 'changed') {
+    emit('demo.no-change', { ...revised.outcome, headline: demoOutcomeHeadline(revised.outcome) });
+  }
   emit('demo.capture', {
     capture_ok: true,
     nonce_match: true,
@@ -378,6 +383,6 @@ export async function runIntegrateBand(
     skipped_media: commitResult.skippedMedia,
     duration_ms: cap.durationMs,
   });
-  emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture });
+  emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture, outcome: revised.outcome?.kind ?? null });
   return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
 }

@@ -17,12 +17,15 @@
  *
  * Contract: [data-component="verdict-form"][data-form-state][data-form-kind]
  * [data-initiative-id][data-ac-count][data-blocking-count][data-submit-error];
- * [data-section="verdict-headline"][data-headline=ready|not-ready]; field
+ * [data-section="verdict-headline"][data-headline=ready|not-ready][data-demo-outcome=changed|no-change|unknown|'']
+ * (forge-nk1y.43: a capture that showed no change is named in the headline, approve behind a rationale); field
  * `approve-rationale`; actions `approve-and-merge` (data-emphasis) | `send-back`,
  * `compose-send-back`, `open-reflect`.
  */
 import Link from 'next/link';
 import { useState } from 'react';
+
+import { demoOutcomeHeadline, type DemoOutcome } from '@forge/contracts';
 
 import type { DerivedVerdict } from '@/lib/review-comments-client';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
@@ -42,7 +45,7 @@ const plural = (k: number, one: string, many: string): string => `${k} ${k === 1
 
 export function DecisionCard({
   derived, blockerCount, resolvedCount, initiativeId, submitting, submitted, error, composing,
-  onCompose, onSubmit, onTypedSubmitted, reflectHref, claims, loadError = null, onJumpToBlocker,
+  onCompose, onSubmit, onTypedSubmitted, reflectHref, claims, loadError = null, onJumpToBlocker, demoOutcome = null,
 }: {
   derived: DerivedVerdict;
   blockerCount: number;
@@ -62,25 +65,31 @@ export function DecisionCard({
   loadError?: string | null;
   /** Select / scroll to the first open blocker (absent when there is none). */
   onJumpToBlocker?: () => void;
+  /** What the demo capture found; `null` when nothing was compared. */
+  demoOutcome?: DemoOutcome | null;
 }): JSX.Element {
   const [rationale, setRationale] = useState('');
   const blockedReason = loadError ? `${loadError} — reload the page; the verdict cannot be derived without them` : submitting ? 'the verdict is being submitted' : null;
   const reviewerBlockers = claims.present ? claims.blocker : 0;
   const blocking = blockerCount + reviewerBlockers;
   const noReview = claims.noCurrentReview;
-  // Approving over a reviewer blocker, or with no current review at all, is possible — de-emphasised, behind the operator's reason.
-  const overBlocker = derived.kind === 'approve' && (reviewerBlockers > 0 || noReview !== undefined);
+  const noChange = demoOutcome !== null && demoOutcome.kind !== 'changed';
+  // Approving over a reviewer blocker, with no current review, or over a demo that showed no change
+  // is possible — de-emphasised, behind the operator's reason.
+  const overBlocker = derived.kind === 'approve' && (reviewerBlockers > 0 || noReview !== undefined || noChange);
   const rationaleNeed = reviewerBlockers > 0
     ? `approve over ${plural(reviewerBlockers, 'open reviewer blocker', 'open reviewer blockers')}`
-    : 'approve without a current review';
+    : noReview ? 'approve without a current review' : 'approve with no captured behaviour change';
   const approveReason = blockedReason ?? (overBlocker && rationale.trim() === '' ? `a rationale is required to ${rationaleNeed}` : null);
-  const notReady = blocking > 0 || noReview !== undefined;
+  const notReady = blocking > 0 || noReview !== undefined || noChange;
   const headline = blocking > 0
     ? `Not ready: ${plural(blocking, 'blocking finding', 'blocking findings')}`
     : noReview?.unread
       ? 'Not ready: the review could not be read — reload the page'
       : noReview
       ? `Not ready: no current review — it failed at ${noReview.headSha ? noReview.headSha.slice(0, 7) : 'an unknown head'}`
+      : noChange && demoOutcome
+      ? `Not ready: ${demoOutcomeHeadline(demoOutcome)}`
       : 'Ready to approve and merge';
   const primaryBtn: React.CSSProperties = { flex: 1, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-md)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', padding: 'var(--space-2) var(--space-4)', border: '1px solid var(--ember)', background: 'var(--ember)', color: 'var(--accent-fg)' };
   const secondaryBtn: React.CSSProperties = { ...miniBtn, flex: 1, fontSize: 'var(--text-md)', fontWeight: 600, padding: 'var(--space-2) var(--space-4)', color: 'var(--text)' };
@@ -135,7 +144,7 @@ export function DecisionCard({
         </>
       ) : (
         <>
-          <h2 data-section="verdict-headline" data-headline={notReady ? 'not-ready' : 'ready'} style={{ ...title, color: notReady ? 'var(--amber)' : undefined }}>
+          <h2 data-section="verdict-headline" data-headline={notReady ? 'not-ready' : 'ready'} data-demo-outcome={demoOutcome?.kind ?? ''} style={{ ...title, color: notReady ? 'var(--amber)' : undefined }}>
             {headline}
           </h2>
           <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
