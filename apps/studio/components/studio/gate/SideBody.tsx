@@ -15,7 +15,7 @@ export function SideBody({ media, mode, side, size }: { media: SideMedia; mode: 
   }
   if (mode === 'output' || (mode === 'video' && !media.video)) {
     return (
-      <pre data-captured-output style={{ margin: 0, height: '100%', overflow: 'auto', padding: 'var(--space-2) var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: size === 'large' ? 'var(--text-md)' : 'var(--text-xs)', lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+      <pre data-captured-output style={{ margin: 0, height: '100%', overflow: 'auto', padding: 'var(--space-2) var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: size === 'large' ? 'var(--text-md)' : 'var(--text-base)', lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
         {media.output || '(no output captured)'}
       </pre>
     );
