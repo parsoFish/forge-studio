@@ -32,6 +32,7 @@ import type { NodeExecContext } from '../../flow-node-context.ts';
 import type { CycleInput } from '../../cycle-context.ts';
 import { serializeManifest, type InitiativeManifest } from '../../manifest.ts';
 import { rebaseForResume } from '../../cycle-helpers.ts';
+import { errText, rebasePreservedBranchOntoMain } from '../../pr-branch-sync.ts';
 
 const INITIATIVE = 'INIT-2026-10-14-start-rebase';
 const BRANCH = `forge/${INITIATIVE}`;
@@ -233,4 +234,29 @@ test('resume entry is labelled resume: resumeFrom "develop" emits entry:"resume"
   } finally {
     g.cleanup();
   }
+});
+
+test('refusal: a preserved worktree checked out on main itself is refused by name — main is never rebased or pushed', () => {
+  const g = ground();
+  try {
+    g.git(['checkout', '-q', 'main']);
+    commitFile(g.git, g.project, 'local.txt', 'local only\n', 'local main commit');
+    mergeDependencyOnOrigin(g);
+    const before = g.git(['rev-parse', 'HEAD']);
+    const originMain = g.gitIn(join(g.root, 'origin.git'))(['rev-parse', 'main']);
+    const res = rebasePreservedBranchOntoMain(g.project);
+    assert.equal(res.ok, false);
+    assert.match(res.reason ?? '', /on main itself/);
+    assert.equal(g.git(['rev-parse', 'HEAD']), before, 'local main untouched');
+    assert.equal(g.gitIn(join(g.root, 'origin.git'))(['rev-parse', 'main']), originMain, 'origin main never pushed');
+  } finally {
+    g.cleanup();
+  }
+});
+
+test('errText masks a credential embedded in a remote URL before it reaches an event', () => {
+  const err = { stderr: "fatal: unable to access 'https://x-access-token:ghp_SECRET123@github.com/o/r.git/': 403" };
+  const text = errText(err);
+  assert.ok(!text.includes('ghp_SECRET123'), text);
+  assert.match(text, /https:\/\/\*\*\*@github\.com/);
 });

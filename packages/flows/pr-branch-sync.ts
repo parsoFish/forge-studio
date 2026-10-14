@@ -262,6 +262,7 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
     catch { return { ok: false, rebased: false, base: 'main', ...unresolved, reason: 'no main/master branch to rebase onto' }; }
   }
   if (!branch) return { ok: false, rebased: false, base, ...unresolved, reason: 'detached HEAD or not a git repo' };
+  if (branch === base) return { ok: false, rebased: false, base, ...unresolved, reason: `the preserved worktree is on ${base} itself — refusing to rebase or push the base branch` };
 
   const hasOrigin = (() => {
     try { git(['remote', 'get-url', 'origin']); return true; } catch { return false; }
@@ -311,11 +312,11 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
   return { ok: true, rebased: true, base: target, ...rebasedShas, ...withFetch };
 }
 
-/** git's stderr (or the error message), bounded for an event field. */
-function errText(err: unknown): string {
+/** git's stderr (or the error message), bounded for an event field, with any `scheme://user:secret@` credential in a remote URL masked. */
+export function errText(err: unknown): string {
   const e = err as { stderr?: Buffer | string; message?: string };
   const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-  return (stderr || e.message || '').slice(0, 300);
+  return (stderr || e.message || '').replace(/([a-z][a-z0-9+.-]*:\/\/)[^@\s/]+@/gi, '$1***@').slice(0, 300);
 }
 
 export type LocalRemoteInvariant = {
