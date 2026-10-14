@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 155 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 156 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -55,20 +55,20 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 9 | 1,854 | **1,854** | ratified 1,854 — forge-mfv5.1.37: `Run.runBase`, the commit a run's dev loop started on; +2 measured on main 1,852, lane-ratified (≤100, ruling 666). |
-| `kernel` | 41 | 6,945 | **5,798** | ratified 5,798 — forge-mfv5.1.28: `isText`/`stringList`, the one request-body list check every send-back and Kickoff-gate door uses; +10 measured on main 5,788, lane-ratified (≤100, ruling 666). |
+| `kernel` | 42 | 7,043 | **5,896** | ratified 5,896 — forge-nk1y.42: `run-prefix.ts` (`demoMeans.run` validation + the tree's own pyproject commands) and the in-tree-first checkpoint head resolver; +98 measured on main 5,798 after trimming its comments 122 → 98, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 53 | 11,961 | **10,164** | ratified 10,164 — forge-mfv5.1.32: the project page edits demoMeans and acceptance (`project-declarations.ts`, PUT patch with stray-key refusal); +16 measured on main 10,148 (after #1203), lane-ratified (≤100, ruling 666). |
+| `projects` | 53 | 11,978 | **10,181** | ratified 10,181 — forge-nk1y.42: `demoMeans.run` parsed and validated (the run prefix that makes a capture command execute the tree under capture); +17 measured on main 10,164, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 44 | 12,529 | **12,532** | ratified 12,532 — row 211 (forge-8vfn.8.5.47): the `FORGE_AGENT_SPAWN` overlay, +50 (measured ceiling), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 94 | 26,144 | **25,945** | ratified 25,945 — forge-mfv5.1.37: a develop Start onto a preserved branch rebases at entry, fail-closed on fetch, shas in the event, `deriveRunBase`; +97 measured on main 25,848, lane-ratified (≤100, ruling 666). |
-| `factory` | 17 | 3,088 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 53 | 13,131 | **13,131** | ratified 13,131 — forge-nk1y.39: `review-input-scope.ts` (bounded git buffer; binaries + the orchestrator-only demo bundle named, not derived) and the review's outcome record; +94 measured on main 13,037 after culling stale comment blocks, lane-ratified (≤100, ruling 666). |
+| `flows` | 94 | 26,171 | **25,972** | ratified 25,972 — forge-nk1y.42: the capture preflight reads the project's `demoMeans.run` (`projectRunPrefixes`) and refuses a head outside the tree; +27 measured on main 25,945 (after #1211), lane-ratified (≤100, ruling 666). |
+| `factory` | 17 | 3,097 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 53 | 13,164 | **13,164** | ratified 13,164 — forge-nk1y.42: the demo planner's one revise turn, told why its plan was refused at preflight; +33 measured on main 13,131, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,171 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **526** | **137,188** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **527** | **137,372** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -134,7 +134,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
 | packages/knowledge/brain-lint.ts | knowledge | verbatim | 668 |
 | packages/flows/cost-by-class.ts | flows | rewritten | 98 |
-| packages/flows/demo-checkpoint-preflight.ts | flows | rewritten | 92 |
+| packages/flows/demo-checkpoint-preflight.ts | flows | rewritten | 94 |
 | packages/flows/bridge-hooks.ts | flows | verbatim | 394 |
 | packages/flows/bridge-recovery.ts | flows | verbatim | 394 |
 | packages/flows/halt-watch.ts | flows | rewritten | 38 **New file, row 207 (forge-8vfn.8.5.57):** the serve tick's view of the emergency halt — logs on transition and at most every `HALT_REMINDER_MS`. |
@@ -229,7 +229,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/preflight.ts | projects | pruned | 306 |
 | packages/projects/preflight-build.ts | projects | verbatim | 138 |
 | packages/projects/preflight-demo.ts | projects | verbatim | 179 |
-| packages/projects/demo-means.ts | projects | rewritten | 77 |
+| packages/projects/demo-means.ts | projects | rewritten | 94 |
 | packages/projects/demo-plan.ts | projects | rewritten | 95 |
 | packages/projects/preflight-gate.ts | projects | verbatim | 281 |
 | packages/projects/preflight-instructions.ts | projects | verbatim | 135 |
@@ -462,7 +462,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
 | packages/stations/demo-delta.ts | stations | verbatim | 145 |
 | packages/stations/demo-form.ts | stations | rewritten | 73 |
-| packages/stations/demo-planner-port.ts | stations | rewritten | 77 |
+| packages/stations/demo-planner-port.ts | stations | rewritten | 110 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 292 |
 | packages/stations/demo-model.ts | stations | verbatim | 791 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 374 |
@@ -589,12 +589,12 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 194 |
 | packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/factory/demo.ts | factory | verbatim | 452 |
+| packages/factory/demo.ts | factory | verbatim | 458 |
 | packages/factory/demo-api-capture.ts | factory | rewritten | 42 |
-| packages/factory/demo-planner.ts | factory | rewritten | 83 |
+| packages/factory/demo-planner.ts | factory | rewritten | 86 |
 | packages/flows/index.ts | flows | verbatim | 140 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
-| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 441 |
+| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 466 |
 | packages/flows/pr.ts | flows | verbatim | 443 |
 | packages/flows/pr-media.ts | flows | rewritten | 157 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
@@ -604,8 +604,9 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/gh-identity.ts | kernel | verbatim | 111 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 158 |
-| packages/kernel/index.ts | kernel | verbatim | 116 |
-| packages/kernel/checkpoint-command.ts | kernel | rewritten | 88 **New file, forge-8vfn.30.9: the one checkpoint-command head resolver (PATH, then a contained package.json bin) shared by the pre-claim check and the capture spawn.** |
+| packages/kernel/index.ts | kernel | verbatim | 119 |
+| packages/kernel/checkpoint-command.ts | kernel | rewritten | 125 **New file, forge-8vfn.30.9: the one checkpoint-command head resolver (in-tree first: run prefix, contained package.json bin, then PATH for system tools only — forge-nk1y.42) shared by the pre-claim check and the capture spawn.** |
+| packages/kernel/run-prefix.ts | kernel | rewritten | 58 **New file, forge-nk1y.42: `demoMeans.run` validation (no shell, no absolute path, no `..`, never the head itself) and the tree's own pyproject commands.** |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 336 |
 | packages/kernel/tool-fence.ts | kernel | rewritten | 94 **Written for bead `forge-a9o9` (T1 rulings 670/691) — deny-by-default tool access, with no enumeration anywhere. Here rather than beside `makeToolEventSink` in `agents` because the spawn paths that need it span `sessions`, `agents` and `factory`, and the kernel is the only layer all three already stand on; `spawn-env.ts` next door settled the same class for env vars.** |

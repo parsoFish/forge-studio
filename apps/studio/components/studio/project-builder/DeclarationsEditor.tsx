@@ -3,7 +3,7 @@
 /**
  * forge-mfv5.1.32 — the demo means and the live-acceptance tier, edited on the project page and saved
  * with it. The demo-builder session adds the commands its captures drive to `demoMeans` when it locks.
- * Contract: fields `demo-means-commands|routes|api-paths|api-commands|ignore-keys`, `acceptance-match`,
+ * Contract: fields `demo-means-commands|routes|api-paths|api-commands|ignore-keys|run`, `acceptance-match`,
  * `acceptance-requires-env`; `[data-declarations-error]` names a refusal.
  */
 import { declarationsFromForm, type DeclarationsForm } from '@/lib/project-declarations';
@@ -16,6 +16,7 @@ const FIELDS: Array<{ key: keyof DeclarationsForm; field: string; title: string;
   { key: 'apiPaths', field: 'demo-means-api-paths', title: 'API paths', hint: 'GETs on the tree’s own server' },
   { key: 'apiCommands', field: 'demo-means-api-commands', title: 'API commands', hint: 'the project’s CLI printing JSON' },
   { key: 'ignoreKeys', field: 'demo-means-ignore-keys', title: 'Ignored keys', hint: 'volatile JSON keys, any depth' },
+  { key: 'run', field: 'demo-means-run', title: 'Run prefixes', hint: 'command = in-tree prefix, e.g. gw = python3 -m gitweave.cli' },
 ];
 
 export function DeclarationsEditor({ value, onChange }: { value: DeclarationsForm; onChange: (next: DeclarationsForm) => void }) {

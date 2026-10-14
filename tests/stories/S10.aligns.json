@@ -26,7 +26,7 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-15",
-      "digest": "e2b691192b7bfa2a",
+      "digest": "2dfea6b1fc4a5f7e",
       "why": "D-15: The integrate station assembles evidence for review before any human or agent judges it; gates are orchestrator verbs (plan gate, review gate, merge)"
     },
     {

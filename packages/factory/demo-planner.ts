@@ -29,6 +29,9 @@ export function renderDemoPlannerPrompt(input: DemoPlannerInput): string {
     `API paths on the tree's own server (api-before-after):\n${list(input.allowed.apiPaths)}`,
     `Routes (screenshot):\n${list(input.allowed.routes)}`,
     '',
+    ...(input.revise
+      ? [`## Revise: your last plan was sent back\n\nWhy: ${input.revise.reason}\n\n${input.revise.details.map((d) => `- ${d}`).join('\n')}\n`, 'Choose means that avoid this, from the allowed means only.', '']
+      : []),
     'Reply with the plan JSON only.',
   ].join('\n');
 }

@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-253 files, 1437 sink calls; 183 classified (accidentally-safe 8, guarded 47, not-request-derived 36, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+254 files, 1442 sink calls; 184 classified (accidentally-safe 8, guarded 47, not-request-derived 37, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -97,7 +97,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/work-item.ts` | 11 | guarded |  | read | `hasWorkItemFiles` moved here from enqueue-flow-run.ts and `rawWorkItemStatuses` added (forge-mfv5.1.25): reads WI dirs under `_logs/<cycle_id>`, the manifest worktree and `_worktrees/<initiative_id>`; kickoff-facts.ts checks isCanonicalInitiativeId and validateManifestPathFields (cycle_id segment, worktree/repo containment) before any path is built, and reads nothing when they fail. |
 | `packages/flows/worktree.ts` | 16 | unclassified |  |  |  |
 | `packages/kernel/case-folding-probe.ts` | 4 | not-request-derived |  | read | Not a route: reached from `POST /api/agents/:slug/run` via `packages/agents/materials-staging.ts` and from `POST… |
-| `packages/kernel/checkpoint-command.ts` | 5 | not-request-derived | `resolveDeclaredBin containment + realpath re-check` | exec | checkpoint command head and the claim's worktree; reads the worktree package.json, never a request field |
+| `packages/kernel/checkpoint-command.ts` | 8 | not-request-derived | `resolveDeclaredBin containment + realpath re-check; a path-bearing head is lexically and realpath contained` | exec | checkpoint command head, the project's own demoMeans.run, and the claim's worktree; reads the worktree package.json, never a request field |
 | `packages/kernel/claude-cli-path.ts` | 1 | not-request-derived |  | read | Not a route: the SDK spawn path, read once per `query()` |
 | `packages/kernel/config.ts` | 5 | not-request-derived |  | exec | `GET /api/studio/projects/starters` via `packages/projects/project-roster.ts`'s `handleProjectsStarters` |
 | `packages/kernel/contained-read.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
@@ -113,6 +113,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/kernel/path-guard.ts` | 13 | unguarded |  | exec | any caller with a multi-segment tail |
 | `packages/kernel/process-liveness.ts` | 5 | other |  | read | no request field |
 | `packages/kernel/project-layout.ts` | 6 | not-request-derived |  | read | Not a route: reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s `mintRemote` |
+| `packages/kernel/run-prefix.ts` | 2 | not-request-derived | `fixed leaf pyproject.toml under the capture worktree` | read | reads the capture worktree's pyproject.toml for the commands the tree installs itself; the worktree is the claim's, never a request field |
 | `packages/kernel/served-file.ts` | 2 | guarded | `guardedFile` | exec | forge-mfv5.1.29: `guardedByteReader` stats and streams ONLY the path `guardedFile(root, segments, 'read')` returned (leaf-inclusive identity + containment); reached from `GET /api/artifact/<cycleId>/<filename>` in `apps/forge/bridge-cycle-data.ts`. Pinned by `apps/forge/tests/contract/artifact-media-serving.test.ts` (symlinked leaf and `..` refused) and `packages/kernel/tests/unit/served-file.test.ts`. |
 | `packages/kernel/studio-object.ts` | 2 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/kernel/studio/yaml-fields.ts` | 1 | unclassified |  |  |  |

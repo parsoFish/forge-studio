@@ -182,3 +182,62 @@ describe('D-45: the planner picks the form and the narrative; the orchestrator v
     assert.ok(!existsSync(join(demoDir(), 'demo.json')));
   });
 });
+
+// forge-nk1y.42: a plan whose command would run a PATH copy of the tree's own
+// command is refused at preflight, and the planner gets ONE revise turn told why.
+describe('nk1y.42: an unproducible plan gets one revise turn, told why', () => {
+  const GW = 'gw plan';
+  let savedPath: string | undefined;
+  beforeEach(() => {
+    const stale = join(root, '..', `${root.split('/').pop()}-stale-bin`);
+    mkdirSync(stale, { recursive: true });
+    writeFileSync(join(stale, 'gw'), '#!/bin/sh\necho stale\n', { mode: 0o755 });
+    savedPath = process.env.PATH;
+    process.env.PATH = `${stale}:${savedPath ?? ''}`;
+    writeFileSync(join(root, 'pyproject.toml'), '[project.scripts]\ngw = "gitweave.cli:main"\n');
+    writeFileSync(join(root, '.forge', 'project.json'), JSON.stringify({
+      name: 'gitweave', testProcess: { local: { cmd: ['npm', 'test'] } }, demoMeans: { commands: [GW, CLI_CMD] },
+    }));
+  });
+  afterEach(() => {
+    process.env.PATH = savedPath;
+    rmSync(join(root, '..', `${root.split('/').pop()}-stale-bin`), { recursive: true, force: true });
+  });
+
+  const plan = (command: string): DemoPlannerOutcome => ({
+    ok: true, costUsd: 0.01, raw: { narrative: NARRATIVE, checkpoints: [{ form: 'cli-before-after', caption: 'c', acRef: 'WI-1', command }] },
+  });
+  function sequence(outcomes: DemoPlannerOutcome[], seen: DemoPlannerInput[]): DemoPlannerPort {
+    return { plan: async (_def, input) => { seen.push(input); return outcomes[Math.min(seen.length - 1, outcomes.length - 1)]!; } };
+  }
+
+  it('the revise turn is told the refusal by name, and its producible plan is captured', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(GW), plan(CLI_CMD)], seen));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0]!.revise, undefined);
+    assert.match(seen[1]!.revise!.reason, /not producible/);
+    assert.match(seen[1]!.revise!.details.join('\n'), /`gw` resolves to .*stale-bin\/gw outside the capture tree .*demoMeans\.run/);
+    assert.ok(messages().includes('demo.plan.revise'));
+    const demo = JSON.parse(readFileSync(join(demoDir(), 'demo.json'), 'utf8'));
+    assert.equal(demo.checkpoints[0].command, CLI_CMD);
+  });
+
+  it('ONE chance: a revise that is still unproducible fails the band by name, no capture', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(GW), plan(GW)], seen));
+    assert.equal(seen.length, 2);
+    assert.equal(result.status === 'failed' && result.reason, 'tooling-unavailable');
+    assert.match(result.status === 'failed' ? result.detail : '', /outside the capture tree/);
+    assert.ok(!existsSync(join(root, 'capture-ran')));
+  });
+
+  it('a producible plan is never sent back', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(CLI_CMD)], seen));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 1);
+    assert.ok(!messages().includes('demo.plan.revise'));
+  });
+});
