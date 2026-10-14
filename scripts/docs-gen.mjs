@@ -63,9 +63,10 @@ function example(node) {
   return 'text';
 }
 
-/** Every object level, depth first in schema order: [{path, obj}]. */
+/** Every object level that declares fields, depth first in schema order: [{path, obj}].
+ *  A map (no `properties`, only `additionalProperties`) is described by its parent's row. */
 function levels(obj, path = '') {
-  const out = [{ path, obj }];
+  const out = path === '' || Object.keys(obj.properties ?? {}).length > 0 ? [{ path, obj }] : [];
   for (const [name, node] of Object.entries(obj.properties ?? {})) {
     const o = objectOf(node);
     if (o) out.push(...levels(o.obj, (path ? path + '.' : '') + name + o.suffix));
