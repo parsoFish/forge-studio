@@ -63,12 +63,13 @@ top-level blocks under the identity line:
 │ Acceptance criteria (19)         │ Adversarial review · reviewed e0a0a56 ≠  │  2 review
 │ MET  WI-1 GIVEN … (1 line)       │ head 0162a36   [Findings|Why·what·how]   │    --pane-md
 │ … scrolls inside                 │ WI-1 title · 2-line summary · findings   │
-├──────────────┬───────────────────┴──────────────────────────────────────────┤
-│ WI-1 ⬡ track │ [CHANGED] caption  $ command                      [Comment]  │  3 demo
-│   ⬢ changed  │ BEFORE (output|frame|video)   AFTER (output|frame|video)    │    --pane-xl
-│   ⬡ unchgd   │ ≥ 600 px each, click → <dialog> lightbox                     │
-│ WI-2 …       │ what differs (diff excerpt, --pane-xs)                       │
-├──────────────┴──────────────────────────────────────────────────────────────┤
+├──────────────────────────────────┴──────────────────────────────────────────┤
+│ WI-1 ─⬡─⬢─⬡─ WI-2 ─⬡─⬢─ …   station strip, --pane-xs, scrolls sideways       │  3 demo
+│ [CHANGED] caption  $ command                                      [Comment]  │    one
+│ BEFORE 16:9 (output|frame|video)      AFTER 16:9 (output|frame|video)        │    viewport
+│ ≥ 720 px each (743 at 1600), click → <dialog> lightbox                       │
+│ what differs (diff excerpt, --pane-xs)                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
 │ ▸ Work items, test runs and changed files                                    │  4 details
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -78,12 +79,14 @@ top-level blocks under the identity line:
 | identity | (none) | 48 | crumb, h1, status pill, artifact trail as one row of chips |
 | 1 decision | `gate-decision` | 330 | narrative (labelled), six measured facts, the decision card |
 | 2 review | `review` → `ac-verdicts`, `review-findings` | 282 | criteria and findings side by side, each `--pane-md` and scrolling inside |
-| 3 demo | `demo-comparison` | 522 | checkpoint rail plus one checkpoint at a time, `--pane-xl` |
+| 3 demo | `demo-comparison` | 755 | a checkpoint strip above one checkpoint at a time, the pair in 16:9 boxes (media pair pane, forge-nk1y.44) |
 | 4 details | `demo-details` | 44 closed | work items, gate runs, changed files (collapsed: secondary) |
 
 The mock measures **1,426 px** tall and 1,600 px wide. The approve button
 sits at y = 358–412, and 0 of 20 regions overflow. A 1,000 px viewport shows
 blocks 1 and 2 whole and the top of the demo.
+With the media pair pane (forge-nk1y.44) the built gate measures 1,840 px on
+the gitweave I3a verdict, each side 743×418.
 
 ### Block 1: the decision
 
