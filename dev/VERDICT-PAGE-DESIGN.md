@@ -132,15 +132,18 @@ blocks 1 and 2 whole and the top of the demo.
 
 ### Block 3: the demo
 
-- **Rail (the signature).** The checkpoints are grouped by work item on a
-  station track. Each stop is a hex node: filled ember for *changed*, hollow
-  for *unchanged*, amber for *unknown*. Each stop also carries the delta
-  word and the caption. The track is forge's flow vocabulary (stations on a
-  line) applied to evidence.
-- **Viewer.** One checkpoint at a time. It shows the delta stamp
-  (`CHANGED` / `UNCHANGED` / `UNKNOWN` by name), the caption, the exact
+- **Strip (the signature).** The checkpoints are grouped by work item on a
+  station track that runs across the top of the block, `--pane-xs` tall and
+  scrolling sideways. Each stop is a hex node: filled ember for *changed*,
+  hollow for *unchanged*, amber for *unknown*. Each stop also carries the
+  delta word and the caption. The track is forge's flow vocabulary (stations
+  on a line) applied to evidence.
+- **Viewer.** One checkpoint at a time, below the strip. It shows the delta
+  stamp (`CHANGED` / `UNCHANGED` / `UNKNOWN` by name), the caption, the exact
   command, a Comment button (the checkpoint's `[data-demo-region]`), then
-  before and after side by side at ≥ 600 px each. Each side switches between
+  before and after side by side across the full width, each a 16:9 box at
+  least 720 px wide (the media pair pane, UI-CONSTRAINTS §2; forge-nk1y.44
+  measured the old column layout at about 544×306 per side). Each side switches between
   output (default when stdout was captured), frame and video (inline
   `<video>` from the artifact route, present when recorded). Below them is
   the delta excerpt with added and removed lines coloured, contained at

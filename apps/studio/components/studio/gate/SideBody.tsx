@@ -21,7 +21,7 @@ export function SideBody({ media, mode, side, size }: { media: SideMedia; mode: 
     );
   }
   if (mode === 'video' && media.video) {
-    return <video controls preload="metadata" playsInline src={media.video} style={{ width: '100%', height: '100%', display: 'block', background: 'var(--bg)' }} />;
+    return <video controls preload="metadata" playsInline src={media.video} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: 'var(--bg)' }} />;
   }
   return <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-base)', color: 'var(--dim)' }}>{media.note || '—'}</div>;
 }

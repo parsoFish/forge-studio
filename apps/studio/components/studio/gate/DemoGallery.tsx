@@ -1,18 +1,22 @@
 'use client';
 
 /**
- * The demo on the verdict gate (forge-mfv5.1.31): a station-track rail of the
+ * The demo on the verdict gate (forge-mfv5.1.31): a station track of the
  * checkpoints grouped by work item (hex node filled = changed, hollow =
- * unchanged, amber = unknown) and ONE checkpoint at a time, before and after
- * side by side, contained in a `--pane-xl` pane. A command checkpoint opens on
- * its captured stdout (the frames are 320 px stills — forge-nk1y.30); frame
- * and video are one press away; either side enlarges into a <dialog>.
+ * unchanged, amber = unknown) running ACROSS the top as a strip, and ONE
+ * checkpoint at a time below it, before and after side by side across the full
+ * gate width — each side a 16:9 box at least `--pane-xl` + `--pane-md` wide
+ * (forge-nk1y.44, the UI-CONSTRAINTS §2 media pair pane; it was ~544x306 beside
+ * a column rail in a fixed 480 px pane). A command checkpoint opens on its
+ * captured stdout; frame and video are one press away in the same box; either
+ * side enlarges into a <dialog>.
  *
  * The evidence was captured by the orchestrator (D-15); nothing here grades
  * it. DOM: [data-section="demo-comparison"], the selected checkpoint's header
  * is its comment region (`[data-demo-region="checkpoint-<n>"]`, n 1-based) and
  * carries [data-checkpoint][data-checkpoint-kind][data-checkpoint-delta];
- * [data-side][data-media-kind]; actions `select-checkpoint`, `media-mode`,
+ * the strip is `nav[data-rail="strip"]`, the pair `[data-section="demo-pair"]`,
+ * each side's box `[data-media-box]`; [data-side][data-media-kind]; actions `select-checkpoint`, `media-mode`,
  * `enlarge-evidence`.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -88,11 +92,11 @@ export function DemoGallery({
           {checkpoints.length} checkpoint{checkpoints.length === 1 ? '' : 's'} · {changed} changed · captured by the orchestrator, before and after · press either side to enlarge
         </span>
       </header>
-      <div style={{ display: 'grid', gridTemplateColumns: 'calc(var(--pane-md) + var(--space-5)) minmax(0, 1fr)', height: 'var(--pane-xl)' }}>
-        <nav aria-label="Checkpoints" style={{ borderRight: '1px solid var(--line)', overflowY: 'auto', padding: 'var(--space-2) 0' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <nav aria-label="Checkpoints" data-rail="strip" style={{ display: 'flex', alignItems: 'stretch', gap: 'var(--space-4)', height: 'var(--pane-xs)', overflowX: 'auto', overflowY: 'hidden', borderBottom: '1px solid var(--line)', padding: '0 var(--space-4)' }}>
           {groups.map((g) => (
-            <div key={`${g.wi}-${g.items[0]!.index}`}>
-              <div style={{ ...wiTag, padding: 'var(--space-2) var(--space-4) var(--space-1)' }}>{g.wi || 'checkpoints'}</div>
+            <div key={`${g.wi}-${g.items[0]!.index}`} style={{ display: 'flex', alignItems: 'stretch', flex: 'none' }}>
+              <div style={{ ...wiTag, alignSelf: 'center', paddingRight: 'var(--space-2)' }}>{g.wi || 'checkpoints'}</div>
               {g.items.map(({ index, cp: c }) => (
                 <Stop key={index} label={c.caption || c.label} delta={c.delta ?? 'unknown'} current={sel.kind === 'checkpoint' && sel.index === index}
                   commentCount={comments.filter((x) => x.region === `checkpoint-${index + 1}`).length} blocking={blockingIn(`checkpoint-${index + 1}`)}
@@ -101,8 +105,8 @@ export function DemoGallery({
             </div>
           ))}
           {apiDiff.length > 0 && (
-            <div>
-              <div style={{ ...wiTag, padding: 'var(--space-2) var(--space-4) var(--space-1)' }}>API</div>
+            <div style={{ display: 'flex', alignItems: 'stretch', flex: 'none' }}>
+              <div style={{ ...wiTag, alignSelf: 'center', paddingRight: 'var(--space-2)' }}>API</div>
               {apiDiff.map((d, index) => (
                 <Stop key={index} label={`${d.name} (${d.change})`} delta="changed" current={sel.kind === 'apidiff' && sel.index === index}
                   commentCount={comments.filter((x) => x.region === `apidiff-${index + 1}`).length} blocking={blockingIn(`apidiff-${index + 1}`)}
@@ -112,7 +116,7 @@ export function DemoGallery({
           )}
         </nav>
 
-        <div style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minWidth: 0, overflowY: 'auto' }}>
+        <div style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minWidth: 0 }}>
           {cp && media && (
             <>
               <div
@@ -137,7 +141,7 @@ export function DemoGallery({
               {cp.kind === 'harness' && cp.metrics && cp.metrics.length > 0 ? (
                 <MetricRows rows={cp.metrics} />
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--space-4)' }}>
+                <div data-section="demo-pair" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, calc(var(--pane-xl) + var(--pane-md))), 1fr))', gap: 'var(--space-4)' }}>
                   {(['before', 'after'] as const).map((side) => (
                     <SidePanel key={side} side={side} media={media[side]} mode={modeOf(side)}
                       onMode={(m) => setModes((prev) => ({ ...prev, [side]: m }))}
@@ -196,26 +200,27 @@ function Stop({ label, delta, current, commentCount, blocking, attrs, onClick }:
       data-delta={delta}
       data-stop-blocking={blocking}
       aria-current={current ? 'true' : undefined}
+      title={label}
       onClick={onClick}
       style={{
-        position: 'relative', display: 'grid', gridTemplateColumns: 'var(--space-4) minmax(0, 1fr)', gap: 'var(--space-2)', alignItems: 'start',
-        width: '100%', textAlign: 'left', border: 0, cursor: 'pointer', padding: 'var(--space-1) var(--space-4)',
+        position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 'var(--space-1)',
+        width: 'var(--pane-sm)', flex: 'none', textAlign: 'left', border: 0, cursor: 'pointer', padding: 'var(--space-1) var(--space-2)',
         background: current ? 'var(--panel-2)' : 'none', color: 'inherit',
       }}
     >
-      {/* the track */}
-      <span aria-hidden style={{ position: 'absolute', left: 'calc(var(--space-4) + var(--space-2) - var(--space-1) / 4)', top: 0, bottom: 0, width: 'calc(var(--space-1) / 2)', background: 'var(--line)' }} />
-      {/* the station: a hex, filled when the evidence changed */}
-      <span aria-hidden style={{ position: 'relative', width: 'var(--space-4)', height: 'calc(var(--space-4) + var(--space-1) / 2)', marginTop: 'calc(var(--space-1) / 2)', clipPath: 'var(--hex-clip)', background: DELTA_COLOUR[delta] ?? 'var(--line-2)' }}>
-        {!filled && <span style={{ position: 'absolute', inset: 'calc(var(--space-1) * 0.75)', clipPath: 'var(--hex-clip)', background: current ? 'var(--panel-2)' : 'var(--panel)' }} />}
-      </span>
-      <span style={{ fontSize: 'var(--text-sm)', lineHeight: 1.35, color: current ? 'var(--text)' : 'var(--dim)', overflowWrap: 'anywhere' }}>
-        <span style={{ ...word, display: 'block', color: DELTA_COLOUR[delta] ?? 'var(--faint)' }}>
-          {delta}{commentCount > 0 ? ` · ${commentCount} comment${commentCount === 1 ? '' : 's'}` : ''}
-          {blocking > 0 && <span style={{ color: 'var(--amber)' }}>{` · ${blocking} open blocker${blocking === 1 ? '' : 's'}`}</span>}
+      {/* the track runs through every station on the strip */}
+      <span aria-hidden style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 'calc(var(--space-4) + var(--space-1) / 2)' }}>
+        <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 'calc(var(--space-1) / 2)', background: 'var(--line)' }} />
+        {/* the station: a hex, filled when the evidence changed */}
+        <span style={{ position: 'relative', width: 'var(--space-4)', height: '100%', clipPath: 'var(--hex-clip)', background: DELTA_COLOUR[delta] ?? 'var(--line-2)' }}>
+          {!filled && <span style={{ position: 'absolute', inset: 'calc(var(--space-1) * 0.75)', clipPath: 'var(--hex-clip)', background: current ? 'var(--panel-2)' : 'var(--panel)' }} />}
         </span>
-        {label}
       </span>
+      <span style={{ ...word, color: DELTA_COLOUR[delta] ?? 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {delta}{commentCount > 0 ? ` · ${commentCount}` : ''}
+        {blocking > 0 && <span style={{ color: 'var(--amber)' }}>{` · ${blocking} open blocker${blocking === 1 ? '' : 's'}`}</span>}
+      </span>
+      <span style={{ fontSize: 'var(--text-sm)', color: current ? 'var(--text)' : 'var(--dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </button>
   );
 }
@@ -247,7 +252,7 @@ function SidePanel({ side, media, mode, onMode, onEnlarge }: {
       </div>
       {/* A plain box — captured output stays selectable and scrollable, a <video> keeps its own
           controls; enlarging is the button over it. */}
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '2 / 1', overflow: 'hidden', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}>
+      <div data-media-box style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', overflow: 'hidden', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}>
         <SideBody media={media} mode={mode} side={side} size="small" />
         <button data-action="enlarge-evidence" aria-label={`Enlarge the ${side} evidence`} onClick={onEnlarge}
           style={{ ...miniBtn, position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)' }}>Enlarge</button>
