@@ -182,10 +182,8 @@ export function validateDemoModel(raw: unknown): string[] {
   reqStr('essence');
   reqStr('project');
   reqStr('diffStat');
-  const outcome = m.outcome as { kind?: unknown } | undefined;
-  if (outcome !== undefined && !['changed', 'no-change', 'unknown'].includes(outcome?.kind as string)) {
-    errors.push('outcome.kind must be one of changed|no-change|unknown when set');
-  }
+  const outcomeKind = (m.outcome as { kind?: unknown } | undefined)?.kind;
+  if (m.outcome !== undefined && !['changed', 'no-change', 'unknown'].includes(outcomeKind as string)) errors.push('outcome.kind must be one of changed|no-change|unknown when set');
 
   const cps = m.checkpoints;
   if (!Array.isArray(cps) || cps.length === 0) {

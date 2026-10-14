@@ -713,7 +713,7 @@ packages/stations/phases/gate-feedback.ts writeFileSync 2
 packages/stations/phases/integrate.ts execFileSync 1
 packages/stations/phases/integrate.ts existsSync 2
 packages/stations/phases/integrate.ts mkdirSync 2
-packages/stations/phases/integrate.ts readFileSync 2
+packages/stations/phases/integrate.ts readFileSync 3
 packages/stations/phases/integrate.ts unlinkSync 1
 packages/stations/phases/integrate.ts writeFileSync 4
 packages/stations/phases/merge-boundary.ts execFileSync 1

@@ -282,107 +282,136 @@ export async function runIntegrateBand(
 
   const p = planned && input.planner ? await planDemo(input.planner, { input, derivedInput, cfg, model: derived.model, logger }, emit) : null;
   if (p && !p.ok) return { status: 'failed', reason: p.reason, detail: p.detail };
-  const model = p ? p.model : derived.model;
+  let model = p ? p.model : derived.model;
 
-  // ── write what was derived ───────────────────────────────────────────────
-  const demoDirRel = worktreeDemoRelDir(input.worktreePath, input.initiativeId);
-  const demoDirAbs = worktreeDemoDir(input.worktreePath, input.initiativeId);
-  const demoJsonAbs = join(demoDirAbs, DEMO_JSON_BASENAME);
-  const prDescriptionAbs = join(input.worktreePath, PR_DESCRIPTION_REL);
-  mkdirSync(demoDirAbs, { recursive: true });
-  writeFileSync(demoJsonAbs, `${JSON.stringify(model, null, 2)}\n`);
+  // forge-nk1y.43: a capture that showed no behaviour change sends the plan back ONCE, with the
+  // identical outputs in the planner's brief, before the gate; a second no-change stands, named.
+  for (let attempt = 1; ; attempt += 1) {
+    // ── write what was derived ───────────────────────────────────────────────
+    const demoDirRel = worktreeDemoRelDir(input.worktreePath, input.initiativeId);
+    const demoDirAbs = worktreeDemoDir(input.worktreePath, input.initiativeId);
+    const demoJsonAbs = join(demoDirAbs, DEMO_JSON_BASENAME);
+    const prDescriptionAbs = join(input.worktreePath, PR_DESCRIPTION_REL);
+    mkdirSync(demoDirAbs, { recursive: true });
+    writeFileSync(demoJsonAbs, `${JSON.stringify(model, null, 2)}\n`);
 
-  const prBody = derivePrBody(model, derivedInput);
-  const missingSections = PR_BODY_SECTIONS.filter((s) => !prBody.includes(s));
-  if (missingSections.length > 0) {
-    // Structural backstop, not a validation of someone else's authoring: the
-    // body is derived HERE, so a missing section is this module's own defect
-    // and must fail loud rather than open a PR the reviewer cannot read.
-    const detail = `derived PR body is missing ${missingSections.join(', ')}`;
-    emit('demo.pr-body-invalid', { missing: missingSections }, { event_type: 'error' });
-    return { status: 'failed', reason: 'render-failed', detail };
-  }
-  mkdirSync(join(input.worktreePath, '.forge'), { recursive: true });
-  if (existsSync(prDescriptionAbs)) unlinkSync(prDescriptionAbs);
-  writeFileSync(prDescriptionAbs, prBody);
+    const prBody = derivePrBody(model, derivedInput);
+    const missingSections = PR_BODY_SECTIONS.filter((s) => !prBody.includes(s));
+    if (missingSections.length > 0) {
+      // Structural backstop, not a validation of someone else's authoring: the
+      // body is derived HERE, so a missing section is this module's own defect
+      // and must fail loud rather than open a PR the reviewer cannot read.
+      const detail = `derived PR body is missing ${missingSections.join(', ')}`;
+      emit('demo.pr-body-invalid', { missing: missingSections }, { event_type: 'error' });
+      return { status: 'failed', reason: 'render-failed', detail };
+    }
+    mkdirSync(join(input.worktreePath, '.forge'), { recursive: true });
+    if (existsSync(prDescriptionAbs)) unlinkSync(prDescriptionAbs);
+    writeFileSync(prDescriptionAbs, prBody);
 
-  const render = renderDemoBundle(demoDirAbs, input.worktreePath);
-  if (!render.ok) {
-    const detail = render.errors.join('; ');
-    emit('demo.render-failed', { errors: render.errors }, { event_type: 'error' });
-    return { status: 'failed', reason: 'render-failed', detail };
-  }
+    const render = renderDemoBundle(demoDirAbs, input.worktreePath);
+    if (!render.ok) {
+      const detail = render.errors.join('; ');
+      emit('demo.render-failed', { errors: render.errors }, { event_type: 'error' });
+      return { status: 'failed', reason: 'render-failed', detail };
+    }
 
-  // ── capture, where the class says so ─────────────────────────────────────
-  const wantsCapture = profile.capture === 'checkpoints' && demoJsonWantsCapture(demoJsonAbs);
-  if (!wantsCapture) {
-    const commitResult = commitOrchestratedCaptureArtifacts(
-      input.worktreePath,
-      demoDirRel,
-      input.initiativeId,
-      `chore(demo): demo artifacts (${input.initiativeId})`,
-    );
-    emit('demo.artifacts.committed', {
-      committed: commitResult.committed,
-      capture: profile.capture,
-      skipped_media: commitResult.skippedMedia,
+    // ── capture, where the class says so ─────────────────────────────────────
+    const wantsCapture = profile.capture === 'checkpoints' && demoJsonWantsCapture(demoJsonAbs);
+    if (!wantsCapture) {
+      const commitResult = commitOrchestratedCaptureArtifacts(
+        input.worktreePath,
+        demoDirRel,
+        input.initiativeId,
+        `chore(demo): demo artifacts (${input.initiativeId})`,
+      );
+      emit('demo.artifacts.committed', {
+        committed: commitResult.committed,
+        capture: profile.capture,
+        skipped_media: commitResult.skippedMedia,
+      });
+      emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture });
+      return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
+    }
+
+    const preflight = preflightDemoCaptureCommands(demoJsonAbs, input.worktreePath);
+    if (!preflight.ok) {
+      emit('demo.capture.tooling-unavailable', { problems: preflight.problems, failure_kind: 'environment' }, { event_type: 'error' });
+      return {
+        status: 'failed',
+        reason: 'tooling-unavailable',
+        detail: `demo capture command(s) not producible: ${preflight.problems.join('; ')}`,
+      };
+    }
+    const nonce = generateCaptureNonce();
+    const cap = runOrchestratorCommand(input.orchestratedCapture?.argv ?? buildDemoCaptureArgv(input.initiativeId), {
+      cwd: input.worktreePath,
+      timeoutMs: input.orchestratedCapture?.timeoutMs ?? resolveDemoCaptureTimeoutMs(),
+      env: { ...process.env, [CAPTURE_NONCE_ENV]: nonce },
     });
-    emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture });
+    if (!cap.ok) {
+      emit(
+        'demo.capture',
+        {
+          capture_ok: false,
+          exit_code: cap.exitCode,
+          timed_out: cap.timedOut,
+          failure_kind: cap.timedOut || cap.errored ? 'environment' : 'command',
+          stderr_tail: cap.stderrTail.slice(-500),
+        },
+        { event_type: 'error' },
+      );
+      return { status: 'failed', reason: 'capture-failed', detail: `orchestrated capture failed (exit ${cap.exitCode}): ${cap.stderrTail.slice(-500)}` };
+    }
+    const verdict = judgeCaptureNonce(nonce, readStampedNonce(demoJsonAbs));
+    if (!verdict.ok) {
+      emit('demo.capture', { capture_ok: true, nonce_match: false, nonce_verdict: verdict.reason, capture_nonce: nonce }, { event_type: 'error' });
+      return { status: 'failed', reason: verdict.reason, detail: verdict.detail };
+    }
+    const revised = reviseAfterCapture(demoJsonAbs, demoDirAbs, prDescriptionAbs, input.worktreePath, derivedInput, model.essence, emit);
+    if (!revised.ok) {
+      return { status: 'failed', reason: revised.reason, detail: revised.detail };
+    }
+    if (attempt === 1 && planned && input.planner && revised.outcome && revised.outcome.kind !== 'changed') {
+      const details = noChangeDetails(demoJsonAbs);
+      emit('demo.plan.revise', { reason: 'no-change', headline: demoOutcomeHeadline(revised.outcome), details });
+      const again = await planDemo(input.planner, { input, derivedInput, cfg, model: derived.model, logger }, emit, {
+        reason: `${demoOutcomeHeadline(revised.outcome)} — choose commands, routes or API reads whose output this change alters`,
+        details,
+      });
+      if (!again.ok) return { status: 'failed', reason: again.reason, detail: again.detail };
+      model = again.model;
+      continue;
+    }
+    const commitResult = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
+    // forge-nk1y.43: a capture that showed no change is a named outcome the verdict gate heads with.
+    if (revised.outcome && revised.outcome.kind !== 'changed') {
+      emit('demo.no-change', { ...revised.outcome, headline: demoOutcomeHeadline(revised.outcome) });
+    }
+    emit('demo.capture', {
+      capture_ok: true,
+      nonce_match: true,
+      capture_nonce: nonce,
+      exit_code: 0,
+      committed: commitResult.committed,
+      skipped_media: commitResult.skippedMedia,
+      duration_ms: cap.durationMs,
+    });
+    emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture, outcome: revised.outcome?.kind ?? null });
     return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
   }
+}
 
-  const preflight = preflightDemoCaptureCommands(demoJsonAbs, input.worktreePath);
-  if (!preflight.ok) {
-    emit('demo.capture.tooling-unavailable', { problems: preflight.problems, failure_kind: 'environment' }, { event_type: 'error' });
-    return {
-      status: 'failed',
-      reason: 'tooling-unavailable',
-      detail: `demo capture command(s) not producible: ${preflight.problems.join('; ')}`,
-    };
-  }
-  const nonce = generateCaptureNonce();
-  const cap = runOrchestratorCommand(input.orchestratedCapture?.argv ?? buildDemoCaptureArgv(input.initiativeId), {
-    cwd: input.worktreePath,
-    timeoutMs: input.orchestratedCapture?.timeoutMs ?? resolveDemoCaptureTimeoutMs(),
-    env: { ...process.env, [CAPTURE_NONCE_ENV]: nonce },
-  });
-  if (!cap.ok) {
-    emit(
-      'demo.capture',
-      {
-        capture_ok: false,
-        exit_code: cap.exitCode,
-        timed_out: cap.timedOut,
-        failure_kind: cap.timedOut || cap.errored ? 'environment' : 'command',
-        stderr_tail: cap.stderrTail.slice(-500),
-      },
-      { event_type: 'error' },
-    );
-    return { status: 'failed', reason: 'capture-failed', detail: `orchestrated capture failed (exit ${cap.exitCode}): ${cap.stderrTail.slice(-500)}` };
-  }
-  const verdict = judgeCaptureNonce(nonce, readStampedNonce(demoJsonAbs));
-  if (!verdict.ok) {
-    emit('demo.capture', { capture_ok: true, nonce_match: false, nonce_verdict: verdict.reason, capture_nonce: nonce }, { event_type: 'error' });
-    return { status: 'failed', reason: verdict.reason, detail: verdict.detail };
-  }
-  const revised = reviseAfterCapture(demoJsonAbs, demoDirAbs, prDescriptionAbs, input.worktreePath, derivedInput, model.essence, emit);
-  if (!revised.ok) {
-    return { status: 'failed', reason: revised.reason, detail: revised.detail };
-  }
-  const commitResult = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
-  // forge-nk1y.43: a capture that showed no change is a named outcome the verdict gate heads with.
-  if (revised.outcome && revised.outcome.kind !== 'changed') {
-    emit('demo.no-change', { ...revised.outcome, headline: demoOutcomeHeadline(revised.outcome) });
-  }
-  emit('demo.capture', {
-    capture_ok: true,
-    nonce_match: true,
-    capture_nonce: nonce,
-    exit_code: 0,
-    committed: commitResult.committed,
-    skipped_media: commitResult.skippedMedia,
-    duration_ms: cap.durationMs,
-  });
-  emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture, outcome: revised.outcome?.kind ?? null });
-  return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
+/** One line per before/after checkpoint that showed no change: its driver and the output both sides printed. */
+function noChangeDetails(demoJsonAbs: string): string[] {
+  const cps = (JSON.parse(readFileSync(demoJsonAbs, 'utf8')) as DemoModel).checkpoints;
+  return cps
+    .filter((c) => c.form !== 'test-evidence' && c.delta !== undefined && c.delta !== 'changed')
+    .map((c) => {
+      const driver = c.command ?? c.route ?? c.apiPath ?? c.label;
+      const out = (c.afterOutput ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      return c.delta === 'unknown'
+        ? `"${c.label}" \`${driver}\` could not be compared`
+        : `"${c.label}" \`${driver}\` printed the same before and after: ${out || '(no output)'}`;
+    });
 }

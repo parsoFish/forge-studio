@@ -241,3 +241,74 @@ describe('nk1y.42: an unproducible plan gets one revise turn, told why', () => {
     assert.ok(!messages().includes('demo.plan.revise'));
   });
 });
+
+// forge-nk1y.43: an all-unchanged capture sends the plan back ONCE with the identical outputs in its
+// brief; the revised plan is captured again; a second no-change stands as the named outcome.
+describe('nk1y.43: a no-change capture gets one revise turn with the identical outputs', () => {
+  /** Capture child: run N stamps the deltas[N-1] on every checkpoint, with identical output on unchanged. */
+  function sequencedCapture(deltas: string[]): string {
+    const p = join(root, 'fake-capture-seq.mjs');
+    writeFileSync(p, [
+      "import { existsSync, readFileSync, writeFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const n = join(process.cwd(), 'capture-count');",
+      "const run = existsSync(n) ? Number(readFileSync(n, 'utf8')) + 1 : 1;",
+      'writeFileSync(n, String(run));',
+      `const delta = ${JSON.stringify(deltas)}[run - 1] ?? 'unchanged';`,
+      "const f = join(process.cwd(), 'demo', process.argv[2], 'demo.json');",
+      "const m = JSON.parse(readFileSync(f, 'utf8'));",
+      "m.checkpoints = m.checkpoints.map((c) => ({ ...c, delta, beforeOutput: 'git version 2.55.0', afterOutput: 'git version 2.55.0' }));",
+      'm.capture = { nonce: process.env.FORGE_CAPTURE_NONCE };',
+      'writeFileSync(f, JSON.stringify(m, null, 2));',
+    ].join('\n'));
+    return p;
+  }
+  async function runSeq(planner: DemoPlannerPort, deltas: string[]) {
+    return runIntegrateBand({
+      initiativeId: ID, worktreePath: root, manifestPath: manifestPath(), projectRepoPath: root,
+      orchestratedCapture: { argv: [process.execPath, sequencedCapture(deltas), ID] },
+      planner: { port: planner, def: DEF, cycleId: 'cycle-1' },
+    }, logger, GATES, testClassProfilePort());
+  }
+  const plan = (command: string): DemoPlannerOutcome => ({
+    ok: true, costUsd: 0.01, raw: { narrative: NARRATIVE, checkpoints: [{ form: 'cli-before-after', caption: 'c', acRef: 'WI-1', command }] },
+  });
+  const apiPlan: DemoPlannerOutcome = {
+    ok: true, costUsd: 0.01, raw: { narrative: NARRATIVE, checkpoints: [{ form: 'api-before-after', caption: 'c', acRef: 'WI-2', command: API_CMD }] },
+  };
+  function sequence(outcomes: DemoPlannerOutcome[], seen: DemoPlannerInput[]): DemoPlannerPort {
+    return { plan: async (_def, input) => { seen.push(input); return outcomes[Math.min(seen.length - 1, outcomes.length - 1)]!; } };
+  }
+
+  it('the revise turn sees the identical outputs; its plan is captured again and reads changed', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await runSeq(sequence([plan(CLI_CMD), apiPlan], seen), ['unchanged', 'changed']);
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 2);
+    assert.match(seen[1]!.revise!.reason, /^Demo captured no behaviour change — 1\/1 checkpoints identical/);
+    assert.deepEqual(seen[1]!.revise!.details, [`"Plan 1: WI-1" \`${CLI_CMD}\` printed the same before and after: git version 2.55.0`]);
+    assert.equal(readFileSync(join(root, 'capture-count'), 'utf8'), '2');
+    const demo = JSON.parse(readFileSync(join(demoDir(), 'demo.json'), 'utf8'));
+    assert.equal(demo.outcome.kind, 'changed');
+    assert.equal(demo.checkpoints[0].command, API_CMD);
+    assert.ok(!messages().includes('demo.no-change'));
+  });
+
+  it('ONE chance: a second no-change stands as the named outcome, the planner asked exactly twice', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await runSeq(sequence([plan(CLI_CMD), apiPlan], seen), ['unchanged', 'unchanged']);
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 2);
+    const demo = JSON.parse(readFileSync(join(demoDir(), 'demo.json'), 'utf8'));
+    assert.equal(demo.outcome.kind, 'no-change');
+    assert.ok(messages().includes('demo.no-change'));
+  });
+
+  it('a changed first capture is never sent back', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await runSeq(sequence([plan(CLI_CMD)], seen), ['changed']);
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 1);
+    assert.equal(readFileSync(join(root, 'capture-count'), 'utf8'), '1');
+  });
+});
