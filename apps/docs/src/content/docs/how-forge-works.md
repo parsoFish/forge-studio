@@ -3,7 +3,7 @@ title: How forge works
 description: The parts of a forge factory and how a piece of work moves through one.
 type: explanation
 owner: parsoFish
-last_verified: 2026-10-11
+last_verified: 2026-10-14
 covers: [packages/flows/**, packages/stations/**, packages/factory/**, packages/knowledge/**, studio/flows/**, skills/**]
 ---
 
@@ -28,7 +28,7 @@ forge ships one working factory. It is two flows plus one agent that fires after
 2. **Plan gate.** You review the plan and approve it, or send it back with feedback. Nothing is queued until you approve.
 3. The project-manager agent splits each initiative into work items: small, ordered units, each with at least one acceptance criterion and a command that checks it. An initiative criterion that names a test command must be run whole by some work item's command. A set that fails validation goes back to the project manager with every error named, at most twice within the initiative's budget; if it still fails, it is set aside whole, never run partially, and the errors are kept so **Requeue** repairs the set instead of starting over.
 
-**Kickoff gate.** The develop flow does not start by itself. A planned initiative's roadmap card reads KICKOFF until you start it.
+**Kickoff gate.** The develop flow does not start by itself. A planned initiative's roadmap card reads KICKOFF until you start it. Starting it first rebases the initiative's branch onto the project's main, so the build includes anything merged while it waited, such as an initiative it depends on. The run page shows the commit it started from. If the rebase conflicts, the run stops before building and names the commit it could not rebase onto.
 
 **Develop flow.**
 
