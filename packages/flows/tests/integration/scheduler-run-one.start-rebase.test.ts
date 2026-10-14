@@ -40,6 +40,9 @@ function setupProject(): { root: string; repo: string; origin: string } {
   const origin = join(root, 'origin.git');
   mkdirSync(repo, { recursive: true });
   sh(repo, ['init', '-q', '-b', 'main']);
+  // The rebase replays commits, so the repo needs a committer identity of its own (CI runners have no global one).
+  sh(repo, ['config', 'user.email', 't@forge']);
+  sh(repo, ['config', 'user.name', 'forge-test']);
   commit(repo, 'README.md', 'base\n', 'base');
   sh(root, ['init', '-q', '--bare', '-b', 'main', origin]);
   sh(repo, ['remote', 'add', 'origin', origin]);
