@@ -308,7 +308,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // Collect the signals that affect the terminal/transient decision.
   // Each group is only what's needed to resolve the classification below.
   let gateMissingScript = false, worktreeNoDeps = false;
-  let baselineRed = false, resumeNeedsRebase = false;
+  let baselineRed = false, resumeNeedsRebase: Record<string, unknown> | null = null;
   let pmEmptyDecomposition = false, pmPartialUsable = false;
   let pmCapped = false, pmBudgetExhausted = false;
   let pmHiddenCoupling = false, pmInvalidWorkItems = false;
@@ -413,7 +413,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // G4 (plan item 2.2): the unifier's fix-iteration loop halted after N
     // consecutive failures of the SAME composed-gate sub-check.
     if (msg === 'uwi.loop-cap-exhausted') { uwiLoopCapExhausted = true; ev(e); }
-    if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
+    if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = md; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (GATE_MISSING_SCRIPT_RE.test(blob)) { gateMissingScript = true; ev(e); }
@@ -696,7 +696,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
-  if (resumeNeedsRebase) return T('terminal', 'resume blocked — the preserved branch conflicts with current main (another cycle merged during the stall); rebase the initiative branch onto main by hand, then re-resume', evidence);
+  if (resumeNeedsRebase) return T('terminal', entryRebaseReason(resumeNeedsRebase), evidence);
   // Plan 2.11: partial-but-usable BEATS the empty-decomposition and
   // capped+degenerate terminal rules — an incremental-write run capped
   // mid-flight legitimately leaves a truncated tail WI (per-item errors)
@@ -726,4 +726,19 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (trivialPass) return T('transient', 'gate passed before any iteration — F-26 forces ≥1 iteration on retry', evidence);
 
   return T('terminal', 'failure could not be classified — examine events.jsonl manually', evidence);
+}
+
+/**
+ * forge-mfv5.1.37: the entry rebase (Start or resume) names what it was
+ * rebasing onto. A conflict reads "rebase conflict onto <sha12> (<base>)";
+ * any other refusal (no main, a rejected lease push) is quoted, never
+ * reworded as a conflict.
+ */
+function entryRebaseReason(md: Record<string, unknown>): string {
+  const base = typeof md.base === 'string' ? md.base : 'main';
+  if (md.conflict === false) {
+    return `entry rebase onto ${base} refused — ${String(md.reason ?? 'no reason recorded')}; fix the preserved branch by hand, then requeue`;
+  }
+  const onto = typeof md.onto_sha === 'string' ? md.onto_sha.slice(0, 12) : 'UNKNOWN';
+  return `rebase conflict onto ${onto} (${base}) — the preserved branch conflicts with current main; rebase the initiative branch onto it by hand, then requeue`;
 }

@@ -395,6 +395,19 @@ const RESUME_POINTS_INTO_DEVELOP: ReadonlySet<CycleInput['resumeFrom']> = new Se
 ]);
 
 /**
+ * forge-mfv5.1.37 (R39): does this run rebase its branch onto main once, at
+ * entry, before the first node? Yes for a resume into the develop flow
+ * (D-06), and yes for a run with no `resumeFrom` that reuses a preserved
+ * branch — the Kickoff Start, whose branch was cut when the PM ran and may
+ * predate a dependency's merge. One predicate, one `rebaseForResume`, one
+ * rebase per entry. `'plan'` stays `execPm`'s own (row 157).
+ */
+export function rebasesAtEntry(input: Pick<CycleInput, 'resumeFrom' | 'reusesPreservedWorktree'>): boolean {
+  if (input.resumeFrom === undefined) return input.reusesPreservedWorktree === true;
+  return RESUME_POINTS_INTO_DEVELOP.has(input.resumeFrom);
+}
+
+/**
  * Walk the flow's nodes in topological order and execute each node.
  *
  * Threading: CycleInput is passed UNCHANGED to every executor — same object,
@@ -529,12 +542,13 @@ export async function runFlow({
   // per-node below so each node gets a fresh WedgeDetector.
   const costLogger = wrapLoggerForCost(logger, costTracker);
 
-  // Row 167 (ruling 1916): re-entry rebase, ONCE, before the first node runs
-  // (see this function's own doc above). A failed rebase throws here — before
+  // Row 167 (ruling 1916) + forge-mfv5.1.37: entry rebase, ONCE, before the
+  // first node runs — a resume into develop or a Start on a preserved branch
+  // (`rebasesAtEntry`; see this function's own doc above). A failed rebase throws here — before
   // any node's try/catch, so it is never reclassified as a node's own error —
   // and `rebaseForResume` has already emitted the classified `cycle.resume-
   // needs-rebase` event the caller's `classifyCycleFailure` reads.
-  if (RESUME_POINTS_INTO_DEVELOP.has(input.resumeFrom)) {
+  if (rebasesAtEntry(input)) {
     rebaseForResume(input, costLogger);
   }
 
