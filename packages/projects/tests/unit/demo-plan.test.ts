@@ -105,3 +105,31 @@ test('a flood of bad keys is reported bounded: at most 20 rows plus a count, eve
   const huge = validateDemoPlan(plan([{ form: 'cli-before-after', caption: 'c', command: 'a'.repeat(100_000) }]), ALLOWED);
   assert.ok(!huge.ok && huge.errors.every((e) => e.length < 300));
 });
+
+// Row 4 of forge-nk1y.45: a screenshot checkpoint may drive declared interaction steps and outline
+// regions on the tree's own page, so a UI before/after is not a bare page load. Inert data, validated by name.
+const SHOT = { form: 'screenshot', caption: 'The dashboard filters by author', route: '/dashboard' };
+
+test('a screenshot checkpoint carries steps and regions through validation', () => {
+  const cp = { ...SHOT, steps: [{ fill: '#author', text: 'alice' }, { click: 'button[data-action="apply"]' }, { press: 'Enter' }], regions: ['#results'] };
+  const r = validateDemoPlan(plan([cp]), ALLOWED);
+  assert.equal(r.ok, true, r.ok ? '' : r.errors.join('; '));
+  assert.deepEqual(r.ok && r.plan.checkpoints[0], cp);
+});
+
+for (const [name, extra, row] of [
+  ['steps on a cli checkpoint', { form: 'cli-before-after', caption: 'c', command: 'gitpulse --since 7d', steps: [{ click: '#x' }] }, /plan-invalid:checkpoints\[0\]\.steps: form cli-before-after takes no steps/],
+  ['steps not an array', { ...SHOT, steps: { click: '#x' } }, /plan-invalid:checkpoints\[0\]\.steps: must be an array of 1–10 steps/],
+  ['an unknown step kind', { ...SHOT, steps: [{ hover: '#x' }] }, /plan-invalid:checkpoints\[0\]\.steps\[0\]: must be exactly one of \{ click \} \| \{ fill, text \} \| \{ press \}/],
+  ['a multi-line selector', { ...SHOT, steps: [{ click: '#a\n#b' }] }, /plan-invalid:checkpoints\[0\]\.steps\[0\]\.click: must be one line of at most 120 characters/],
+  ['a fill without text', { ...SHOT, steps: [{ fill: '#a' }] }, /plan-invalid:checkpoints\[0\]\.steps\[0\]: must be exactly one of/],
+  ['a press that is not a key name', { ...SHOT, steps: [{ press: 'Enter; rm' }] }, /plan-invalid:checkpoints\[0\]\.steps\[0\]\.press: must be a key name/],
+  ['too many steps', { ...SHOT, steps: Array.from({ length: 11 }, () => ({ click: '#x' })) }, /must be an array of 1–10 steps/],
+  ['a region that is not a selector string', { ...SHOT, regions: [{ x: 1 }] }, /plan-invalid:checkpoints\[0\]\.regions: must be an array of 1–6 selectors/],
+] as const) {
+  test(`refuses: ${name}`, () => {
+    const r = validateDemoPlan(plan([extra]), ALLOWED);
+    assert.equal(r.ok, false);
+    assert.match(r.ok ? '' : r.errors.join('; '), row);
+  });
+}

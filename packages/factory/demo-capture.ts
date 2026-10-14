@@ -318,6 +318,10 @@ export async function recordBrowser(input: RecordBrowserInput): Promise<RecordRe
       }
     }
     await page.waitForTimeout(SETTLE_MS);
+    // A declared step may click a link; the evidence must still be the tree's own page.
+    if (new URL(page.url()).origin !== new URL(input.url).origin) {
+      throw new DemoRecordError(`recordBrowser: ${side}/${label} left the tree's own server (now at ${new URL(page.url()).origin}) — refused`);
+    }
     if (input.regions && input.regions.length > 0) {
       await overlay(page).outline(input.regions);
     }

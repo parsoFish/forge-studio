@@ -7,8 +7,13 @@
 import { SHELL_METACHARACTERS, extractDemoRoute, extractDrivableCommand } from '@forge/contracts';
 
 import { DEMO_EVIDENCE_FORMS, isOwnServerPath, type DemoEvidenceForm, type DemoMeans } from './demo-means.ts';
+import { checkBrowserSteps, type BrowserStepDecl } from './demo-browser-steps.ts';
 
-export type DemoPlanCheckpoint = { form: DemoEvidenceForm; caption: string; acRef?: string; command?: string; route?: string; apiPath?: string };
+export type DemoPlanCheckpoint = {
+  form: DemoEvidenceForm; caption: string; acRef?: string; command?: string; route?: string; apiPath?: string;
+  /** screenshot only: the interaction driven before the final still, and the regions outlined. */
+  steps?: BrowserStepDecl[]; regions?: string[];
+};
 export type DemoPlan = { narrative: string; checkpoints: DemoPlanCheckpoint[] };
 export type AllowedDemoMeans = { commands: string[]; routes: string[]; apiPaths: string[]; apiCommands: string[] };
 export type DemoPlanResult = { ok: true; plan: DemoPlan } | { ok: false; errors: string[] };
@@ -38,7 +43,7 @@ export function allowedDemoMeans(means: DemoMeans | undefined, acs: ReadonlyArra
 }
 
 const PLAN_KEYS = ['narrative', 'checkpoints'];
-const CHECKPOINT_KEYS = ['form', 'caption', 'acRef', 'command', 'route', 'apiPath'];
+const CHECKPOINT_KEYS = ['form', 'caption', 'acRef', 'command', 'route', 'apiPath', 'steps', 'regions'];
 /** Which driver fields each form takes; every other driver field is refused. */
 const DRIVERS: Record<DemoEvidenceForm, readonly string[]> = {
   'cli-before-after': ['command'], 'api-before-after': ['command', 'apiPath'], screenshot: ['route'], 'test-evidence': [],
@@ -77,6 +82,10 @@ function checkCheckpoint(raw: unknown, i: number, allowed: AllowedDemoMeans, err
   checkDriver(raw, 'command', form === 'api-before-after' ? allowed.apiCommands : allowed.commands, at, errors);
   checkDriver(raw, 'route', allowed.routes, at, errors);
   checkDriver(raw, 'apiPath', allowed.apiPaths, at, errors);
+  for (const key of ['steps', 'regions']) {
+    if (raw[key] !== undefined && form !== 'screenshot') errors.push(`plan-invalid:${at}.${key}: form ${form} takes no ${key}`);
+  }
+  if (form === 'screenshot') checkBrowserSteps(raw.steps, raw.regions, `plan-invalid:${at}`, errors);
 }
 
 /** Validate a raw plan against the allowed means; every refusal names its row. */
