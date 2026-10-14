@@ -730,13 +730,14 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
 
 /**
  * forge-mfv5.1.37: the entry rebase (Start or resume) names what it was
- * rebasing onto. A conflict reads "rebase conflict onto <sha12> (<base>)";
- * any other refusal (no main, a rejected lease push) is quoted, never
- * reworded as a conflict.
+ * rebasing onto. A conflict (`conflict: true`) reads "rebase conflict onto
+ * <sha12> (<base>)"; any other refusal (a failed fetch, uncommitted changes,
+ * a rejected lease push, an event that predates the `conflict` key) is quoted
+ * by its own reason, never reworded as a conflict.
  */
 function entryRebaseReason(md: Record<string, unknown>): string {
   const base = typeof md.base === 'string' ? md.base : 'main';
-  if (md.conflict === false) {
+  if (md.conflict !== true) {
     return `entry rebase onto ${base} refused — ${String(md.reason ?? 'no reason recorded')}; fix the preserved branch by hand, then requeue`;
   }
   const onto = typeof md.onto_sha === 'string' ? md.onto_sha.slice(0, 12) : 'UNKNOWN';

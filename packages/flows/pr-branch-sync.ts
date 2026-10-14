@@ -221,7 +221,7 @@ export type ResumeRebaseResult = {
   fromSha: string | null;
   toSha: string | null;
   ontoSha: string | null;
-  /** Set when `origin` exists but could not be fetched: `base` is then the LOCAL branch, named, never silent. */
+  /** Set when `origin` exists but could not be fetched — the rebase is then refused (`ok:false`). */
   fetchError?: string;
   /** The rebase itself conflicted (aborted; the branch is untouched). */
   conflict?: true;
@@ -267,30 +267,37 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
   const hasOrigin = (() => {
     try { git(['remote', 'get-url', 'origin']); return true; } catch { return false; }
   })();
-  // Pick up other cycles' merges: fetch + rebase onto origin/<base>. A failed
-  // fetch with an origin present is carried as `fetchError` (the event names
-  // it) — the local base is used, never silently.
-  let target = base;
-  let fetchError: string | undefined;
+  // Pick up other cycles' merges: fetch + rebase onto origin/<base>. With an
+  // origin present a failed fetch REFUSES by name: the local base is only as
+  // fresh as the last pull, so proceeding on it is the stale-base defect itself.
   if (hasOrigin) {
-    try { git(['fetch', 'origin', base]); target = `origin/${base}`; }
-    catch (err) { fetchError = errText(err); }
+    try { git(['fetch', 'origin', base]); }
+    catch (err) {
+      const fetchError = errText(err);
+      return { ok: false, rebased: false, base: `origin/${base}`, ...unresolved, fetchError, reason: `could not fetch origin/${base} — refusing to start on the local ${base}, which may predate merged work: ${fetchError}` };
+    }
   }
-  const withFetch = fetchError === undefined ? {} : { fetchError };
+  const target = hasOrigin ? `origin/${base}` : base;
   const shas = { fromSha, toSha: fromSha, ontoSha: sha(target) };
 
   // No divergence: target is already an ancestor of HEAD — nothing to do.
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', target, 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
-    return { ok: true, rebased: false, base: target, ...shas, ...withFetch };
+    return { ok: true, rebased: false, base: target, ...shas };
   } catch { /* diverged → attempt a clean rebase */ }
 
+  let dirty: string;
+  try { dirty = git(['status', '--porcelain', '--untracked-files=no']).trim(); }
+  catch (err) { return { ok: false, rebased: false, base: target, ...shas, reason: `could not read the preserved worktree's status: ${errText(err)}` }; }
+  if (dirty) {
+    return { ok: false, rebased: false, base: target, ...shas, reason: `the preserved worktree has uncommitted changes to tracked files — commit or discard them, then requeue: ${dirty.slice(0, 200)}` };
+  }
   try {
     git(['rebase', '--rebase-merges', target]); // keeps each `wi(<id>): merge`, the review's delivery record (forge-mfv5.1.30)
   } catch (err) {
     try { git(['rebase', '--abort']); } catch { /* leave it; surfaced below */ }
     return {
-      ok: false, rebased: false, base: target, ...shas, ...withFetch, conflict: true,
+      ok: false, rebased: false, base: target, ...shas, conflict: true,
       reason: `rebase onto ${target} conflicted — manual rebase required before re-resuming: ${errText(err)}`,
     };
   }
@@ -304,12 +311,12 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
       git(['push', '--force-with-lease', '--set-upstream', 'origin', branch]);
     } catch (err) {
       return {
-        ok: false, rebased: true, base: target, ...rebasedShas, ...withFetch,
+        ok: false, rebased: true, base: target, ...rebasedShas,
         reason: `rebased onto ${target} locally but force-with-lease push failed (someone else moved the branch?): ${errText(err)}`,
       };
     }
   }
-  return { ok: true, rebased: true, base: target, ...rebasedShas, ...withFetch };
+  return { ok: true, rebased: true, base: target, ...rebasedShas };
 }
 
 /** git's stderr (or the error message), bounded for an event field, with any `scheme://user:secret@` credential in a remote URL masked. */

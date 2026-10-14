@@ -958,7 +958,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
 function runFactsByInitiative(forgeRoot: string): Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning' | 'failNote' | 'runBase'>> {
   const facts = new Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning' | 'failNote' | 'runBase'>>(); // + forge-mfv5.1.27 fixRound
   for (const r of cachedListRuns(forgeRoot, Date.now())) { // a defined fact is never overwritten by another run's absent one
-    const f = facts.get(r.initiativeId); facts.set(r.initiativeId, { completedAt: r.completedAt ?? f?.completedAt, awaitingKickoff: r.awaitingKickoff ?? f?.awaitingKickoff, fixRound: r.fixRound ?? f?.fixRound, fixRoundRunning: r.fixRoundRunning ?? f?.fixRoundRunning, developRunning: r.developRunning ?? f?.developRunning, failNote: r.failNote ?? f?.failNote, runBase: r.runBase ?? f?.runBase });
+    const f = facts.get(r.initiativeId); facts.set(r.initiativeId, { completedAt: r.completedAt ?? f?.completedAt, awaitingKickoff: r.awaitingKickoff ?? f?.awaitingKickoff, fixRound: r.fixRound ?? f?.fixRound, fixRoundRunning: r.fixRoundRunning ?? f?.fixRoundRunning, developRunning: r.developRunning ?? f?.developRunning, failNote: f ? f.failNote : r.failNote, runBase: f ? f.runBase : r.runBase }); // newest-first: the NEWEST run's note and base, never an older run's
   }
   return facts;
 }

@@ -260,3 +260,43 @@ test('errText masks a credential embedded in a remote URL before it reaches an e
   assert.ok(!text.includes('ghp_SECRET123'), text);
   assert.match(text, /https:\/\/\*\*\*@github\.com/);
 });
+
+test('fail closed: origin present but unreachable → refused by name before any node, never a start on the stale local main', async () => {
+  const g = ground();
+  try {
+    mergeDependencyOnOrigin(g);
+    g.git(['remote', 'set-url', 'origin', join(g.root, 'no-such-origin.git')]);
+    const before = g.git(['rev-parse', 'HEAD']);
+    const r = await start(g, 'nofetch', { reusesPreservedWorktree: true });
+    await assert.rejects(r.run, /could not fetch origin\/main/);
+    assert.deepEqual(r.executedNodes, []);
+    assert.equal(g.git(['rev-parse', 'HEAD']), before);
+    const ev = rebaseEvents(r.events());
+    assert.equal(ev.length, 1);
+    assert.equal(ev[0].message, 'cycle.resume-needs-rebase');
+    assert.equal(typeof ev[0].metadata?.fetch_error, 'string');
+    const cls = classifyCycleFailure(r.events());
+    assert.equal(cls.kind, 'terminal');
+    assert.match(cls.reason, /could not fetch origin\/main/);
+    assert.doesNotMatch(cls.reason, /rebase conflict/, 'a fetch failure is never reported as a conflict');
+  } finally {
+    g.cleanup();
+  }
+});
+
+test('refusal: uncommitted tracked changes in the preserved worktree are named as such, never as a conflict', async () => {
+  const g = ground();
+  try {
+    mergeDependencyOnOrigin(g);
+    writeFileSync(join(g.project, 'a.txt'), 'uncommitted edit\n');
+    const r = await start(g, 'dirty', { reusesPreservedWorktree: true });
+    await assert.rejects(r.run, /uncommitted changes to tracked files/);
+    assert.deepEqual(r.executedNodes, []);
+    assert.equal(readFileSync(join(g.project, 'a.txt'), 'utf8'), 'uncommitted edit\n', 'the operator\'s edit is left in place');
+    const cls = classifyCycleFailure(r.events());
+    assert.match(cls.reason, /uncommitted changes/);
+    assert.doesNotMatch(cls.reason, /rebase conflict/);
+  } finally {
+    g.cleanup();
+  }
+});
