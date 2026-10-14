@@ -955,10 +955,10 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
  * queue tree (it has no project filter), so this is a superset scan — cheap
  * because it's the memo's job, not a second parse of anything roadmap-local.
  */
-function runFactsByInitiative(forgeRoot: string): Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning'>> {
-  const facts = new Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning'>>(); // + forge-mfv5.1.27 fixRound
+function runFactsByInitiative(forgeRoot: string): Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning' | 'failNote' | 'runBase'>> {
+  const facts = new Map<string, Pick<Run, 'completedAt' | 'awaitingKickoff' | 'fixRound' | 'fixRoundRunning' | 'developRunning' | 'failNote' | 'runBase'>>(); // + forge-mfv5.1.27 fixRound
   for (const r of cachedListRuns(forgeRoot, Date.now())) { // a defined fact is never overwritten by another run's absent one
-    const f = facts.get(r.initiativeId); facts.set(r.initiativeId, { completedAt: r.completedAt ?? f?.completedAt, awaitingKickoff: r.awaitingKickoff ?? f?.awaitingKickoff, fixRound: r.fixRound ?? f?.fixRound, fixRoundRunning: r.fixRoundRunning ?? f?.fixRoundRunning, developRunning: r.developRunning ?? f?.developRunning });
+    const f = facts.get(r.initiativeId); facts.set(r.initiativeId, { completedAt: r.completedAt ?? f?.completedAt, awaitingKickoff: r.awaitingKickoff ?? f?.awaitingKickoff, fixRound: r.fixRound ?? f?.fixRound, fixRoundRunning: r.fixRoundRunning ?? f?.fixRoundRunning, developRunning: r.developRunning ?? f?.developRunning, failNote: r.failNote ?? f?.failNote, runBase: r.runBase ?? f?.runBase });
   }
   return facts;
 }
@@ -973,7 +973,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     // also uses — manifest metadata (title: / initiative_id), never a heading.
     const title = initiativeTitle(manifest);
 
-    const { completedAt, awaitingKickoff, fixRound, fixRoundRunning, developRunning } = runById.get(initId) ?? {};
+    const { completedAt, awaitingKickoff, fixRound, fixRoundRunning, developRunning, failNote, runBase } = runById.get(initId) ?? {};
     const atGate = awaitingKickoff === true && status === 'ready-for-review';
     const items = roadmapWorkItems(initId, manifest.cycle_id ?? null, { forgeRoot, logsRoot }, { atGate });
     const workItems = items.length > 0 ? items : undefined;
@@ -1002,7 +1002,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
         && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
-      ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' ? ((e) => (e.length > 0 ? { pmRepairErrors: e } : {}))(recordedPmValidationErrors(forgeRoot, manifest)) : {}), /* D-49 row 5: recorded or derived; read-only here, Requeue persists */ ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}),
+      ...(completedAt !== undefined && status !== 'failed' ? { completedAt } : {}), ...(status === 'failed' ? ((e) => (e.length > 0 ? { pmRepairErrors: e } : {}))(recordedPmValidationErrors(forgeRoot, manifest)) : {}), /* D-49 row 5: recorded or derived; read-only here, Requeue persists */ ...(fixRound !== undefined && (status === 'ready-for-review' || status === 'in-flight') ? { fixRound } : {}), ...(status === 'in-flight' && fixRoundRunning ? { fixRoundRunning } : {}), ...(status === 'in-flight' && developRunning ? { developRunning } : {}), ...(status === 'failed' && failNote !== undefined ? { failNote } : {}), ...(runBase !== undefined ? { runBase } : {}), /* forge-mfv5.1.37 */
       ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
   });

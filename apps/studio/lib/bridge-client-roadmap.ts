@@ -114,6 +114,10 @@ export type RoadmapInitiative = {
   completedAt?: string;
   /** D-49: a FAILED initiative's recorded project-manager validation errors — Requeue repairs the set on them. */
   pmRepairErrors?: string[];
+  /** forge-mfv5.1.37: a FAILED initiative's served `Run.failNote` (e.g. "rebase conflict onto <sha>") — shown by name in the drawer. */
+  failNote?: string;
+  /** forge-mfv5.1.37 row 2: the served `Run.runBase` — the commit the dev loop started on. */
+  runBase?: string;
   /**
    * M7 findings row 59: forge-architect and forge-develop both terminate at
    * the SAME status word (`ready-for-review`), so `status` alone cannot

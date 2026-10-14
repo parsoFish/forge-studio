@@ -1459,3 +1459,27 @@ test('aggregateRun: a cost-ceiling stop derives stopOnBudget with the resumable 
     cleanup(root);
   }
 });
+
+// ---------------------------------------------------------------------------
+// forge-mfv5.1.37 row 2 — the run carries the base its dev loop started on
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: a Start that rebased at entry serves runBase = the onto sha; a run with none omits it', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-10-14-run-base';
+    const cycleId = '2026-10-14T00-00-00_INIT-2026-10-14-run-base';
+    const manifestPath = writeManifest(root, 'in-flight', initId, { cycle_id: cycleId });
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }),
+      ev('orchestrator', 'log', 'cycle.resume-rebased', { entry: 'start', onto_sha: '93fbaec2aaaa', from_sha: 'e516ce8bbbb', to_sha: 'cccc' }),
+      ev('developer-loop', 'start'),
+    ]);
+    assert.equal(aggregateRun({ root, queueState: 'in-flight', manifestPath, nowMs: Date.now() }).runBase, '93fbaec2aaaa');
+
+    writeCycleLog(root, cycleId, [ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }), ev('developer-loop', 'start')]);
+    assert.equal('runBase' in aggregateRun({ root, queueState: 'in-flight', manifestPath, nowMs: Date.now() }), false);
+  } finally {
+    cleanup(root);
+  }
+});

@@ -39,6 +39,7 @@ import {
   deriveArtifacts,
   deriveStopOnBudget,
   deriveOperatorStop,
+  deriveRunBase,
   endMetaIndicatesFailure,
   findGateNodeId,
   findGateNote,
@@ -322,6 +323,7 @@ function buildRun(args: {
   // --- Operator-stop (M7 row 150, ruling 1774): same derive-don't-store shape
   // as stopOnBudget above, from the runner's own `flow.operator-stop` event. ---
   const operatorStop = deriveOperatorStop(events);
+  const runBase = deriveRunBase(events); // forge-mfv5.1.37 row 2
 
   // --- Initiative title: manifest metadata (title: / initiative_id), W7-A4 ---
   const initiative = initiativeTitle(manifest);
@@ -410,6 +412,7 @@ function buildRun(args: {
     ...(failNote !== undefined ? { failNote } : {}),
     ...(stopOnBudget !== null ? { stopOnBudget } : {}),
     ...(operatorStop ? { operatorStop } : {}),
+    ...(runBase !== undefined ? { runBase } : {}),
     ...(reflectionLoss !== undefined
       ? { reflectionLost: reflectionLoss.cause, reflectionLostNote: reflectionLoss.note }
       : {}),

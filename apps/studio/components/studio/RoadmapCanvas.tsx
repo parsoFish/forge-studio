@@ -557,7 +557,7 @@ function RoadmapCanvasNode({
   dimmed: boolean;
   onSelect: (id: string) => void;
 }) {
-  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId, fixRound, fixRoundRunning, developRunning } = initiative;
+  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId, fixRound, fixRoundRunning, developRunning, runBase } = initiative;
   const colour = ROADMAP_TONE_COLOR[queueStatusToColor(status)];
   const planPhase = workItems !== undefined ? 'planned' : status === 'in-flight' ? 'claimed' : 'pending';
 
@@ -578,7 +578,7 @@ function RoadmapCanvasNode({
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')} data-blocked-clauses={(blockedClauses ?? []).join(',')}
       data-initiative-collapsed="true"
-      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})} {...(fixRound !== undefined ? { 'data-fix-round': String(fixRound), 'data-fix-round-state': fixRoundRunning === true ? 'running' : 'parked' } : {})}
+      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})} {...(fixRound !== undefined ? { 'data-fix-round': String(fixRound), 'data-fix-round-state': fixRoundRunning === true ? 'running' : 'parked' } : {})} {...(runBase !== undefined ? { 'data-run-base': runBase } : {})}
       onClick={() => onSelect(initiativeId)}
       style={{
         position: 'absolute', left: position.x, top: position.y, width: position.w, height: position.h,
@@ -765,7 +765,7 @@ function RoadmapDrawer({
           recoveryNote={recoveryNote}
           onInspectRecovery={inspectRecovery}
           onRecoveryAction={doRecoveryAction}
-          onDepJump={onDepJump} onWorkItemAdded={onRecoveryDone} pmRepairErrors={initiative.pmRepairErrors}
+          onDepJump={onDepJump} onWorkItemAdded={onRecoveryDone} pmRepairErrors={initiative.pmRepairErrors} failNote={initiative.failNote}
         />
       </>
     );
