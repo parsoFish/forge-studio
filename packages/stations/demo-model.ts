@@ -23,6 +23,7 @@ import { join } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
 import { isSafeDemoRoute } from '@forge/contracts';
+import type { BrowserStepDecl } from '@forge/projects';
 
 import type {
   HarnessMetricRow,
@@ -61,6 +62,9 @@ export type DemoModelCheckpoint = {
   /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route to navigate
    *  to (`server.url + route`) instead of the server root. Validated by `isSafeDemoRoute`. */
   route?: string;
+  /** A planned screenshot's interaction and outlined regions, driven on both sides (row 4 of forge-nk1y.45). */
+  steps?: BrowserStepDecl[];
+  regions?: string[];
   /** Evidence form; `apiPath` (api-before-after only, never with `command`) GETs the tree's own server. */
   form?: DemoEvidenceForm;
   apiPath?: string;

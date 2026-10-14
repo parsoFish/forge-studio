@@ -61,7 +61,11 @@ Choose per checkpoint what shows THIS change best:
 - **`cli-before-after`** — the change alters what a command prints. Name one
   `command` from the allowed commands.
 - **`screenshot`** — the change alters a page. Name one `route` from the
-  allowed routes.
+  allowed routes. When the change shows only after an interaction, add
+  `steps` — up to 10 of `{ "click": "<selector>" }`,
+  `{ "fill": "<selector>", "text": "<value>" }` or `{ "press": "Enter" }` — and
+  up to 6 `regions` selectors to outline in the final frame. The capture drives
+  the same steps on both sides.
 - **`test-evidence`** — nothing above can show it. No driver field; the
   orchestrator attaches the gate output.
 
@@ -75,7 +79,8 @@ the band fails.
 ## Rules the orchestrator enforces
 
 Each checkpoint has a `form`, a non-empty `caption`, an optional `acRef`, and
-exactly the one driver field its form takes. A plan carries no other field —
+exactly the one driver field its form takes; a `screenshot` may add `steps` and
+`regions`. A plan carries no other field —
 no output, no delta, no verdict. At most 12 checkpoints. The narrative is
 labelled *agent narrative, not evidence* in DEMO.md and never moves a verdict.
 

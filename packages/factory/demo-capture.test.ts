@@ -379,3 +379,12 @@ test('collectCapturedMedia: a plain .png with no filmstrip still binds as the im
     rmSync(bundleDir, { recursive: true, force: true });
   }
 });
+
+// forge-nk1y.44: at 13 px in a 1280x720 recording the stdout read at ~5 px on the gate; the
+// page's output type is at least 18 px (prompt 20) so the video stays legible beside the text.
+test('terminalPageHtml: output type ≥ 18 px and the prompt 20 px at the 1280x720 recording', () => {
+  const html = terminalPageHtml('after', 'Plan-1');
+  const px = (sel: string): number => Number(new RegExp(`${sel.replace('#', '\\#').replace('.', '\\.')}\\{[^}]*font-size:(\\d+)px`).exec(html)?.[1]);
+  assert.ok(px('#output') >= 18, `#output font-size ${px('#output')}px < 18px`);
+  assert.equal(px('.prompt'), 20);
+});

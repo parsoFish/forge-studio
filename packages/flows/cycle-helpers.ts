@@ -83,6 +83,9 @@ export function rebaseForResume(input: CycleInput, logger: EventLogger): void {
     ['.forge/work-items', '.forge/unifier-items'],
     () => rebasePreservedBranchOntoMain(input.worktreePath),
   );
+  // forge-mfv5.1.37: the same rebase runs at a Kickoff Start onto a preserved
+  // branch; `entry` says which, the shas say what moved.
+  const entry = input.resumeFrom ? 'resume' : 'start';
   logger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
@@ -93,13 +96,29 @@ export function rebaseForResume(input: CycleInput, logger: EventLogger): void {
     message: rebase.ok
       ? (rebase.rebased ? 'cycle.resume-rebased' : 'cycle.resume-no-rebase-needed')
       : 'cycle.resume-needs-rebase',
-    metadata: { base: rebase.base, rebased: rebase.rebased, reason: rebase.reason ?? null },
+    metadata: {
+      entry,
+      base: rebase.base,
+      rebased: rebase.rebased,
+      from_sha: rebase.fromSha,
+      to_sha: rebase.toSha,
+      onto_sha: rebase.ontoSha,
+      conflict: rebase.conflict ?? false,
+      fetch_error: rebase.fetchError ?? null,
+      reason: rebase.reason ?? null,
+    },
   });
   if (!rebase.ok) {
+    const what = rebase.conflict ? `${rebaseConflictLabel(rebase.ontoSha, rebase.base)} — ` : '';
     throw new Error(
-      `resume-needs-rebase: ${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
+      `resume-needs-rebase: ${what}${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
     );
   }
+}
+
+/** "rebase conflict onto <sha12> (<base>)" — the one wording the error, the classifier and the card share. */
+function rebaseConflictLabel(ontoSha: string | null, base: string): string {
+  return `rebase conflict onto ${ontoSha ? ontoSha.slice(0, 12) : 'UNKNOWN'} (${base})`;
 }
 
 // ---------------------------------------------------------------------------

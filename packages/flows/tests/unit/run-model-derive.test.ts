@@ -19,6 +19,7 @@ import {
   findFailure,
   deriveStopOnBudget,
   deriveOperatorStop,
+  deriveRunBase,
 } from '../../run-model-derive.ts';
 import type { EventLogEntry, Phase } from '@forge/kernel';
 import type { RunPhaseStatus } from '../../run-model.ts';
@@ -670,4 +671,23 @@ test(
 
 test('deriveOperatorStop: an empty event stream derives false', () => {
   assert.equal(deriveOperatorStop([]), false);
+});
+
+// ---------------------------------------------------------------------------
+// forge-mfv5.1.37 row 2 — deriveRunBase: the commit the entry rebase put the
+// branch onto (Start or resume), from the runner's own cycle.resume-* event.
+// ---------------------------------------------------------------------------
+
+test('deriveRunBase: a rebased or no-op entry derives its onto_sha; the LAST entry wins', () => {
+  const events = [
+    ev('orchestrator', 'log', { message: 'cycle.resume-no-rebase-needed', metadata: { entry: 'start', onto_sha: 'aaa111' } }),
+    ev('orchestrator', 'log', { message: 'cycle.resume-rebased', metadata: { entry: 'resume', onto_sha: 'bbb222' } }),
+  ];
+  assert.equal(deriveRunBase(events), 'bbb222');
+});
+
+test('deriveRunBase: a refused entry rebase, a missing sha, or no entry event derives nothing — never a guess', () => {
+  assert.equal(deriveRunBase([ev('orchestrator', 'error', { message: 'cycle.resume-needs-rebase', metadata: { onto_sha: 'ccc333' } })]), undefined);
+  assert.equal(deriveRunBase([ev('orchestrator', 'log', { message: 'cycle.resume-rebased', metadata: { onto_sha: null } })]), undefined);
+  assert.equal(deriveRunBase([ev('developer-loop', 'start')]), undefined);
 });

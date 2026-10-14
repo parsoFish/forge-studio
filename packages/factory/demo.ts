@@ -38,8 +38,8 @@ import {
   checkpointArtifactStem,
 } from '@forge/stations/demo-types.ts';
 import { isSafeDemoRoute } from '@forge/contracts';
-import { resolveCheckpointHead, contentTypeByExtension } from '@forge/kernel';
-import { loadProjectConfig } from '@forge/projects';
+import { resolveCheckpointHead, contentTypeByExtension, type CheckpointHeadOptions } from '@forge/kernel';
+import { checkBrowserSteps, loadProjectConfig, type BrowserStepDecl } from '@forge/projects';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
   collectCapturedMedia,
@@ -165,7 +165,7 @@ export type CaptureCheckpointsInput = {
    * An AC-derived browser checkpoint (forge-mfv5.1.7) carries `route`: the
    * in-app path navigated to (`server.url + route`) instead of the server root.
    */
-  checkpointLabels: Array<{ label: string; route?: string }>;
+  checkpointLabels: BrowserCheckpoint[];
   /** CLI/output checkpoints — each runs `command` in the before+after worktree and
    *  captures stdout to before/<label>.out + after/<label>.out (the real terminal
    *  output the demo shows side-by-side, instead of a hand-written prose note). */
@@ -174,6 +174,8 @@ export type CaptureCheckpointsInput = {
   checkpointApiPaths?: Array<{ label: string; apiPath: string }>;
   /** Build before serving (slower) vs dev-server only. */
   build?: boolean;
+  /** The project's `demoMeans.run` — how a command head runs from each tree (forge-nk1y.42). */
+  runPrefixes?: Readonly<Record<string, string>>;
 };
 
 export type CaptureCheckpointsResult = {
@@ -225,11 +227,13 @@ export function tokeniseWorktreePath(text: string, worktreePath: string): string
     .reduce((acc, form) => (form ? acc.split(form).join('<worktree>') : acc), text);
 }
 
-export function captureCommandOutput(worktreePath: string, command: string): string {
+/** Run one checkpoint command in `worktreePath` — the tree under capture, via
+ *  its declared run prefix where one is given (forge-nk1y.42). */
+export function captureCommandOutput(worktreePath: string, command: string, opts: CheckpointHeadOptions = {}): string {
   const argv = command.trim().split(/\s+/);
   let out: string;
   try {
-    const head = resolveCheckpointHead(argv, worktreePath);
+    const head = resolveCheckpointHead(argv, worktreePath, opts);
     if (!head.ok) return `[command did not run: ${head.reason}]\n`;
     const r = spawnSync(head.file, head.args, {
       cwd: worktreePath,
@@ -253,7 +257,7 @@ export async function captureCheckpoints(
   input: CaptureCheckpointsInput,
 ): Promise<CaptureCheckpointsResult> {
   const { buildTree, startServer, sweepStaleServer } = await import('./demo-runtime.ts');
-  const { recordTerminal, recordBrowser } = await import('./demo-capture.ts');
+  const { recordTerminal } = await import('./demo-capture.ts');
   const { captureApiGet } = await import('./demo-api-capture.ts');
   const apiPaths = input.checkpointApiPaths ?? [];
 
@@ -305,7 +309,7 @@ export async function captureCheckpoints(
         // artefact of running in a fresh worktree per run, never real
         // before/after behaviour, so leaving it in would read every run as
         // "changed" regardless of the command's actual output.
-        const out = tokeniseWorktreePath(captureCommandOutput(wt.path, command), wt.path);
+        const out = tokeniseWorktreePath(captureCommandOutput(wt.path, command, { runPrefixes: input.runPrefixes }), wt.path);
         writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
         // Best-effort per D-07 — a recording failure never fails the
@@ -342,7 +346,8 @@ export async function captureCheckpoints(
             writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), tokeniseWorktreePath(got.out, wt.path));
             captured.push(label);
           }
-          for (const { label, route } of input.checkpointLabels) {
+          for (const browserCp of input.checkpointLabels) {
+            const { label, route } = browserCp;
             // Point-of-use guard (forge-mfv5.1.7): demo.json's `route` is never
             // re-validated before it reaches here, so it is resolved and origin-
             // checked NOW — a refused route is skipped, never navigated.
@@ -354,12 +359,7 @@ export async function captureCheckpoints(
             // recordBrowser writes the final outlined still at native resolution as
             // `<label>.png` — the checkpoint's image (forge-nk1y.30); the filmstrip is a thumbnail.
             try {
-              await recordBrowser({
-                side,
-                label: checkpointArtifactStem(label),
-                url: resolution.url,
-                bundleDir,
-              });
+              await recordBrowserCheckpoint(browserCp, side, resolution.url, bundleDir);
               captured.push(label);
             } catch (err) {
               process.stderr.write(
@@ -380,6 +380,52 @@ export async function captureCheckpoints(
   }
 
   return { capturedBefore, capturedAfter };
+}
+
+/** A browser (screenshot) checkpoint as capture drives it: its route plus the declared steps and regions. */
+export type BrowserCheckpoint = { label: string; route?: string; steps?: BrowserStepDecl[]; regions?: string[] };
+
+/**
+ * The demo.json checkpoints capture records in a browser (row 4 of forge-nk1y.45):
+ * neither a command, an api path, gate output (`test-evidence`) nor a harness
+ * table — those were recorded as bare root-page stills. Their `steps`/`regions`
+ * are re-validated here, at the point of use; a malformed set is refused by
+ * name and never driven.
+ */
+export function browserCheckpointsOf(
+  cps: ReadonlyArray<{ label?: string; command?: string; apiPath?: string; route?: unknown; form?: string; kind?: string; steps?: unknown; regions?: unknown }>,
+): { checkpoints: BrowserCheckpoint[]; refused: string[] } {
+  const checkpoints: BrowserCheckpoint[] = [];
+  const refused: string[] = [];
+  for (const c of cps) {
+    if (!c.label || c.command || c.apiPath !== undefined || c.form === 'test-evidence' || c.kind === 'harness') continue;
+    const errors: string[] = [];
+    checkBrowserSteps(c.steps, c.regions, 'checkpoint', errors);
+    if (errors.length > 0) {
+      refused.push(`${c.label}: ${errors.join('; ')}`);
+      continue;
+    }
+    checkpoints.push({
+      label: c.label,
+      route: typeof c.route === 'string' ? c.route : undefined,
+      ...(c.steps !== undefined ? { steps: c.steps as BrowserStepDecl[] } : {}),
+      ...(c.regions !== undefined ? { regions: c.regions as string[] } : {}),
+    });
+  }
+  return { checkpoints, refused };
+}
+
+/** Record one browser checkpoint at `url`, driving its declared steps and outlining its regions. */
+export async function recordBrowserCheckpoint(cp: BrowserCheckpoint, side: 'before' | 'after', url: string, bundleDir: string) {
+  const { recordBrowser } = await import('./demo-capture.ts');
+  return recordBrowser({
+    side,
+    label: checkpointArtifactStem(cp.label),
+    url,
+    bundleDir,
+    ...(cp.steps ? { steps: cp.steps } : {}),
+    ...(cp.regions ? { regions: cp.regions } : {}),
+  });
 }
 
 /** The api-path checkpoints capture may fetch: only paths the project declares (forge-mfv5.1.19). */
@@ -430,11 +476,12 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
   // Means are the project's, read here, never from demo.json: only a declared
   // api path is fetched (an undeclared one stays uncaptured → `unknown`), and
   // the control drops only the project's declared ignoreKeys.
-  const means = loadProjectConfig(input.projectRepoPath)?.demoMeans?.api;
+  const demoMeans = loadProjectConfig(input.projectRepoPath)?.demoMeans;
+  const means = demoMeans?.api;
   const checkpointApiPaths = declaredApiCheckpoints(cps, means?.paths ?? []);
-  const checkpointLabels = cps
-    .filter((c) => c.label && !c.command && c.apiPath === undefined)
-    .map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
+  const browser = browserCheckpointsOf(cps);
+  for (const reason of browser.refused) process.stderr.write(`[demo] refusing browser checkpoint ${reason}\n`);
+  const checkpointLabels = browser.checkpoints;
   await captureCheckpoints({
     projectRepoPath: input.projectRepoPath,
     project: input.project,
@@ -446,6 +493,7 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
     checkpointCommands,
     checkpointApiPaths,
     build: true,
+    runPrefixes: demoMeans?.run ?? {},
   });
   const captured = collectCapturedMedia(input.bundleDir);
   const merged = mergeCapturedMedia(JSON.parse(readFileSync(input.jsonPath, 'utf8')), captured);

@@ -99,6 +99,8 @@ export type InitiativeDetailProps = {
   onWorkItemAdded?: () => void | Promise<void>;
   /** D-49: a FAILED initiative's recorded PM validation errors — present ⇒ Requeue runs the PM in repair mode. */
   pmRepairErrors?: string[];
+  /** forge-mfv5.1.37: a FAILED initiative's served failure note (e.g. "rebase conflict onto <sha>"), shown by name. */
+  failNote?: string;
 };
 
 export function InitiativeDetail({
@@ -127,6 +129,7 @@ export function InitiativeDetail({
   onDepJump,
   onWorkItemAdded,
   pmRepairErrors,
+  failNote,
   initialPendingRecovery = null,
 }: InitiativeDetailProps) {
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
@@ -394,6 +397,11 @@ export function InitiativeDetail({
             </span>
           </div>
 
+          {status === 'failed' && failNote && (
+            <div data-initiative-fail-note style={{ fontSize: 11, color: 'var(--red, #a33)', fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>
+              Failed — {failNote}
+            </div>
+          )}
           {/* D-49: say which Requeue this is before the operator presses it. */}
           <div data-recovery-requeue-mode={pmRepairErrors?.length ? 'repair' : 'standard'} style={{ fontSize: 11, color: 'var(--dim)' }}>
             {pmRepairErrors?.length ? (

@@ -156,6 +156,11 @@
             "commands": { "type": "array", "items": { "type": "string" }, "description": "Commands that print a JSON body to standard output, such as the project's own CLI reading a live service with its own credentials." },
             "ignoreKeys": { "type": "array", "items": { "type": "string" }, "description": "Extra key names dropped at any depth before before/after JSON is compared, on top of the default volatile keys (`id`, `node_id`, timestamps, `url`, `*_url`, `etag`, `size`, `watchers`, `watchers_count`)." }
           }
+        },
+        "run": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "How a command runs from the tree under capture, such as `{ \"gw\": \"python3 -m gitweave.cli\" }`. Each key is a command name; its value replaces that name. A command the project installs (a script declared in `pyproject.toml`) that is found only on `PATH` runs one installed copy for both before and after, so forge refuses it unless it is declared here. A value may not hold shell operators, an absolute path or `..`."
         }
       }
     },
