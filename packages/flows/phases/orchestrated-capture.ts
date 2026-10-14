@@ -122,16 +122,24 @@ export function preflightDemoCaptureCommands(
   demoJsonPath: string,
   worktreePath: string,
 ): DemoCommandPreflight {
-  let checkpoints: Array<{ label?: unknown; command?: unknown }> = [];
+  let checkpoints: Array<{ label?: unknown; command?: unknown; apiPath?: unknown; route?: unknown; steps?: unknown; form?: unknown; kind?: unknown }> = [];
   try {
     const parsed = JSON.parse(readFileSync(demoJsonPath, 'utf8')) as {
-      checkpoints?: Array<{ label?: unknown; command?: unknown }>;
+      checkpoints?: typeof checkpoints;
     };
     checkpoints = Array.isArray(parsed?.checkpoints) ? parsed.checkpoints : [];
   } catch {
     return { ok: true, problems: [] };
   }
   const commands: DemoCheckpointCommand[] = [];
+  // Row 4 of forge-nk1y.45: a browser checkpoint with no route and no steps is a bare root-page load.
+  const bare = checkpoints.filter(
+    (cp) => typeof cp?.label === 'string' && cp.command === undefined && cp.apiPath === undefined
+      && (cp.form === 'screenshot' || cp.kind === 'screenshot' || cp.kind === 'video') && typeof cp.route !== 'string' && cp.steps === undefined,
+  );
+  if (bare.length > 0) {
+    return { ok: false, problems: bare.map((cp) => `checkpoint "${cp.label as string}": a screenshot checkpoint names no route and no steps — capture would record a bare root-page load`) };
+  }
   for (const cp of checkpoints) {
     if (typeof cp?.command !== 'string' || cp.command.trim() === '') continue;
     const label = typeof cp.label === 'string' && cp.label.trim() ? cp.label : '(unlabelled)';

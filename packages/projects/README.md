@@ -25,7 +25,7 @@ both directions, and is required to FAIL against an empty index.
 | config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` · `writeProjectConfigPatch` · `validateDemoDeclaration` · `WI_GATE_PACKAGE_PLACEHOLDER` |
 | preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` · `clauseTarget` · `loadDeclaredSkills` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
-| demo means | `parseDemoMeans` · `isOwnServerPath` · `DEMO_EVIDENCE_FORMS` · `allowedDemoMeans` · `validateDemoPlan` · `NARRATIVE_MAX_WORDS` |
+| demo means | `parseDemoMeans` · `isOwnServerPath` · `DEMO_EVIDENCE_FORMS` · `allowedDemoMeans` · `validateDemoPlan` · `checkBrowserSteps` · `NARRATIVE_MAX_WORDS` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
 | repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` · `dirtyPaths` · `isGitRepo` · `beginStudioTransaction` |
 | the reset | `cmdProjectReset` · `computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` |
