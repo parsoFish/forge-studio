@@ -145,6 +145,8 @@ export function FlowRunDetail({
       // `?? 0` mirrors the counter's own honest starting value; see
       // `findReviewRound` (`@forge/flows`) for the derivation.
       data-review-round={String(run?.reviewRound ?? 0)}
+      // forge-mfv5.1.37 row 2: the commit the dev loop started on (`Run.runBase`); empty when none was recorded.
+      data-run-base={run?.runBase ?? ''}
       data-page-ready={ready ? 'true' : 'false'}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
@@ -209,6 +211,9 @@ export function FlowRunDetail({
               </span>
             )}
             <span>{run?.id ?? runId} · flow {flowId || '—'}</span>
+            {found && run?.runBase && (
+              <span data-component="run-base" title={`dev loop started on ${run.runBase}`}>base {run.runBase.slice(0, 12)}</span>
+            )}
           </div>
         </header>
 
