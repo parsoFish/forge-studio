@@ -83,6 +83,8 @@ export type Run = {
   /** An operator-requested stop (M7 row 150, ruling 1774) — resumable, distinct
    *  from an ordinary crash, same shape as `stopOnBudget` above. */
   operatorStop?: boolean;
+  /** forge-mfv5.1.37: the commit the entry rebase (Start or resume) put the branch onto — the dev loop's base. Absent when none was recorded. */
+  runBase?: string;
   reflectionLost?: string;           // merged/closed cycle whose reflection was lost (cause)
   reflectionLostNote?: string;
   /** `costUsd` optional per work item — the wire-parse carries this array through unvalidated. */
