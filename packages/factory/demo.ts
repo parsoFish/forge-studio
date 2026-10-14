@@ -38,7 +38,7 @@ import {
   checkpointArtifactStem,
 } from '@forge/stations/demo-types.ts';
 import { isSafeDemoRoute } from '@forge/contracts';
-import { resolveCheckpointHead, contentTypeByExtension } from '@forge/kernel';
+import { resolveCheckpointHead, contentTypeByExtension, type CheckpointHeadOptions } from '@forge/kernel';
 import { checkBrowserSteps, loadProjectConfig, type BrowserStepDecl } from '@forge/projects';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
@@ -174,6 +174,8 @@ export type CaptureCheckpointsInput = {
   checkpointApiPaths?: Array<{ label: string; apiPath: string }>;
   /** Build before serving (slower) vs dev-server only. */
   build?: boolean;
+  /** The project's `demoMeans.run` — how a command head runs from each tree (forge-nk1y.42). */
+  runPrefixes?: Readonly<Record<string, string>>;
 };
 
 export type CaptureCheckpointsResult = {
@@ -225,11 +227,13 @@ export function tokeniseWorktreePath(text: string, worktreePath: string): string
     .reduce((acc, form) => (form ? acc.split(form).join('<worktree>') : acc), text);
 }
 
-export function captureCommandOutput(worktreePath: string, command: string): string {
+/** Run one checkpoint command in `worktreePath` — the tree under capture, via
+ *  its declared run prefix where one is given (forge-nk1y.42). */
+export function captureCommandOutput(worktreePath: string, command: string, opts: CheckpointHeadOptions = {}): string {
   const argv = command.trim().split(/\s+/);
   let out: string;
   try {
-    const head = resolveCheckpointHead(argv, worktreePath);
+    const head = resolveCheckpointHead(argv, worktreePath, opts);
     if (!head.ok) return `[command did not run: ${head.reason}]\n`;
     const r = spawnSync(head.file, head.args, {
       cwd: worktreePath,
@@ -301,7 +305,7 @@ export async function captureCheckpoints(
         // artefact of running in a fresh worktree per run, never real
         // before/after behaviour, so leaving it in would read every run as
         // "changed" regardless of the command's actual output.
-        const out = tokeniseWorktreePath(captureCommandOutput(wt.path, command), wt.path);
+        const out = tokeniseWorktreePath(captureCommandOutput(wt.path, command, { runPrefixes: input.runPrefixes }), wt.path);
         writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
         // Best-effort per D-07 — a recording failure never fails the
@@ -468,7 +472,8 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
   // Means are the project's, read here, never from demo.json: only a declared
   // api path is fetched (an undeclared one stays uncaptured → `unknown`), and
   // the control drops only the project's declared ignoreKeys.
-  const means = loadProjectConfig(input.projectRepoPath)?.demoMeans?.api;
+  const demoMeans = loadProjectConfig(input.projectRepoPath)?.demoMeans;
+  const means = demoMeans?.api;
   const checkpointApiPaths = declaredApiCheckpoints(cps, means?.paths ?? []);
   const browser = browserCheckpointsOf(cps);
   for (const reason of browser.refused) process.stderr.write(`[demo] refusing browser checkpoint ${reason}\n`);
@@ -484,6 +489,7 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
     checkpointCommands,
     checkpointApiPaths,
     build: true,
+    runPrefixes: demoMeans?.run ?? {},
   });
   const captured = collectCapturedMedia(input.bundleDir);
   const merged = mergeCapturedMedia(JSON.parse(readFileSync(input.jsonPath, 'utf8')), captured);

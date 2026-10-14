@@ -217,10 +217,21 @@ export type ResumeRebaseResult = {
   rebased: boolean;
   /** The base branch rebased onto (origin/main, main, …). */
   base: string;
+  /** HEAD before / after, and the commit `base` named — `null` only when git could not answer. */
+  fromSha: string | null;
+  toSha: string | null;
+  ontoSha: string | null;
+  /** Set when `origin` exists but could not be fetched — the rebase is then refused (`ok:false`). */
+  fetchError?: string;
+  /** The rebase itself conflicted (aborted; the branch is untouched). */
+  conflict?: true;
   reason?: string;
 };
 
 /**
+ * forge-mfv5.1.37: called at EVERY develop entry onto a preserved branch — a
+ * Kickoff Start as well as a resume (`flow-runner.ts`'s `rebasesAtEntry`).
+ *
  * cascade-v4 #4: on a resume run, another cycle may have merged to
  * `main` between the stall and the resume — so the preserved initiative branch
  * no longer has `main` as its merge-base, and the dev-loop-close invariant
@@ -238,57 +249,81 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
   const branch = currentBranch(worktreePath);
   const git = (args: string[]): string =>
     execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).toString();
+  const sha = (ref: string): string | null => {
+    try { return git(['rev-parse', '--verify', `${ref}^{commit}`]).trim(); } catch { return null; }
+  };
+  const fromSha = sha('HEAD');
+  const unresolved = { fromSha, toSha: fromSha, ontoSha: null };
   let base = 'main';
   try {
     git(['rev-parse', '--verify', 'main']);
   } catch {
     try { git(['rev-parse', '--verify', 'master']); base = 'master'; }
-    catch { return { ok: false, rebased: false, base: 'main', reason: 'no main/master branch to rebase onto' }; }
+    catch { return { ok: false, rebased: false, base: 'main', ...unresolved, reason: 'no main/master branch to rebase onto' }; }
   }
-  if (!branch) return { ok: false, rebased: false, base, reason: 'detached HEAD or not a git repo' };
+  if (!branch) return { ok: false, rebased: false, base, ...unresolved, reason: 'detached HEAD or not a git repo' };
+  if (branch === base) return { ok: false, rebased: false, base, ...unresolved, reason: `the preserved worktree is on ${base} itself — refusing to rebase or push the base branch` };
 
-  // Pick up other cycles' merges: fetch + rebase onto origin/<base>.
-  let target = base;
-  try { git(['fetch', 'origin', base]); target = `origin/${base}`; }
-  catch { target = base; }
+  const hasOrigin = (() => {
+    try { git(['remote', 'get-url', 'origin']); return true; } catch { return false; }
+  })();
+  // Pick up other cycles' merges: fetch + rebase onto origin/<base>. With an
+  // origin present a failed fetch REFUSES by name: the local base is only as
+  // fresh as the last pull, so proceeding on it is the stale-base defect itself.
+  if (hasOrigin) {
+    try { git(['fetch', 'origin', base]); }
+    catch (err) {
+      const fetchError = errText(err);
+      return { ok: false, rebased: false, base: `origin/${base}`, ...unresolved, fetchError, reason: `could not fetch origin/${base} — refusing to start on the local ${base}, which may predate merged work: ${fetchError}` };
+    }
+  }
+  const target = hasOrigin ? `origin/${base}` : base;
+  const shas = { fromSha, toSha: fromSha, ontoSha: sha(target) };
 
   // No divergence: target is already an ancestor of HEAD — nothing to do.
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', target, 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
-    return { ok: true, rebased: false, base: target };
+    return { ok: true, rebased: false, base: target, ...shas };
   } catch { /* diverged → attempt a clean rebase */ }
 
+  let dirty: string;
+  try { dirty = git(['status', '--porcelain', '--untracked-files=no']).trim(); }
+  catch (err) { return { ok: false, rebased: false, base: target, ...shas, reason: `could not read the preserved worktree's status: ${errText(err)}` }; }
+  if (dirty) {
+    return { ok: false, rebased: false, base: target, ...shas, reason: `the preserved worktree has uncommitted changes to tracked files — commit or discard them, then requeue: ${dirty.slice(0, 200)}` };
+  }
   try {
     git(['rebase', '--rebase-merges', target]); // keeps each `wi(<id>): merge`, the review's delivery record (forge-mfv5.1.30)
   } catch (err) {
     try { git(['rebase', '--abort']); } catch { /* leave it; surfaced below */ }
-    const e = err as { stderr?: Buffer | string; message?: string };
-    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
     return {
-      ok: false, rebased: false, base: target,
-      reason: `rebase onto ${target} conflicted — manual rebase required before re-resuming: ${(stderr || e.message || '').slice(0, 300)}`,
+      ok: false, rebased: false, base: target, ...shas, conflict: true,
+      reason: `rebase onto ${target} conflicted — manual rebase required before re-resuming: ${errText(err)}`,
     };
   }
+  const rebasedShas = { ...shas, toSha: sha('HEAD') };
 
   // Rebase rewrote history → the branch must be force-pushed (with lease, never
   // plain --force) so origin/<branch> matches. Only the initiative branch.
   // Skip the push if there is no origin remote (no-remote project or test fixture).
-  const hasOrigin = (() => {
-    try { git(['remote', 'get-url', 'origin']); return true; } catch { return false; }
-  })();
   if (hasOrigin) {
     try {
       git(['push', '--force-with-lease', '--set-upstream', 'origin', branch]);
     } catch (err) {
-      const e = err as { stderr?: Buffer | string; message?: string };
-      const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
       return {
-        ok: false, rebased: true, base: target,
-        reason: `rebased onto ${target} locally but force-with-lease push failed (someone else moved the branch?): ${(stderr || e.message || '').slice(0, 300)}`,
+        ok: false, rebased: true, base: target, ...rebasedShas,
+        reason: `rebased onto ${target} locally but force-with-lease push failed (someone else moved the branch?): ${errText(err)}`,
       };
     }
   }
-  return { ok: true, rebased: true, base: target };
+  return { ok: true, rebased: true, base: target, ...rebasedShas };
+}
+
+/** git's stderr (or the error message), bounded for an event field, with any `scheme://user:secret@` credential in a remote URL masked. */
+export function errText(err: unknown): string {
+  const e = err as { stderr?: Buffer | string; message?: string };
+  const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
+  return (stderr || e.message || '').replace(/([a-z][a-z0-9+.-]*:\/\/)[^@\s/]+@/gi, '$1***@').slice(0, 300);
 }
 
 export type LocalRemoteInvariant = {

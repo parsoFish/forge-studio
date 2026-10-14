@@ -42,7 +42,7 @@ import type { ManifestClass } from '@forge/contracts';
 import { extractDrivableCommand } from '@forge/contracts';
 
 import { readWorkItemsFromDir, type WorkItem } from './work-item.ts';
-import { preflightDemoCommands, type DemoCheckpointCommand } from './phases/orchestrated-capture.ts';
+import { preflightDemoCommands, projectRunPrefixes, type DemoCheckpointCommand } from './phases/orchestrated-capture.ts';
 
 /** The one class whose installed gate profile captures checkpoint-command
  *  evidence (`@forge/factory/class-profiles.ts`'s `capture: 'checkpoints'`
@@ -86,7 +86,9 @@ export function demoCheckpointPreflightRefusal(worktreePath: string, changeClass
   if (items.length === 0) return null;
   const commands = acDerivedCheckpointCommands(items);
   if (commands.length === 0) return null;
-  const preflight = preflightDemoCommands(commands, worktreePath);
+  const prefixes = projectRunPrefixes(worktreePath);
+  if (!prefixes.ok) return `demo checkpoint command(s) not producible: ${prefixes.reason}`;
+  const preflight = preflightDemoCommands(commands, worktreePath, { runPrefixes: prefixes.runPrefixes });
   if (preflight.ok) return null;
   return `demo checkpoint command(s) not producible: ${preflight.problems.join('; ')}`;
 }

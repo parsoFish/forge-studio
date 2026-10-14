@@ -40,7 +40,7 @@ export { type ClosureResult, type CycleInput, type CycleOutcome, type LintStatus
 export { type MergeGateResult, type MergeGateEvidence, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, preservingForgeScratch, rebaseForResume, runMergeBoundaryGate } from './cycle-helpers.ts';
 export { openPrInline } from './cycle-pr-open.ts';
 export { promoteMergedToDone, runClosure } from './phases/closure.ts';
-export { CAPTURE_NONCE_ENV, MAX_COMMITTED_DEMO_MEDIA_BYTES, MAX_COMMITTED_DEMO_WEBM_BYTES, buildDemoCaptureArgv, commitOrchestratedCaptureArtifacts, demoJsonWantsCapture, generateCaptureNonce, preflightDemoCaptureCommands, resolveDemoCaptureTimeoutMs, runOrchestratorCommand } from './phases/orchestrated-capture.ts';
+export { CAPTURE_NONCE_ENV, MAX_COMMITTED_DEMO_MEDIA_BYTES, MAX_COMMITTED_DEMO_WEBM_BYTES, buildDemoCaptureArgv, commitOrchestratedCaptureArtifacts, demoJsonWantsCapture, generateCaptureNonce, preflightDemoCaptureCommands, preflightDemoCommands, projectRunPrefixes, resolveDemoCaptureTimeoutMs, runOrchestratorCommand } from './phases/orchestrated-capture.ts';
 export type { CommitOrchestratedCaptureArtifactsResult, SkippedCaptureMedia } from './phases/orchestrated-capture.ts';
 export { compileWorkItemSpecs } from './phases/wi-spec-compile.ts';
 

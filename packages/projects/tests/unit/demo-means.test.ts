@@ -16,6 +16,7 @@ const FULL = {
   commands: ['gitpulse --since 7d'],
   routes: ['/dashboard'],
   api: { paths: ['/api/health'], commands: ['gitweave org show --json'], ignoreKeys: ['sha'] },
+  run: { gw: 'python3 -m gitweave.cli', gitpulse: 'node ./bin/gitpulse.js' },
 };
 
 test('a full declaration parses to the same shape', () => {
@@ -43,6 +44,14 @@ const refusals: Array<[string, unknown, RegExp]> = [
   ['api path outside the root', { api: { paths: ['/api/../../secret'] } }, /demoMeans\.api\.paths\[0\] .*own server/],
   ['ignoreKeys not strings', { api: { ignoreKeys: [1] } }, /demoMeans\.api\.ignoreKeys must be an array of strings/],
   ['ignoreKeys dotted path', { api: { ignoreKeys: ['a.b'] } }, /demoMeans\.api\.ignoreKeys\[0\] .*key name/],
+  // forge-nk1y.42: a run prefix makes a capture command execute the tree under capture.
+  ['run not an object', { run: ['gw'] }, /demoMeans\.run must be an object/],
+  ['run key not a bare name', { run: { 'bin/gw': 'node ./x.js' } }, /demoMeans\.run\.bin\/gw: the key must be a bare command name/],
+  ['run prefix with a shell', { run: { gw: 'python3 -m x; id' } }, /demoMeans\.run\.gw .*shell metacharacters/],
+  ['run prefix absolute', { run: { gw: '/home/u/.local/bin/gw' } }, /demoMeans\.run\.gw .*absolute path/],
+  ['run prefix climbing out', { run: { gw: 'node ../other/cli.js' } }, /demoMeans\.run\.gw .*`\.\.`/],
+  ['run prefix is the head itself', { run: { gw: 'gw' } }, /demoMeans\.run\.gw .*runs `gw` itself/],
+  ['run prefix empty', { run: { gw: ' ' } }, /demoMeans\.run\.gw: must be a non-empty/],
 ];
 
 for (const [name, input, expected] of refusals) {

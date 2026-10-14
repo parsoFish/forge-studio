@@ -94,3 +94,26 @@ test('the readiness panel says when neither is declared', async () => {
   expect(q('[data-readiness-item="demo-means"]').getAttribute('data-declared')).toBe('false');
   expect(q('[data-readiness-item="acceptance-tier"]').getAttribute('data-declared')).toBe('false');
 });
+
+// forge-nk1y.42: the run prefix is edited on the page, round-trips, and a Save never drops it.
+const GW_RUN = { demoMeans: { ...GW.demoMeans, run: { gw: 'python3 -m gitweave.cli' } }, acceptance: GW.acceptance };
+
+test('run prefixes round-trip: stored → form → declarations, unchanged', () => {
+  expect(declarationsFromForm(formFromDeclarations(GW_RUN))).toEqual({ ok: true, ...GW_RUN });
+});
+
+test('a run prefix typed on the page reaches Save\'s payload', async () => {
+  let form = formFromDeclarations(GW);
+  await act(async () => { root.render(React.createElement(Harness, { initial: form, onForm: (f) => { form = f; } })); });
+  await typeInto('[data-field="demo-means-run"]', 'gw = python3 -m gitweave.cli\n');
+  const decl = declarationsFromForm(form);
+  expect(decl).toEqual({ ok: true, ...GW_RUN });
+});
+
+test('a run line with no `=` is refused by name, and the editor says so', async () => {
+  let form = formFromDeclarations({});
+  await act(async () => { root.render(React.createElement(Harness, { initial: form, onForm: (f) => { form = f; } })); });
+  await typeInto('[data-field="demo-means-run"]', 'gw python3 -m gitweave.cli');
+  expect(declarationsFromForm(form)).toEqual({ ok: false, reason: 'run prefix line 1 needs `<command> = <in-tree prefix>`' });
+  expect(q('[data-declarations-error]').textContent).toContain('run prefix line 1');
+});

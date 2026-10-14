@@ -1,4 +1,4 @@
-/** `resolveCheckpointHead` — PATH, then a contained package.json bin (forge-8vfn.30.9). */
+/** `resolveCheckpointHead` — a contained package.json bin, then PATH (forge-8vfn.30.9). */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -64,6 +64,6 @@ test('a missing package.json is "no bin declared"; a malformed one is a named re
     assert.match(r.ok ? '' : r.reason, /unreadable or malformed/);
     rmSync(join(dir, 'package.json'));
     const r2 = resolveCheckpointHead(['gp'], dir);
-    assert.match(r2.ok ? '' : r2.reason, /PATH.*package\.json "bin"/);
+    assert.match(r2.ok ? '' : r2.reason, /package\.json "bin" and on PATH/);
   });
 });

@@ -31,7 +31,9 @@ import {
   ORCHESTRATOR_GIT_IDENTITY,
   resolveCheckpointHead,
   resolveGuardedPath,
+  type CheckpointHeadOptions,
 } from '@forge/kernel';
+import { loadProjectConfig } from '@forge/projects';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
@@ -87,10 +89,11 @@ export type DemoCheckpointCommand = { label: string; command: string };
 export function preflightDemoCommands(
   checkpoints: readonly DemoCheckpointCommand[],
   worktreePath: string,
+  opts: CheckpointHeadOptions = {},
 ): DemoCommandPreflight {
   const problems: string[] = [];
   for (const cp of checkpoints) {
-    const problem = checkCommandProducible(cp.command, worktreePath);
+    const problem = checkCommandProducible(cp.command, worktreePath, opts);
     if (problem) problems.push(`checkpoint "${cp.label}": ${problem}`);
   }
   return { ok: problems.length === 0, problems };
@@ -142,10 +145,28 @@ export function preflightDemoCaptureCommands(
     const label = typeof cp.label === 'string' && cp.label.trim() ? cp.label : '(unlabelled)';
     commands.push({ label, command: cp.command.trim() });
   }
-  return preflightDemoCommands(commands, worktreePath);
+  if (commands.length === 0) return { ok: true, problems: [] };
+  const prefixes = projectRunPrefixes(worktreePath);
+  if (!prefixes.ok) return { ok: false, problems: [prefixes.reason] };
+  return preflightDemoCommands(commands, worktreePath, { runPrefixes: prefixes.runPrefixes });
 }
 
-function checkCommandProducible(command: string, worktreePath: string): string | null {
+/**
+ * The project's declared run prefixes (`demoMeans.run`, forge-nk1y.42) read
+ * from the tree's own `.forge/project.json`. Absent config → none declared; an
+ * unreadable or invalid one is a named refusal, never "no prefixes" (§6.15).
+ */
+export function projectRunPrefixes(
+  worktreePath: string,
+): { ok: true; runPrefixes: Record<string, string> } | { ok: false; reason: string } {
+  try {
+    return { ok: true, runPrefixes: loadProjectConfig(worktreePath)?.demoMeans?.run ?? {} };
+  } catch (err) {
+    return { ok: false, reason: `.forge/project.json could not be read for demoMeans.run: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+function checkCommandProducible(command: string, worktreePath: string, opts: CheckpointHeadOptions): string | null {
   const argv = command.split(/\s+/);
   const head = argv[0]!;
   // Package-runner scripts: the named script must be defined.
@@ -164,9 +185,12 @@ function checkCommandProducible(command: string, worktreePath: string): string |
     }
     return null;
   }
-  // Path-bearing head: must exist + be executable relative to the worktree.
+  // Path-bearing head: inside the tree (the resolver's rule), then it must
+  // exist + be executable there.
   if (head.includes('/')) {
-    const abs = head.startsWith('/') ? head : resolve(worktreePath, head);
+    const contained = resolveCheckpointHead(argv, worktreePath, opts);
+    if (!contained.ok) return contained.reason;
+    const abs = resolve(worktreePath, head);
     try {
       accessSync(abs, constants.X_OK);
       return null;
@@ -174,9 +198,10 @@ function checkCommandProducible(command: string, worktreePath: string): string |
       return `\`${head}\` does not exist or is not executable in the worktree — the capture run would record "[command did not run]" as evidence`;
     }
   }
-  // Bare binary: PATH, then a contained package.json `bin` (forge-8vfn.30.9) —
-  // the SAME resolver the capture spawn uses.
-  const resolved = resolveCheckpointHead(argv, worktreePath);
+  // Bare binary: a declared run prefix, a contained package.json `bin`, then
+  // PATH for system tools only (forge-nk1y.42) — the SAME resolver the
+  // capture spawn uses.
+  const resolved = resolveCheckpointHead(argv, worktreePath, opts);
   return resolved.ok ? null : resolved.reason;
 }
 

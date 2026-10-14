@@ -479,3 +479,20 @@ export function deriveStopOnBudget(
 export function deriveOperatorStop(events: readonly EventLogEntry[]): boolean {
   return events.some((e) => e.message === 'flow.operator-stop');
 }
+
+/**
+ * forge-mfv5.1.37 row 2: the commit the run's branch was rebased onto at
+ * entry (a Kickoff Start onto a preserved branch, or a resume) — the base the
+ * dev loop started on — from the LAST successful entry-rebase event's
+ * `onto_sha`. A refused rebase never started a dev loop, so it derives
+ * nothing; neither does a run with no entry rebase (a fresh worktree).
+ */
+export function deriveRunBase(events: readonly EventLogEntry[]): string | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.message !== 'cycle.resume-rebased' && e.message !== 'cycle.resume-no-rebase-needed') continue;
+    const onto = e.metadata?.onto_sha;
+    return typeof onto === 'string' && onto.length > 0 ? onto : undefined;
+  }
+  return undefined;
+}

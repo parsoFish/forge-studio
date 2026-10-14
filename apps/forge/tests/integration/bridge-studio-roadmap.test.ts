@@ -583,3 +583,39 @@ test('roadmap: ready-for-review under a FOREIGN flow is startable; the same flow
     'enqueue a second develop run beside a live one',
   );
 });
+
+// forge-mfv5.1.37: the card reads the base its dev loop started on, and a failed
+// initiative's drawer reads its failure by name ("rebase conflict onto <sha>").
+test('roadmap: a failed initiative serves its failNote; a started one serves runBase', async () => {
+  const failedCycle = 'cycle-init-rb-f';
+  const startedCycle = 'cycle-init-rb-s';
+  const note = 'rebase conflict onto 93fbaec2a1b2 (origin/main) — the preserved branch conflicts with current main';
+  const log = (cycleId: string, id: string, events: object[]) => {
+    mkdirSync(join(forgeRoot, '_logs', cycleId), { recursive: true });
+    writeFileSync(join(forgeRoot, '_logs', cycleId, 'events.jsonl'), events.map((e) => JSON.stringify({ cycle_id: cycleId, initiative_id: id, input_refs: [], output_refs: [], ...e })).join('\n') + '\n');
+  };
+  writeFileSync(join(forgeRoot, '_queue', 'failed', 'INIT-RB-F.md'), makeManifest('INIT-RB-F', { cycleId: failedCycle }));
+  log(failedCycle, 'INIT-RB-F', [
+    { event_id: 'EV_1', phase: 'orchestrator', skill: 'cycle', event_type: 'start', started_at: '2026-10-14T09:46:05.000Z', message: 'cycle.start' },
+    { event_id: 'EV_2', phase: 'orchestrator', skill: 'cycle', event_type: 'error', started_at: '2026-10-14T09:46:06.000Z', message: 'cycle.resume-needs-rebase', metadata: { entry: 'start', conflict: true, onto_sha: '93fbaec2a1b2c3' } },
+    { event_id: 'EV_3', phase: 'orchestrator', skill: 'cycle', event_type: 'log', started_at: '2026-10-14T09:46:07.000Z', message: 'failure_classification', metadata: { kind: 'terminal', reason: note } },
+  ]);
+  writeFileSync(join(forgeRoot, '_queue', 'in-flight', 'INIT-RB-S.md'), makeManifest('INIT-RB-S', { cycleId: startedCycle }));
+  log(startedCycle, 'INIT-RB-S', [
+    { event_id: 'EV_1', phase: 'orchestrator', skill: 'cycle', event_type: 'start', started_at: '2026-10-14T09:46:05.000Z', message: 'cycle.start' },
+    { event_id: 'EV_2', phase: 'orchestrator', skill: 'cycle', event_type: 'log', started_at: '2026-10-14T09:46:06.000Z', message: 'cycle.resume-rebased', metadata: { entry: 'start', onto_sha: '93fbaec2a1b2c3' } },
+  ]);
+  try {
+    const roadmap = await fetchRoadmap();
+    const f = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-RB-F') as { failNote?: string } | undefined;
+    const s = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-RB-S') as { runBase?: string; failNote?: string } | undefined;
+    assert.equal(f?.failNote, note);
+    assert.equal(s?.runBase, '93fbaec2a1b2c3');
+    assert.equal(s?.failNote, undefined, 'a note is served only for a failed initiative');
+  } finally {
+    for (const [dir, id, cyc] of [['failed', 'INIT-RB-F', failedCycle], ['in-flight', 'INIT-RB-S', startedCycle]]) {
+      rmSync(join(forgeRoot, '_queue', dir, `${id}.md`), { force: true });
+      rmSync(join(forgeRoot, '_logs', cyc), { recursive: true, force: true });
+    }
+  }
+});

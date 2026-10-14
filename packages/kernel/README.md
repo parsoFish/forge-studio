@@ -33,7 +33,7 @@ directly.
 | where a session dir lives: under the logs root, never in the ground | `SESSIONS_DIRNAME` · `ARCHITECT_KIND_DIR` · `sessionDirSegments` · `sessionKindSegments` · `resolveSessionDir` |
 | the session/project-dir realpath-guarded single-file read | `safeReadFileInSession` |
 | case-folding probe (duplicate-target detection) | `CaseFoldingProbeError` · `detectVolumeCaseFolding` |
-| resolving a demo checkpoint command's head (PATH, then a contained package.json bin entry) | `resolveCheckpointHead` |
+| resolving a demo checkpoint command's head inside the tree under capture (declared run prefix, contained package.json bin, then PATH for system tools; a PATH copy of the tree's own command is refused) and validating a run prefix | `resolveCheckpointHead` · `validateRunPrefix` · `RUN_PREFIX_KEY` |
 | guarded scan (bounded mtime + tail reads) | `guardedMtime` · `selectRecentEntries` · `guardedReadFileTail` |
 | the studio validator Finding shape | `err` · `flag` |
 | station + band ports (SPEC.md §2) | `createBandRegistry` |
