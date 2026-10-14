@@ -15,13 +15,13 @@ export function SideBody({ media, mode, side, size }: { media: SideMedia; mode: 
   }
   if (mode === 'output' || (mode === 'video' && !media.video)) {
     return (
-      <pre data-captured-output style={{ margin: 0, height: '100%', overflow: 'auto', padding: 'var(--space-2) var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: size === 'large' ? 'var(--text-md)' : 'var(--text-xs)', lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+      <pre data-captured-output style={{ margin: 0, height: '100%', overflow: 'auto', padding: 'var(--space-2) var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: size === 'large' ? 'var(--text-md)' : 'var(--text-base)', lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
         {media.output || '(no output captured)'}
       </pre>
     );
   }
   if (mode === 'video' && media.video) {
-    return <video controls preload="metadata" playsInline src={media.video} style={{ width: '100%', height: '100%', display: 'block', background: 'var(--bg)' }} />;
+    return <video controls preload="metadata" playsInline src={media.video} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: 'var(--bg)' }} />;
   }
   return <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-base)', color: 'var(--dim)' }}>{media.note || '—'}</div>;
 }

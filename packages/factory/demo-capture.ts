@@ -229,12 +229,12 @@ export function terminalPageHtml(side: RecordSide, label: string): string {
     'html,body{margin:0;height:100%;background:#0d1117;color:#c9d1d9;' +
     'font-family:ui-monospace,Menlo,Consolas,monospace;}' +
     '.term{padding:24px;}' +
-    '.titlebar{font-size:12px;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;}' +
-    '.prompt{display:flex;align-items:center;gap:8px;font-size:16px;margin-bottom:20px;}' +
+    '.titlebar{font-size:14px;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;}' +
+    '.prompt{display:flex;align-items:center;gap:8px;font-size:20px;margin-bottom:20px;}' +
     '.prompt .sigil{color:#3fb950;}' +
     '#cmdline{background:transparent;border:none;color:#e6edf3;font:inherit;outline:none;flex:1;caret-color:#e6edf3;}' +
-    '#output{white-space:pre-wrap;font-size:13px;line-height:1.6;min-height:24px;}' +
-    '#footer{margin-top:20px;font-size:11px;color:#6e7681;}' +
+    '#output{white-space:pre-wrap;font-size:18px;line-height:1.5;min-height:24px;}' +
+    '#footer{margin-top:20px;font-size:13px;color:#6e7681;}' +
     '</style></head><body><div class="term">' +
     `<div class="titlebar">${side} — ${label}</div>` +
     '<div class="prompt"><span class="sigil">$</span><input id="cmdline" /></div>' +
