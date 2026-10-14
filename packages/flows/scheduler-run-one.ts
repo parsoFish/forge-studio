@@ -442,6 +442,8 @@ export async function runOne(
       // D-06: thread the resume marker into the cycle so it skips PM +
       // per-WI dev-loop and runs only the unifier + downstream phases.
       resumeFrom: manifest.resumeFrom,
+      // forge-mfv5.1.37: a reused branch (the Kickoff hand-off) is rebased onto main at entry.
+      reusesPreservedWorktree: strategy === 'reuse',
       eventTee: tee,
       // No verdict provider is threaded in: the review verdict arrives
       // out-of-band as a UI action. D-20: a send-back appends UWIs the drain

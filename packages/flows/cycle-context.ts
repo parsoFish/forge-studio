@@ -121,6 +121,14 @@ export type CycleInput = {
    * Absent ⇒ normal full cycle.
    */
   resumeFrom?: 'integrate' | 'develop' | 'plan' | 'pr-open';
+  /**
+   * forge-mfv5.1.37: the scheduler REUSED a preserved worktree and branch for
+   * this run (`decideWorktreeStrategy` → `'reuse'`) — the Kickoff hand-off,
+   * where `resumeFrom` is cleared. `runFlow` rebases such a branch onto main
+   * once at entry, exactly as it does for a resume (`rebasesAtEntry`).
+   * Absent ⇒ a fresh `worktree.add`, already cut from main.
+   */
+  reusesPreservedWorktree?: boolean;
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**

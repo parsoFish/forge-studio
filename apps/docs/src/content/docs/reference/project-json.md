@@ -94,6 +94,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `commands` | array of string | no | - | Commands a CLI before/after checkpoint may run. Each runs without a shell, so it may not contain shell operators such as `\|`, `;` or `$`. |
 | `routes` | array of string | no | - | In-app paths a screenshot checkpoint may open, starting `/` with no traversal. |
 | `api` | object | no | - | Means for an API before/after checkpoint, compared as JSON. |
+| `run` | object | no | - | How a command runs from the tree under capture, such as `{ "gw": "python3 -m gitweave.cli" }`. Each key is a command name; its value replaces that name. A command the project installs (a script declared in `pyproject.toml`) that is found only on `PATH` runs one installed copy for both before and after, so forge refuses it unless it is declared here. A value may not hold shell operators, an absolute path or `..`. |
 
 ### `demoMeans.api`
 

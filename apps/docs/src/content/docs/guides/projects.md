@@ -45,7 +45,7 @@ It checks the same clauses and prints a pass, fail or warn line for each. It als
 
 The editor also holds two declarations, both saved with **Save**:
 
-- **Demo means** lists what a demo may drive: commands, in-app routes, and API paths or commands. Ignored keys are left out of a before/after comparison. When the demo builder locks a declaration, it adds the commands its capture steps ran.
+- **Demo means** lists what a demo may drive: commands, in-app routes, and API paths or commands. Ignored keys are left out of a before/after comparison. When the demo builder locks a declaration, it adds the commands its capture steps ran. A command the project installs itself, such as a script declared in `pyproject.toml`, needs a run prefix (`gw` → `python3 -m gitweave.cli`): a copy found only on `PATH` runs the same code before and after, so forge refuses it.
 - **Acceptance tier** is the text that marks a live-acceptance gate command, plus the environment variables such a gate needs. A tier with variables but no match is refused by name. forge always sets `FORGE_RESOURCE_PREFIX` for a work item's gate, to keep its live resources apart from other runs'; an acceptance criterion that requires the variable to be absent must unset it inside the test.
 
 The readiness panel lists both, or says that neither is declared.

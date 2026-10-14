@@ -17,6 +17,7 @@ export {
   findReflectionLoss,
   deriveStopOnBudget,
   deriveOperatorStop,
+  deriveRunBase,
 } from './run-model-derive-status.ts';
 
 export {

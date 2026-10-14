@@ -80,3 +80,16 @@ test('extractPlanJson: a fenced block wins; a bare object parses; prose is null'
   assert.deepEqual(extractPlanJson(' {"a":2} '), { a: 2 });
   assert.equal(extractPlanJson('no plan'), null);
 });
+
+test('the revise turn (nk1y.42 / nk1y.43) is shown why the last plan was sent back, with its facts', async () => {
+  const { queryFn, seen } = replying(`\`\`\`json\n${JSON.stringify(PLAN)}\n\`\`\``);
+  const revise = { reason: 'checkpoint command(s) not producible from the tree under capture', details: ['checkpoint "Plan 1": `gw` resolves to /home/u/.local/bin/gw outside the capture tree'] };
+  await createDemoPlanner({ queryFn }).plan(def, { ...input(), revise }, logger);
+  assert.match(seen[0]!.prompt, /## Revise: your last plan was sent back\n\nWhy: checkpoint command\(s\) not producible from the tree under capture\n\n- checkpoint "Plan 1": `gw` resolves to \/home\/u\/\.local\/bin\/gw outside the capture tree/);
+});
+
+test('a first turn carries no revise section', async () => {
+  const { queryFn, seen } = replying(`\`\`\`json\n${JSON.stringify(PLAN)}\n\`\`\``);
+  await createDemoPlanner({ queryFn }).plan(def, input(), logger);
+  assert.doesNotMatch(seen[0]!.prompt, /## Revise/);
+});

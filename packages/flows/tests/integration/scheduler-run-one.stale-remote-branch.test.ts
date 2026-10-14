@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -543,7 +543,7 @@ test('runOne (d): origin unreachable at attempt start on a FRESH attempt → ref
 // tell, at cleanup time, that this attempt owns it).
 // ---------------------------------------------------------------------------
 
-test("runOne (d'): origin unreachable at attempt start on a RESUME attempt → never refused, records no ownership, a later failure deletes nothing", async () => {
+test("runOne (d'): origin unreachable at attempt start on a RESUME attempt → never refused by the stale-branch guard, records no ownership, stops at the entry rebase by name, deletes nothing", async () => {
   await withSkipContractCheck(async () => {
     const { root, repo, origin } = setupProject();
     const initiativeId = `INIT-8vfn818dp-${randomUUID()}`;
@@ -570,10 +570,15 @@ test("runOne (d'): origin unreachable at attempt start on a RESUME attempt → n
       assert.ok(!logged.includes('stale-remote-branch.cleaned-up'), 'no ownership was recorded on UNKNOWN — the branch THIS attempt pushed must survive');
       assert.ok(!logged.includes('stale-remote-branch.cleanup-failed'), 'no ownership recorded — cleanup never even runs');
 
-      // Origin was restored (chmod 755) by the wiring's own `dev` node before
-      // it pushed, so the branch THIS attempt pushed is readable again — and,
-      // per the assertions above, was never targeted for deletion.
-      assert.notEqual(remoteHeadSha(repo, branch), null, 'this attempt DID push the branch — it must still be there, unowned but undeleted');
+      // forge-mfv5.1.37: the entry rebase now fetches origin and REFUSES by name
+      // when it cannot (never a start on a possibly-stale local main), so the
+      // outage stops this attempt before the `dev` node — nothing pushed,
+      // nothing deleted, and the refusal is named in the cycle's own log.
+      chmodSync(origin, 0o755);
+      const cycleLogs = readdirSync(join(root, '_logs'), { recursive: true, encoding: 'utf8' })
+        .filter((f) => f.endsWith('events.jsonl')).map((f) => readFileSync(join(root, '_logs', f), 'utf8')).join('');
+      assert.ok(cycleLogs.includes('cycle.resume-needs-rebase') && cycleLogs.includes('could not fetch origin/main'), 'the outage is refused by name at the entry rebase');
+      assert.equal(remoteHeadSha(repo, branch), null, 'refused before the dev node — this attempt pushed nothing, so there is nothing to delete');
     } finally {
       chmodSync(origin, 0o755);
       rmSync(root, { recursive: true, force: true });

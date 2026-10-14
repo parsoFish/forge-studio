@@ -95,7 +95,7 @@ export type ProjectWithMeta = {
   skills?: string[];
   demoProcess?: Array<{ kind: string; text: string; element?: string }>;
   /** forge-mfv5.1.32: what a demo may drive (`demoMeans`) and the live-acceptance tier, as stored. */
-  demoMeans?: { commands?: string[]; routes?: string[]; api?: { paths?: string[]; commands?: string[]; ignoreKeys?: string[] } };
+  demoMeans?: { commands?: string[]; routes?: string[]; api?: { paths?: string[]; commands?: string[]; ignoreKeys?: string[] }; run?: Record<string, string> };
   acceptance?: { match: string; requiresEnv?: string[] };
   /** True when a demo-builder run has locked a reproducible demo into the repo
    *  (`.forge/demo/demo.lock.json`) — drives the "update the demo" entry + the

@@ -111,6 +111,9 @@ export * from './forge-ref-guard-hook.ts';
  *  helpers (`newRunStamp`/`randomRunSuffix`) — row 206 (forge-8vfn.8.5.56). */
 export * from './dispatch-claim.ts';
 
-/** The one resolver for a demo checkpoint command's head: PATH, then the
- *  worktree package.json `bin` (contained inside the worktree). */
-export { resolveCheckpointHead } from './checkpoint-command.ts';
+/** The one resolver for a demo checkpoint command's head, tree first: a
+ *  declared run prefix (`demoMeans.run`), the worktree package.json `bin`, then
+ *  PATH for system tools only — a PATH copy of the tree's own command is
+ *  refused by name (forge-nk1y.42). */
+export { resolveCheckpointHead, type CheckpointHeadOptions } from './checkpoint-command.ts';
+export { RUN_PREFIX_KEY, validateRunPrefix, type RunPrefixes } from './run-prefix.ts';
