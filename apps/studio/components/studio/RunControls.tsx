@@ -64,6 +64,7 @@ import {
   runAwaitsServe,
   runControlsShouldRender,
   runFailureNoteKind,
+  describeRoundHalt,
   type RunControl,
   type RunControlId,
 } from '@/lib/run-controls';
@@ -206,13 +207,16 @@ export function RunControls({
           data-component="run-status-line"
           data-stop-on-budget={failureNoteKind === 'budget' ? 'true' : undefined}
           data-run-stop-reason={failureNoteKind === 'operator-stop' ? 'operator-stop' : undefined}
+          data-round-halt={failureNoteKind === 'round-halt' ? run.roundHalt!.classification : undefined}
           style={{ fontSize: 12, color: 'var(--faint)' }}
         >
           {failureNoteKind === 'budget'
             ? describeStopOnBudget(run.stopOnBudget!)
             : failureNoteKind === 'operator-stop'
               ? describeOperatorStop()
-              : `Run failed${failureNoteKind === 'fail-note' ? ` — ${run.failNote}` : ''}.`}
+              : failureNoteKind === 'round-halt'
+                ? `${describeRoundHalt(run.roundHalt!)} — fix the preserved worktree, then Requeue.`
+                : `Run failed${failureNoteKind === 'fail-note' ? ` — ${run.failNote}` : ''}.`}
         </span>
       )}
       {controls.map((c) => (

@@ -21,6 +21,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { drainPendingFixWorkItems, type FixLoopDrainResult } from '../../drain-fix-loop.ts';
+import type { EventLogEntry } from '@forge/kernel';
+import { aggregateRun } from '../../run-model.ts';
+import { deriveRoundHalt } from '../../run-model-derive-status.ts';
 import type { PhaseWiring } from '../../phase-wiring.ts';
 import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 import { FIX_INIT, plantStrandedFixRound, type StrandedFixRound } from '../test-fixtures/stranded-fix-round.ts';
@@ -70,6 +73,11 @@ test('a terminal entry failure halts the round: failed/ with the reason + file, 
     assert.match(String(halted[0]!.metadata?.reason), /wi-1\.txt/);
     assert.equal(events(fx).some((e) => e.message === 'sendback.loop-completed'), false, 'a halted round never reads as completed');
     assert.equal(starts(fx), before + 1);
+
+    const run = aggregateRun({ root, queueState: 'failed', manifestPath: queue(root, 'failed'), nowMs: Date.now() });
+    assert.equal(run.status, 'failed', 'the surfaces read failed, never "running"');
+    assert.deepEqual({ ...run.roundHalt, reason: undefined }, { round: 1, classification: 'terminal', reason: undefined });
+    assert.match(run.roundHalt?.reason ?? '', /wi-1\.txt/);
 
     const second = await drain(root);
     assert.equal(second, undefined, 'the next tick sees nothing to drain');
@@ -155,4 +163,12 @@ test('a node that fails terminally without touching the round halts too — it w
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('deriveRoundHalt: only the LATEST attempt counts — a Requeue\'s cycle.start clears the halt', () => {
+  const ev = (message: string, metadata?: Record<string, unknown>) => ({ message, metadata }) as unknown as EventLogEntry;
+  const halted = ev('sendback.loop-halted', { round: 2, classification: 'terminal', reason: 'r' });
+  assert.deepEqual(deriveRoundHalt([ev('cycle.start'), halted]), { round: 2, classification: 'terminal', reason: 'r' });
+  assert.equal(deriveRoundHalt([ev('cycle.start'), halted, ev('cycle.start')]), undefined);
+  assert.equal(deriveRoundHalt([ev('cycle.start'), ev('sendback.loop-completed')]), undefined);
 });

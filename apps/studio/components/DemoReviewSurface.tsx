@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { demoOutcomeOf } from '@forge/contracts';
 
 import type { DemoModel } from '@/lib/bridge-client';
+import type { Run } from '@/lib/studio-client';
 import { submitVerdict } from '@/lib/bridge-client';
 import {
   fetchReviewComments,
@@ -52,6 +53,7 @@ export function DemoReviewSurface({
   costUsd = null,
   reflectHref,
   bridgeBase = null,
+  roundHalt,
 }: {
   model: DemoModel;
   cycleId: string;
@@ -61,6 +63,8 @@ export function DemoReviewSurface({
   costUsd?: number | null;
   reflectHref?: string;
   bridgeBase?: string | null;
+  /** forge-mfv5.1.39: the run's halted fix round, for the decision card's headline. */
+  roundHalt?: { halt: NonNullable<Run['roundHalt']>; href: string };
 }): JSX.Element {
   const [comments, setComments] = useState<ReviewComment[]>([]);
   const [derived, setDerived] = useState<DerivedVerdict>({ kind: 'approve' });
@@ -206,6 +210,7 @@ export function DemoReviewSurface({
           loadError={loadError}
           onJumpToBlocker={firstBlocker ? () => setFocusRegion((f) => ({ id: firstBlocker, seq: (f?.seq ?? 0) + 1 })) : undefined}
           demoOutcome={demoOutcome}
+          roundHalt={roundHalt}
           claims={{
             present: doc !== null,
             missed: verdicts.missed ?? 0,
