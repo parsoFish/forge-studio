@@ -35,7 +35,7 @@ A media pair pane is the exception: a before/after pair spans the full surface
 width, each side a 16:9 box sized by its width (at least `--pane-xl` +
 `--pane-md`, `object-fit: contain`), and the block holding it fits one
 viewport. Its index collapses to a strip above the pair. (D-46 amendment,
-forge-nk1y.44, pending operator ratification, D-38.)
+forge-nk1y.44.)
 
 ## 3. Stacking
 
