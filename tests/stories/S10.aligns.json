@@ -15,7 +15,7 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-06",
-      "digest": "fe98ca1374209d7c",
+      "digest": "3bc4c0af8de3bcf2",
       "why": "D-06: Act2 (S10.act2.mjs): stop/resume-run (ruling 1794's inferRequeueResume path) keeps the finished work item and re-runs the unfinished one — \"the second attempt starts from what the first one…"
     },
     {
@@ -26,7 +26,7 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-15",
-      "digest": "2dfea6b1fc4a5f7e",
+      "digest": "d2c1cd6ee7028422",
       "why": "D-15: The integrate station assembles evidence for review before any human or agent judges it; gates are orchestrator verbs (plan gate, review gate, merge)"
     },
     {
