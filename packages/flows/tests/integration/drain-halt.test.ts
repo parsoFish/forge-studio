@@ -182,32 +182,18 @@ test('a node that fails terminally: the attempt that moved the head (entry rebas
   }
 });
 
-/** Drain with an injected cycle that appends `lines` to the attempt's log (a cycle.start first) and returns `status`, or throws. */
-async function drainWith(root: string, fx: StrandedFixRound, out: { status?: string; throws?: string; lines?: object[] }) {
+/** Drain with an injected cycle that appends `lines` to the attempt's log (a cycle.start first) and returns `status`. */
+async function drainWith(root: string, fx: StrandedFixRound, out: { status?: string; lines?: object[] }) {
   const results = await drainPendingFixWorkItems({
     queueRoot: join(root, '_queue'), logsRoot: join(root, '_logs'), phaseWiring: UNREACHED_PHASE_WIRING, confirmMerge: () => false,
     runDrainCycle: async () => {
       const log = join(fx.logDir, 'events.jsonl');
       writeFileSync(log, readFileSync(log, 'utf8') + [{ message: 'cycle.start' }, ...(out.lines ?? [])].map((l) => JSON.stringify(l)).join('\n') + '\n');
-      if (out.throws) throw new Error(out.throws);
       return { status: out.status ?? 'failed' };
     },
   });
   return results.find((x) => x.initiativeId === FIX_INIT);
 }
-
-test('a THROWN drain cycle that left the round untouched halts UNKNOWN with the thrown message (§6.15)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'drain-halt-throw-'));
-  try {
-    const fx = plant(root, { dirty: false });
-    const r = await drainWith(root, fx, { throws: 'manifest has no flow_id' });
-    assert.equal(r?.status, 'halted', JSON.stringify(r));
-    assert.equal(events(fx).find((e) => e.message === 'sendback.loop-halted')?.metadata?.classification, 'UNKNOWN');
-    assert.match(r?.detail ?? '', /no flow_id/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test('an unclassified failure halts UNKNOWN and says no classification or error was recorded', async () => {
   const root = mkdtempSync(join(tmpdir(), 'drain-halt-unknown-'));

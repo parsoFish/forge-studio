@@ -281,16 +281,15 @@ export async function drainPendingFixWorkItems(
       let halted = false;
       const headBefore = worktreeHeadSha(worktreePath);
       try {
-        let result: { status: string };
-        let thrown: string | null = null;
-        try { result = await runDrainCycle(input, deps.phaseWiring); } catch (err) { thrown = err instanceof Error ? err.message : String(err); result = { status: 'failed' }; }
+        // A THROWN cycle (runCycle classifies and returns every failure inside its own try) keeps the pinned
+        // `status:'error'` + return-to-ready-for-review contract (drain-fix-loop.test.ts).
+        const result = await runDrainCycle(input, deps.phaseWiring);
         // forge-mfv5.1.39: a failed run that left the round untouched (same pending WIs, same head) and did not
         // classify transient re-fails identically every tick — halt it by name in failed/, never back to ready-for-review.
         const after = pendingFixWorkItems(worktreePath).map((p) => p.work_item_id).sort();
         const headAfter = worktreeHeadSha(worktreePath);
         const untouched = after.join(',') === pending.map((p) => p.work_item_id).sort().join(',') && headAfter === headBefore;
-        const halt = result.status !== 'failed' || !untouched ? null : thrown !== null ? { classification: 'UNKNOWN', reason: thrown } : roundHaltFromLog(logPath);
-        if (halt === null && thrown !== null) throw new Error(thrown);
+        const halt = result.status === 'failed' && untouched ? roundHaltFromLog(logPath) : null;
         if (halt !== null) {
           createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: headAfter } });
           try { // the event is the record the surfaces read; the manifest copy never blocks the move to failed/
