@@ -173,7 +173,7 @@ test('makeQualityGateFromCmd: requiredEnv satisfied → gate runs + passes norma
   const present = 'FORGE_TEST_PRESENT_ENV_XYZ';
   process.env[present] = '1';
   try {
-    const gate = makeQualityGateFromCmd(dir, ['true'], undefined, { requiredEnv: [present] });
+    const gate = makeQualityGateFromCmd(dir, ['sh', '-c', 'echo "1 passed in 0.01s"'], undefined, { requiredEnv: [present] }); // forge-mfv5.1.38: an acceptance gate must show a test summary
     assert.equal(gate(), true, 'gate runs (and passes) when the required env var is set');
   } finally {
     delete process.env[present];
@@ -194,7 +194,7 @@ test('makeQualityGateFromCmd: requiredEnv satisfied by the worktree secrets.env 
     let info: GateRunInfo | undefined;
     const gate = makeQualityGateFromCmd(
       dir,
-      ['sh', '-c', `test "$${fromSecrets}" = from-secrets`],
+      ['sh', '-c', `test "$${fromSecrets}" = from-secrets && echo "1 passed in 0.01s"`],
       (i) => { info = i; },
       { requiredEnv: [fromSecrets] },
     );
@@ -213,7 +213,7 @@ test('makeQualityGateFromCmd: process env WINS over secrets.env on conflict', ()
     writeFileSync(join(dir, 'secrets.env'), `${conflicted}=from-secrets\n`);
     const gate = makeQualityGateFromCmd(
       dir,
-      ['sh', '-c', `test "$${conflicted}" = from-process`],
+      ['sh', '-c', `test "$${conflicted}" = from-process && echo "1 passed in 0.01s"`],
       undefined,
       { requiredEnv: [conflicted] },
     );
@@ -237,7 +237,7 @@ test('makeQualityGateFromCmd: unsetEnv strips a declared var from the gate child
     let info: GateRunInfo | undefined;
     const gate = makeQualityGateFromCmd(
       dir,
-      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"'],
+      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"; echo "1 passed in 0.01s"'],
       (i) => { info = i; },
       { unsetEnv: ['FORGE_TEST_TF_ACC_XYZ'] },
     );
@@ -277,7 +277,7 @@ test('makeQualityGateFromCmd: unsetEnv strips a declared var even when requiredE
     let info: GateRunInfo | undefined;
     const gate = makeQualityGateFromCmd(
       dir,
-      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"'],
+      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"; echo "1 passed in 0.01s"'],
       (i) => { info = i; },
       { requiredEnv: [present], unsetEnv: ['FORGE_TEST_TF_ACC_XYZ'] },
     );

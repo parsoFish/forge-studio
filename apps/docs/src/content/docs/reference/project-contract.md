@@ -59,7 +59,7 @@ The fields of `.forge/project.json` are in that file's schema; the project build
 |---|---|---|---|
 | Local | `testProcess.local` | One command that is green at HEAD, fast, and needs no live system. | After each work-item iteration. |
 | CI | `testProcess.ci` | Your full CI command. It may chain commands. | Once, as the final gate before a PR opens, with `unsetEnv` variables stripped. |
-| Acceptance | `testProcess.acceptance` | A live-system suite, for projects whose behaviour only a real system can prove. | As a work item's own gate. Planning fails if the change class requires this tier and no work item carries a gate containing `match`. A gate that runs with a `requiresEnv` variable unset errors instead of passing. forge sets `FORGE_RESOURCE_PREFIX` for every work item's gate, so a criterion that needs it absent must unset it inside the test. |
+| Acceptance | `testProcess.acceptance` | A live-system suite, for projects whose behaviour only a real system can prove. | As a work item's own gate. Planning fails if the change class requires this tier and no work item carries a gate containing `match`. A gate that runs with a `requiresEnv` variable unset errors instead of passing. Any work item's gate whose test runner reports only skipped tests fails, naming the skips; an acceptance gate must print a `pytest`, `vitest`, `node:test` or `go test -v` summary. forge sets `FORGE_RESOURCE_PREFIX` for every work item's gate, so a criterion that needs it absent must unset it inside the test. |
 
 ### Preflight clauses
 

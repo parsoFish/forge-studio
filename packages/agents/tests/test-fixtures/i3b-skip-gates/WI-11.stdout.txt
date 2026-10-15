@@ -1,0 +1,10 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/parso/forge/_worktrees/wi/INIT-2026-10-11-i3b-self-service/WI-11
+configfile: pyproject.toml
+plugins: black-0.6.0, cov-7.0.0, anyio-4.12.1, mypy-1.0.1
+collected 1 item
+
+tests/acceptance/test_gw_reset_readback.py s                             [100%]
+
+============================== 1 skipped in 0.01s ==============================

@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { deriveResourcePrefix, gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY, RESOURCE_PREFIX_ENV } from '@forge/kernel';
+import { judgeGateTestSummary } from './gate-test-summary.ts';
 
 export type StopCondition =
   | { kind: 'quality-gates-pass' }
@@ -147,14 +148,8 @@ export type GateRunInfo = {
   stderrTail: string;
   /** The command that was run, for grep-ability in the event log. */
   command: string;
-  /**
-   * Set when the gate failed despite exit 0 — surfaces *which* tightening
-   * rejected the run. Empty when the gate's outcome was determined by exit
-   * code alone (the pre-tightening behaviour). G2 (2026-07-11): the
-   * 'no-work-indicator' string-scan reason was deleted with its heuristics —
-   * hollow detection is the runner's `hollow-no-work` diff-presence check.
-   */
-  rejectReason?: 'required-paths-missing' | 'gate-errored' | 'live-env-missing' | 'gate-timeout';
+  /** Set when the gate failed despite exit 0 — which tightening rejected it (`no-tests-ran`: forge-mfv5.1.38). */
+  rejectReason?: 'required-paths-missing' | 'gate-errored' | 'live-env-missing' | 'gate-timeout' | 'no-tests-ran';
   /**
    * Set when the gate command itself could NOT RUN (missing binary, EACCES,
    * killed by signal) — a BROKEN GATE, categorically different from a test
@@ -368,8 +363,7 @@ export function makeQualityGateFromCmd(
  * paths in the diff. Catches "agent wrote nothing the manifest declared as
  * `creates` / `verification_artifact`". A rejection sets `passed: false` + a
  * `rejectReason` on the GateRunInfo so post-mortems can see which layer
- * caught it. (G2: the output-string no-work scan that used to run here was
- * deleted — the runner's `hollow-no-work` diff-presence check replaces it.)
+ * caught it. A runner that executed zero tests is not a pass (forge-mfv5.1.38).
  */
 function runGateCapturing(
   worktreePath: string,
@@ -525,6 +519,12 @@ function runGateCapturing(
 
   // Tightening: only relevant when exit-code already said "pass". A non-zero
   // exit is a clear fail regardless of paths.
+  const noTests = passed ? judgeGateTestSummary(`${stdout}\n${stderr}`, { acceptance: requiredEnv.length > 0 }) : null;
+  if (noTests) { passed = false;
+    exitCode = -7; // synthetic — exit 0, but the runner executed nothing
+    rejectReason = 'no-tests-ran';
+    stderr = `${stderr}${stderr && !stderr.endsWith('\n') ? '\n' : ''}[forge gate-no-tests] ${noTests}. A gate that runs no test proves nothing: make the test run here (its skip condition, the env it needs) or gate on a test that does.`;
+  }
   if (passed) {
     // requiredPaths diff inclusion check.
     if (options?.requiredPaths && options.requiredPaths.length > 0) {
