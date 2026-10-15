@@ -289,7 +289,7 @@ export async function drainPendingFixWorkItems(
         if (halt !== null) {
           halted = true;
           createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: worktreeHeadSha(worktreePath) } });
-          annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason) });
+          annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason).replace(/\$/g, '\\u0024') }); // `$` is a String.replace pattern in annotateManifest
           moveTo(file, 'failed', paths);
           deps.notify?.(`${initiativeId} · fix round ${round} halted (${halt.classification}): ${halt.reason} — fix the worktree, then Requeue`);
           out.push({ initiativeId, status: 'halted', detail: halt.reason });

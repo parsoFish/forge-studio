@@ -169,8 +169,8 @@ export function roundHaltFromLog(logPath: string): { classification: string; rea
   const events = readLogEvents(logPath) ?? [];
   const attempt = events.slice(Math.max(0, lastIndex(events, (e) => e.message === 'cycle.start')));
   const cls = attempt[lastIndex(attempt, (e) => e.message === 'failure_classification')]?.metadata;
-  const classification = typeof cls?.failure_kind === 'string' ? cls.failure_kind : 'UNKNOWN';
-  if (classification === 'transient') return null;
+  if (cls?.failure_kind === 'transient') return null;
+  const classification = cls?.failure_kind === 'terminal' ? 'terminal' : 'UNKNOWN'; // a closed set: it is written raw into the manifest
   const error = attempt[lastIndex(attempt, (e) => e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end')]?.metadata?.error;
   const reason = typeof error === 'string' ? error.replace(/^\w*Error: /, '') : String(cls?.reason ?? 'no failure recorded in the attempt');
   return { classification, reason };
@@ -181,7 +181,8 @@ export function haltedRoundRefusal(logPath: string, pendingIds: readonly string[
   const events = readLogEvents(logPath) ?? [];
   const halt = events[lastIndex(events, (e) => e.message === 'sendback.loop-halted')];
   if (!halt || events.indexOf(halt) < lastIndex(events, (e) => e.message === 'cycle.start')) return null;
-  const halted = (halt.metadata?.pending_work_items as string[] | undefined) ?? [];
+  const halted = halt.metadata?.pending_work_items;
+  if (!Array.isArray(halted)) return 'fix round halted, but its record names no pending work items (unreadable) — fix the worktree, then Requeue';
   if (halted.join(',') !== [...pendingIds].sort().join(',')) return null;
   return `fix round halted (${String(halt.metadata?.classification)}): ${String(halt.metadata?.reason)} — fix the worktree, then Requeue`;
 }
