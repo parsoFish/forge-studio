@@ -13,6 +13,8 @@
  * is the kind of rule an author can break and a reader cannot check.
  */
 
+import { demoOutcomeHeadline, demoOutcomeOf } from '@forge/contracts';
+
 import type { DemoModel, DemoModelCheckpoint } from '../demo-model.ts';
 import { deriveDeltaSummary, renderAcceptanceCriterion, type DerivedDemoInput } from './derive-demo-model.ts';
 
@@ -55,12 +57,18 @@ export function derivePrBody(model: DemoModel, input: DerivedDemoInput): string 
     (row) => `- \`${row.cmd.join(' ')}\` (${row.gate}) — ${row.ok ? 'pass' : 'fail'}`,
   );
   const deltaSummary = deriveDeltaSummary(model.checkpoints);
+  // forge-nk1y.43: a capture that showed no change is named above every section, never only in the list.
+  const outcome = demoOutcomeOf(model.checkpoints);
+  const outcomeWarning = outcome && outcome.kind !== 'changed'
+    ? [`> **${demoOutcomeHeadline(outcome)}.** The verdict gate asks for your reason before this merges.`, '']
+    : [];
 
   return [
     `# ${input.title}`,
     '',
     `Initiative \`${input.initiativeId}\` · project \`${input.project}\` · head \`${input.headSha}\``,
     '',
+    ...outcomeWarning,
     '## Why',
     '',
     'The acceptance criteria this initiative was decomposed against:',

@@ -99,7 +99,7 @@ describe('reviseAfterCapture — idempotent', () => {
       const second = reviseAfterCapture(jsonPath, dir, prPath, dir, derivedInput(), baseEssence, noopEmit);
       assert.equal(second.ok, true);
       const finalModel = JSON.parse(readFileSync(jsonPath, 'utf8')) as DemoModel;
-      const occurrences = finalModel.essence.split('No observable behaviour change was captured.').length - 1;
+      const occurrences = finalModel.essence.split('Demo captured no behaviour change').length - 1;
       assert.equal(occurrences, 1, `expected the sentence exactly once, essence was: ${finalModel.essence}`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
