@@ -44,7 +44,8 @@ import {
   pendingFixWorkItems,
 } from './fix-work-items.ts';
 import type { CycleInput } from './cycle-context.ts';
-import { fixRoundHeadRefusal } from './requeue-resume.ts';
+import { fixRoundHeadRefusal, haltedRoundRefusal, roundHaltFromLog } from './requeue-resume.ts';
+import { annotateManifest } from './scheduler-run-one.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
 
 /** Keep the claimed manifest's heartbeat fresh during a (possibly long) drain so
@@ -58,6 +59,7 @@ export type FixLoopDrainStatus =
   | 'no-worktree'
   | 'needs-operator'
   | 'cap-exceeded'
+  | 'halted'
   | 'locked'
   | 'claimed-elsewhere'
   | 'error';
@@ -212,6 +214,15 @@ export async function drainPendingFixWorkItems(
         continue;
       }
 
+      // forge-mfv5.1.39: a round that halted on this pending set stays halted until the operator's Requeue (a new cycle.start).
+      const logPath = join(logsRoot, cycleId, 'events.jsonl');
+      const haltRefusal = haltedRoundRefusal(logPath, pending.map((p) => p.work_item_id));
+      if (haltRefusal !== null) {
+        createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'sendback.loop-halt-refused', metadata: { detail: haltRefusal } });
+        out.push({ initiativeId, status: 'needs-operator', detail: haltRefusal });
+        continue;
+      }
+
       // Merge-vs-loop (D-20): a MERGED PR is finalize-merged's domain — the
       // merge always wins; finalize surfaces the dropped fix WIs non-silently.
       if (await confirmMerge(worktreePath)) {
@@ -267,8 +278,23 @@ export async function drainPendingFixWorkItems(
         resumeFrom: 'develop',
         ...(deps.logsRoot ? { logsRoot } : {}),
       };
+      let halted = false;
       try {
         const result = await runDrainCycle(input, deps.phaseWiring);
+        // forge-mfv5.1.39: a failed run that left the round untouched and did not classify transient re-fails
+        // identically every tick — halt it by name in failed/, never back to ready-for-review.
+        const after = pendingFixWorkItems(worktreePath).map((p) => p.work_item_id).sort();
+        const untouched = after.join(',') === pending.map((p) => p.work_item_id).sort().join(',');
+        const halt = result.status === 'failed' && untouched ? roundHaltFromLog(logPath) : null;
+        if (halt !== null) {
+          halted = true;
+          createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: worktreeHeadSha(worktreePath) } });
+          annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason) });
+          moveTo(file, 'failed', paths);
+          deps.notify?.(`${initiativeId} · fix round ${round} halted (${halt.classification}): ${halt.reason} — fix the worktree, then Requeue`);
+          out.push({ initiativeId, status: 'halted', detail: halt.reason });
+          continue;
+        }
         deps.notify?.(`${initiativeId} · fix loop ran ${pending.length} fix work-item(s) → ${result.status}`);
         // Round evidence for the verdict surface's stale-findings comparison:
         // the round that just completed + the branch tip it produced.
@@ -291,7 +317,7 @@ export async function drainPendingFixWorkItems(
         // Closure is the single terminal-move authority. If the cycle
         // threw/crashed before closure, the manifest is stranded in in-flight —
         // return it to ready-for-review so it's never lost.
-        if (existsSync(inFlightPath)) {
+        if (!halted && existsSync(inFlightPath)) {
           try { moveTo(file, 'ready-for-review', paths); } catch { /* best-effort */ }
         }
       }
