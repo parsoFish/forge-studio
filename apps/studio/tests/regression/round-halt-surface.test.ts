@@ -21,6 +21,7 @@ import { RunControls } from '../../components/studio/RunControls.tsx';
 import { FlowRunDetail } from '../../components/studio/FlowRunDetail.tsx';
 import { DecisionCard } from '../../components/studio/gate/DecisionCard.tsx';
 import type { Run, Flow } from '../../lib/studio-client.ts';
+import { runFailureNoteKind } from '../../lib/run-controls.ts';
 
 const HALT = { round: 2, classification: 'terminal', reason: 'resume-needs-rebase: the preserved worktree has uncommitted changes to tracked files — commit or discard them, then requeue: M gitweave.egg-info/SOURCES.txt' };
 const RUN: Run = {
@@ -69,4 +70,11 @@ test('CONTROL: without a halt the card reads as before', () => {
   const html = card();
   expect(html).toContain('Ready to approve and merge');
   expect(html).not.toContain('data-round-halt');
+});
+
+test('runFailureNoteKind: a round halt outranks the generic failNote; a budget or operator stop still outranks it', () => {
+  expect(runFailureNoteKind(RUN)).toBe('round-halt');
+  expect(runFailureNoteKind({ ...RUN, operatorStop: true })).toBe('operator-stop');
+  expect(runFailureNoteKind({ ...RUN, stopOnBudget: { spentUsd: 5, ceilingUsd: 5, resumable: true, completedWorkItems: 0, totalWorkItems: 1 } })).toBe('budget');
+  expect(runFailureNoteKind({ ...RUN, status: 'active' })).toBe(null);
 });

@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { drainPendingFixWorkItems, type FixLoopDrainResult } from '../../drain-fix-loop.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { aggregateRun } from '../../run-model.ts';
+import { runRequeue } from '../../forge-requeue.ts';
 import { parseManifest } from '../../manifest.ts';
 import matter from 'gray-matter';
 import { deriveRoundHalt } from '../../run-model-derive-status.ts';
@@ -163,15 +164,119 @@ test('a transient failure that leaves the round untouched keeps today\'s return 
   }
 });
 
-test('a node that fails terminally without touching the round halts too — it would re-fail identically every tick', async () => {
+test('a node that fails terminally: the attempt that moved the head (entry rebase) retries once; the next, identical one halts', async () => {
   const root = mkdtempSync(join(tmpdir(), 'drain-halt-node-'));
   try {
     const fx = plant(root, { dirty: false });
-    const r = await drain(root, { ...UNREACHED_PHASE_WIRING, executor: { run: async () => { throw new Error('stub dev node: gate binary missing'); } } });
-    assert.equal(r?.status, 'halted', JSON.stringify(r));
-    assert.match(r?.detail ?? '', /gate binary missing/);
+    const wiring = { ...UNREACHED_PHASE_WIRING, executor: { run: async () => { throw new Error('stub dev node: gate binary missing'); } } };
+    const first = await drain(root, wiring);
+    assert.equal(first?.status, 'drained', `the rebase moved the head: not untouched — ${JSON.stringify(first)}`);
+    assert.ok(existsSync(queue(root, 'ready-for-review')));
+    const second = await drain(root, wiring);
+    assert.equal(second?.status, 'halted', JSON.stringify(second));
+    assert.match(second?.detail ?? '', /gate binary missing/);
     assert.ok(existsSync(queue(root, 'failed')));
     assert.equal(events(fx).filter((e) => e.message === 'sendback.loop-halted').length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** Drain with an injected cycle that appends `lines` to the attempt's log (a cycle.start first) and returns `status`, or throws. */
+async function drainWith(root: string, fx: StrandedFixRound, out: { status?: string; throws?: string; lines?: object[] }) {
+  const results = await drainPendingFixWorkItems({
+    queueRoot: join(root, '_queue'), logsRoot: join(root, '_logs'), phaseWiring: UNREACHED_PHASE_WIRING, confirmMerge: () => false,
+    runDrainCycle: async () => {
+      const log = join(fx.logDir, 'events.jsonl');
+      writeFileSync(log, readFileSync(log, 'utf8') + [{ message: 'cycle.start' }, ...(out.lines ?? [])].map((l) => JSON.stringify(l)).join('\n') + '\n');
+      if (out.throws) throw new Error(out.throws);
+      return { status: out.status ?? 'failed' };
+    },
+  });
+  return results.find((x) => x.initiativeId === FIX_INIT);
+}
+
+test('a THROWN drain cycle that left the round untouched halts UNKNOWN with the thrown message (§6.15)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-halt-throw-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    const r = await drainWith(root, fx, { throws: 'manifest has no flow_id' });
+    assert.equal(r?.status, 'halted', JSON.stringify(r));
+    assert.equal(events(fx).find((e) => e.message === 'sendback.loop-halted')?.metadata?.classification, 'UNKNOWN');
+    assert.match(r?.detail ?? '', /no flow_id/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unclassified failure halts UNKNOWN and says no classification or error was recorded', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-halt-unknown-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    const r = await drainWith(root, fx, {});
+    assert.equal(r?.status, 'halted', JSON.stringify(r));
+    assert.match(r?.detail ?? '', /no failure classification and no error recorded/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an operator stop or a cost-ceiling stop is a clean boundary: never a round halt', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-halt-stop-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    const r = await drainWith(root, fx, { lines: [{ message: 'failure_classification', metadata: { failure_kind: 'terminal', cleanBoundaryHalt: true } }] });
+    assert.equal(r?.status, 'drained', JSON.stringify(r));
+    assert.ok(existsSync(queue(root, 'ready-for-review')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the move to failed/ failing is named, and the re-presented round is then refused by name — once', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-halt-move-'));
+  try {
+    const fx = plant(root, { dirty: true });
+    rmSync(join(root, '_queue', 'failed'), { recursive: true });
+    writeFileSync(join(root, '_queue', 'failed'), 'not a directory\n');
+    const r = await drain(root);
+    assert.equal(r?.status, 'error', JSON.stringify(r));
+    assert.match(r?.detail ?? '', /halted, but the move to failed\/ failed/);
+    assert.ok(existsSync(queue(root, 'ready-for-review')), 'the stranded manifest is kept, never lost');
+    const before = starts(fx);
+    for (let tick = 0; tick < 3; tick++) assert.equal((await drain(root))?.status, 'needs-operator');
+    assert.equal(starts(fx), before, 'no re-entry');
+    assert.equal(events(fx).filter((e) => e.message === 'sendback.loop-halt-refused').length, 1, 'refused once per halt, not every tick');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a halt over a DIFFERENT pending set does not refuse: a new send-back round runs', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-halt-newset-'));
+  try {
+    const fx = plant(root, { dirty: true });
+    await drain(root);
+    renameSync(queue(root, 'failed'), queue(root, 'ready-for-review'));
+    const wi7 = readFileSync(join(fx.worktree, '.forge', 'work-items', 'WI-6.md'), 'utf8').replace(/WI-6/g, 'WI-7');
+    writeFileSync(join(fx.worktree, '.forge', 'work-items', 'WI-7.md'), wi7);
+    const before = starts(fx);
+    await drain(root);
+    assert.equal(starts(fx), before + 1, 'the drain re-entered for the new set');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Requeue of a halted round: back to pending at resume_from develop, the halt record gone', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-halt-requeue-'));
+  try {
+    plant(root, { dirty: true });
+    await drain(root);
+    runRequeue(FIX_INIT, { forgeRoot: root });
+    const requeued = readFileSync(queue(root, 'pending'), 'utf8');
+    assert.match(requeued, /^resume_from: develop$/m);
+    assert.doesNotMatch(requeued, /round_halt/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

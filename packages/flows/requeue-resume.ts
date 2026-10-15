@@ -163,28 +163,31 @@ export function derivePmValidationErrors(logPath: string): string[] {
  * forge-mfv5.1.39: the latest attempt's failure as a fix round's HALT — its
  * classification (`'UNKNOWN'` when none was written: §6.15 fails closed) and
  * the cycle's own error (it carries the dirty-file list). Null when the attempt
- * classified `transient` — a retry on the next drain tick is still honest.
+ * classified `transient`, or was a clean-boundary stop (operator / cost ceiling,
+ * resumable by their own acts) — a retry on the next drain tick is still honest.
  */
 export function roundHaltFromLog(logPath: string): { classification: string; reason: string } | null {
   const events = readLogEvents(logPath) ?? [];
   const attempt = events.slice(Math.max(0, lastIndex(events, (e) => e.message === 'cycle.start')));
   const cls = attempt[lastIndex(attempt, (e) => e.message === 'failure_classification')]?.metadata;
-  if (cls?.failure_kind === 'transient') return null;
+  if (cls?.failure_kind === 'transient' || cls?.cleanBoundaryHalt === true) return null;
   const classification = cls?.failure_kind === 'terminal' ? 'terminal' : 'UNKNOWN'; // a closed set: it is written raw into the manifest
   const error = attempt[lastIndex(attempt, (e) => e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end')]?.metadata?.error;
-  const reason = typeof error === 'string' ? error.replace(/^\w*Error: /, '') : String(cls?.reason ?? 'no failure recorded in the attempt');
+  const reason = typeof error === 'string' ? error.replace(/^\w*Error: /, '') : typeof cls?.reason === 'string' ? cls.reason : 'the run failed with no failure classification and no error recorded in its attempt';
   return { classification, reason };
 }
 
-/** forge-mfv5.1.39: the latest attempt was a halted fix round over these pending WIs — the drain refuses it by name. */
-export function haltedRoundRefusal(logPath: string, pendingIds: readonly string[]): string | null {
+/** forge-mfv5.1.39: the latest attempt was a halted fix round over these pending WIs — the drain refuses it by name (`alreadyRefused`: said once per halt). */
+export function haltedRoundRefusal(logPath: string, pendingIds: readonly string[]): { detail: string; alreadyRefused: boolean } | null {
   const events = readLogEvents(logPath) ?? [];
-  const halt = events[lastIndex(events, (e) => e.message === 'sendback.loop-halted')];
-  if (!halt || events.indexOf(halt) < lastIndex(events, (e) => e.message === 'cycle.start')) return null;
+  const at = lastIndex(events, (e) => e.message === 'sendback.loop-halted');
+  if (at < 0 || at < lastIndex(events, (e) => e.message === 'cycle.start')) return null;
+  const halt = events[at]!;
+  const alreadyRefused = events[events.length - 1]?.message === 'sendback.loop-halt-refused';
   const halted = halt.metadata?.pending_work_items;
-  if (!Array.isArray(halted)) return 'fix round halted, but its record names no pending work items (unreadable) — fix the worktree, then Requeue';
+  if (!Array.isArray(halted)) return { detail: 'fix round halted, but its record names no pending work items (unreadable) — fix the worktree, then Requeue', alreadyRefused };
   if (halted.join(',') !== [...pendingIds].sort().join(',')) return null;
-  return `fix round halted (${String(halt.metadata?.classification)}): ${String(halt.metadata?.reason)} — fix the worktree, then Requeue`;
+  return { detail: `fix round halted (${String(halt.metadata?.classification)}): ${String(halt.metadata?.reason)} — fix the worktree, then Requeue`, alreadyRefused };
 }
 
 /** forge-mfv5.1.35: the latest attempt's `cycle.end` status, or null (no log / no end). */

@@ -218,8 +218,8 @@ export async function drainPendingFixWorkItems(
       const logPath = join(logsRoot, cycleId, 'events.jsonl');
       const haltRefusal = haltedRoundRefusal(logPath, pending.map((p) => p.work_item_id));
       if (haltRefusal !== null) {
-        createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'sendback.loop-halt-refused', metadata: { detail: haltRefusal } });
-        out.push({ initiativeId, status: 'needs-operator', detail: haltRefusal });
+        if (!haltRefusal.alreadyRefused) createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'sendback.loop-halt-refused', metadata: { detail: haltRefusal.detail } });
+        out.push({ initiativeId, status: 'needs-operator', detail: haltRefusal.detail });
         continue;
       }
 
@@ -279,18 +279,25 @@ export async function drainPendingFixWorkItems(
         ...(deps.logsRoot ? { logsRoot } : {}),
       };
       let halted = false;
+      const headBefore = worktreeHeadSha(worktreePath);
       try {
-        const result = await runDrainCycle(input, deps.phaseWiring);
-        // forge-mfv5.1.39: a failed run that left the round untouched and did not classify transient re-fails
-        // identically every tick — halt it by name in failed/, never back to ready-for-review.
+        let result: { status: string };
+        let thrown: string | null = null;
+        try { result = await runDrainCycle(input, deps.phaseWiring); } catch (err) { thrown = err instanceof Error ? err.message : String(err); result = { status: 'failed' }; }
+        // forge-mfv5.1.39: a failed run that left the round untouched (same pending WIs, same head) and did not
+        // classify transient re-fails identically every tick — halt it by name in failed/, never back to ready-for-review.
         const after = pendingFixWorkItems(worktreePath).map((p) => p.work_item_id).sort();
-        const untouched = after.join(',') === pending.map((p) => p.work_item_id).sort().join(',');
-        const halt = result.status === 'failed' && untouched ? roundHaltFromLog(logPath) : null;
+        const headAfter = worktreeHeadSha(worktreePath);
+        const untouched = after.join(',') === pending.map((p) => p.work_item_id).sort().join(',') && headAfter === headBefore;
+        const halt = result.status !== 'failed' || !untouched ? null : thrown !== null ? { classification: 'UNKNOWN', reason: thrown } : roundHaltFromLog(logPath);
+        if (halt === null && thrown !== null) throw new Error(thrown);
         if (halt !== null) {
+          createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: headAfter } });
+          try { // the event is the record the surfaces read; the manifest copy never blocks the move to failed/
+            annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason).replace(/\$/g, '\\u0024') }); // `$` is a String.replace pattern there
+          } catch (err) { deps.notify?.(`${initiativeId} · halted round's manifest record not written: ${err instanceof Error ? err.message : String(err)}`); }
+          try { moveTo(file, 'failed', paths); } catch (err) { throw new Error(`fix round halted, but the move to failed/ failed: ${err instanceof Error ? err.message : String(err)}`); }
           halted = true;
-          createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: worktreeHeadSha(worktreePath) } });
-          annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason).replace(/\$/g, '\\u0024') }); // `$` is a String.replace pattern in annotateManifest
-          moveTo(file, 'failed', paths);
           deps.notify?.(`${initiativeId} · fix round ${round} halted (${halt.classification}): ${halt.reason} — fix the worktree, then Requeue`);
           out.push({ initiativeId, status: 'halted', detail: halt.reason });
           continue;
