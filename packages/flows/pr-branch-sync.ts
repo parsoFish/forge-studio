@@ -298,7 +298,7 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
     try { git(['rebase', '--abort']); } catch { /* leave it; surfaced below */ }
     return {
       ok: false, rebased: false, base: target, ...shas, conflict: true,
-      reason: `rebase onto ${target} conflicted — manual rebase required before re-resuming: ${errText(err)}`,
+      reason: `rebase onto ${target} conflicted — manual rebase required before re-resuming: ${gitStopReason(err)}`,
     };
   }
   const rebasedShas = { ...shas, toSha: sha('HEAD') };
@@ -320,11 +320,21 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
 }
 
 /** git's stderr (or the error message), bounded for an event field, with any `scheme://user:secret@` credential in a remote URL masked. */
+/** forge-mfv5.1.40: git's own stop lines (`error:`/`fatal:`/`CONFLICT` and the paths under them), never progress output; errText when none. */
+export function gitStopReason(err: unknown): string {
+  const e = err as { stdout?: Buffer | string; stderr?: Buffer | string };
+  const lines = `${e.stdout?.toString() ?? ''}\n${e.stderr?.toString() ?? ''}`.split(/[\r\n]+/);
+  const stop = lines.filter((l, i) => /^(error|fatal|CONFLICT)\b/.test(l) || (l.startsWith('\t') && lines.slice(0, i).some((p) => /^(error|fatal|CONFLICT)\b/.test(p))));
+  return stop.length > 0 ? redactUrlCredentials(stop.map((l) => l.trim()).join(' · ')).slice(0, 600) : errText(err);
+}
+
 export function errText(err: unknown): string {
   const e = err as { stderr?: Buffer | string; message?: string };
   const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-  return (stderr || e.message || '').replace(/([a-z][a-z0-9+.-]*:\/\/)[^@\s/]+@/gi, '$1***@').slice(0, 300);
+  return redactUrlCredentials(stderr || e.message || '').slice(0, 300);
 }
+
+const redactUrlCredentials = (s: string): string => s.replace(/([a-z][a-z0-9+.-]*:\/\/)[^@\s/]+@/gi, '$1***@');
 
 export type LocalRemoteInvariant = {
   ok: boolean;
