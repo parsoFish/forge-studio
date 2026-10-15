@@ -205,11 +205,19 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
       GATES,
       testClassProfilePort(),
     );
+    // forge-nk1y.43: an all-unchanged capture is the NAMED outcome `no-change` — on demo.json, the PR
+    // body and the event log — never a silent `demo.complete` pass.
     assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
     const demoJson = JSON.parse(readFileSync(join(root, 'demo', INITIATIVE_ID, 'demo.json'), 'utf8'));
-    assert.match(demoJson.essence, /No observable behaviour change was captured\./);
+    assert.deepEqual(demoJson.outcome, { kind: 'no-change', compared: 1, changed: 0, unchanged: 1, unknown: 0 });
+    assert.match(demoJson.essence, /Demo captured no behaviour change — 1\/1 checkpoints identical\./);
     const prBody = readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8');
-    assert.match(prBody, /No observable behaviour change was captured\./);
+    assert.match(prBody.split('## Why')[0]!, /> \*\*Demo captured no behaviour change — 1\/1 checkpoints identical\.\*\*/);
+    const noChange = events.find((e) => (e as { message?: string }).message === 'demo.no-change') as unknown as { metadata: Record<string, unknown> } | undefined;
+    assert.ok(noChange, 'demo.no-change is emitted');
+    assert.equal(noChange!.metadata.headline, 'Demo captured no behaviour change — 1/1 checkpoints identical');
+    const complete = events.find((e) => (e as { message?: string }).message === 'demo.complete') as unknown as { metadata: Record<string, unknown> };
+    assert.equal(complete.metadata.outcome, 'no-change');
   });
 
   it('kills "a real change reads as no change": a changed checkpoint\'s count reaches both artifacts', async () => {
@@ -230,9 +238,13 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
     );
     assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
     const demoJson = JSON.parse(readFileSync(join(root, 'demo', INITIATIVE_ID, 'demo.json'), 'utf8'));
-    assert.match(demoJson.essence, /1 of 1 captured checkpoints changed behaviour\./);
+    assert.match(demoJson.essence, /1 of 1 checkpoints changed behaviour\./);
+    assert.equal(demoJson.outcome.kind, 'changed');
     const prBody = readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8');
-    assert.match(prBody, /1 of 1 captured checkpoints changed behaviour\./);
+    assert.match(prBody, /1 of 1 checkpoints changed behaviour\./);
+    assert.ok(!messages().includes('demo.no-change'));
+    const complete = events.find((e) => (e as { message?: string }).message === 'demo.complete') as unknown as { metadata: Record<string, unknown> };
+    assert.equal(complete.metadata.outcome, 'changed');
   });
 
   it('kills "a corrupt demo.json after capture reads as success": the band FAILS CLOSED instead of leaving a stale pre-capture PR body', async () => {

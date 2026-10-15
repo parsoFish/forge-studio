@@ -14,6 +14,7 @@
  * comment state and the submit; the blocks only render it.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { demoOutcomeOf } from '@forge/contracts';
 
 import type { DemoModel } from '@/lib/bridge-client';
 import { submitVerdict } from '@/lib/bridge-client';
@@ -123,6 +124,10 @@ export function DemoReviewSurface({
       setError('refused — a rationale is required to approve without a current review');
       return;
     }
+    if (derived.kind === 'approve' && demoOutcome && demoOutcome.kind !== 'changed' && approveRationale === '') {
+      setError('refused — a rationale is required to approve with no captured behaviour change');
+      return;
+    }
     setSubmitting(true);
     try {
       const result =
@@ -157,6 +162,8 @@ export function DemoReviewSurface({
   const noCurrentReview = currency.kind === 'not-current' ? { headSha: currency.headSha } : currency.kind === 'unknown' ? { headSha: null, unread: true as const } : undefined;
   const criteria = joinCriteria(model.acceptanceCriteria ?? [], doc?.acEvaluations ?? []);
   const checkpoints = model.checkpoints;
+  // forge-nk1y.43: the outcome the integrate band recorded, else the same count over the checkpoints.
+  const demoOutcome = model.outcome ?? demoOutcomeOf(checkpoints);
   const severities = countBy(doc?.findings ?? [], (f) => f.severity ?? 'info');
   const verdicts = countBy(criteria.filter((c) => c.verdict !== null), (c) => c.verdict!);
   const testEvidence = model.testEvidence ?? [];
@@ -198,6 +205,7 @@ export function DemoReviewSurface({
           reflectHref={reflectHref}
           loadError={loadError}
           onJumpToBlocker={firstBlocker ? () => setFocusRegion((f) => ({ id: firstBlocker, seq: (f?.seq ?? 0) + 1 })) : undefined}
+          demoOutcome={demoOutcome}
           claims={{
             present: doc !== null,
             missed: verdicts.missed ?? 0,

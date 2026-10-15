@@ -25,6 +25,7 @@ be reachable from here or it cannot reach the browser at all.
 | the ONE Kickoff-gate rule — the run model derives it, the develop enqueue refuses on it | `KICKOFF_SOURCE_FLOW_ID` · `isAwaitingKickoff` · `kickoffBuiltReason` |
 | the fix-round rule — the run model derives the round of a parked or running gate-fix and whether develop is running, the drain and requeue refuse a moved branch head | `fixRoundOf` · `developRunningOf` · `fixRoundDeliveredHead` · `fixRoundHeadVerdict` |
 | the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `resolveDeclaredBin` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
+| the demo's capture outcome — `no-change` is a named state, shared by the integrate band and the verdict gate (forge-nk1y.43) | `demoOutcomeOf` · `demoOutcomeHeadline` |
 | pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
 | work-item status vocabulary | `WORK_ITEM_STATUSES` |
 | work-item id patterns (`WI-`/`UWI-`, the split-suffix rule) + numeric stem; the one natural id order and a set's leaf work items (forge-mfv5.1.36); the one-relative-path rule for a scope entry submitted at the Kickoff gate (forge-nk1y.32) | `WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `DEV_WORK_ITEM_ID_PATTERN` · `devWorkItemIdStem` · `compareWorkItemIds` · `leafWorkItemIds` · `scopeEntryErrors` |

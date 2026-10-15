@@ -246,7 +246,7 @@ describe('deriveDeltaSummary — says what was ignored (forge-1rk5.3, CONTROL RE
 
   it('kills "the normalisation line replaces the existing sentences": both the existing "no observable change" sentence and the new normalisation line are present', () => {
     const summary = deriveDeltaSummary([checkpoint('unchanged')]);
-    assert.ok(summary!.includes('No observable behaviour change was captured.'));
+    assert.ok(summary!.includes('Demo captured no behaviour change — 1/1 checkpoints identical.'), summary!);
     assert.ok(summary!.includes('Command output compared after normalising:'));
   });
 

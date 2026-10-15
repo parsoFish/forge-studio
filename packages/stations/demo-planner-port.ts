@@ -51,6 +51,8 @@ export async function planDemo(
   planner: NonNullable<IntegrateBandInput['planner']>,
   ctx: { input: IntegrateBandInput; derivedInput: DerivedDemoInput; cfg: ProjectConfig | null; model: DemoModel; logger: EventLogger },
   emit: Emit,
+  /** The band's own revise (forge-nk1y.43): the first ask carries it, and it is the plan's one revise. */
+  revise?: DemoPlannerInput['revise'],
 ): Promise<{ ok: true; model: DemoModel } | { ok: false; reason: 'plan-failed' | 'plan-invalid'; detail: string }> {
   const { input, derivedInput: d, cfg } = ctx;
   const processCommands = (cfg?.demoProcess ?? []).filter((s) => s.kind === 'capture').map((s) => extractDrivableCommand(s.text)).flatMap((r) => (r.ok ? [r.command] : []));
@@ -61,14 +63,14 @@ export async function planDemo(
     workItems: d.workItems.map((wi) => ({ id: wi.id, title: wi.title, story: wi.story ?? '' })),
     acceptanceCriteria: d.acceptanceCriteria.map(renderAcceptanceCriterion), diffStat: d.diffStat, changedFiles: d.changedFiles, allowed,
   };
-  const first = await askAndValidate(planner, base, ctx.logger, emit);
+  const first = await askAndValidate(planner, revise ? { ...base, revise } : base, ctx.logger, emit);
   if (!first.ok) return first;
   let plan = first.plan;
   // forge-nk1y.42: a command that would not run the tree under capture is sent
   // back ONCE, with the refusal by name. A plan still refused after it reaches
   // the band's own preflight, which fails `tooling-unavailable` by name.
   const refused = unproducible(plan, input.worktreePath);
-  if (refused.length > 0) {
+  if (refused.length > 0 && !revise) {
     emit('demo.plan.revise', { reason: 'unproducible', problems: refused });
     const second = await askAndValidate(planner, { ...base, revise: { reason: 'checkpoint command(s) not producible from the tree under capture', details: refused } }, ctx.logger, emit);
     if (!second.ok) return second;

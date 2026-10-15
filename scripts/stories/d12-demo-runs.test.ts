@@ -338,7 +338,7 @@ describe('judgeRun — control (real derivePrBody + embedDemoInPr output)', () =
       includeMedia: true,
       isPrivate: true,
     });
-    assert.ok(deltaSummary.startsWith('No observable behaviour change was captured.'), deltaSummary);
+    assert.ok(deltaSummary.startsWith('Demo captured no behaviour change — 2/2 checkpoints identical.'), deltaSummary);
     assert.ok(prBody.includes(deltaSummary), 'sanity: the real PR body really carries the real sentence');
     const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, true, JSON.stringify(verdict.reasons, null, 2));
@@ -378,7 +378,7 @@ describe('judgeRun — positive (real derivePrBody + embedDemoInPr output)', () 
       includeMedia: true,
       isPrivate: true,
     });
-    assert.ok(deltaSummary.startsWith('2 of 2 captured checkpoints changed behaviour.'), deltaSummary);
+    assert.ok(deltaSummary.startsWith('2 of 2 checkpoints changed behaviour.'), deltaSummary);
     assert.match(
       prBody,
       /!\[[^\]]* — after\]\(https:\/\/github\.com\/parsoFish\/story-d12-positive\/blob\/[0-9a-f]{40}\/demo\/[^)]*\.capture\/after\/[^)]*\.filmstrip\.png\?raw=true\)/,

@@ -17,6 +17,7 @@
  * fail-fast-with-messages contract.
  */
 
+import type { DemoOutcome } from '@forge/contracts';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -106,6 +107,8 @@ export type DemoModel = {
   checkpoints: DemoModelCheckpoint[];
   /** "What this enables" — agent narrative, never evidence (D-15); excluded from the delta. */
   narrative?: string;
+  /** What the orchestrator's before/after comparison found (forge-nk1y.43) — `no-change` is named, never a silent pass. */
+  outcome?: DemoOutcome;
   /** `git diff --stat baseRef..changedRef`. Required — grounds the demo. */
   diffStat: string;
   /**
@@ -179,6 +182,8 @@ export function validateDemoModel(raw: unknown): string[] {
   reqStr('essence');
   reqStr('project');
   reqStr('diffStat');
+  const outcomeKind = (m.outcome as { kind?: unknown } | undefined)?.kind;
+  if (m.outcome !== undefined && !['changed', 'no-change', 'unknown'].includes(outcomeKind as string)) errors.push('outcome.kind must be one of changed|no-change|unknown when set');
 
   const cps = m.checkpoints;
   if (!Array.isArray(cps) || cps.length === 0) {

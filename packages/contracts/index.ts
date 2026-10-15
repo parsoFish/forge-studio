@@ -38,6 +38,7 @@ export * from './run-view-types.ts';
  *  and projects (bead forge-mfv5.2.2), plus the presentation-only skill-id
  *  vocabulary (bead forge-mfv5.2.8). */
 export * from './demo-declaration.ts';
+export * from './demo-outcome.ts';
 
 /** Pseudo-project session anchors — pure transfer from `packages/sessions`
  *  (D-29 `studio-beyond-contracts` edge 3, ratchet fix). */

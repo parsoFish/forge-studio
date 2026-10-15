@@ -338,6 +338,8 @@ export type DemoModel = {
   checkpoints: DemoModelCheckpoint[];
   diffStat: string;
   acceptanceCriteria?: string[];
+  /** forge-nk1y.43: the capture's named outcome, recorded by the integrate band. */
+  outcome?: import('@forge/contracts').DemoOutcome;
   /**
    * Per-AC evaluated output. When present, the review screen foregrounds a
    * dedicated "Intent & Outcome" section (MVUS req b). One entry per AC
