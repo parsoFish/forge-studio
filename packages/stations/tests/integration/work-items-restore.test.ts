@@ -196,6 +196,7 @@ test("restore: a snapshot status older than the branch is corrected from the bra
   try {
     const snap = join(w.logsRoot, CYCLE, 'work-items-snapshot');
     writeFileSync(join(snap, 'WI-2.md'), serializeWorkItem(wi('WI-2', 'pending', ['src/b.ts'])));
+    execFileSync('git', ['-C', w.wt, 'checkout', '-q', '-b', 'forge/INIT-2026-10-16-restore']);
     commitOnBranch(w, 'wi(WI-2): merge');
     commitOnBranch(w, 'wi(WI-3): merge');
     restore(w);
@@ -213,6 +214,19 @@ test('restore: a queue dir holding no work item (only a leftover _graph.md) is r
     assert.equal(restore(w).status, 'restored');
     assert.equal(readFileSync(join(wiDir(w), '_graph.md'), 'utf8'), '# live graph\n', 'never overwritten');
     assert.ok(existsSync(join(wiDir(w), 'WI-1.md')));
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test("restore: a dependency's `wi(<id>): merge` already on main (the same ids, an earlier initiative) never marks this initiative's item delivered", () => {
+  const w = world({ snapshot: true, sendBack: 'typed' });
+  try {
+    commitOnBranch(w, 'wi(WI-3): merge'); // on main: I3a's WI-3, merged before this initiative branched
+    execFileSync('git', ['-C', w.wt, 'checkout', '-q', '-b', 'forge/INIT-2026-10-16-restore']);
+    commitOnBranch(w, 'wi(WI-2): merge');
+    restore(w);
+    assert.equal(parseWorkItem(readFileSync(join(wiDir(w), 'WI-3.md'), 'utf8')).status, 'pending', 'the dependency\'s merge is not this item\'s delivery');
   } finally {
     rmSync(w.dir, { recursive: true, force: true });
   }

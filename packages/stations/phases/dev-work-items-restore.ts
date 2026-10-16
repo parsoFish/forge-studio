@@ -31,7 +31,6 @@ export function restoreDevWorkItemsAtResume(input: CycleInput, logger: EventLogg
   }
   emit('log', 'work-items.restored', { from_snapshot: restored.fromSnapshot, reminted: restored.reminted });
 }
-
 export type RestoreWorkItemsResult =
   | { status: 'present' }
   | { status: 'restored'; fromSnapshot: string[]; reminted: string[] }
@@ -61,10 +60,11 @@ export function restoreWorkItemsForResume(opts: { worktreePath: string; initiati
   }
   const bad = Object.entries(snapshot.parseErrors);
   if (bad.length > 0) return refuse(`the snapshot has unparseable work items: ${bad.map(([f, e]) => `${f}: ${e}`).join('; ')}`);
-  // The snapshot predates a crash; the branch's own `wi(<id>): merge` commits say what was delivered since.
+  // The snapshot predates a crash; this initiative's own `wi(<id>): merge` commits (never a dependency's on main) say what was delivered since.
+  const git = (args: string[]): string => execFileSync('git', ['-C', opts.worktreePath, ...args], { encoding: 'utf8', stdio: 'pipe' });
   let log: string;
-  try { log = execFileSync('git', ['-C', opts.worktreePath, 'log', '--format=%s'], { encoding: 'utf8', stdio: 'pipe' }); } catch (err) {
-    return refuse(`could not read the branch's delivery record (git log): ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
+  try { log = git(['log', '--format=%s', `${['origin/main', 'main', 'origin/master', 'master'].find((r) => { try { return git(['rev-parse', '--verify', '--quiet', r]) !== ''; } catch { return false; } }) ?? 'NO-BASE-REF'}..HEAD`]); } catch (err) {
+    return refuse(`could not read the branch's delivery record (git log <main>..HEAD): ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
   }
   const delivered = new Set(log.split('\n').flatMap((l) => /^wi\((.+)\): merge$/.exec(l)?.[1] ?? []));
   const items = kept.map((w) => (delivered.has(w.work_item_id) ? { ...w, status: 'complete' as const } : w));
