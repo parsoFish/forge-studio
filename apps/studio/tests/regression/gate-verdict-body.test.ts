@@ -82,3 +82,8 @@ test('buildGateVerdictBody: demo/verdict gate send-back — notes become rationa
   expect(ac.when.length).toBeGreaterThan(0);
   expect(ac.then).toBe('the after screenshot is missing');
 });
+
+test('buildGateVerdictBody: demo/verdict gate send-back — marked derivedFrom:"comments" (forge-mfv5.1.43: a prose door, not a typed work item)', () => {
+  expect(buildGateVerdictBody('verdict', 'send-back', { notes: 'fix it' }).derivedFrom).toBe('comments');
+  expect(buildGateVerdictBody('plan', 'send-back', { notes: 'fix it', project: 'demo' }).derivedFrom).toBeUndefined();
+});

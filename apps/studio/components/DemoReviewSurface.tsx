@@ -142,6 +142,7 @@ export function DemoReviewSurface({
               initiativeId: verdictInitiativeId,
               rationale: derived.rationale,
               acceptanceCriteria: derived.acceptanceCriteria,
+              derivedFrom: 'comments', // forge-mfv5.1.43: the comment door — prose criteria, D-20 unchanged
               // A blocker's runnable inline command gates the fix WI (forge-mfv5.1.28).
               ...(derived.qualityGateCmd ? { qualityGateCmd: derived.qualityGateCmd } : {}),
             });

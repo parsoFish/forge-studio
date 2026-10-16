@@ -61,6 +61,7 @@ async function fillAll(gate = 'node --test tests/retire.test.ts'): Promise<void>
   await type('[data-field="kickoff-ac-given-1"]', 'the legacy specs');
   await type('[data-field="kickoff-ac-when-1"]', 'the retire test runs');
   await type('[data-field="kickoff-ac-then-1"]', 'none remain');
+  await type('[data-field="kickoff-ac-check-1"]', 'node --test tests/retire.test.ts');
   await type('[data-field="kickoff-wi-gate-cmd"]', gate);
   await type('[data-field="kickoff-wi-files"]', 'specs/legacy.md\ntests/retire.test.ts');
 }
@@ -73,7 +74,7 @@ test('collapsed under "Add work item", editing, with prefixed AC rows and named 
   expect(details.open).toBe(false);
   expect(details.querySelector('summary')?.textContent).toBe('Add work item');
   expect(panel().getAttribute('data-form-state')).toBe('editing');
-  for (const h of ['kickoff-ac-given-1', 'kickoff-ac-when-1', 'kickoff-ac-then-1']) q(`[data-field="${h}"]`);
+  for (const h of ['kickoff-ac-given-1', 'kickoff-ac-when-1', 'kickoff-ac-then-1', 'kickoff-ac-check-1', 'kickoff-ac-expect-1', 'kickoff-ac-unset-env-1', 'kickoff-ac-requires-env-1']) q(`[data-field="${h}"]`);
   q('[data-action="kickoff-add-criterion"]');
   q('[data-action="kickoff-remove-criterion-1"]');
 });
@@ -91,7 +92,7 @@ test('fields map onto the request; success shows the added WI and the uncovered 
   expect(addMock).toHaveBeenCalledWith({
     initiativeId: INIT,
     summary: 'Retire the legacy specs.',
-    acceptanceCriteria: [{ given: 'the legacy specs', when: 'the retire test runs', then: 'none remain' }],
+    acceptanceCriteria: [{ given: 'the legacy specs', when: 'the retire test runs', then: 'none remain', check: { argv: ['node', '--test', 'tests/retire.test.ts'], expect: 'pass' } }],
     qualityGateCmd: ['node', '--test', 'tests/retire.test.ts'],
     filesInScope: ['specs/legacy.md', 'tests/retire.test.ts'],
   });

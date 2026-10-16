@@ -94,6 +94,9 @@ test('pick WI-14: fields and dependencies prefill; the two-paths line is refused
   expect(val('kickoff-edit-wi-files')).toBe(WI14_LINE);
   expect(checked()).toEqual(['WI-9a', 'WI-10', 'WI-11']);
   expect(btn('save-kickoff-wi').disabled).toBe(true);
+  // forge-mfv5.1.43: WI-14 predates per-criterion checks — the form re-authors its criteria, so it asks for one first.
+  expect(btn('save-kickoff-wi').getAttribute('data-disabled-reason')).toMatch(/AC1 needs a check command/);
+  await type('[data-field="kickoff-edit-ac-check-1"]', 'python3 -m pytest tests/test_docs_no_terraform_tokens.py');
   const reason = `files_in_scope entry "${WI14_LINE}" refused: contains whitespace — one relative path per entry`;
   expect(btn('save-kickoff-wi').getAttribute('data-disabled-reason')).toBe(reason);
   expect(editMock).not.toHaveBeenCalled();
@@ -103,12 +106,13 @@ test('fix WI-14\'s files (one per line) and Save: PATCHes the full set, refreshe
   editMock.mockResolvedValue({ ok: true, workItemId: 'WI-14', dependsOn: ['WI-9a', 'WI-10', 'WI-11'] });
   await pick('WI-14');
   await type('[data-field="kickoff-edit-wi-files"]', WI14_LINE.replace(' ', '\n'));
+  await type('[data-field="kickoff-edit-ac-check-1"]', 'python3 -m pytest tests/test_docs_no_terraform_tokens.py');
   await act(async () => { btn('save-kickoff-wi').click(); });
   expect(editMock).toHaveBeenCalledWith({
     initiativeId: INIT,
     workItemId: 'WI-14',
     summary: 'No Terraform references left in agent context or docs',
-    acceptanceCriteria: [AC14],
+    acceptanceCriteria: [{ ...AC14, check: { argv: ['python3', '-m', 'pytest', 'tests/test_docs_no_terraform_tokens.py'], expect: 'pass' } }],
     qualityGateCmd: ['python3', '-m', 'pytest', 'tests/test_docs_no_terraform_tokens.py'],
     filesInScope: ['tests/test_docs_no_terraform_tokens.py', '.github/copilot-context.md'],
     dependsOn: ['WI-9a', 'WI-10', 'WI-11'],

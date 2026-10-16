@@ -9,7 +9,9 @@ import { bridgeFetch, bridgePost, bridgeReadOr404 } from './bridge-client-core.t
 import { bridgeErrorMessage } from './bridge-result.ts';
 import type { WorkItemSource } from './work-item-authoring.ts';
 
-export type AcceptanceCriterion = { given: string; when: string; then: string };
+/** forge-mfv5.1.43: a typed criterion's falsifying check (argv, never a shell string). */
+export type AcceptanceCheck = { argv: string[]; expect: 'pass' | 'fail'; unsetEnv?: string[]; requiresEnv?: string[] };
+export type AcceptanceCriterion = { id?: string; given: string; when: string; then: string; check?: AcceptanceCheck };
 
 export type VerdictSubmission =
   | { kind: 'approve'; initiativeId: string; rationale: string }
@@ -22,6 +24,8 @@ export type VerdictSubmission =
       qualityGateCmd?: string[];
       /** forge-mfv5.1.28: the fix WI's scope; absent ⇒ the WI-scope union. */
       filesInScope?: string[];
+      /** forge-mfv5.1.43: set by the prose doors (blocking comments, gate notes); absent ⇒ typed, a check per criterion. */
+      derivedFrom?: 'comments';
     };
 
 export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boolean; error?: string }> {
@@ -393,7 +397,7 @@ export async function postGate(
    * 'approve'|'revise'|'reject', so a bare send-back falls through to
    * `kind:''` and 400s. See lib/gate-verdict-body.ts's `buildGateVerdictBody`.
    */
-  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[]; project?: string; kind?: string },
+  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[]; project?: string; kind?: string; derivedFrom?: 'comments' },
 ): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/runs/${encodeURIComponent(runId)}/gates/${encodeURIComponent(gateId)}`, {
     verdict,
