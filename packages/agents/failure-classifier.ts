@@ -59,6 +59,17 @@ export type FailureClassification = {
   evidence_event_ids: string[];
 };
 
+/** The run page shows this reason whole; the band's detail is bounded (the validator already caps its rows). */
+const INTEGRATE_REASON_MAX_CHARS = 1200;
+
+/** `delivery gate: integrate band failed (<reason>: <detail>) — the branch…` → `(<reason>): <detail>`; '' when unparseable. */
+function integrateBandOwnReason(msg: string): string {
+  const m = /integrate band failed \(([a-z-]+): ([\s\S]*)\) — the branch is not review-ready/.exec(msg);
+  if (!m) return '';
+  const detail = m[2]!.length > INTEGRATE_REASON_MAX_CHARS ? `${m[2]!.slice(0, INTEGRATE_REASON_MAX_CHARS)}…` : m[2]!;
+  return `(${m[1]}): ${detail}`;
+}
+
 const T = (
   kind: FailureKind,
   reason: string,
@@ -317,6 +328,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // R4-10-F1: the demo + adversarial-review nodes replaced the unifier on the
   // live develop flow; their delivery-gate throws must be diagnosed accurately,
   // not swept into the retired unifier / reviewer-Ralph vocabulary below.
+  let integrateBandDetail = '';
   let integrateBandFailed = false, adversarialReviewFailed = false, adversarialReviewDeriveFailed = false;
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
@@ -514,6 +526,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       // unifier-no-demo branches for a node that isn't the unifier or reviewer.
       if (msg.includes('delivery gate: integrate band failed')) {
         integrateBandFailed = true; ev(e);
+        integrateBandDetail = integrateBandOwnReason(msg);
       } else if (msg.includes('adversarial review pipeline failed (derive-failed')) {
         // forge-nk1y.39: the ORCHESTRATOR's git read failed — nothing was judged.
         adversarialReviewDeriveFailed = true; ev(e);
@@ -717,7 +730,13 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (unifierNotPassed) return T('terminal', 'unifier did not pass its composed gate (tests / demo / self-contained PR / branch-sync) — branch not review-ready, PR creation blocked at the delivery gate', evidence);
   // R4-10-F1: the successor nodes' own delivery-gate failures — checked before
   // the reviewer-Ralph rule so a demo/adversarial failure reads accurately.
-  if (integrateBandFailed) return T('terminal', 'the integrate band failed to derive the delivery bundle — the branch is not review-ready and no PR opened; the error event carries the band\'s own reason', evidence);
+  // forge-mfv5.1.41: the run page's note is this reason — it carries the band's own named reason, so a
+  // refused demo plan reads as itself with its recovery act, never a bare "integrate band failed".
+  if (integrateBandFailed) {
+    return T('terminal', integrateBandDetail
+      ? `the integrate band failed ${integrateBandDetail} — the branch is not review-ready and no PR opened`
+      : 'the integrate band failed to derive the delivery bundle — the branch is not review-ready and no PR opened; the error event carries the band\'s own reason', evidence);
+  }
   if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / budget) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then re-run', evidence);
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 

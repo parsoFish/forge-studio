@@ -88,6 +88,16 @@ test('the revise turn (nk1y.42 / nk1y.43) is shown why the last plan was sent ba
   assert.match(seen[0]!.prompt, /## Revise: your last plan was sent back\n\nWhy: checkpoint command\(s\) not producible from the tree under capture\n\n- checkpoint "Plan 1": `gw` resolves to \/home\/u\/\.local\/bin\/gw outside the capture tree/);
 });
 
+test('the repair turn (mfv5.1.41) is shown the refused plan beside the validator errors', async () => {
+  const { queryFn, seen } = replying(`\`\`\`json\n${JSON.stringify(PLAN)}\n\`\`\``);
+  const invalidPlan = JSON.stringify({ narrative: 'n', checkpoints: [{ form: 'cli-before-after', caption: 'c', command: 'gitweave org show' }] });
+  const revise = { reason: 'your last plan failed validation', details: ['plan-invalid:checkpoints[0].command: "gitweave org show" is not a declared means'], invalidPlan };
+  await createDemoPlanner({ queryFn }).plan(def, { ...input(), revise }, logger);
+  assert.match(seen[0]!.prompt, /- plan-invalid:checkpoints\[0\]\.command: "gitweave org show" is not a declared means/);
+  assert.ok(seen[0]!.prompt.includes(`The refused plan:\n\n\`\`\`json\n${invalidPlan}\n\`\`\``));
+  assert.match(seen[0]!.prompt, /`gitweave org show --json`/, 'the declared means are listed on the repair turn');
+});
+
 test('a first turn carries no revise section', async () => {
   const { queryFn, seen } = replying(`\`\`\`json\n${JSON.stringify(PLAN)}\n\`\`\``);
   await createDemoPlanner({ queryFn }).plan(def, input(), logger);

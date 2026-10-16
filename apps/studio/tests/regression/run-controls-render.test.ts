@@ -136,6 +136,14 @@ test('a failed run carrying a failNote shows it rather than a bare "Run failed."
   expect(html).toContain('dev-loop wedged at WI-3');
 });
 
+test('mfv5.1.41: a run failed on a refused demo plan names it and offers Resume, never a bare "integrate band failed"', () => {
+  const failNote = 'the integrate band failed (plan-invalid): Demo plan invalid after a repair turn: plan-invalid:checkpoints[0].command: "pytest tests/a.py" is not a declared means (demoMeans or an acceptance criterion\'s span) (first plan: plan-invalid:checkpoints[0].command: "pytest tests/a.py" is not a declared means (demoMeans or an acceptance criterion\'s span)) — Resume from integrate re-runs the planner — the branch is not review-ready and no PR opened';
+  const html = markup(RunControls, { run: run('failed', { failNote }) });
+  expect(html).toContain('Demo plan invalid after a repair turn: plan-invalid:checkpoints[0].command');
+  expect(html).toContain('Resume from integrate re-runs the planner');
+  expect(html).toContain('data-action="resume-run"');
+});
+
 // ---- flows-23: the queued run's control is forge serve ----------------------
 
 test('flows-28/49 (S3-11): each control advertises BOTH ids — the run handle and the initiative id the routes take', () => {
