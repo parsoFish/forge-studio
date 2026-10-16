@@ -60,6 +60,7 @@ export { createWiWorktree, removeWiWorktree, wiWorktreePath } from './wi-worktre
 export { type MergeConflictDetail, type MergeQueue, createMergeQueue, mergeAndPublish, mergeWiIntoCycle } from './wi-merge-back.ts';
 export { type DispatchOutcome, runConcurrentDispatch } from './wi-dispatch-scheduler.ts';
 export { reviewCapExhaustedPath, writeMergeGateConfigErrorMarker, writeReviewCapExhaustedMarker } from './fix-work-items.ts';
+export { restoreWorkItemsForResume, type RestoreWorkItemsResult } from './work-items-restore.ts';
 export { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 export {
   addKickoffWorkItem,

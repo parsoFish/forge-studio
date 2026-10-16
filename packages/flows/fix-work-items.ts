@@ -311,38 +311,22 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
     );
   }
 
-  const concernKind: 'packaging' | 'code-fix' =
-    source.concernKind === 'packaging' ? 'packaging' : 'code-fix';
   const gateCmd =
     source.qualityGateCmd && source.qualityGateCmd.length > 0
       ? source.qualityGateCmd
       : input.projectGateCmd;
-
-  // Scope: the concern's own scope when supplied (the demo-fix path), else the
-  // union of every dev-WI's files_in_scope ∪ the demo/PR artifacts — a code fix
-  // can reach whatever the initiative built.
-  const demoJsonRel = worktreeDemoJsonRelPath(worktreePath, initiativeId);
-  const packagingScope = ['.forge/pr-description.md', demoJsonRel];
-  const scope =
-    source.filesInScope && source.filesInScope.length > 0
-      ? [...source.filesInScope]
-      : Array.from(new Set([...devWorkItemScopeUnion(worktreePath), ...packagingScope]));
-
   const existing = readWorkItemsFromDir(dir).items;
   const fixId = nextDevWorkItemId(worktreePath);
-  const fixWi: WorkItem = {
-    work_item_id: fixId,
-    initiative_id: initiativeId,
-    status: 'pending',
-    depends_on: [],
-    acceptance_criteria: acs,
-    files_in_scope: scope,
-    quality_gate_cmd: [...gateCmd],
-    estimated_iterations: Math.max(1, input.estimatedIterations),
-    origin: source.origin,
-    ...(concernKind === 'packaging' ? { behavior_preserving: true } : {}),
-    body: fixConcernBody(fixId, source.origin, concernKind, source.rationale, acs),
-  };
+  const fixWi = buildFixWorkItem({
+    worktreePath,
+    initiativeId,
+    id: fixId,
+    source,
+    acceptanceCriteria: acs,
+    gateCmd,
+    estimatedIterations: input.estimatedIterations,
+    existing,
+  });
   const { perItem, setErrors } = validateWorkItemSet([...existing, fixWi]);
   const errors = [...(perItem[fixId] ?? []), ...setErrors];
   if (errors.length > 0) {
@@ -354,13 +338,44 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
   return { appended: [fixId] };
 }
 
-/** Union of every dev work-item's files_in_scope (the initiative's touched code). */
-function devWorkItemScopeUnion(worktreePath: string): string[] {
-  const scope = new Set<string>();
-  for (const wi of readWorkItemsFromDir(devWorkItemsDir(worktreePath)).items) {
-    for (const f of wi.files_in_scope) scope.add(f);
-  }
-  return [...scope];
+/**
+ * The ONE fix work-item builder (D-20): `compileFixWorkItems` appends with it, and a
+ * develop resume re-mints a send-back's item with it from the persisted typed
+ * record (forge-mfv5.1.47, `work-items-restore.ts`). Scope: the concern's own
+ * when supplied, else the union of the `existing` dev items' scopes ∪ the
+ * demo/PR artifacts — a code fix can reach whatever the initiative built.
+ */
+export function buildFixWorkItem(opts: {
+  worktreePath: string;
+  initiativeId: string;
+  id: string;
+  source: FixConcernSource;
+  acceptanceCriteria: AcceptanceCriterion[];
+  gateCmd: string[];
+  estimatedIterations: number;
+  existing: WorkItem[];
+}): WorkItem {
+  const { source, acceptanceCriteria: acs } = opts;
+  const concernKind: 'packaging' | 'code-fix' = source.concernKind === 'packaging' ? 'packaging' : 'code-fix';
+  const demoJsonRel = worktreeDemoJsonRelPath(opts.worktreePath, opts.initiativeId);
+  const packagingScope = ['.forge/pr-description.md', demoJsonRel];
+  const scope =
+    source.filesInScope && source.filesInScope.length > 0
+      ? [...source.filesInScope]
+      : Array.from(new Set([...opts.existing.flatMap((w) => w.files_in_scope), ...packagingScope]));
+  return {
+    work_item_id: opts.id,
+    initiative_id: opts.initiativeId,
+    status: 'pending',
+    depends_on: [],
+    acceptance_criteria: acs,
+    files_in_scope: scope,
+    quality_gate_cmd: [...opts.gateCmd],
+    estimated_iterations: Math.max(1, opts.estimatedIterations),
+    origin: source.origin,
+    ...(concernKind === 'packaging' ? { behavior_preserving: true } : {}),
+    body: fixConcernBody(opts.id, source.origin, concernKind, source.rationale, acs),
+  };
 }
 
 function fixConcernBody(

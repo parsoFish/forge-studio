@@ -442,6 +442,11 @@ export async function applyReviewVerdict(
           appended_work_items: appended,
           origin: 'review-fix',
           round,
+          // forge-mfv5.1.47: with the fields above, everything `buildFixWorkItem` needs —
+          // a develop resume re-mints this item exactly when `.forge/work-items` is lost.
+          files_in_scope: body.filesInScope ?? null,
+          estimated_iterations: REVIEW_FIX_DEFAULT_ITERATIONS,
+          work_item_gate_cmd: concernGateCmd && concernGateCmd.length > 0 ? concernGateCmd : projectGateCmd,
         },
       });
       for (const id of appended) {

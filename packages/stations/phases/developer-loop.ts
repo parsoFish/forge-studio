@@ -32,6 +32,7 @@ import {
 } from '@forge/flows';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { buildWiQualityGate, deriveWiGateCmd } from './wi-quality-gate.ts';
+import { restoreDevWorkItemsAtResume } from './dev-work-items-restore.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
 import type { AgentInvocation } from '@forge/agents';
@@ -272,6 +273,7 @@ export async function runDeveloperLoop(
   // moment it actually needs a profile.
   classProfiles?: ClassProfilePort,
 ): Promise<void> {
+  restoreDevWorkItemsAtResume(input, logger); // forge-mfv5.1.47: a develop resume never meets a lost queue unnamed
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const cp = requireClassProfiles(classProfiles, 'developer-loop');
   // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (D-34).

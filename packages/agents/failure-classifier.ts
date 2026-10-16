@@ -319,7 +319,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // Collect the signals that affect the terminal/transient decision.
   // Each group is only what's needed to resolve the classification below.
   let gateMissingScript = false, worktreeNoDeps = false;
-  let baselineRed = false, resumeNeedsRebase: Record<string, unknown> | null = null;
+  let baselineRed = false, resumeNeedsRebase: Record<string, unknown> | null = null, restoreRefused: string | null = null;
   let pmEmptyDecomposition = false, pmPartialUsable = false;
   let pmCapped = false, pmBudgetExhausted = false;
   let pmHiddenCoupling = false, pmInvalidWorkItems = false;
@@ -426,6 +426,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // consecutive failures of the SAME composed-gate sub-check.
     if (msg === 'uwi.loop-cap-exhausted') { uwiLoopCapExhausted = true; ev(e); }
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = md; ev(e); }
+    // forge-mfv5.1.47: a develop resume's lost work-item queue could not be restored — named, needs-operator.
+    if (msg === 'work-items.restore-refused') { restoreRefused = typeof md?.reason === 'string' ? md.reason : 'work items not restorable'; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (GATE_MISSING_SCRIPT_RE.test(blob)) { gateMissingScript = true; ev(e); }
@@ -710,6 +712,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
   if (resumeNeedsRebase) return T('terminal', entryRebaseReason(resumeNeedsRebase), evidence);
+  if (restoreRefused !== null) return T('terminal', `${restoreRefused} — restore .forge/work-items by hand (or requeue fresh), then resume`, evidence);
   // Plan 2.11: partial-but-usable BEATS the empty-decomposition and
   // capped+degenerate terminal rules — an incremental-write run capped
   // mid-flight legitimately leaves a truncated tail WI (per-item errors)
