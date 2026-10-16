@@ -20,3 +20,15 @@ export function liveAcceptanceEnvFor(
   if (!accGate?.requires_env || accGate.requires_env.length === 0) return undefined;
   return gateCmd.some((tok) => tok.includes(accGate.match)) ? accGate.requires_env : undefined;
 }
+
+const INLINE_PROGRAM_FLAGS: ReadonlySet<string> = new Set(['-c', '-e', '--eval']);
+
+/**
+ * The same decision for a per-AC check (D-20, forge-mfv5.1.44), read from its arguments, never from the
+ * text of an inline program (the operand of `-c`/`-e`/`--eval`): gitweave I3b WI-15's AC3 guard named
+ * `tests/acceptance` inside its `python3 -c` program, was classed as the live suite, and its exit 0 was
+ * refused for carrying no runner summary. The result is the check's inherited `requiresEnv` AND its acceptance class.
+ */
+export function liveAcceptanceEnvForCheck(accGate: AcceptanceGateConfig | undefined, argv: readonly string[]): string[] | undefined {
+  return liveAcceptanceEnvFor(accGate, argv.filter((_, i) => i === 0 || !INLINE_PROGRAM_FLAGS.has(argv[i - 1]!)));
+}

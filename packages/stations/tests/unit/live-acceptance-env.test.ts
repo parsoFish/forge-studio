@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { liveAcceptanceEnvFor } from '../../phases/live-acceptance-env.ts';
+import { liveAcceptanceEnvFor, liveAcceptanceEnvForCheck } from '../../phases/live-acceptance-env.ts';
 
 const ACC_GATE = { match: 'acceptancetests', requires_env: ['TF_ACC', 'AZDO_PERSONAL_ACCESS_TOKEN'] };
 const LIVE_CMD = ['go', 'test', '-run', 'TestAccFoo', './azuredevops/internal/acceptancetests/...'];
@@ -36,4 +36,14 @@ test('a project with no live tier, or a tier with no env, demands nothing', () =
   assert.equal(liveAcceptanceEnvFor(undefined, LIVE_CMD), undefined);
   assert.equal(liveAcceptanceEnvFor({ match: 'acceptancetests', requires_env: [] }, LIVE_CMD), undefined);
   assert.equal(liveAcceptanceEnvFor({ match: 'acceptancetests' }, LIVE_CMD), undefined);
+});
+
+test('forge-mfv5.1.44: a check is read by its arguments, never by the text of an inline program', () => {
+  const gw = { match: 'tests/acceptance', requires_env: ['GW_CALLER_TOKEN'] };
+  const guard = ['python3', '-c', "import subprocess,sys; r=subprocess.run(['grep','-rqnE','gw-acc-','gitweave','tests/acceptance']).returncode; sys.exit(0 if r==1 else 1)"];
+  assert.equal(liveAcceptanceEnvForCheck(gw, guard), undefined);
+  assert.deepEqual(liveAcceptanceEnvFor(gw, guard), ['GW_CALLER_TOKEN'], 'the WI gate keeps the D-34 substring guard');
+  assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['python3', '-m', 'pytest', 'tests/acceptance', '-q']), ['GW_CALLER_TOKEN']);
+  assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['node', '-e', 'run()', 'tests/acceptance']), ['GW_CALLER_TOKEN'], 'an argument after the program still counts');
+  assert.deepEqual(liveAcceptanceEnvForCheck(ACC_GATE, LIVE_CMD), ['TF_ACC', 'AZDO_PERSONAL_ACCESS_TOKEN']);
 });

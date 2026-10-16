@@ -43,13 +43,15 @@ test('an ordinary gate with no test summary (a build) is unchanged', () => {
   assert.equal(run(printing('Compiled successfully.\n')).passed, true);
 });
 
-test('an acceptance gate (requiredEnv declared) with no recognised summary is refused by name', () => {
+test('an acceptance gate (it targets the live suite) with no recognised summary is refused by name', () => {
   process.env.FORGE_TEST_GATE_ACC = '1';
   try {
-    const { passed, info } = run(printing('ok  \tgithub.com/x/y\t0.01s\n'), { requiredEnv: ['FORGE_TEST_GATE_ACC'] });
+    const { passed, info } = run(printing('ok  \tgithub.com/x/y\t0.01s\n'), { requiredEnv: ['FORGE_TEST_GATE_ACC'], acceptance: true });
     assert.equal(passed, false);
     assert.equal(info.rejectReason, 'no-tests-ran');
     assert.match(info.stderrTail, /acceptance gate output carries no recognised test summary/);
+    // forge-mfv5.1.44: requiredEnv alone does not class a gate as acceptance — a guard keeps its exit-code verdict.
+    assert.equal(run(printing('ok  \tgithub.com/x/y\t0.01s\n'), { requiredEnv: ['FORGE_TEST_GATE_ACC'] }).passed, true);
   } finally {
     delete process.env.FORGE_TEST_GATE_ACC;
   }
