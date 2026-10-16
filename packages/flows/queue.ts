@@ -223,74 +223,82 @@ export function writeHeartbeat(filename: string, paths = getPaths()): void {
   writeFileSync(hbPath, new Date().toISOString());
 }
 
-export type RecoveryResult = {
-  recovered: string[];
-  reason: 'stale-heartbeat' | 'missing-worktree' | 'worktree-path-refused';
+export type StrandedReason = 'stale-heartbeat' | 'missing-worktree';
+
+/** forge-mfv5.1.47: what the sweep knew of one stranded manifest, read BEFORE the move clears its `.heartbeat`/`.stop` sidecars. */
+export type StrandedClassification = {
+  filename: string;
+  initiativeId: string;
+  cycleId: string | null;
+  resumeFrom: string | null;
+  reason: StrandedReason;
+  stopFlag: boolean;
+  heartbeatAgeMs: number | null;
 };
 
+/** `recovered`: every filename moved to failed/; `classified`: one entry per stranded manifest (none for a refused path). */
+export type RecoveryResult = { recovered: string[]; reason: StrandedReason | 'worktree-path-refused'; classified: StrandedClassification[] };
+
 /**
- * Sweep in-flight for stale heartbeats and missing worktrees. Returns the
- * filenames that were moved back to pending.
+ * Sweep in-flight for stranded manifests (a stale heartbeat, a missing worktree)
+ * and CLASSIFY each into failed/ (forge-mfv5.1.47, D-06/D-11): never
+ * re-dispatched — the operator's Requeue/Resume is the only re-entry — and its
+ * branch, worktree and `.forge/` scratch are never touched.
  */
 export function recover(opts: {
   paths?: QueuePaths;
   staleHeartbeatMs?: number;
   worktreeExists?: (workTreePath: string) => boolean;
+  /** A manifest THIS process is running (the periodic sweep's own in-flight map) is never judged stranded. */
+  isLive?: (filename: string) => boolean;
 } = {}): RecoveryResult[] {
   const paths = opts.paths ?? getPaths();
   const staleMs = opts.staleHeartbeatMs ?? 5 * 60 * 1000;
   const wtExists = opts.worktreeExists ?? ((p: string) => existsSync(p));
 
-  const stale: string[] = [];
-  const missing: string[] = [];
+  const stranded: Record<StrandedReason, StrandedClassification[]> = { 'stale-heartbeat': [], 'missing-worktree': [] };
   const refused: string[] = [];
 
   for (const filename of listInFlight(paths)) {
+    if (opts.isLive?.(filename) === true) continue;
     const hbPath = join(paths.inFlight, filename + '.heartbeat');
     const manifestPath = join(paths.inFlight, filename);
+    const heartbeatAgeMs = existsSync(hbPath) ? Date.now() - statSync(hbPath).mtimeMs : null;
+    const { worktreePath, ...facts } = readStrandedFacts(manifestPath, filename);
+    const classify = (reason: StrandedReason): void => {
+      const stopFlag = existsSync(operatorStopPath(paths.inFlight, initiativeIdFromFilename(filename)));
+      moveTo(filename, 'failed', paths);
+      stranded[reason].push({ filename, ...facts, reason, stopFlag, heartbeatAgeMs });
+    };
 
-    // Stale-heartbeat sweep
-    if (existsSync(hbPath)) {
-      const age = Date.now() - statSync(hbPath).mtimeMs;
-      if (age > staleMs) {
-        renameSync(manifestPath, join(paths.pending, filename));
-        stale.push(filename);
-        continue;
-      }
-    }
+    if (heartbeatAgeMs !== null && heartbeatAgeMs > staleMs) { classify('stale-heartbeat'); continue; }
 
-    // Missing-worktree sweep
-    const claimed = parseWorktreeClaim(manifestPath);
-    if (claimed) {
+    if (worktreePath !== null) {
       // FAIL CLOSED (forge-nk1y.20): an uncontained `worktree_path` is never probed, and the
-      // manifest is PARKED in failed/ under its own reason -- not pending (that would
-      // dispatch it a second time) and not "missing-worktree" (the path was refused).
-      const contained =
-        initiativeWorktreeRefusal(claimed.worktreePath, { forgeRoot: dirname(paths.root), initiativeId: claimed.initiativeId }) === null;
-      if (!contained) {
+      // manifest is PARKED in failed/ under its own reason -- not "missing-worktree" (the path was refused).
+      if (initiativeWorktreeRefusal(worktreePath, { forgeRoot: dirname(paths.root), initiativeId: facts.initiativeId }) !== null) {
         moveTo(filename, 'failed', paths);
         refused.push(filename);
-      } else if (!wtExists(claimed.worktreePath)) {
-        renameSync(manifestPath, join(paths.pending, filename));
-        missing.push(filename);
+      } else if (!wtExists(worktreePath)) {
+        classify('missing-worktree');
       }
     }
   }
 
-  const out: RecoveryResult[] = [];
-  if (stale.length) out.push({ recovered: stale, reason: 'stale-heartbeat' });
-  if (missing.length) out.push({ recovered: missing, reason: 'missing-worktree' });
-  if (refused.length) out.push({ recovered: refused, reason: 'worktree-path-refused' });
+  const out: RecoveryResult[] = (['stale-heartbeat', 'missing-worktree'] as const)
+    .filter((reason) => stranded[reason].length > 0)
+    .map((reason) => ({ recovered: stranded[reason].map((x) => x.filename), reason, classified: stranded[reason] }));
+  if (refused.length) out.push({ recovered: refused, reason: 'worktree-path-refused', classified: [] });
   return out;
 }
 
-/** The manifest's `worktree_path` + the initiative id it is judged against; null if missing, malformed or absent. */
-function parseWorktreeClaim(manifestPath: string): { worktreePath: string; initiativeId: string } | null {
-  if (!existsSync(manifestPath)) return null;
+/** One manifest read: the ids a classification names (an unreadable manifest falls back to its file stem, never skipped) + its `worktree_path`. */
+function readStrandedFacts(manifestPath: string, filename: string): Pick<StrandedClassification, 'initiativeId' | 'cycleId' | 'resumeFrom'> & { worktreePath: string | null } {
+  const stem = filename.replace(/\.md$/, '');
   try {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    return m.worktree_path ? { worktreePath: m.worktree_path, initiativeId: m.initiative_id } : null;
+    return { initiativeId: m.initiative_id || stem, cycleId: m.cycle_id ?? null, resumeFrom: m.resume_from ?? null, worktreePath: m.worktree_path ?? null };
   } catch {
-    return null;
+    return { initiativeId: stem, cycleId: null, resumeFrom: null, worktreePath: null };
   }
 }

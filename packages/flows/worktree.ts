@@ -24,8 +24,13 @@ export function add(opts: {
   branch: string;
   worktreesRoot: string;
   initiativeId: string;
+  /** forge-mfv5.1.47 (D-06): on a RESUME a missing branch is never created from HEAD and an existing dir is never removed. */
+  resume?: boolean;
 }): WorktreeHandle {
   const path = resolve(opts.worktreesRoot, opts.initiativeId);
+  if (opts.resume === true && existsSync(path)) {
+    throw new Error(`worktree add refused on a resume: ${path} exists but is not a registered worktree of ${opts.projectRepoPath} — it is never removed (it may hold .forge scratch); move it aside by hand, then resume`);
+  }
   if (!existsSync(dirname(path))) mkdirSync(dirname(path), { recursive: true });
 
   // F1.I4 self-heal: a prior cycle may have left a stale `git worktree`
@@ -49,6 +54,9 @@ export function add(opts: {
     }
   })();
 
+  if (!branchExists && opts.resume === true) {
+    throw new Error(`worktree add refused on a resume: branch ${opts.branch} does not exist — a resume never creates it from HEAD (it recreates a missing branch only from origin)`);
+  }
   const args = branchExists
     ? ['-C', opts.projectRepoPath, 'worktree', 'add', path, opts.branch]
     : ['-C', opts.projectRepoPath, 'worktree', 'add', '-b', opts.branch, path];

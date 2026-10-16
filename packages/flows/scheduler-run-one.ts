@@ -25,6 +25,8 @@ import { endMetaIndicatesFailure } from './run-model-derive-status.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
 import { probeRemoteBranch, shouldRefuseFreshAttempt } from './stale-remote-branch-guard.ts';
+import { ensureResumeBranch } from './resume-branch.ts';
+import { currentBranch } from './pr-branch-sync.ts';
 import {
   decideRequeueResume,
   branchHasCommittedWork,
@@ -344,6 +346,20 @@ export async function runOne(
         initiativeId: manifest.initiativeId,
       };
     }
+    // forge-mfv5.1.47 (D-06): a RESUME settles its branch before any worktree step (resume-branch.ts)
+    // and reuses only a worktree that is ON that branch; a refusal names why and runs nothing.
+    if (manifest.resumeFrom !== undefined) {
+      const settled = ensureResumeBranch({ projectRepoPath: manifest.projectRepoPath, branch });
+      const wtBranch = settled.ok && strategy === 'reuse' ? currentBranch(expectedWtPath) : branch;
+      const reason = !settled.ok ? settled.reason : wtBranch !== branch ? `the preserved worktree ${expectedWtPath} is on ${wtBranch ?? 'a detached HEAD'}, not ${branch} — refusing to resume on it` : null;
+      if (reason !== null) {
+        emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'resume-branch.refused', { branch, resume_from: manifest.resumeFrom, reason });
+        moveTo(filename, 'failed', paths);
+        await notify({ type: 'failed', title: `Resume refused: ${manifest.initiativeId}`, body: reason }, cfg.notify);
+        return;
+      }
+      if (settled.ok) emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'log', 'resume-branch.settled', { branch, action: settled.action, sha: settled.sha, origin_unknown: settled.originUnknown ?? null });
+    }
     if (strategy === 'reuse') {
       const why = manifest.resumeFrom ? `resume-from-${manifest.resumeFrom}` : 'architect→develop hand-off';
       if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
@@ -365,8 +381,9 @@ export async function runOne(
       );
       return; // runOne done — no worktree, no cycle, zero agent spend, no ownership recorded
     } else {
-      // bead forge-8vfn.8.1.8: fail fast, before any spend — fresh ('add') only; 'reuse' owns its own branch.
-      if (shouldRefuseFreshAttempt(probe)) {
+      // bead forge-8vfn.8.1.8: fail fast, before any spend — fresh ('add') only; 'reuse' owns its own branch,
+      // and so does a resume (forge-mfv5.1.47: its origin branch is the pushed work it was just settled onto).
+      if (manifest.resumeFrom === undefined && shouldRefuseFreshAttempt(probe)) {
         const sha = probe.sha;
         const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
         emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', {
@@ -386,6 +403,7 @@ export async function runOne(
         branch,
         worktreesRoot: cfg.worktreesRoot,
         initiativeId: manifest.initiativeId,
+        resume: manifest.resumeFrom !== undefined,
       });
     }
     // F-24: link the project's installed dependencies into the worktree.

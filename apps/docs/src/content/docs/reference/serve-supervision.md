@@ -3,7 +3,7 @@ title: Serve supervision
 description: How forge serve runs, who restarts it, its process-id and lock files, recovery sweeps, and the emergency halt.
 type: reference
 owner: parsoFish
-last_verified: 2026-10-06
+last_verified: 2026-10-16
 covers: [packages/flows/daemon.ts, packages/flows/scheduler.ts, packages/flows/halt-watch.ts, packages/kernel/halt.ts, apps/forge/serve-supervisor.ts, apps/forge/bridge-halt.ts, apps/forge/forge-watch.ts]
 ---
 
@@ -15,7 +15,7 @@ covers: [packages/flows/daemon.ts, packages/flows/scheduler.ts, packages/flows/h
 |---|---|
 | Start, adopt and restart the `forge serve` process | `forge studio`, with crash-loop back-off |
 | Allow only one `forge serve` per forge root | `forge serve` itself, by lock |
-| Re-queue work orphaned by a dead process | `forge serve`, by sweeps |
+| Park work orphaned by a dead process in `failed/`, untouched, for you to resume | `forge serve`, by sweeps |
 | Show serve's health | Studio, read-only |
 
 `forge studio` spawns `serve` detached, so closing Studio does not strand in-flight work. On start it adopts a live serve of the same root instead of spawning a second. An attach-only `forge studio --attach` never supervises; it only reads state.

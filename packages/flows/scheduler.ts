@@ -30,6 +30,7 @@ import {
   runCronSync,
   runRecoverySweep,
   announceRecovery,
+  recoveryLogsRoot,
 } from './scheduler-sweeps.ts';
 import { createHaltWatch } from './halt-watch.ts';
 
@@ -96,14 +97,15 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // Recovery sweep at startup — deliberately NOT `runRecoverySweep`
   // (scheduler-sweeps.ts), which try/catch-wraps everything for the
   // interval timer; a startup failure should stay loud.
+  // forge-mfv5.1.47: a stranded in-flight manifest is CLASSIFIED into failed/ —
+  // never re-dispatched, its branch/worktree/scratch never cleaned (D-06, D-11).
+  const bootPaths = getPaths(cfg.queueRoot);
   const recoveries = recover({
-    paths: getPaths(cfg.queueRoot),
+    paths: bootPaths,
     staleHeartbeatMs: cfg.staleHeartbeatMs,
     worktreeExists: worktree.exists,
   });
-  // F-09: each result's orphaned worktrees + scratch branches are cleaned (the manifests are
-  // back in pending/ where the cleanup reads worktree_path + project_repo_path).
-  for (const r of recoveries) await announceRecovery(r, getPaths(cfg.queueRoot), cfg.notify);
+  for (const r of recoveries) await announceRecovery(r, bootPaths, cfg.notify, recoveryLogsRoot(bootPaths, cfg.logsRoot));
 
   // F-W5-7: at startup, finalize any ready-for-review cycle whose PR was merged
   // while the daemon was down (operator merged, nothing re-confirmed it).
@@ -230,11 +232,11 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
     : null;
 
   // F-08 / D-05: periodic crash-recovery sweep. The startup sweep above
-  // catches state from prior crashes; this catches mid-run loss (a worktree
-  // that vanishes, a heartbeat that goes stale because runOne is wedged).
+  // catches state from prior crashes; this catches a manifest no live runOne
+  // of THIS process owns (a wedged own run is the flow's wedge-kill's, never a sweep's).
   // Cleared at shutdown so the process can exit cleanly.
   const recoverTimer = setInterval(() => {
-    void runRecoverySweep(cfg);
+    void runRecoverySweep(cfg, (filename) => inFlight.has(filename));
     // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
     // then (D-20) drain any review work-items appended since the last sweep.
     void runFinalizeSweep(opts.phaseWiring).then(() => runDrainSweep(opts.phaseWiring, cfg.queueRoot)).then(() => runCronSync());

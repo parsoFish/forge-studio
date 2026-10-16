@@ -21,7 +21,7 @@ rule is the target, not a description of today.
 | run one flow — the station engine | `checkFlowTriggers` · `findFanOutViolations` · `flowPathForId` · `listFlowBandIds` · `loadFlowDefinition` · `loadStarterFlow` · `resolveNodeKind` · `runFlow` |
 | the cycle the develop flow runs | `CAPTURE_NONCE_ENV` · `MAX_COMMITTED_DEMO_MEDIA_BYTES` · `MAX_COMMITTED_DEMO_WEBM_BYTES` · `REFLECTION_LOST_EVENT` · `REFLECT_MODE_FILE` · `assertNonEmptyDelivery` · `buildDemoCaptureArgv` · `commitDevLoopBoundary` · `commitOrchestratedCaptureArtifacts` · `compileWorkItemSpecs` · `demoJsonWantsCapture` · `enforceDevLoopCloseInvariant` · `enforceFinalCiGate` · `generateCaptureNonce` · `openPrInline` · `preflightDemoCaptureCommands` · `preflightDemoCommands` · `projectRunPrefixes` · `preservingForgeScratch` · `promoteMergedToDone` · `rebaseForResume` · `recordBrainGateResult` · `resolveCostCeilingOverride` · `resolveDemoCaptureTimeoutMs` · `resumeSkipsPerWiWork` · `runClosure` · `runMergeBoundaryGate` · `runOrchestratorCommand` |
 | queue state machine, manifests and initiatives | `DERIVED_CEILING_MARGIN_SHARE` · `getPaths` · `initiativeTitle` · `isContainedProjectRepoPath` · `isSafeProjectName` · `isSafeCycleId` · `listAllInitiativeIds` · `listInFlight` · `listPlannedInitiatives` · `manifestBlockedClauses` · `mintAndPersistManifestCycleId` · `mintTriggeredInitiative` · `parseManifest` · `persistManifestCostCeiling` · `persistManifestPmValidationErrors` · `persistManifestSpecs` · `recordedPmValidationErrors` · `promoteManifests` · `serializeManifest` · `CHANGE_CLASSES` · `isCanonicalInitiativeId` |
-| work items and their worktrees | `DEV_WORK_ITEM_ID_PATTERN` · `REJECTED_SET_MARKER` · `WORK_ITEM_FILE_PATTERN` · `acLabel` · `addKickoffWorkItem` · `createMergeQueue` · `createWiWorktree` · `deleteKickoffWorkItem` · `editKickoffWorkItem` · `enqueueGateFixWorkItems` · `gateRequiredPaths` · `kickoffAddedWorkItemFields` · `mergeAndPublish` · `mergeWiIntoCycle` · `parseWorkItem` · `readWorkItemsFromDir` · `removeWiWorktree` · `reviewCapExhaustedPath` · `runConcurrentDispatch` · `serializeWorkItem` · `topologicalOrder` · `validateWorkItem` · `validateWorkItemSet` · `wiWorktreePath` · `writeMergeGateConfigErrorMarker` · `writeReviewCapExhaustedMarker` · `writeWorkItem` · `writeWorkItemStatus` |
+| work items and their worktrees | `DEV_WORK_ITEM_ID_PATTERN` · `REJECTED_SET_MARKER` · `WORK_ITEM_FILE_PATTERN` · `acLabel` · `addKickoffWorkItem` · `createMergeQueue` · `createWiWorktree` · `deleteKickoffWorkItem` · `devWorkItemsDir` · `editKickoffWorkItem` · `enqueueGateFixWorkItems` · `gateRequiredPaths` · `kickoffAddedWorkItemFields` · `mergeAndPublish` · `mergeWiIntoCycle` · `parseWorkItem` · `readWorkItemsFromDir` · `remintSendBackItems` · `removeWiWorktree` · `reviewCapExhaustedPath` · `runConcurrentDispatch` · `serializeWorkItem` · `topologicalOrder` · `validateWorkItem` · `validateWorkItemSet` · `wiWorktreePath` · `writeMergeGateConfigErrorMarker` · `writeReviewCapExhaustedMarker` · `writeWorkItem` · `writeWorkItemStatus` |
 | triggers and staged flow runs | `PLAN_FLOW_ID` · `REPO_RE` · `TRIGGER_KIND_IDS` · `drainFlowRunRequests` · `enqueueDevelopRun` · `enqueueFlowRun` · `enqueuePlanRun` · `fireAgentCompleteTriggers` · `listFlowRunRequests` · `stageFlowRunRequest` |
 | serve and its daemon | `checkInitiativeDeps` · `clearOwnPidFile` · `clearPidFile` · `daemonPaths` · `decideAutoRetry` · `isAlive` · `markStopping` · `readPid` · `serve` · `spawnServeDetached` · `startServeLock` · `unmetBuildDeps` · `writePidFile` |
 | the run model the ui reads | `_resetRunListCacheForTest` · `buildAgentSlugToNodeId` · `buildNodeMapping` · `cachedListRuns` · `endMetaIndicatesFailure` · `eventToNodeId` · `summariseCycle` · `costByClass` |
@@ -77,8 +77,14 @@ sidecar (`writeHeartbeat`, `queue.ts:204-207`, a plain `writeFileSync`; only
 its mtime is ever read, so a torn write is harmless). `recover()`
 (`queue.ts:218-251`) sweeps `in-flight/` every scheduler tick and once,
 un-guarded by try/catch, at daemon startup (`scheduler-sweeps.ts:104-124`),
-renaming an item back to `pending` on a heartbeat >5 min stale or a manifest
-whose `worktree_path` no longer exists. `claim`/`moveTo`
+parking an item in `failed/` with a `recovery.stranded-classified` event
+(reason, operator-stop flag, last cycle event) on a heartbeat >5 min stale or
+a manifest whose `worktree_path` no longer exists — never re-dispatched, its
+branch, worktree and `.forge/` scratch untouched (forge-mfv5.1.47); the
+operator's Requeue/Resume is the only re-entry. A resume settles its branch
+first (`resume-branch.ts`: local as is, a missing one from origin, a
+disagreement refused by name), and a develop resume restores a lost
+work-item queue (`@forge/stations` `dev-work-items-restore.ts`). `claim`/`moveTo`
 (`queue.ts:134-171`) also clear the heartbeat and any `<id>.stop`
 operator-stop flag on every state transition, so a stale flag can never
 outlive its halt or meet a fresh cycle of the same id
@@ -95,8 +101,8 @@ work-items undrainable. The daemon-crash story itself is
 `persistManifestResumeFromIntegrate` (`manifest.ts:564-573`): once every WI
 is `complete` but the post-develop band hasn't finished, it stamps
 `resume_from: integrate` on the manifest *before* a crash can happen, so the
-recovery sweep's rename-to-`pending` plus that pre-set marker resumes at
-`integrate` rather than re-running PM + the whole dev-loop. `resume_from`
+operator's Requeue of the parked run resumes at `integrate` rather than
+re-running PM + the whole dev-loop. `resume_from`
 (D-06, `manifest.ts:161-167`) also takes `plan | develop | pr-open`;
 `inferRequeueResume` (`requeue-resume.ts`) derives it from the prior
 `failure_classification` event when a WI died mid-cycle instead, and

@@ -32,6 +32,7 @@ import {
 } from '@forge/flows';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { buildWiQualityGate, deriveWiGateCmd } from './wi-quality-gate.ts';
+import { restoreDevWorkItemsAtResume } from './dev-work-items-restore.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
 import type { AgentInvocation } from '@forge/agents';
@@ -267,11 +268,11 @@ export async function runDeveloperLoop(
   // Ralph iteration (claude-agent.ts `externalSignal`) so a wedge-kill cancels
   // the in-flight per-item CLI subprocesses, not just the outer phase promise.
   signal?: AbortSignal,
-  // The one port (operator ruling, items 81/83): optional, because this
-  // station must build with no factory installed; refuses by name below the
-  // moment it actually needs a profile.
+  // The one port (operator ruling, items 81/83): optional, because this station must
+  // build with no factory installed; refuses by name below the moment it needs a profile.
   classProfiles?: ClassProfilePort,
 ): Promise<void> {
+  restoreDevWorkItemsAtResume(input, logger); // forge-mfv5.1.47: a develop resume never meets a lost queue unnamed
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const cp = requireClassProfiles(classProfiles, 'developer-loop');
   // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (D-34).
@@ -1264,7 +1265,6 @@ export async function runDeveloperLoop(
   // its own flow nodes after this; on a resume the flow-runner skips this dev
   // node entirely and re-enters at the integrate node (resume_from:'integrate', R4-10-F6).
 }
-
 
 /**
  * S1.3 — dev-loop close-step local↔remote invariant assertion.

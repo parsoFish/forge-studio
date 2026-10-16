@@ -28,11 +28,12 @@ name; with none bound the band keeps the checkpoints it derives.
 | the docs class's merge-boundary verb | `runDocsGate` |
 | D-47 coverage the Kickoff gate re-reports | `uncoveredAcceptanceCriteria` |
 | D-47's runnable span, a verdict comment's gate (D-20) | `firstRunnableSpan` |
+| a develop resume's lost work-item queue, restored or refused (D-06) | `restoreWorkItemsForResume` |
 
 ### Types
 
 `ChangeClass` · `ClassProfilePort` · `FlowRunnerDeps` · `GateProfile` ·
-`DemoPlannerPort` · `DemoPlannerInput` · `DemoPlannerOutcome`
+`DemoPlannerPort` · `DemoPlannerInput` · `DemoPlannerOutcome` · `RestoreWorkItemsResult`
 
 ## One door, plus three literal production subpaths and one test-only subpath
 

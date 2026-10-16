@@ -35,3 +35,4 @@ export { runDocsGate } from './gates/docs-gate.ts';
 
 // ---- D-47 coverage, re-reported when the Kickoff gate adds a work item (forge-nk1y.12) ----
 export { uncoveredAcceptanceCriteria, firstRunnableSpan } from './phases/decompose-completeness.ts';
+export { restoreWorkItemsForResume, type RestoreWorkItemsResult } from './phases/dev-work-items-restore.ts';

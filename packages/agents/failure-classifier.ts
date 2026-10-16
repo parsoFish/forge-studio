@@ -319,7 +319,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // Collect the signals that affect the terminal/transient decision.
   // Each group is only what's needed to resolve the classification below.
   let gateMissingScript = false, worktreeNoDeps = false;
-  let baselineRed = false, resumeNeedsRebase: Record<string, unknown> | null = null;
+  let baselineRed = false, resumeNeedsRebase: Record<string, unknown> | null = null, restoreRefused: string | null = null;
   let pmEmptyDecomposition = false, pmPartialUsable = false;
   let pmCapped = false, pmBudgetExhausted = false;
   let pmHiddenCoupling = false, pmInvalidWorkItems = false;
@@ -426,6 +426,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // consecutive failures of the SAME composed-gate sub-check.
     if (msg === 'uwi.loop-cap-exhausted') { uwiLoopCapExhausted = true; ev(e); }
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = md; ev(e); }
+    // forge-mfv5.1.47: a develop resume's lost work-item queue could not be restored — named, needs-operator.
+    if (msg === 'work-items.restore-refused') { restoreRefused = typeof md?.reason === 'string' ? md.reason : 'work items not restorable'; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (GATE_MISSING_SCRIPT_RE.test(blob)) { gateMissingScript = true; ev(e); }
@@ -705,6 +707,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // `kind: 'terminal'` (recoverable: false) even though it is, in the
   // "an operator could resume this" sense, the least "terminal" terminal
   // failure in this file. Do not "fix" this to transient.
+  // Emitted before the dev node's own `start` (it refuses at the door), so it outranks an earlier attempt's signals in the window.
+  if (restoreRefused !== null) return T('terminal', `${restoreRefused} — restore .forge/work-items by hand (or requeue fresh), then resume`, evidence);
   if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);

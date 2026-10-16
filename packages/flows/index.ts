@@ -59,7 +59,7 @@ export { type CouplingPair, DEV_WORK_ITEM_ID_PATTERN, REJECTED_SET_MARKER, WORK_
 export { createWiWorktree, removeWiWorktree, wiWorktreePath } from './wi-worktree.ts';
 export { type MergeConflictDetail, type MergeQueue, createMergeQueue, mergeAndPublish, mergeWiIntoCycle } from './wi-merge-back.ts';
 export { type DispatchOutcome, runConcurrentDispatch } from './wi-dispatch-scheduler.ts';
-export { reviewCapExhaustedPath, writeMergeGateConfigErrorMarker, writeReviewCapExhaustedMarker } from './fix-work-items.ts';
+export { devWorkItemsDir, remintSendBackItems, reviewCapExhaustedPath, writeMergeGateConfigErrorMarker, writeReviewCapExhaustedMarker } from './fix-work-items.ts';
 export { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 export {
   addKickoffWorkItem,
