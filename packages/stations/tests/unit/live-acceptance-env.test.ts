@@ -46,4 +46,14 @@ test('forge-mfv5.1.44: a check is read by its arguments, never by the text of an
   assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['python3', '-m', 'pytest', 'tests/acceptance', '-q']), ['GW_CALLER_TOKEN']);
   assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['node', '-e', 'run()', 'tests/acceptance']), ['GW_CALLER_TOKEN'], 'an argument after the program still counts');
   assert.deepEqual(liveAcceptanceEnvForCheck(ACC_GATE, LIVE_CMD), ['TF_ACC', 'AZDO_PERSONAL_ACCESS_TOKEN']);
+  assert.equal(liveAcceptanceEnvForCheck(gw, ['node', '--eval=/* tests/acceptance */ 0']), undefined, 'the joined --eval= form is program text too');
+  assert.equal(liveAcceptanceEnvForCheck(gw, ['/usr/bin/python3.12', '-Ic', 'print("tests/acceptance")']), undefined, 'a clustered -c flag');
+});
+
+test('forge-mfv5.1.44: a shell\'s -c operand is a command line — a shell-wrapped suite run keeps the D-34 guard', () => {
+  const gw = { match: 'tests/acceptance', requires_env: ['GW_CALLER_TOKEN'] };
+  assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['sh', '-c', 'pytest tests/acceptance -q']), ['GW_CALLER_TOKEN']);
+  assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['bash', '-lc', 'pytest tests/acceptance -q']), ['GW_CALLER_TOKEN']);
+  assert.deepEqual(liveAcceptanceEnvForCheck(ACC_GATE, ['sh', '-c', 'go test ./azuredevops/internal/acceptancetests/...']), ['TF_ACC', 'AZDO_PERSONAL_ACCESS_TOKEN']);
+  assert.deepEqual(liveAcceptanceEnvForCheck(gw, ['pytest', '-c', 'tests/acceptance/pytest.ini']), ['GW_CALLER_TOKEN'], 'a runner\'s own -c (config file) is an argument');
 });

@@ -1,3 +1,5 @@
+import { basename } from 'node:path';
+
 import type { AcceptanceGateConfig } from '@forge/projects';
 
 /**
@@ -21,14 +23,19 @@ export function liveAcceptanceEnvFor(
   return gateCmd.some((tok) => tok.includes(accGate.match)) ? accGate.requires_env : undefined;
 }
 
-const INLINE_PROGRAM_FLAGS: ReadonlySet<string> = new Set(['-c', '-e', '--eval']);
+/** A non-shell interpreter (a shell's `-c` operand is a command line and stays readable) and its inline-program flags. */
+const INTERPRETER = /^(?:python[\d.]*|node|nodejs|ruby|perl|php)$/;
+const INLINE_FLAG = /^(?:-[A-Za-z]*[ceEp]|--eval|--print)$/;
+const INLINE_JOINED = /^--(?:eval|print)=/;
 
 /**
- * The same decision for a per-AC check (D-20, forge-mfv5.1.44), read from its arguments, never from the
- * text of an inline program (the operand of `-c`/`-e`/`--eval`): gitweave I3b WI-15's AC3 guard named
- * `tests/acceptance` inside its `python3 -c` program, was classed as the live suite, and its exit 0 was
- * refused for carrying no runner summary. The result is the check's inherited `requiresEnv` AND its acceptance class.
+ * The same decision for a per-AC check (D-20, forge-mfv5.1.44): when the check runs an interpreter, the
+ * text of its inline program (`python3 -c`, `node -e`/`--eval`) is code, not the suite the command
+ * targets, so it is not matched. gitweave I3b WI-15's AC3 guard named `tests/acceptance` inside its
+ * `python3 -c` program, was classed as the live suite, and its exit 0 was refused for carrying no runner
+ * summary. The result is the check's inherited `requiresEnv` AND its acceptance class.
  */
 export function liveAcceptanceEnvForCheck(accGate: AcceptanceGateConfig | undefined, argv: readonly string[]): string[] | undefined {
-  return liveAcceptanceEnvFor(accGate, argv.filter((_, i) => i === 0 || !INLINE_PROGRAM_FLAGS.has(argv[i - 1]!)));
+  if (!INTERPRETER.test(basename(argv[0] ?? ''))) return liveAcceptanceEnvFor(accGate, argv);
+  return liveAcceptanceEnvFor(accGate, argv.filter((t, i) => i === 0 || (!INLINE_JOINED.test(t) && !INLINE_FLAG.test(argv[i - 1]!))));
 }
