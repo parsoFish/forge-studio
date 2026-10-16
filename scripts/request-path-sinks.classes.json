@@ -975,7 +975,7 @@
   "class": "not-request-derived",
   "guard": null,
   "verified": "read",
-  "note": "`worktreeDemoDir(input.worktreePath, input.initiativeId)` — the same flow-input demo dir integrate.ts writes demo.json into; no request value reaches it"
+  "note": "`worktreeDemoDir(input.worktreePath, input.initiativeId)` — the same flow-input demo dir integrate.ts writes demo.json into; and (forge-mfv5.1.41) `dirname(logger.logFilePath)` + `demo-plan-invalid-<integer>.json`, the cycle's own log dir with an integer name; no request value reaches either"
  },
  "packages/stations/demo-model.ts": {
   "class": "other",

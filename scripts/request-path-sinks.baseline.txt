@@ -680,8 +680,9 @@ packages/stations/demo-model.ts existsSync 1
 packages/stations/demo-model.ts readdirSync 1
 packages/stations/demo-model.ts readFileSync 4
 packages/stations/demo-model.ts writeFileSync 2
-packages/stations/demo-planner-port.ts mkdirSync 1
-packages/stations/demo-planner-port.ts writeFileSync 1
+packages/stations/demo-planner-port.ts existsSync 1
+packages/stations/demo-planner-port.ts mkdirSync 2
+packages/stations/demo-planner-port.ts writeFileSync 2
 packages/stations/gates/docs-gate.ts existsSync 2
 packages/stations/gates/docs-gate.ts readFileSync 1
 packages/stations/phases/adversarial-review.ts execFileSync 1
