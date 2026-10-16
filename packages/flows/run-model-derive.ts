@@ -18,6 +18,7 @@ export {
   deriveStopOnBudget,
   deriveOperatorStop,
   deriveRunBase,
+  deriveRoundHalt,
 } from './run-model-derive-status.ts';
 
 export {

@@ -20,7 +20,8 @@
  * [data-section="verdict-headline"][data-headline=ready|not-ready][data-demo-outcome=changed|no-change|unknown|'']
  * (forge-nk1y.43: a capture that showed no change is named in the headline, approve behind a rationale); field
  * `approve-rationale`; actions `approve-and-merge` (data-emphasis) | `send-back`,
- * `compose-send-back`, `open-reflect`.
+ * `compose-send-back`, `open-reflect`. forge-mfv5.1.39: a fix round the drain HALTED heads the card
+ * "Round N halted: <reason>" ([data-round-halt=<classification>]) with `open-run-recovery` → the run page's Requeue.
  */
 import Link from 'next/link';
 import { useState } from 'react';
@@ -31,6 +32,8 @@ import type { DerivedVerdict } from '@/lib/review-comments-client';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { eyebrow, miniBtn } from './styles';
+import { describeRoundHalt } from '@/lib/run-controls';
+import type { Run } from '@/lib/studio-client';
 
 /** The approve rationale when the operator writes none and nothing blocks (forge-nk1y.34: never the old canned line). */
 export const DEFAULT_APPROVE_RATIONALE = 'Approved on the visual review — no blocking comments and no reviewer blockers open.';
@@ -45,7 +48,7 @@ const plural = (k: number, one: string, many: string): string => `${k} ${k === 1
 
 export function DecisionCard({
   derived, blockerCount, resolvedCount, initiativeId, submitting, submitted, error, composing,
-  onCompose, onSubmit, onTypedSubmitted, reflectHref, claims, loadError = null, onJumpToBlocker, demoOutcome = null,
+  onCompose, onSubmit, onTypedSubmitted, reflectHref, claims, loadError = null, onJumpToBlocker, demoOutcome = null, roundHalt,
 }: {
   derived: DerivedVerdict;
   blockerCount: number;
@@ -67,6 +70,8 @@ export function DecisionCard({
   onJumpToBlocker?: () => void;
   /** What the demo capture found; `null` when nothing was compared. */
   demoOutcome?: DemoOutcome | null;
+  /** forge-mfv5.1.39: the latest fix round halted — failed, never "running"; `href` is the run page that offers Requeue. */
+  roundHalt?: { halt: NonNullable<Run['roundHalt']>; href: string };
 }): JSX.Element {
   const [rationale, setRationale] = useState('');
   const blockedReason = loadError ? `${loadError} — reload the page; the verdict cannot be derived without them` : submitting ? 'the verdict is being submitted' : null;
@@ -76,13 +81,15 @@ export function DecisionCard({
   const noChange = demoOutcome !== null && demoOutcome.kind !== 'changed';
   // Approving over a reviewer blocker, with no current review, or over a demo that showed no change
   // is possible — de-emphasised, behind the operator's reason.
-  const overBlocker = derived.kind === 'approve' && (reviewerBlockers > 0 || noReview !== undefined || noChange);
-  const rationaleNeed = reviewerBlockers > 0
+  const overBlocker = derived.kind === 'approve' && (roundHalt !== undefined || reviewerBlockers > 0 || noReview !== undefined || noChange);
+  const rationaleNeed = roundHalt ? 'approve over a halted fix round' : reviewerBlockers > 0
     ? `approve over ${plural(reviewerBlockers, 'open reviewer blocker', 'open reviewer blockers')}`
     : noReview ? 'approve without a current review' : 'approve with no captured behaviour change';
   const approveReason = blockedReason ?? (overBlocker && rationale.trim() === '' ? `a rationale is required to ${rationaleNeed}` : null);
-  const notReady = blocking > 0 || noReview !== undefined || noChange;
-  const headline = blocking > 0
+  const notReady = roundHalt !== undefined || blocking > 0 || noReview !== undefined || noChange;
+  const headline = roundHalt
+    ? describeRoundHalt(roundHalt.halt)
+    : blocking > 0
     ? `Not ready: ${plural(blocking, 'blocking finding', 'blocking findings')}`
     : noReview?.unread
       ? 'Not ready: the review could not be read — reload the page'
@@ -147,6 +154,12 @@ export function DecisionCard({
           <h2 data-section="verdict-headline" data-headline={notReady ? 'not-ready' : 'ready'} data-demo-outcome={demoOutcome?.kind ?? ''} style={{ ...title, color: notReady ? 'var(--amber)' : undefined }}>
             {headline}
           </h2>
+          {roundHalt && (
+            <p data-round-halt={roundHalt.halt.classification} style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
+              The fix round stopped and will not retry on its own: resolve the reason above, then{' '}
+              <Link href={roundHalt.href} data-action="open-run-recovery" style={{ color: 'var(--ember)', fontWeight: 600 }}>Requeue it on the run page →</Link>
+            </p>
+          )}
           <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
             Your comments: <strong style={{ color: blockerCount > 0 ? 'var(--amber)' : 'var(--green)' }}>{blockerCount} blocking open</strong> · {resolvedCount} resolved · the review: <strong style={{ color: reviewerBlockers > 0 ? 'var(--amber)' : 'var(--green)' }}>{plural(reviewerBlockers, 'blocker', 'blockers')}</strong>.
             {overBlocker && ' Send back, or approve over it with your reason below.'}

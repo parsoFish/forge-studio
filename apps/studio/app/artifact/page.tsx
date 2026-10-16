@@ -1159,7 +1159,7 @@ function ArtifactPageInner() {
                   reviewFindings={reviewState}
                   costUsd={run?.costUsd ?? null}
                   bridgeBase={bridgeBase}
-                  reflectHref={reflectHref}
+                  reflectHref={reflectHref} roundHalt={run?.roundHalt ? { halt: run.roundHalt, href: `/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}` } : undefined}
                   onSubmitted={(kind) => {
                     setGateState(kind === 'approve' ? 'approved' : 'sent-back');
                   }}
