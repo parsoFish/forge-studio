@@ -9,12 +9,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { restoreWorkItemsForResume } from '../../work-items-restore.ts';
-import { parseWorkItem, serializeWorkItem, type WorkItem } from '../../work-item.ts';
+import { restoreWorkItemsForResume } from '../../phases/dev-work-items-restore.ts';
+import { parseWorkItem, serializeWorkItem, type WorkItem } from '@forge/flows';
 
 const ID = 'INIT-2026-10-16-restore';
 const CYCLE = `2026-10-16T08-00-00_${ID}`;
@@ -155,6 +155,22 @@ test('restore: a send-back whose fix item IS in the snapshot is not minted twice
     assert.deepEqual(r, { status: 'restored', fromSnapshot: ['WI-1', 'WI-2', 'WI-3'], reminted: [] });
     assert.equal(parseWorkItem(readFileSync(join(wiDir(w), 'WI-3.md'), 'utf8')).status, 'complete');
     assert.ok(!existsSync(join(wiDir(w), 'WI-4.md')));
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test('restore: a symlinked .forge (the worktree is agent-writable) is refused, never followed — nothing written outside', () => {
+  const w = world({ snapshot: true, sendBack: 'typed' });
+  try {
+    const outside = join(w.dir, 'outside');
+    mkdirSync(outside);
+    rmSync(join(w.wt, '.forge'), { recursive: true, force: true });
+    symlinkSync(outside, join(w.wt, '.forge'), 'dir');
+    const r = restore(w);
+    assert.equal(r.status, 'refused');
+    if (r.status === 'refused') assert.match(r.reason, /symlink — never followed/);
+    assert.deepEqual(readdirSync(outside), [], 'nothing written through the link');
   } finally {
     rmSync(w.dir, { recursive: true, force: true });
   }

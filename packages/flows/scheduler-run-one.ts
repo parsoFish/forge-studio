@@ -346,23 +346,17 @@ export async function runOne(
         initiativeId: manifest.initiativeId,
       };
     }
-    // forge-mfv5.1.47 (D-06): a RESUME settles its branch before any worktree
-    // step — the local branch as is, a missing one only from origin, a refusal by
-    // name when they disagree — and reuses only a worktree that is ON that branch.
+    // forge-mfv5.1.47 (D-06): a RESUME settles its branch before any worktree step (resume-branch.ts)
+    // and reuses only a worktree that is ON that branch; a refusal names why and runs nothing.
     if (manifest.resumeFrom !== undefined) {
       const settled = ensureResumeBranch({ projectRepoPath: manifest.projectRepoPath, branch });
       const wtBranch = settled.ok && strategy === 'reuse' ? currentBranch(expectedWtPath) : branch;
-      const reason = !settled.ok
-        ? settled.reason
-        : wtBranch !== branch
-          ? `the preserved worktree ${expectedWtPath} is on ${wtBranch ?? 'a detached HEAD'}, not ${branch} — refusing to resume on it`
-          : null;
+      const reason = !settled.ok ? settled.reason : wtBranch !== branch ? `the preserved worktree ${expectedWtPath} is on ${wtBranch ?? 'a detached HEAD'}, not ${branch} — refusing to resume on it` : null;
       if (reason !== null) {
         emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'resume-branch.refused', { branch, resume_from: manifest.resumeFrom, reason });
-        console.error(`[serve] ${manifest.initiativeId} — resume refused: ${reason}`);
         moveTo(filename, 'failed', paths);
         await notify({ type: 'failed', title: `Resume refused: ${manifest.initiativeId}`, body: reason }, cfg.notify);
-        return; // runOne done — no worktree step, no cycle, the branch untouched
+        return;
       }
       if (settled.ok) emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'log', 'resume-branch.settled', { branch, action: settled.action, sha: settled.sha, origin_unknown: settled.originUnknown ?? null });
     }

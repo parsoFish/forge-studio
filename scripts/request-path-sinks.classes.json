@@ -1102,5 +1102,23 @@
   "guard": null,
   "verified": "exec",
   "note": "runs `gh` with a fixed argv: the slug is parsed from the project repo's own `remote.origin.url` (owner/repo charset-checked), the base from its own branches; cwd is the managed project root the route already resolved — no request field reaches it"
+ },
+ "packages/flows/resume-branch.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "forge-mfv5.1.47: one execFileSync('git', ['-C', projectRepoPath, ...]) arg-array helper; projectRepoPath and the forge/<initiativeId> branch come from a claimed manifest that runOne's validateClaimable has already contained, never request bytes."
+ },
+ "packages/flows/worktree.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "forge-mfv5.1.47: add() refuses a resume onto an existing unregistered dir (one existsSync on resolve(worktreesRoot, initiativeId)); worktreesRoot is forge config and initiativeId a validated manifest id, never request bytes."
+ },
+ "packages/stations/phases/dev-work-items-restore.ts": {
+  "class": "other",
+  "guard": "isSafeSegment",
+  "verified": "read",
+  "note": "forge-mfv5.1.47: reads <logsRoot>/<cycleId>/{work-items-snapshot,events.jsonl} (forge-owned; cycleId refused unless isSafeSegment) and writes <worktreePath>/.forge/work-items via a sibling staging dir; worktreePath is the scheduler-contained cycle worktree, and a symlinked .forge or work-items is refused, never followed."
  }
 }

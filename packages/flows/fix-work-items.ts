@@ -317,16 +317,7 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
       : input.projectGateCmd;
   const existing = readWorkItemsFromDir(dir).items;
   const fixId = nextDevWorkItemId(worktreePath);
-  const fixWi = buildFixWorkItem({
-    worktreePath,
-    initiativeId,
-    id: fixId,
-    source,
-    acceptanceCriteria: acs,
-    gateCmd,
-    estimatedIterations: input.estimatedIterations,
-    existing,
-  });
+  const fixWi = buildFixWorkItem({ worktreePath, initiativeId, id: fixId, source, acceptanceCriteria: acs, gateCmd, estimatedIterations: input.estimatedIterations, existing });
   const { perItem, setErrors } = validateWorkItemSet([...existing, fixWi]);
   const errors = [...(perItem[fixId] ?? []), ...setErrors];
   if (errors.length > 0) {
@@ -338,43 +329,27 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
   return { appended: [fixId] };
 }
 
-/**
- * The ONE fix work-item builder (D-20): `compileFixWorkItems` appends with it, and a
- * develop resume re-mints a send-back's item with it from the persisted typed
- * record (forge-mfv5.1.47, `work-items-restore.ts`). Scope: the concern's own
- * when supplied, else the union of the `existing` dev items' scopes ∪ the
- * demo/PR artifacts — a code fix can reach whatever the initiative built.
- */
-export function buildFixWorkItem(opts: {
-  worktreePath: string;
-  initiativeId: string;
-  id: string;
-  source: FixConcernSource;
-  acceptanceCriteria: AcceptanceCriterion[];
-  gateCmd: string[];
-  estimatedIterations: number;
-  existing: WorkItem[];
-}): WorkItem {
-  const { source, acceptanceCriteria: acs } = opts;
+/** The ONE fix work-item builder (D-20): compile appends with it; a develop resume re-mints a send-back's item with it (forge-mfv5.1.47). */
+export function buildFixWorkItem(o: { worktreePath: string; initiativeId: string; id: string; source: FixConcernSource; acceptanceCriteria: AcceptanceCriterion[]; gateCmd: string[]; estimatedIterations: number; existing: WorkItem[] }): WorkItem {
+  const { source, acceptanceCriteria: acs } = o;
   const concernKind: 'packaging' | 'code-fix' = source.concernKind === 'packaging' ? 'packaging' : 'code-fix';
-  const demoJsonRel = worktreeDemoJsonRelPath(opts.worktreePath, opts.initiativeId);
-  const packagingScope = ['.forge/pr-description.md', demoJsonRel];
-  const scope =
-    source.filesInScope && source.filesInScope.length > 0
-      ? [...source.filesInScope]
-      : Array.from(new Set([...opts.existing.flatMap((w) => w.files_in_scope), ...packagingScope]));
+  // Scope: the concern's own when supplied (the demo-fix path), else the union of every dev-WI's
+  // files_in_scope ∪ the demo/PR artifacts — a code fix can reach whatever the initiative built.
+  const scope = source.filesInScope && source.filesInScope.length > 0
+    ? [...source.filesInScope]
+    : Array.from(new Set([...o.existing.flatMap((w) => w.files_in_scope), '.forge/pr-description.md', worktreeDemoJsonRelPath(o.worktreePath, o.initiativeId)]));
   return {
-    work_item_id: opts.id,
-    initiative_id: opts.initiativeId,
+    work_item_id: o.id,
+    initiative_id: o.initiativeId,
     status: 'pending',
     depends_on: [],
     acceptance_criteria: acs,
     files_in_scope: scope,
-    quality_gate_cmd: [...opts.gateCmd],
-    estimated_iterations: Math.max(1, opts.estimatedIterations),
+    quality_gate_cmd: [...o.gateCmd],
+    estimated_iterations: Math.max(1, o.estimatedIterations),
     origin: source.origin,
     ...(concernKind === 'packaging' ? { behavior_preserving: true } : {}),
-    body: fixConcernBody(opts.id, source.origin, concernKind, source.rationale, acs),
+    body: fixConcernBody(o.id, source.origin, concernKind, source.rationale, acs),
   };
 }
 

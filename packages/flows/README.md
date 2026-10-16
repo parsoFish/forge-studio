@@ -77,8 +77,14 @@ sidecar (`writeHeartbeat`, `queue.ts:204-207`, a plain `writeFileSync`; only
 its mtime is ever read, so a torn write is harmless). `recover()`
 (`queue.ts:218-251`) sweeps `in-flight/` every scheduler tick and once,
 un-guarded by try/catch, at daemon startup (`scheduler-sweeps.ts:104-124`),
-renaming an item back to `pending` on a heartbeat >5 min stale or a manifest
-whose `worktree_path` no longer exists. `claim`/`moveTo`
+parking an item in `failed/` with a `recovery.stranded-classified` event
+(reason, operator-stop flag, last cycle event) on a heartbeat >5 min stale or
+a manifest whose `worktree_path` no longer exists — never re-dispatched, its
+branch, worktree and `.forge/` scratch untouched (forge-mfv5.1.47); the
+operator's Requeue/Resume is the only re-entry. A resume settles its branch
+first (`resume-branch.ts`: local as is, a missing one from origin, a
+disagreement refused by name), and a develop resume restores a lost
+work-item queue (`@forge/stations` `dev-work-items-restore.ts`). `claim`/`moveTo`
 (`queue.ts:134-171`) also clear the heartbeat and any `<id>.stop`
 operator-stop flag on every state transition, so a stale flag can never
 outlive its halt or meet a fresh cycle of the same id
@@ -95,8 +101,8 @@ work-items undrainable. The daemon-crash story itself is
 `persistManifestResumeFromIntegrate` (`manifest.ts:564-573`): once every WI
 is `complete` but the post-develop band hasn't finished, it stamps
 `resume_from: integrate` on the manifest *before* a crash can happen, so the
-recovery sweep's rename-to-`pending` plus that pre-set marker resumes at
-`integrate` rather than re-running PM + the whole dev-loop. `resume_from`
+operator's Requeue of the parked run resumes at `integrate` rather than
+re-running PM + the whole dev-loop. `resume_from`
 (D-06, `manifest.ts:161-167`) also takes `plan | develop | pr-open`;
 `inferRequeueResume` (`requeue-resume.ts`) derives it from the prior
 `failure_classification` event when a WI died mid-cycle instead, and

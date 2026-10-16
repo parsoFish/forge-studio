@@ -8,7 +8,7 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createLogger, isSafeSegment, readHalt } from '@forge/kernel';
-import { getPaths, recover, type QueuePaths, type RecoveryResult, type StrandedClassification } from './queue.ts';
+import { getPaths, recover, type QueuePaths, type RecoveryResult } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
@@ -127,65 +127,30 @@ export function recoveryLogsRoot(paths: QueuePaths, logsRoot: string | undefined
 }
 
 /**
- * Announce one `recover()` result (forge-mfv5.1.47). Every result was parked in
- * failed/ — none is re-dispatched and none is cleaned up: a stranded run's
- * branch, worktree and `.forge/` scratch are the operator's to resume (D-06).
- * Each stranded manifest gets a `recovery.stranded-classified` event in its own
- * cycle log naming the reason, the operator-stop flag and the last cycle event.
+ * Announce one `recover()` result (forge-mfv5.1.47): every manifest was parked in failed/, none is
+ * re-dispatched or cleaned up (D-06). Each stranded one gets a `recovery.stranded-classified` event in
+ * its own cycle log naming the reason, the operator-stop flag and the last cycle event.
  */
 export async function announceRecovery(r: RecoveryResult, paths: QueuePaths, cfg: NotifyConfig, logsRoot: string): Promise<void> {
-  const refused = r.reason === 'worktree-path-refused';
-  for (const c of r.classified) emitStrandedClassified(c, paths, logsRoot);
-  await notify(
-    {
-      type: 'failed',
-      title: refused
-        ? `Refused ${r.recovered.length} manifest(s): worktree_path not the initiative's own`
-        : `Parked ${r.recovered.length} stranded run(s) in failed/ — needs operator`,
-      body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}. ${refused ? '' : 'Resume or requeue from the initiative card; nothing was re-run or cleaned up.'}`.trim(),
-    },
-    cfg,
-  );
-}
-
-function emitStrandedClassified(c: StrandedClassification, paths: QueuePaths, logsRoot: string): void {
-  const logId = c.cycleId !== null && isSafeSegment(c.cycleId) ? c.cycleId : c.initiativeId;
-  if (!isSafeSegment(logId)) {
-    console.error(`[serve] recovery.stranded-classified not logged: unsafe log id for ${c.filename}`);
-    return;
+  for (const c of r.classified) {
+    const logId = c.cycleId !== null && isSafeSegment(c.cycleId) ? c.cycleId : c.initiativeId;
+    if (!isSafeSegment(logId)) { console.error(`[serve] recovery.stranded-classified not logged: unsafe log id for ${c.filename}`); continue; }
+    const metadata = { reason: c.reason, stop_flag: c.stopFlag, heartbeat_age_ms: c.heartbeatAgeMs, resume_from: c.resumeFrom, last_event: lastCycleEvent(join(logsRoot, logId, 'events.jsonl')), queue_state: 'failed', needs: 'operator' };
+    createLogger(logId, logsRoot).emit({ initiative_id: c.initiativeId, phase: 'orchestrator', skill: 'scheduler', event_type: 'error', input_refs: [join(paths.failed, c.filename)], output_refs: [], message: 'recovery.stranded-classified', metadata });
   }
-  createLogger(logId, logsRoot).emit({
-    initiative_id: c.initiativeId,
-    phase: 'orchestrator',
-    skill: 'scheduler',
-    event_type: 'error',
-    input_refs: [join(paths.failed, c.filename)],
-    output_refs: [],
-    message: 'recovery.stranded-classified',
-    metadata: {
-      reason: c.reason,
-      stop_flag: c.stopFlag,
-      heartbeat_age_ms: c.heartbeatAgeMs,
-      resume_from: c.resumeFrom,
-      last_event: lastCycleEvent(join(logsRoot, logId, 'events.jsonl')),
-      queue_state: 'failed',
-      needs: 'operator',
-    },
-  });
+  const refused = r.reason === 'worktree-path-refused';
+  const title = refused ? `Refused ${r.recovered.length} manifest(s): worktree_path not the initiative's own` : `Parked ${r.recovered.length} stranded run(s) in failed/ — needs operator`;
+  await notify({ type: 'failed', title, body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}.${refused ? '' : ' Resume or requeue from the initiative card; nothing was re-run or cleaned up.'}` }, cfg);
 }
 
-/** The last parseable event of a cycle log, or null when there is none to read. */
+/** The last parseable event of a cycle log (a torn SIGKILL line is skipped), or null. */
 function lastCycleEvent(logPath: string): { message: string; phase: string | null; at: string | null } | null {
-  if (!existsSync(logPath)) return null;
-  const lines = readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i--) {
+  const lines = existsSync(logPath) ? readFileSync(logPath, 'utf8').split('\n').filter(Boolean) : [];
+  for (const line of lines.reverse()) {
     try {
-      const e = JSON.parse(lines[i]!) as { message?: unknown; phase?: unknown; started_at?: unknown };
-      if (typeof e.message !== 'string') continue;
-      return { message: e.message, phase: typeof e.phase === 'string' ? e.phase : null, at: typeof e.started_at === 'string' ? e.started_at : null };
-    } catch {
-      /* a torn last line (the SIGKILL) — read the one before it */
-    }
+      const e = JSON.parse(line) as { message?: unknown; phase?: unknown; started_at?: unknown };
+      if (typeof e.message === 'string') return { message: e.message, phase: typeof e.phase === 'string' ? e.phase : null, at: typeof e.started_at === 'string' ? e.started_at : null };
+    } catch { /* torn line */ }
   }
   return null;
 }

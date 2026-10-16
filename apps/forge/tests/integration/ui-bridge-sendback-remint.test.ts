@@ -14,7 +14,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { restoreWorkItemsForResume, serializeWorkItem } from '@forge/flows';
+import { serializeWorkItem } from '@forge/flows';
+import { restoreWorkItemsForResume } from '@forge/stations';
 
 function setup(slug: string): { forgeRoot: string; worktreePath: string; initiativeId: string; cycleId: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), `bv-remint-${slug}-`));

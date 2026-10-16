@@ -24,12 +24,7 @@ export function add(opts: {
   branch: string;
   worktreesRoot: string;
   initiativeId: string;
-  /**
-   * forge-mfv5.1.47 (D-06): true on a RESUME. A missing branch then throws by
-   * name instead of being created from HEAD (main) — the resume settles its
-   * branch first (`resume-branch.ts`) — and an existing directory at the path
-   * is refused rather than self-healed away (it may hold `.forge/` scratch).
-   */
+  /** forge-mfv5.1.47 (D-06): on a RESUME a missing branch is never created from HEAD and an existing dir is never removed. */
   resume?: boolean;
 }): WorktreeHandle {
   const path = resolve(opts.worktreesRoot, opts.initiativeId);
