@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
@@ -39,6 +40,9 @@ function world(withSnapshot: boolean): { dir: string; input: CycleInput } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-devloop-restore-'));
   const wt = join(dir, 'wt');
   mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
+  execFileSync('git', ['init', '-q', '-b', 'main', wt]);
+  execFileSync('git', ['-C', wt, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base']);
+  writeFileSync(join(dir, 'm.md'), `---\ninitiative_id: ${ID}\nproject: p\nproject_repo_path: ${wt}\ncreated_at: '2026-10-16T00:00:00Z'\niteration_budget: 5\ncost_budget_usd: 5\nclass: code\nspecs:\n  - WI-1\n---\n`);
   const logsRoot = join(dir, '_logs');
   mkdirSync(join(logsRoot, CYCLE), { recursive: true });
   if (withSnapshot) {

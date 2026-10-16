@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { restoreWorkItemsForResume } from '../../phases/dev-work-items-restore.ts';
@@ -44,6 +45,8 @@ function world(opts: { snapshot: boolean; sendBack: 'none' | 'typed' | 'no-gate'
   const dir = mkdtempSync(join(tmpdir(), 'forge-wi-restore-'));
   const wt = join(dir, 'wt');
   mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
+  execFileSync('git', ['init', '-q', '-b', 'main', wt]);
+  execFileSync('git', ['-C', wt, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base']);
   if (opts.worktreeItems) writeFileSync(join(wt, '.forge', 'work-items', 'WI-1.md'), serializeWorkItem(wi('WI-1', 'complete', ['src/live.ts'])));
   const logsRoot = join(dir, '_logs');
   const cycleDir = join(logsRoot, CYCLE);
@@ -77,7 +80,8 @@ function world(opts: { snapshot: boolean; sendBack: 'none' | 'typed' | 'no-gate'
   return { dir, wt, logsRoot };
 }
 
-const restore = (w: World) => restoreWorkItemsForResume({ worktreePath: w.wt, initiativeId: ID, cycleId: CYCLE, logsRoot: w.logsRoot });
+const restore = (w: World, specs?: string[]) => restoreWorkItemsForResume({ worktreePath: w.wt, initiativeId: ID, cycleId: CYCLE, logsRoot: w.logsRoot, specs });
+const commitOnBranch = (w: World, msg: string): void => { execFileSync('git', ['-C', w.wt, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', msg]); };
 const wiDir = (w: World): string => join(w.wt, '.forge', 'work-items');
 
 test('restore: an empty .forge/work-items + a snapshot + a typed send-back → snapshot WIs + _graph/_decomposition copied, the fix item re-minted pending with its checks', () => {
@@ -171,6 +175,44 @@ test('restore: a symlinked .forge (the worktree is agent-writable) is refused, n
     assert.equal(r.status, 'refused');
     if (r.status === 'refused') assert.match(r.reason, /symlink — never followed/);
     assert.deepEqual(readdirSync(outside), [], 'nothing written through the link');
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test('restore: only the current lineage — ids outside the manifest specs (a superseded lineage on the same cycle id) are neither copied nor re-minted', () => {
+  const w = world({ snapshot: true, sendBack: 'typed' });
+  try {
+    const r = restore(w, ['WI-1', 'WI-2']);
+    assert.deepEqual(r, { status: 'restored', fromSnapshot: ['WI-1', 'WI-2'], reminted: [] });
+    assert.ok(!existsSync(join(wiDir(w), 'WI-3.md')), 'the stale send-back item is not re-minted');
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test("restore: a snapshot status older than the branch is corrected from the branch's own `wi(<id>): merge` delivery record", () => {
+  const w = world({ snapshot: true, sendBack: 'typed' });
+  try {
+    const snap = join(w.logsRoot, CYCLE, 'work-items-snapshot');
+    writeFileSync(join(snap, 'WI-2.md'), serializeWorkItem(wi('WI-2', 'pending', ['src/b.ts'])));
+    commitOnBranch(w, 'wi(WI-2): merge');
+    commitOnBranch(w, 'wi(WI-3): merge');
+    restore(w);
+    assert.equal(parseWorkItem(readFileSync(join(wiDir(w), 'WI-2.md'), 'utf8')).status, 'complete', 'delivered after the snapshot');
+    assert.equal(parseWorkItem(readFileSync(join(wiDir(w), 'WI-3.md'), 'utf8')).status, 'complete', 'a re-minted item already merged is complete');
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test('restore: a queue dir holding no work item (only a leftover _graph.md) is restored, and the leftover is kept', () => {
+  const w = world({ snapshot: true, sendBack: 'typed' });
+  try {
+    writeFileSync(join(wiDir(w), '_graph.md'), '# live graph\n');
+    assert.equal(restore(w).status, 'restored');
+    assert.equal(readFileSync(join(wiDir(w), '_graph.md'), 'utf8'), '# live graph\n', 'never overwritten');
+    assert.ok(existsSync(join(wiDir(w), 'WI-1.md')));
   } finally {
     rmSync(w.dir, { recursive: true, force: true });
   }

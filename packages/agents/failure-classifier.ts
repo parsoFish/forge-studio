@@ -707,12 +707,13 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // `kind: 'terminal'` (recoverable: false) even though it is, in the
   // "an operator could resume this" sense, the least "terminal" terminal
   // failure in this file. Do not "fix" this to transient.
+  // Emitted before the dev node's own `start` (it refuses at the door), so it outranks an earlier attempt's signals in the window.
+  if (restoreRefused !== null) return T('terminal', `${restoreRefused} — restore .forge/work-items by hand (or requeue fresh), then resume`, evidence);
   if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
   if (resumeNeedsRebase) return T('terminal', entryRebaseReason(resumeNeedsRebase), evidence);
-  if (restoreRefused !== null) return T('terminal', `${restoreRefused} — restore .forge/work-items by hand (or requeue fresh), then resume`, evidence);
   // Plan 2.11: partial-but-usable BEATS the empty-decomposition and
   // capped+degenerate terminal rules — an incremental-write run capped
   // mid-flight legitimately leaves a truncated tail WI (per-item errors)

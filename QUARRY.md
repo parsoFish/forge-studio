@@ -59,16 +59,16 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 54 | 12,027 | **10,230** | ratified 10,230 — row 4 of forge-nk1y.45: `demo-browser-steps.ts` — a planned screenshot's `steps`/`regions`, validated by name for the plan and at capture; +49 measured on main 10,181 (after #1212), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
-| `agents` | 45 | 12,605 | **12,605** | ratified 12,605 — forge-mfv5.1.47: a develop resume's unrestorable work-item queue classifies terminal by name, never unclassified; +3 measured on main 12,602 after a read for slack found none, lane-ratified (≤100, ruling 666). |
+| `agents` | 45 | 12,606 | **12,606** | ratified 12,606 — forge-mfv5.1.47: a develop resume's unrestorable work-item queue classifies terminal by name, outranking an earlier attempt's signals; +4 measured on main 12,602 after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 96 | 26,399 | **26,200** | ratified 26,200 — forge-mfv5.1.47: a boot only classifies a stranded run into failed/ and a resume settles its branch from origin, never main (the destructive recovery cleanup deleted); +53 measured on main 26,147 after compression, lane-ratified (≤100, ruling 666). |
+| `flows` | 96 | 26,419 | **26,220** | ratified 26,220 — forge-mfv5.1.47: a boot only classifies a stranded run into failed/, a resume settles its branch from origin, never main, and a send-back item re-mints from its event; +73 measured on main 26,147, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,160 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 54 | 13,455 | **13,457** | ratified 13,457 — forge-mfv5.1.47: a develop resume restores a lost work-item queue from the cycle snapshot + the typed send-back record, or refuses by name; +91 measured on main 13,366, lane-ratified (≤100, ruling 666). |
+| `stations` | 54 | 13,466 | **13,466** | ratified 13,466 — forge-mfv5.1.47: a develop resume restores a lost work-item queue from the cycle snapshot, the typed send-back record and the branch's delivery record, or refuses by name; +100 measured on main 13,366, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **533** | **138,118** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **533** | **138,150** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -346,9 +346,9 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 83 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 424 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
-| packages/agents/failure-classifier.ts | agents | verbatim | 767 |
+| packages/agents/failure-classifier.ts | agents | verbatim | 768 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 519 |
-| packages/flows/fix-work-items.ts | flows | verbatim | 397 |
+| packages/flows/fix-work-items.ts | flows | verbatim | 417 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 468 |
 | packages/flows/flow-budgets.ts | flows | verbatim | 558 |
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
@@ -403,7 +403,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/decompose-completeness.ts | stations | verbatim | 266 |
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
-| packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 88 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
+| packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 99 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1653 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 41 |
 | packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 193 |

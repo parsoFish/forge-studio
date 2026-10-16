@@ -398,7 +398,7 @@ export async function applyReviewVerdict(
     // would enqueue work that never runs).
     const caps = resolveReviewLoopCaps();
     const currentRound = (manifest.review_rounds ?? 0) + 1;
-    const { appended } = compileFixWorkItems({
+    const { appended, workItem } = compileFixWorkItems({
       worktreePath,
       initiativeId,
       source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd, filesInScope: body.filesInScope, requireChecks: body.derivedFrom !== 'comments' },
@@ -444,9 +444,9 @@ export async function applyReviewVerdict(
           round,
           // forge-mfv5.1.47: with the fields above, everything `buildFixWorkItem` needs —
           // a develop resume re-mints this item exactly when `.forge/work-items` is lost.
-          files_in_scope: body.filesInScope ?? null,
-          estimated_iterations: REVIEW_FIX_DEFAULT_ITERATIONS,
-          work_item_gate_cmd: concernGateCmd && concernGateCmd.length > 0 ? concernGateCmd : projectGateCmd,
+          files_in_scope: workItem.files_in_scope,
+          estimated_iterations: workItem.estimated_iterations,
+          work_item_gate_cmd: workItem.quality_gate_cmd,
         },
       });
       for (const id of appended) {

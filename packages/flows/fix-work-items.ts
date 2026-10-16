@@ -31,6 +31,7 @@ import {
   type AcceptanceCriterion,
   type FixWiOrigin,
   type WorkItem,
+  FIX_WI_ORIGINS,
 } from './work-item.ts';
 
 /** `<worktree>/.forge/work-items` — the initiative's own queue (shared with PM WIs). */
@@ -265,7 +266,7 @@ export function fixWorkItemCount(worktreePath: string): number {
  * No terminal re-prep WI: the fix-loop drain re-arms the static UWI-1, whose
  * re-authorship of demo.json + the PR description is the legacy-spine re-demo.
  */
-export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended: string[] } {
+export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended: string[]; workItem: WorkItem } {
   const { worktreePath, initiativeId, source, caps } = input;
   const dir = devWorkItemsDir(worktreePath);
 
@@ -326,7 +327,7 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
     );
   }
   writeWorkItem(fixWi, worktreePath, { workItemsDir: dir });
-  return { appended: [fixId] };
+  return { appended: [fixId], workItem: fixWi };
 }
 
 /** The ONE fix work-item builder (D-20): compile appends with it; a develop resume re-mints a send-back's item with it (forge-mfv5.1.47). */
@@ -351,6 +352,25 @@ export function buildFixWorkItem(o: { worktreePath: string; initiativeId: string
     ...(concernKind === 'packaging' ? { behavior_preserving: true } : {}),
     body: fixConcernBody(o.id, source.origin, concernKind, source.rationale, acs),
   };
+}
+
+const strings = (v: unknown): string[] | null => (Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s.length > 0) ? (v as string[]) : null);
+
+/** forge-mfv5.1.47: re-mint the fix items one `reviewer.verdict.send-back` event appended (those `want` keeps and `existing` lacks) from its typed fields. */
+export function remintSendBackItems(m: Record<string, unknown>, ctx: { worktreePath: string; initiativeId: string; existing: WorkItem[]; want: (id: string) => boolean }): WorkItem[] | { refused: string } {
+  const ids = strings(m.appended_work_items);
+  const acs = Array.isArray(m.acceptance_criteria) && m.acceptance_criteria.length > 0 ? (m.acceptance_criteria as AcceptanceCriterion[]) : null;
+  const origin = FIX_WI_ORIGINS.includes(m.origin as FixWiOrigin) ? (m.origin as FixWiOrigin) : null;
+  if (ids === null || acs === null || origin === null) return { refused: 'a send-back event lacks its appended ids, criteria or origin' };
+  const gateCmd = strings(m.work_item_gate_cmd) ?? strings(m.quality_gate_cmd); // the gate the item got (recorded since forge-mfv5.1.47), else the concern's own
+  const estimatedIterations = typeof m.estimated_iterations === 'number' && m.estimated_iterations > 0 ? m.estimated_iterations : DEFAULT_FIX_WI_ITERATIONS;
+  const source: FixConcernSource = { origin, rationale: typeof m.rationale === 'string' ? m.rationale : '', acceptanceCriteria: acs, concernKind: m.concern_kind === 'packaging' ? 'packaging' : 'code-fix', filesInScope: strings(m.files_in_scope) ?? undefined };
+  const out: WorkItem[] = [];
+  for (const id of ids.filter((x) => ctx.want(x) && !ctx.existing.some((w) => w.work_item_id === x))) {
+    if (gateCmd === null) return { refused: `${id}: the send-back event carries no quality_gate_cmd — it cannot be re-minted exactly` };
+    out.push(buildFixWorkItem({ worktreePath: ctx.worktreePath, initiativeId: ctx.initiativeId, id, source, acceptanceCriteria: acs, gateCmd, estimatedIterations, existing: [...ctx.existing, ...out] }));
+  }
+  return out;
 }
 
 function fixConcernBody(

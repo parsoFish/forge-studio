@@ -35,3 +35,12 @@ test('classifyCycleFailure: work-items.restore-refused → terminal, not environ
   assert.doesNotMatch(c.reason, /could not be classified/);
   assert.ok(c.reason.includes(REASON), 'the classification carries the refusal verbatim');
 });
+
+test('classifyCycleFailure: the restore refusal outranks an EARLIER attempt\'s signals left in the window (it fires before the dev node\'s own start)', () => {
+  const c = classifyCycleFailure([
+    ev({ event_type: 'start', message: 'developer-loop.start' }),
+    ev({ event_id: 'e2', event_type: 'error', message: 'dev-loop.baseline-red' }),
+    ev({ event_id: 'e3', event_type: 'error', message: 'work-items.restore-refused', metadata: { reason: REASON } }),
+  ]);
+  assert.ok(c.reason.includes(REASON), `named the refusal, got: ${c.reason}`);
+});

@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 import { startBridge } from '../../ui-bridge.ts';
 import { serializeWorkItem } from '@forge/flows';
@@ -23,6 +24,8 @@ function setup(slug: string): { forgeRoot: string; worktreePath: string; initiat
   const worktreePath = join(forgeRoot, '_worktrees', initiativeId);
   const projectRepoPath = join(forgeRoot, 'projects', 'test-project');
   mkdirSync(join(worktreePath, '.forge', 'work-items'), { recursive: true });
+  execFileSync('git', ['init', '-q', '-b', 'main', worktreePath]);
+  execFileSync('git', ['-C', worktreePath, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base']);
   mkdirSync(projectRepoPath, { recursive: true });
   const cycleId = `2026-10-16T00-00-00_${initiativeId}`;
   writeFileSync(

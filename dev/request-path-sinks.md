@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-256 files, 1458 sink calls; 187 classified (accidentally-safe 8, guarded 47, not-request-derived 37, other 81, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+256 files, 1462 sink calls; 187 classified (accidentally-safe 8, guarded 47, not-request-derived 37, other 81, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -242,7 +242,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/stations/phases/agent-skill-text.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/capture-nonce.ts` | 1 | unclassified |  |  |  |
 | `packages/stations/phases/dev-binding.ts` | 7 | unclassified |  |  |  |
-| `packages/stations/phases/dev-work-items-restore.ts` | 14 | other | `isSafeSegment` | read | forge-mfv5.1.47: reads <logsRoot>/<cycleId>/{work-items-snapshot,events.jsonl} (forge-owned; cycleId refused unless isSafeSegment) and writes <worktreePath>/.forge/work-items via a sibling staging dir; worktreePath is the scheduler-contained cycle worktree, and a symlinked .forge or work-items is refused, never followed. |
+| `packages/stations/phases/dev-work-items-restore.ts` | 18 | other | `isSafeSegment` | read | forge-mfv5.1.47: reads <logsRoot>/<cycleId>/{work-items-snapshot,events.jsonl} (forge-owned; cycleId refused unless isSafeSegment), the claimed manifest's specs, and `git -C <worktreePath> log --format=%s` (arg array); writes <worktreePath>/.forge/work-items via a sibling staging dir, never over an existing file; worktreePath is the scheduler-contained cycle worktree, and a symlinked .forge or work-items is refused, never followed. |
 | `packages/stations/phases/developer-loop.ts` | 5 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/executor-deps.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/stations/phases/executor-table.ts` | 5 | not-request-derived |  | exec | forge-mfv5.1.27 `worktreeHead`: `git rev-parse HEAD` with cwd = the cycle's own scheduler-created worktree (`CycleInput.worktreePath`), never a request field |

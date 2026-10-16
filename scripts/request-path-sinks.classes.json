@@ -1119,6 +1119,6 @@
   "class": "other",
   "guard": "isSafeSegment",
   "verified": "read",
-  "note": "forge-mfv5.1.47: reads <logsRoot>/<cycleId>/{work-items-snapshot,events.jsonl} (forge-owned; cycleId refused unless isSafeSegment) and writes <worktreePath>/.forge/work-items via a sibling staging dir; worktreePath is the scheduler-contained cycle worktree, and a symlinked .forge or work-items is refused, never followed."
+  "note": "forge-mfv5.1.47: reads <logsRoot>/<cycleId>/{work-items-snapshot,events.jsonl} (forge-owned; cycleId refused unless isSafeSegment), the claimed manifest's specs, and `git -C <worktreePath> log --format=%s` (arg array); writes <worktreePath>/.forge/work-items via a sibling staging dir, never over an existing file; worktreePath is the scheduler-contained cycle worktree, and a symlinked .forge or work-items is refused, never followed."
  }
 }

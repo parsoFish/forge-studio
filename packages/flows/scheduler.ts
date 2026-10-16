@@ -232,8 +232,8 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
     : null;
 
   // F-08 / D-05: periodic crash-recovery sweep. The startup sweep above
-  // catches state from prior crashes; this catches mid-run loss (a worktree
-  // that vanishes, a heartbeat that goes stale because runOne is wedged).
+  // catches state from prior crashes; this catches a manifest no live runOne
+  // of THIS process owns (a wedged own run is the flow's wedge-kill's, never a sweep's).
   // Cleared at shutdown so the process can exit cleanly.
   const recoverTimer = setInterval(() => {
     void runRecoverySweep(cfg, (filename) => inFlight.has(filename));

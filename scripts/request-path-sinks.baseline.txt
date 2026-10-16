@@ -699,11 +699,12 @@ packages/stations/phases/dev-binding.ts existsSync 3
 packages/stations/phases/dev-binding.ts readFileSync 1
 packages/stations/phases/dev-binding.ts writeFileSync 3
 packages/stations/phases/dev-work-items-restore.ts cpSync 1
-packages/stations/phases/dev-work-items-restore.ts existsSync 4
+packages/stations/phases/dev-work-items-restore.ts execFileSync 1
+packages/stations/phases/dev-work-items-restore.ts existsSync 5
 packages/stations/phases/dev-work-items-restore.ts lstatSync 1
-packages/stations/phases/dev-work-items-restore.ts mkdirSync 1
+packages/stations/phases/dev-work-items-restore.ts mkdirSync 2
 packages/stations/phases/dev-work-items-restore.ts readdirSync 2
-packages/stations/phases/dev-work-items-restore.ts readFileSync 1
+packages/stations/phases/dev-work-items-restore.ts readFileSync 2
 packages/stations/phases/dev-work-items-restore.ts renameSync 1
 packages/stations/phases/dev-work-items-restore.ts rmSync 3
 packages/stations/phases/developer-loop.ts execFileSync 3
