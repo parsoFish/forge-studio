@@ -9,13 +9,17 @@
 import { test, expect } from 'vitest';
 
 import {
-  emptyWorkItemDraft, parseGateCmd, parseFilesInScope, workItemDraftFrom, workItemDraftMissing, workItemDraftToSource,
+  emptyCriterionDraft, emptyWorkItemDraft, parseGateCmd, parseFilesInScope, workItemDraftFrom, workItemDraftMissing, workItemDraftToSource,
   sendBackDraftMissing, sendBackDraftToSource,
 } from '../../lib/work-item-authoring';
 
+/** A complete criterion row with its falsifying check (forge-mfv5.1.43). */
+const AC_ROW = { ...emptyCriterionDraft(), given: 'g', when: 'w', then: 't', check: 'node --test tests/retire.test.ts' };
+const AC_SENT = { given: 'g', when: 'w', then: 't', check: { argv: ['node', '--test', 'tests/retire.test.ts'], expect: 'pass' } };
+
 const FULL = {
   summary: '  Retire the legacy specs.  ',
-  acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }, { given: '', when: '', then: '' }],
+  acceptanceCriteria: [AC_ROW, emptyCriterionDraft()],
   gateCmd: '  node --test   tests/retire.test.ts ',
   files: 'specs/legacy.md\n\n  tests/retire.test.ts  \n',
 };
@@ -55,10 +59,12 @@ test('the verdict gate\'s typed send-back shares the refusal', () => {
 
 test('a kickoff-added work item\'s fields prefill a draft (argv joined, one path per line)', () => {
   expect(workItemDraftFrom({
-    summary: 'No Terraform', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+    summary: 'No Terraform',
+    acceptanceCriteria: [{ id: 'M1', given: 'g', when: 'w', then: 't', check: { argv: ['pytest', 'tests/acceptance'], expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'] } }],
     qualityGateCmd: ['python3', '-m', 'pytest', 'tests/t.py'], filesInScope: ['tests/t.py', '.github/c.md'],
   })).toEqual({
-    summary: 'No Terraform', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+    summary: 'No Terraform',
+    acceptanceCriteria: [{ id: 'M1', given: 'g', when: 'w', then: 't', check: 'pytest tests/acceptance', expect: 'fail', unsetEnv: 'GW_CALLER_TOKEN', requiresEnv: '' }],
     gateCmd: 'python3 -m pytest tests/t.py', files: 'tests/t.py\n.github/c.md',
   });
 });
@@ -67,7 +73,7 @@ test('the missing-field reason names the first empty required field, null when c
   const empty = emptyWorkItemDraft();
   expect(workItemDraftMissing(empty)).toMatch(/summary/);
   expect(workItemDraftMissing({ ...empty, summary: 's' })).toMatch(/acceptance criterion/);
-  const withAc = { ...empty, summary: 's', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] };
+  const withAc = { ...empty, summary: 's', acceptanceCriteria: [AC_ROW] };
   expect(workItemDraftMissing(withAc)).toMatch(/gate command/);
   expect(workItemDraftMissing({ ...withAc, gateCmd: 'npm test' })).toMatch(/file/);
   expect(workItemDraftMissing(FULL)).toBeNull();
@@ -77,7 +83,7 @@ test('the draft maps to the request source: trimmed, complete ACs only', () => {
   expect(workItemDraftToSource(FULL)).toEqual({
     source: {
       summary: 'Retire the legacy specs.',
-      acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+      acceptanceCriteria: [AC_SENT],
       qualityGateCmd: ['node', '--test', 'tests/retire.test.ts'],
       filesInScope: ['specs/legacy.md', 'tests/retire.test.ts'],
     },
@@ -94,16 +100,16 @@ test('a typed send-back with no complete criterion is refused naming BOTH inputs
 });
 
 test('a typed send-back needs only criteria — gate and scope are optional (absent ⇒ the project gate / WI-scope union)', () => {
-  const d = { ...emptyWorkItemDraft(), acceptanceCriteria: [{ given: ' g ', when: 'w', then: 't' }] };
+  const d = { ...emptyWorkItemDraft(), acceptanceCriteria: [{ ...AC_ROW, given: ' g ' }] };
   expect(sendBackDraftMissing(d)).toBeNull();
-  expect(sendBackDraftToSource(d)).toEqual({ source: { acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] } });
+  expect(sendBackDraftToSource(d)).toEqual({ source: { acceptanceCriteria: [AC_SENT] } });
 });
 
 test('a typed send-back carries the gate as argv and the files one per line', () => {
   const d = { ...FULL, summary: '' };
   expect(sendBackDraftToSource(d)).toEqual({
     source: {
-      acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+      acceptanceCriteria: [AC_SENT],
       qualityGateCmd: ['node', '--test', 'tests/retire.test.ts'],
       filesInScope: ['specs/legacy.md', 'tests/retire.test.ts'],
     },
@@ -114,4 +120,25 @@ test('a quoted gate on a typed send-back is refused by name', () => {
   const d = { ...FULL, gateCmd: 'pytest -k "a b"' };
   expect(sendBackDraftMissing(d)).toMatch(/quote/);
   expect('error' in sendBackDraftToSource(d)).toBe(true);
+});
+
+// ---- forge-mfv5.1.43 — every typed criterion is a falsifying check ----------
+
+test('a criterion with a prose WHEN and no check is refused by name, on both forms', () => {
+  const prose = { ...emptyCriterionDraft(), given: 'g', when: 'the operator reads the output', then: 't' };
+  const d = { ...FULL, acceptanceCriteria: [AC_ROW, prose] };
+  expect(sendBackDraftMissing(d)).toMatch(/AC2 needs a check command — a typed criterion is a falsifying check, never prose/);
+  expect(workItemDraftMissing(d)).toMatch(/AC2 needs a check command/);
+  expect('error' in sendBackDraftToSource(d)).toBe(true);
+});
+
+test('expect-fail with unset / required env names maps to the wire check; a bad env name or quoted check is refused', () => {
+  const row = { ...AC_ROW, check: 'python3 -m pytest tests/acceptance -q', expect: 'fail' as const, unsetEnv: 'GW_CALLER_TOKEN', requiresEnv: 'GW_ORG, GW_RESOURCE_PREFIX' };
+  expect(sendBackDraftToSource({ ...emptyWorkItemDraft(), acceptanceCriteria: [row] })).toEqual({
+    source: { acceptanceCriteria: [{ given: 'g', when: 'w', then: 't', check: {
+      argv: ['python3', '-m', 'pytest', 'tests/acceptance', '-q'], expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'], requiresEnv: ['GW_ORG', 'GW_RESOURCE_PREFIX'],
+    } }] },
+  });
+  expect(sendBackDraftMissing({ ...emptyWorkItemDraft(), acceptanceCriteria: [{ ...row, unsetEnv: 'gw-token' }] })).toMatch(/AC1's env name gw-token/);
+  expect(sendBackDraftMissing({ ...emptyWorkItemDraft(), acceptanceCriteria: [{ ...row, check: 'pytest -k "a b"' }] })).toMatch(/AC1's check: .*quote/);
 });

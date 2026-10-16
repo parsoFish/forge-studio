@@ -27,7 +27,7 @@ const ROUTE = '/api/kickoff/work-items';
 const ADD = {
   initiativeId: I2_INIT,
   summary: 'Live proof that gw apply --json resets before applying',
-  acceptanceCriteria: [{ given: 'a stray prefixed team', when: 'the reset test runs', then: 'the team is gone' }],
+  acceptanceCriteria: [{ given: 'a stray prefixed team', when: 'the reset test runs', then: 'the team is gone' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
   qualityGateCmd: ['python3', '-m', 'pytest', 'tests/acceptance/test_gw_reset_before_apply.py'],
   filesInScope: ['tests/acceptance/test_gw_reset_before_apply.py'],
 };

@@ -12,6 +12,7 @@ import { isCanonicalInitiativeId } from './initiative-id.ts';
 import { validateManifestPathFields } from './manifest-path-guard.ts';
 import { manifestAwaitsKickoff, readKickoffFacts } from './kickoff-facts.ts';
 import { nextDevWorkItemId } from './fix-work-items.ts';
+import { missingCheckErrors } from './acceptance-check.ts';
 import { readCycleEvents } from './legacy-fix-gate.ts';
 import { readWorkItemsFromDir, serializeWorkItem, validateWorkItemSet, writeWorkItem, type AcceptanceCriterion, type WorkItem } from './work-item.ts';
 
@@ -72,10 +73,11 @@ export function buildPlanWorkItem(existing: readonly WorkItem[], id: string, ini
 }
 
 /** The path rule on the work item authored at the gate, then the whole set. */
-function gateSetErrors(set: WorkItem[], authored: WorkItem | null): string[] {
+function gateSetErrors(set: WorkItem[], authored: WorkItem | null, criteriaAuthored = authored !== null): string[] {
   const pathErrors = authored === null ? [] : [
     ...scopeEntryErrors('files_in_scope', authored.files_in_scope),
     ...scopeEntryErrors('creates', authored.creates ?? []),
+    ...(criteriaAuthored ? missingCheckErrors(authored.acceptance_criteria) : []), // forge-mfv5.1.43: criteria the operator authors carry a check each
   ];
   return [...pathErrors, ...setErrorList(validateWorkItemSet(set))];
 }
@@ -211,7 +213,7 @@ export async function editKickoffWorkItem(a: EditKickoffWorkItemArgs): Promise<E
     const refused = full ? kickoffAddedRefusal(a.logsRoot, cycleIdOf(a, g), a.workItemId) : null;
     if (refused) return refused;
     const wi = applyEdit(current, a.edit);
-    const errors = gateSetErrors(existing.map((w) => (w === current ? wi : w)), full ? wi : null);
+    const errors = gateSetErrors(existing.map((w) => (w === current ? wi : w)), full ? wi : null, a.edit.acceptanceCriteria !== undefined);
     if (errors.length > 0) return { status: 'invalid', detail: errors.join('; ') };
     writeWorkItem(wi, worktree, { workItemsDir: g.wiDir });
     writeSnapshotCopy(a, g, wi);

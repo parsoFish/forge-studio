@@ -393,6 +393,8 @@ export function mergeAndPublish(opts: {
   wiBranch: string;
   workItemId: string;
   specPath: string;
+  /** forge-mfv5.1.43: the criteria whose checks passed at close — ticked by forge in the spec. */
+  tickedAcs?: readonly string[];
   /** See `mergeWiIntoCycle`'s `startPointRef` — threaded through unchanged. */
   startPointRef?: string;
   /** See `mergeWiIntoCycle`'s `wiWorktreePath` — threaded through unchanged. */
@@ -414,7 +416,7 @@ export function mergeAndPublish(opts: {
       ...(mergeResult.untrackedRemediated ? { untrackedRemediated: mergeResult.untrackedRemediated } : {}),
     };
   }
-  writeWorkItemStatus(opts.specPath, 'complete');
+  writeWorkItemStatus(opts.specPath, 'complete', opts.tickedAcs ?? []);
   return {
     merged: true,
     push: pushInitiativeBranch(opts.cycleWorktreePath),

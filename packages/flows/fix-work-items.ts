@@ -20,6 +20,7 @@ import { join } from 'node:path';
 
 import { guardedFile, guardedWriteFile } from '@forge/kernel';
 import { worktreeDemoJsonRelPath } from './demo-paths.ts';
+import { acLabel, missingCheckErrors } from './acceptance-check.ts';
 import {
   devWorkItemIdStem,
   gateIsShellPipeline,
@@ -169,6 +170,8 @@ export type FixConcernSource = {
   qualityGateCmd?: string[];
   /** Explicit scope (the demo-fix path); absent ⇒ union of dev-WI scopes + demo/PR. */
   filesInScope?: string[];
+  /** forge-mfv5.1.43: an operator-typed concern — every criterion must carry its falsifying check. */
+  requireChecks?: boolean;
 };
 
 export type FixLoopCaps = {
@@ -275,6 +278,8 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
       'a fix concern needs at least one complete GIVEN/WHEN/THEN acceptance criterion',
     );
   }
+  const missing = source.requireChecks === true ? missingCheckErrors(acs) : [];
+  if (missing.length > 0) throw new FixConcernInvalidError(missing.join('; '));
   if (!input.projectGateCmd || input.projectGateCmd.length === 0) {
     throw new FixConcernInvalidError('projectGateCmd is required to back a fix work-item gate');
   }
@@ -338,10 +343,11 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
     ...(concernKind === 'packaging' ? { behavior_preserving: true } : {}),
     body: fixConcernBody(fixId, source.origin, concernKind, source.rationale, acs),
   };
-  const { setErrors } = validateWorkItemSet([...existing, fixWi]);
-  if (setErrors.length > 0) {
+  const { perItem, setErrors } = validateWorkItemSet([...existing, fixWi]);
+  const errors = [...(perItem[fixId] ?? []), ...setErrors];
+  if (errors.length > 0) {
     throw new FixConcernInvalidError(
-      `fix work-item append would corrupt the queue: ${setErrors.join('; ')}`,
+      `fix work-item append would corrupt the queue: ${errors.join('; ')}`,
     );
   }
   writeWorkItem(fixWi, worktreePath, { workItemsDir: dir });
@@ -365,7 +371,7 @@ function fixConcernBody(
   acs: AcceptanceCriterion[],
 ): string {
   const checklist = acs
-    .map((a, i) => `- [ ] AC${i + 1}: GIVEN ${a.given.trim()} WHEN ${a.when.trim()} THEN ${a.then.trim()}`)
+    .map((a, i) => `- [ ] ${acLabel(a, i)}: GIVEN ${a.given.trim()} WHEN ${a.when.trim()} THEN ${a.then.trim()}`)
     .join('\n');
   return [
     `# ${id} — ${origin} concern (${concernKind})`,
@@ -387,6 +393,7 @@ function fixConcernBody(
           '## How (code-fix discipline)',
           '',
           '1. **Write a failing test FIRST** that encodes the acceptance criteria above (red).',
+          ...(acs.some((a) => a.check) ? ['   Each criterion carries a falsifying check; forge runs every one at close and ticks its box — never tick them yourself.'] : []),
           '2. Make the minimal code change so it passes (green); keep the rest of the suite green.',
           '3. Commit. The re-armed unify/prep pass re-authors the demo + PR after you.',
         ]

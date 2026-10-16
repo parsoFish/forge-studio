@@ -34,7 +34,7 @@ export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
 
 // ---- Work-item definition (WI detail — /artifact viewer) -----------------
 
-export type WorkItemAcceptanceCriterion = { given: string; when: string; then: string };
+export type WorkItemAcceptanceCriterion = { id?: string; given: string; when: string; then: string; check?: { argv: string[]; expect: 'pass' | 'fail'; unsetEnv?: string[]; requiresEnv?: string[] } };
 
 export type WorkItemDetail = {
   work_item_id: string;

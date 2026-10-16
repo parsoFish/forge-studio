@@ -81,6 +81,7 @@ async function fillAll(): Promise<void> {
   await type('[data-field="kickoff-ac-given-1"]', 'a stray team');
   await type('[data-field="kickoff-ac-when-1"]', 'the reset test runs');
   await type('[data-field="kickoff-ac-then-1"]', 'it is gone');
+  await type('[data-field="kickoff-ac-check-1"]', 'python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py');
   await type('[data-field="kickoff-wi-gate-cmd"]', 'python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py');
   await type('[data-field="kickoff-wi-files"]', 'tests/acceptance/test_gw_reset_before_apply.py');
 }

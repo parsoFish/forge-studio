@@ -23,7 +23,7 @@ let bridgeUrl = '';
 const BODY = {
   initiativeId: STRANDED_INIT,
   summary: 'Retire the legacy specs inside I1.',
-  acceptanceCriteria: [{ given: 'the legacy specs', when: 'the retire test runs', then: 'none remain' }],
+  acceptanceCriteria: [{ given: 'the legacy specs', when: 'the retire test runs', then: 'none remain' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
   qualityGateCmd: RETIRE_GATE,
   filesInScope: ['specs/legacy.md', 'tests/retire.test.ts'],
 };

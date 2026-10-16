@@ -27,7 +27,7 @@ import { I2_INIT, plantI2Kickoff } from '../test-fixtures/kickoff-deps-i2.ts';
 const FIXED = ['tests/test_docs_no_terraform_tokens.py', '.github/copilot-context.md'];
 const SOURCE: KickoffWorkItemSource = {
   summary: 'No Terraform references left in agent context or docs',
-  acceptanceCriteria: [{ given: 'the repository after I2', when: 'the docs test runs', then: 'no Terraform tokens remain' }],
+  acceptanceCriteria: [{ given: 'the repository after I2', when: 'the docs test runs', then: 'no Terraform tokens remain' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
   qualityGateCmd: ['python3', '-m', 'pytest', 'tests/test_docs_no_terraform_tokens.py'],
   filesInScope: FIXED,
 };

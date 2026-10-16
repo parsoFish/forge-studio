@@ -16,6 +16,7 @@ import lockfile from 'proper-lockfile';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseManifest, persistManifestSendBack, persistManifestSpecs } from './manifest.ts';
+import type { AcceptanceCriterion } from './work-item.ts';
 import { compileFixWorkItems, writeReviewCapExhaustedMarker, hasReviewCapExhaustedMarker, FixLoopCapError, FixConcernInvalidError } from './fix-work-items.ts';
 import { loadConfig, resolveReviewLoopCaps, sendJson, allowedOrigin, stringList, type StudioContext } from '@forge/kernel';
 import { notify } from './notify.ts';
@@ -79,7 +80,9 @@ export async function applyReviewVerdict(
     initiativeId: string;
     kind: 'approve' | 'send-back';
     rationale: string;
-    acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
+    acceptanceCriteria?: AcceptanceCriterion[];
+    /** forge-mfv5.1.43: the prose doors (blocking comments, gate notes) say so; any other send-back is typed and every criterion carries its check. */
+    derivedFrom?: 'comments';
     concernKind?: 'packaging' | 'code-fix';
     qualityGateCmd?: string[];
     filesInScope?: string[]; // forge-mfv5.1.28: a typed send-back's scope; absent ⇒ the WI-scope union
@@ -108,6 +111,10 @@ export async function applyReviewVerdict(
   const scopeError = body.filesInScope === undefined ? null : stringList('filesInScope', body.filesInScope, 200, 500);
   const listError = gateError ?? scopeError;
   if (listError) { sendJson(res, 400, { error: listError }, origin); return; }
+  if (body.derivedFrom !== undefined && body.derivedFrom !== 'comments') {
+    sendJson(res, 400, { error: `derivedFrom must be 'comments' when set, got ${String(body.derivedFrom)}` }, origin);
+    return;
+  }
   if (kind === 'send-back' && acs.length === 0) {
     sendJson(res, 400, { error: 'send-back needs a blocking comment or a typed work item — neither arrived (no acceptanceCriteria from a blocking review comment, none typed)' }, origin);
     return;
@@ -394,7 +401,7 @@ export async function applyReviewVerdict(
     const { appended } = compileFixWorkItems({
       worktreePath,
       initiativeId,
-      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd, filesInScope: body.filesInScope },
+      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd, filesInScope: body.filesInScope, requireChecks: body.derivedFrom !== 'comments' },
       projectGateCmd,
       estimatedIterations: REVIEW_FIX_DEFAULT_ITERATIONS,
       caps,

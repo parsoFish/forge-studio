@@ -16,10 +16,15 @@ import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 export type AcceptanceCriterion = {
+  /** forge-mfv5.1.43: optional name (`AC1`, `M1`); absent ⇒ `AC<n>` (`acLabel`). */
+  id?: string;
   given: string;
   when: string;
   then: string;
+  /** forge-mfv5.1.43 (D-20): the falsifying check an operator-authored criterion carries. */
+  check?: AcceptanceCheck;
 };
+import { acceptanceCheckErrors, parseCriterionExtras, serializeCriterion, tickAcceptanceCriteria, type AcceptanceCheck } from './acceptance-check.ts';
 
 export type { WorkItemStatus } from '@forge/contracts';
 import type { WorkItemStatus } from '@forge/contracts';
@@ -185,11 +190,7 @@ export function serializeWorkItem(w: WorkItem): string {
     initiative_id: w.initiative_id,
     status: w.status,
     depends_on: w.depends_on,
-    acceptance_criteria: w.acceptance_criteria.map((c) => ({
-      given: c.given,
-      when: c.when,
-      then: c.then,
-    })),
+    acceptance_criteria: w.acceptance_criteria.map(serializeCriterion),
     files_in_scope: w.files_in_scope,
     estimated_iterations: w.estimated_iterations,
   };
@@ -336,6 +337,7 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
       if (!c.when.trim()) errors.push(`acceptance_criteria[${i}].when is empty`);
       if (!c.then.trim()) errors.push(`acceptance_criteria[${i}].then is empty`);
     }
+    errors.push(...acceptanceCheckErrors(w.acceptance_criteria));
   }
 
   if (w.files_in_scope.length === 0) {
@@ -511,14 +513,15 @@ export function writeWorkItem(w: WorkItem, worktreeDir: string, opts: WriteWorkI
  * Update the `status` field in an existing work-item file's YAML frontmatter,
  * leaving every other field and the markdown body byte-identical (round-trip
  * via gray-matter). Used by the developer-loop runner to mark each WI
- * complete | failed after the Ralph loop returns.
+ * complete | failed after the Ralph loop returns. `ticked` (forge-mfv5.1.43): the criteria labels
+ * whose checks passed at close — forge ticks them in the body, never the agent.
  */
-export function writeWorkItemStatus(specPath: string, status: WorkItemStatus): void {
+export function writeWorkItemStatus(specPath: string, status: WorkItemStatus, ticked: readonly string[] = []): void {
   if (!WORK_ITEM_STATUSES.includes(status)) {
     throw new Error(`invalid status: ${status}`);
   }
   const w = parseWorkItem(readFileSync(specPath, 'utf8'));
-  const updated: WorkItem = { ...w, status };
+  const updated: WorkItem = { ...w, status, body: tickAcceptanceCriteria(w.body, ticked) };
   writeFileSync(specPath, serializeWorkItem(updated));
 }
 
@@ -697,6 +700,7 @@ function parseAcceptanceCriteria(data: Record<string, unknown>): AcceptanceCrite
       given: typeof obj.given === 'string' ? obj.given : '',
       when: typeof obj.when === 'string' ? obj.when : '',
       then: typeof obj.then === 'string' ? obj.then : '',
+      ...parseCriterionExtras(obj),
     });
   }
   return out;

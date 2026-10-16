@@ -174,7 +174,10 @@ array):
 The injected run context gives you the exact `initiative_id`, `cycleId`,
 `baseRef`, and `headSha` values — echo them verbatim, don't re-derive them.
 `acRef` is optional; include it when a finding is tied to a specific
-acceptance criterion.
+acceptance criterion, copied verbatim from the prompt's list. A finding that
+shows a work item's own criterion is NOT met contradicts what the work item
+promised: it is a `blocker`, and forge classes it blocker whatever severity it
+carries.
 
 **`acEvaluations` is checked by EXACT set membership, both ways.** One entry
 per criterion the prompt listed, with the criterion string copied character for

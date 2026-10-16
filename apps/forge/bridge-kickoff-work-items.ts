@@ -70,7 +70,12 @@ function fieldError(k: EditKey, v: unknown): string | null {
 }
 
 const toCriteria = (v: unknown): Source['acceptanceCriteria'] =>
-  (v as Array<Record<string, string>>).map((ac) => ({ given: ac.given!, when: ac.when!, then: ac.then! }));
+  (v as Array<Record<string, unknown>>).map((ac) => ({
+    given: ac.given as string, when: ac.when as string, then: ac.then as string,
+    // forge-mfv5.1.43: carried verbatim; validateWorkItem names a malformed one.
+    ...(ac.id !== undefined ? { id: ac.id as string } : {}),
+    ...(ac.check !== undefined ? { check: ac.check as NonNullable<Source['acceptanceCriteria'][number]['check']> } : {}),
+  }));
 
 /** The present editable fields, each validated; `required` must all be present. */
 function parseFields(b: Record<string, unknown>, required: readonly string[]): { edit: Edit } | { error: string } {

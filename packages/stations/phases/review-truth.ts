@@ -5,6 +5,7 @@
  */
 
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
+import type { ReviewFinding } from '@forge/flows';
 
 import { runnableSpan } from './decompose-completeness.ts';
 
@@ -53,4 +54,11 @@ export function runCriterion(worktreePath: string, initiativeId: string, headSha
     }
   }
   return { verdict: 'met', evidence: `${cmds.map((c) => `\`${c.join(' ')}\``).join(', ')}: exit 0 at ${headSha.slice(0, 12)} (run by the orchestrator, not judged by a review agent)` };
+}
+
+/** forge-mfv5.1.43: a non-info finding whose `acRef` is one of the injected criteria (verbatim) contradicts it — a blocker, never a major. Pure. */
+export function escalateAcFindings(findings: readonly ReviewFinding[], criteria: readonly string[]): ReviewFinding[] {
+  return findings.map((f) => (f.acRef !== undefined && criteria.includes(f.acRef) && f.severity !== 'info' && f.severity !== 'blocker'
+    ? { ...f, severity: 'blocker', detail: `${f.detail}\n\n[forge] contradicts acceptance criterion ${f.acRef} — classed blocker (was ${f.severity}).` }
+    : f));
 }

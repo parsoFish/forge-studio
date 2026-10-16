@@ -37,6 +37,8 @@ export type GateVerdictBody = {
   project?: string;
   kind?: string;
   acceptanceCriteria?: GateVerdictAc[];
+  /** forge-mfv5.1.43: the gate bar's notes are a prose door, like a blocking comment. */
+  derivedFrom?: 'comments';
 };
 
 /** The honest default rationale for a notes-less demo-gate approve. */
@@ -56,6 +58,7 @@ export function buildGateVerdictBody(
     }
     return {
       rationale: notes,
+      derivedFrom: 'comments',
       acceptanceCriteria: [
         {
           given: 'the demo evidence for this initiative',

@@ -69,13 +69,17 @@ async function fillTyped(): Promise<void> {
   await type('[data-field="verdict-ac-given-1"]', 'the whole tests/ directory');
   await type('[data-field="verdict-ac-when-1"]', '`python3 -m pytest tests/` runs');
   await type('[data-field="verdict-ac-then-1"]', 'zero tests fail');
+  await type('[data-field="verdict-ac-check-1"]', 'python3 -m pytest tests/');
   await type('[data-field="verdict-wi-gate-cmd"]', 'python3 -m pytest tests/');
   await type('[data-field="verdict-wi-files"]', 'tests/test_structure.py\npytest.ini');
 }
 
 const TYPED = {
   kind: 'send-back', initiativeId: INIT, rationale: 'AC2 is measured by nothing.',
-  acceptanceCriteria: [{ given: 'the whole tests/ directory', when: '`python3 -m pytest tests/` runs', then: 'zero tests fail' }],
+  acceptanceCriteria: [{
+    given: 'the whole tests/ directory', when: '`python3 -m pytest tests/` runs', then: 'zero tests fail',
+    check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' },
+  }],
   qualityGateCmd: ['python3', '-m', 'pytest', 'tests/'],
   filesInScope: ['tests/test_structure.py', 'pytest.ini'],
 };
@@ -106,8 +110,31 @@ test('ReviewVerdictForm send-back omits gate and scope when left blank (the proj
   await type('[data-field="verdict-ac-given-1"]', 'g');
   await type('[data-field="verdict-ac-when-1"]', 'w');
   await type('[data-field="verdict-ac-then-1"]', 't');
+  await type('[data-field="verdict-ac-check-1"]', 'pytest tests/acceptance');
+  await act(async () => {
+    const sel = q<HTMLSelectElement>('[data-field="verdict-ac-expect-1"]');
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'fail');
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await type('[data-field="verdict-ac-unset-env-1"]', 'GW_CALLER_TOKEN');
   await press('[data-action="send-back"]');
-  expect(submitMock).toHaveBeenCalledWith({ kind: 'send-back', initiativeId: INIT, rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] });
+  expect(submitMock).toHaveBeenCalledWith({
+    kind: 'send-back', initiativeId: INIT, rationale: 'r',
+    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't', check: { argv: ['pytest', 'tests/acceptance'], expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'] } }],
+  });
+});
+
+test('forge-mfv5.1.43: a typed criterion with no check is refused by name at the form — nothing is submitted', async () => {
+  await act(async () => { root.render(React.createElement(ReviewVerdictForm, { initiativeId: INIT, initialKind: 'send-back' })); });
+  await type('[data-field="verdict-rationale"]', 'r');
+  await type('[data-field="verdict-ac-given-1"]', 'g');
+  await type('[data-field="verdict-ac-when-1"]', 'the operator reads the help text');
+  await type('[data-field="verdict-ac-then-1"]', 't');
+  const btn = q<HTMLButtonElement>('[data-action="send-back"]');
+  expect(btn.disabled).toBe(true);
+  expect(btn.getAttribute('data-disabled-reason')).toMatch(/AC1 needs a check command — a typed criterion is a falsifying check, never prose/);
+  await press('[data-action="send-back"]');
+  expect(submitMock).not.toHaveBeenCalled();
 });
 
 async function renderSurface(): Promise<void> {
@@ -135,6 +162,6 @@ test('DemoReviewSurface forwards a comment-derived qualityGateCmd on the send-ba
   expect(container.querySelector('[data-action="compose-send-back"]')).toBeNull();
   await press('[data-action="send-back"]');
   expect(submitMock).toHaveBeenCalledWith({
-    kind: 'send-back', initiativeId: INIT, rationale: '[ac-1] AC2 unmet', acceptanceCriteria: [ac], qualityGateCmd: ['python3', '-m', 'pytest', 'tests/'],
+    kind: 'send-back', initiativeId: INIT, rationale: '[ac-1] AC2 unmet', acceptanceCriteria: [ac], derivedFrom: 'comments', qualityGateCmd: ['python3', '-m', 'pytest', 'tests/'],
   });
 });

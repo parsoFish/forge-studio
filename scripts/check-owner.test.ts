@@ -164,7 +164,8 @@ test('the loc drift list in prose output is capped, not a flood — a fixture wi
   let mutated = 0;
   const doctored = rows.map((l) => {
     const t = l.trim();
-    if (/^\| packages\/[^|]+\.ts \|/.test(t) && mutated < 20) {
+    // Only a row whose loc cell IS a bare number can be doctored; a row whose cell carries a note does not count.
+    if (/^\| packages\/[^|]+\.ts \|/.test(t) && /\|\s*\d+\s*\|$/.test(t) && mutated < 20) {
       mutated += 1;
       return l.replace(/\|\s*\d+\s*\|$/, '| 1 |');
     }

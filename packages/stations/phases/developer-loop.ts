@@ -658,7 +658,7 @@ export async function runDeveloperLoop(
       },
     );
 
-    let result: LoopResult | null = null;
+    let result: LoopResult | null = null, acsSatisfied: string[] = []; // acsSatisfied: forge-mfv5.1.43, ticked at close
     let runnerError: { kind: string; message: string } | undefined;
     // G3 (plan 2.3): remember the previous crash so classifyCrash can spot an
     // IDENTICAL repeat — the deterministic no-third-attempt rule.
@@ -699,11 +699,7 @@ export async function runDeveloperLoop(
           // false-fires (the WI's sharp gate would have failed cleanly,
           // but cycle-level `npm test` passes on the baseline).
           qualityGate: ((): undefined | (() => boolean) => {
-            const derived = deriveWiGateCmd({
-              wi,
-              template: localTestProcess?.perWorkItem,
-              fallback: input.qualityGateCmd,
-            });
+            const derived = deriveWiGateCmd({ wi, template: localTestProcess?.perWorkItem, fallback: input.qualityGateCmd });
             if (derived.templateSkipped) {
               emitWiGateTemplateSkipped(logger, {
                 initiativeId: input.initiativeId,
@@ -714,10 +710,10 @@ export async function runDeveloperLoop(
               });
             }
             const effective = derived.cmd;
-            if (!effective) return undefined;
+            if (!effective && !wi.acceptance_criteria.some((a) => a.check)) return undefined; // forge-mfv5.1.43: checks run even with no gate
             return buildWiQualityGate({
               worktreePath: wiWorktree.path,
-              effective,
+              effective: effective ?? [],
               accGate,
               wi,
               requiredPathsSource,
@@ -729,6 +725,7 @@ export async function runDeveloperLoop(
               // distinct gate.timeout event classifies as transient/environment
               // so the scheduler retries instead of failing the work as wrong.
               onRun: (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); gateFeedback.onRun(gateInfo); },
+              onChecksJudged: (satisfied) => { acsSatisfied = [...satisfied]; },
             });
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut
@@ -901,7 +898,7 @@ export async function runDeveloperLoop(
           cycleWorktreePath: input.worktreePath,
           wiBranch: wiWorktree.branch,
           workItemId: wi.work_item_id,
-          specPath,
+          specPath, tickedAcs: acsSatisfied,
           startPointRef: wiBaseSha,
           wiWorktreePath: wiWorktree.path,
         }),

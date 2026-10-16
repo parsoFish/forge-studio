@@ -109,7 +109,7 @@ test('POST 400: WI-14\'s whitespace entry is refused naming it; creates must be 
   const ADD = {
     initiativeId: I2_INIT,
     summary: 's',
-    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
     qualityGateCmd: ['pytest'],
   };
   const r = await c.send('POST', ROUTE, { ...ADD, filesInScope: [WI14_ENTRY] });

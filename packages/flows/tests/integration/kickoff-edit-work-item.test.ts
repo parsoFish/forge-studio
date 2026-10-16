@@ -29,7 +29,7 @@ const FIXED = ['tests/test_docs_no_terraform_tokens.py', '.github/copilot-contex
 const BAD_ENTRIES = ['../x', '/abs', '', 'a\tb'];
 const SOURCE: KickoffWorkItemSource = {
   summary: 'Live proof that gw apply --json resets before applying',
-  acceptanceCriteria: [{ given: 'a stray prefixed team', when: 'the reset test runs', then: 'the team is gone' }],
+  acceptanceCriteria: [{ given: 'a stray prefixed team', when: 'the reset test runs', then: 'the team is gone' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
   qualityGateCmd: ['python3', '-m', 'pytest', 'tests/acceptance/test_gw_reset_before_apply.py'],
   filesInScope: ['tests/acceptance/test_gw_reset_before_apply.py'],
 };
@@ -113,7 +113,7 @@ test('edit WI-14: summary, acceptance criteria, gate command and dependencies, a
   const { wiDir, logDir } = live(root);
   const e: KickoffWorkItemEdit = {
     summary: 'No Terraform tokens in docs',
-    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
     qualityGateCmd: ['python3', '-m', 'pytest', 'tests/x.py'],
     filesInScope: ['tests/x.py'],
     creates: [],
@@ -129,6 +129,15 @@ test('edit WI-14: summary, acceptance criteria, gate command and dependencies, a
   );
   const fields = (events(logDir).at(-1)?.metadata as { fields: string[] }).fields;
   assert.deepEqual(fields, ['summary', 'acceptanceCriteria', 'qualityGateCmd', 'filesInScope', 'dependsOn']);
+}));
+
+test('forge-mfv5.1.43: an edit that authors criteria must carry a check per criterion; a scope-only edit of a check-less WI still lands', () => withRoot(async (root) => {
+  const { wiDir } = live(root);
+  const prose = await edit(root, 'WI-14', { filesInScope: FIXED, acceptanceCriteria: [{ given: 'g', when: 'the docs read clean', then: 't' }] });
+  assert.equal(prose.status, 'invalid');
+  assert.match(detail(prose), /AC1 \(when: the docs read clean\) has no falsifying check/);
+  assert.deepEqual(readWi(wiDir, 'WI-14').files_in_scope, [WI14_ENTRY], 'nothing rewritten');
+  assert.equal((await edit(root, 'WI-14', { filesInScope: FIXED })).status, 'edited', 'the live WI-14 predates checks; fixing its scope authors no criterion');
 }));
 
 test('edit WI-14 leaving its bad entry: invalid, the path rule names the entry; nothing rewritten', () => withRoot(async (root) => {

@@ -31,7 +31,7 @@ function stubCoverage(acs: ReadonlyArray<{ when: string }>, items: ReadonlyArray
 
 const SOURCE: KickoffWorkItemSource = {
   summary: 'Retire the legacy specs inside I1.',
-  acceptanceCriteria: [{ given: 'the legacy specs', when: 'the retire test runs', then: 'none remain' }],
+  acceptanceCriteria: [{ given: 'the legacy specs', when: 'the retire test runs', then: 'none remain' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
   qualityGateCmd: RETIRE_GATE,
   filesInScope: ['specs/legacy.md', 'tests/retire.test.ts'],
 };
@@ -127,6 +127,9 @@ const INVALID: Array<[string, Partial<KickoffWorkItemSource>, RegExp]> = [
   ['empty ACs', { acceptanceCriteria: [] }, /acceptance_criteria must have at least one entry/],
   ['a shell-pipeline gate', { qualityGateCmd: ['bash', '-c', 'a | b'] }, /NOT a shell pipeline/],
   ['a .. scope path', { filesInScope: ['../outside.ts'] }, /may not contain '\.\.'/],
+  // forge-mfv5.1.43 (D-20 amended): an operator-authored criterion is a check, never prose advice.
+  ['a criterion with no falsifying check', { acceptanceCriteria: [{ given: 'g', when: 'the operator reads it', then: 't' }] }, /AC1 \(when: the operator reads it\) has no falsifying check/],
+  ['a malformed check', { acceptanceCriteria: [{ given: 'g', when: 'w', then: 't', check: { argv: ['pytest'], expect: 'maybe' as never } }] }, /AC1: check\.expect must be pass \| fail/],
 ];
 for (const [name, patch, named] of INVALID) {
   test(`invalid (${name}): refused naming the error, nothing written`, () => withRoot(async (root) => {

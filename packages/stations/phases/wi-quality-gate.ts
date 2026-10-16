@@ -1,5 +1,5 @@
-import { gateRequiredPaths, type RequiredPathsSource, type WorkItem } from '@forge/flows';
-import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
+import { acLabel, gateRequiredPaths, type AcceptanceCheck, type RequiredPathsSource, type WorkItem } from '@forge/flows';
+import { makeQualityGateFromCmd, parseGateTestSummary, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { WI_GATE_PACKAGE_PLACEHOLDER, type AcceptanceGateConfig } from '@forge/projects';
 
 import { liveAcceptanceEnvFor } from './live-acceptance-env.ts';
@@ -27,8 +27,16 @@ export type WiQualityGateArgs = {
    *  initiatives running in parallel never collide over, or sweep, each
    *  other's live resources. */
   initiativeId: string;
-  onRun: (info: GateRunInfo) => void;
+  onRun: (info: AcGateRunInfo) => void;
+  /** forge-mfv5.1.43: each acceptance criterion's check, judged — also handed to `onRun` (its `info.ac` names the criterion). */
+  onAcCheck?: (run: AcCheckRun) => void;
+  /** forge-mfv5.1.43: after a gate pass, the labels whose checks were satisfied this run (all of them ⇔ the composite passed). */
+  onChecksJudged?: (satisfied: readonly string[]) => void;
 };
+
+/** One acceptance check's run: `info` is the gate run with `passed` restated as "satisfied", and `command` labelled. */
+export type AcCheckRun = { label: string; expect: AcceptanceCheck['expect']; satisfied: boolean; info: AcGateRunInfo };
+export type AcGateRunInfo = GateRunInfo & { ac?: { label: string; expect: AcceptanceCheck['expect'] } };
 
 /**
  * Build the per-WI quality-gate closure `runRalph`'s `LoopInput.qualityGate`
@@ -40,7 +48,54 @@ export type WiQualityGateArgs = {
  * SAME function, so a change here (e.g. dropping `initiativeId`) trips that
  * test directly instead of only a hand-written mirror of it.
  */
-export function buildWiQualityGate(args: WiQualityGateArgs): () => boolean {
+export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration: number }) => boolean {
+  const wiGate = args.effective.length > 0 ? buildWiGateOnly(args) : () => true; // no gate: the checks alone decide
+  const checks = args.wi.acceptance_criteria.flatMap((ac, i) => (ac.check ? [{ label: acLabel(ac, i), check: ac.check }] : []));
+  // forge-mfv5.1.43 (D-20): the WI closes only when its gate AND every criterion's check pass —
+  // first unsatisfied check stops the run (its output is the agent's next brief).
+  return (ctx) => {
+    if (!wiGate(ctx)) return false;
+    const satisfied: string[] = [];
+    for (const { label, check } of checks) {
+      const run = runAcCheck(args, label, check, ctx);
+      args.onRun(run.info);
+      args.onAcCheck?.(run);
+      if (!run.satisfied) break;
+      satisfied.push(label);
+    }
+    args.onChecksJudged?.(satisfied);
+    return satisfied.length === checks.length;
+  };
+}
+
+function runAcCheck(args: WiQualityGateArgs, label: string, check: AcceptanceCheck, ctx?: { iteration: number }): AcCheckRun {
+  const unsetEnv = [...(args.ciGateUnsetEnv ?? []), ...(check.unsetEnv ?? [])];
+  const requiredEnv = [...(liveAcceptanceEnvFor(args.accGate, check.argv) ?? []), ...(check.requiresEnv ?? [])].filter((n) => !unsetEnv.includes(n));
+  let got: GateRunInfo | undefined;
+  makeQualityGateFromCmd(args.worktreePath, check.argv, (i) => { got = i; }, {
+    ...(requiredEnv.length > 0 ? { requiredEnv } : {}),
+    ...(unsetEnv.length > 0 ? { unsetEnv } : {}),
+    initiativeId: args.initiativeId,
+    timeoutMs: resolveGateTimeoutMs(args.localGateTimeoutMs),
+  })(ctx);
+  const ran: GateRunInfo = got ?? { passed: false, exitCode: -1, durationMs: 0, stdoutTail: '', stderrTail: '[forge] the check reported no run', command: check.argv.join(' '), errored: true };
+  const why = check.expect === 'pass' ? null : expectFailVerdict(ran);
+  const satisfied = check.expect === 'pass' ? ran.passed : why === null;
+  const stderrTail = why === null ? ran.stderrTail : `${ran.stderrTail}\n[forge ac-check] ${label} expected the check to FAIL: ${why}`;
+  const info = { ...ran, passed: satisfied, stderrTail, command: `[${label} expect ${check.expect}] ${ran.command}`, ac: { label, expect: check.expect } };
+  return { label, expect: check.expect, satisfied, info };
+}
+
+/** Why an `expect: fail` run is NOT the falsifying failure it must be, or null: a real non-zero exit, and ≥1 test ran when a runner summary says so. */
+function expectFailVerdict(r: GateRunInfo): string | null {
+  if (r.errored || r.timedOut || r.rejectReason === 'live-env-missing') return `the command could not run as a check (${r.rejectReason ?? 'errored'})`;
+  if (r.passed || r.exitCode <= 0) return `it exited ${r.exitCode <= 0 && !r.passed ? r.exitCode : 0} (${r.rejectReason ?? 'passed'})`;
+  const s = parseGateTestSummary(`${r.stdoutTail}\n${r.stderrTail}`);
+  return s && s.passed + s.failed === 0 ? `the runner ran 0 tests (${s.skipped} skipped, ${s.runner}) — a skip is not a failure` : null;
+}
+
+/** The WI's own gate (unchanged since its 2026-09-27 extraction from `developer-loop.ts`). */
+function buildWiGateOnly(args: WiQualityGateArgs): (ctx?: { iteration: number }) => boolean {
   // Live-acc env guard (`liveAcceptanceEnvFor`): a gate that targets
   // the acc suite runs under requiresEnv whatever the class says.
   const requiredEnv = liveAcceptanceEnvFor(args.accGate, args.effective);

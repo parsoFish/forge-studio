@@ -19,7 +19,7 @@ import { classifyCycleFailure, type StreamQueryFn } from '@forge/agents';
 
 import {
   CODE_LENSES, CYCLE_ID, EXPECTED, INIT_ID, UNCLAIMED_FILE, collectLogger, makeFixture, run, stubQueryFn,
-  validFindingsJson, withoutSpawnSuppressionEnv,
+  criteriaFromPrompt, validFindingsJson, withoutSpawnSuppressionEnv,
 } from '../test-fixtures/adversarial-review-fixture.ts';
 import { assertAdversarialReviewDeclaration } from '../../phases/adversarial-review.ts';
 
@@ -89,6 +89,32 @@ test('forge-8vfn.8.1.22: the reviewer chunk spawn never writes under _logs/<init
       !existsSync(join(fx.logsRoot, INIT_ID)),
       'the reviewer chunk agent must never write under _logs/<initiativeId>/',
     );
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('forge-mfv5.1.43: a major that cites a work item\'s own criterion (acRef, verbatim) lands as a blocker in the artifact; a non-AC major stays major', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const qf = stubQueryFn([
+      (prompt) => {
+        const [criterion] = criteriaFromPrompt(prompt);
+        const base = { severity: 'major', category: 'correctness', title: 't', detail: 'd', evidence: [{ file: 'src.ts', line: 1 }] };
+        writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(prompt, {
+          findings: [{ ...base, id: 'RF-1', acRef: criterion }, { ...base, id: 'RF-2' }],
+        }));
+      },
+    ]);
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'complete');
+    const doc = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8')) as { findings: Array<{ id: string; severity: string }> };
+    assert.deepEqual(doc.findings.filter((f) => f.id.startsWith('WI-1/')).map((f) => [f.id, f.severity]), [['WI-1/RF-1', 'blocker'], ['WI-1/RF-2', 'major']]);
+    const authored = events.find((e) => e.message === 'review.findings.authored')!.metadata as Record<string, unknown>;
+    assert.equal(authored.blocker, 1, 'only the criterion-citing finding is escalated (the unattributed chunk carries no criterion)');
   } finally {
     fx.cleanup();
     restore();
