@@ -225,6 +225,11 @@ export function describeOperatorStop(): string {
   return 'Stopped by the operator — resumable; the worktree and branch are kept.';
 }
 
+/** forge-mfv5.1.39: the ONE wording of a halted fix round — the run page, the rail and the verdict headline. */
+export function describeRoundHalt(h: NonNullable<Run['roundHalt']>): string {
+  return `Round ${h.round} halted: ${h.reason}`;
+}
+
 /**
  * W8-A2 (ON-7 defect 2) — the ONE decision `RunControls` and `RunRail` both
  * route through for "which failure note, if any" — so the "stopOnBudget
@@ -240,11 +245,12 @@ export function describeOperatorStop(): string {
  * threw first is the one that ran) and before the generic fail-note.
  */
 export function runFailureNoteKind(
-  run: Pick<Run, 'status' | 'stopOnBudget' | 'operatorStop' | 'failNote'>,
-): 'budget' | 'operator-stop' | 'fail-note' | null {
+  run: Pick<Run, 'status' | 'stopOnBudget' | 'operatorStop' | 'failNote' | 'roundHalt'>,
+): 'budget' | 'operator-stop' | 'round-halt' | 'fail-note' | null {
   if (run.status !== 'failed') return null;
   if (run.stopOnBudget) return 'budget';
   if (run.operatorStop) return 'operator-stop';
+  if (run.roundHalt) return 'round-halt';
   if (run.failNote) return 'fail-note';
   return null;
 }

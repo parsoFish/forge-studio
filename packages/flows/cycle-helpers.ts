@@ -14,8 +14,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 import type { EventLogger } from '@forge/kernel';
@@ -30,35 +30,26 @@ import { resolveGateTimeoutMs } from '@forge/agents';
 // ---------------------------------------------------------------------------
 
 /**
- * D-06 / D-20: run `fn` (the resume rebase) with the named worktree-relative
- * `.forge/` scratch dirs preserved. A `git rebase` replay clobbers gitignored
- * untracked files, so these dirs (the dev WI specs + the unifier queue) are
- * backed up outside the worktree first and restored afterward IF the rebase
- * emptied them. Dirs absent before the rebase are skipped. Best-effort restore
- * — a missing backup never fails the cycle.
+ * D-06 / D-20: run `fn` (the entry rebase) with EVERY untracked path under the
+ * worktree's `.forge/` — ignored or not — moved aside outside the worktree, then
+ * restored byte-identical whatever the rebase did. A replay overwrites ignored
+ * scratch and refuses to overwrite unignored scratch at a path a commit adds
+ * (forge-mfv5.1.40: a pre-review snapshot commit added the PM repair's
+ * `.forge/work-items-rejected-<ts>/`, stopping I3b round 2). A path that cannot
+ * be listed or restored fails by name; the aside copy is kept until restored.
  */
-export function preservingForgeScratch<T>(worktreePath: string, relDirs: string[], fn: () => T): T {
-  const backups = relDirs.map((rel) => {
-    const dir = resolve(worktreePath, rel);
-    const bak = `${worktreePath}.${rel.replace(/[\\/]/g, '-')}-resume-bak`;
-    const present = existsSync(dir);
-    if (present) {
-      rmSync(bak, { recursive: true, force: true });
-      cpSync(dir, bak, { recursive: true });
-    }
-    return { dir, bak, present };
-  });
+export function preservingForgeScratch<T>(worktreePath: string, fn: () => T): T {
+  const listed = execFileSync('git', ['ls-files', '--others', '-z', '--', '.forge'], { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).split('\0').filter(Boolean);
+  const aside = `${worktreePath}.forge-scratch-resume-bak`;
+  rmSync(aside, { recursive: true, force: true });
+  const move = (from: string, to: string): void => { mkdirSync(dirname(to), { recursive: true }); rmSync(to, { force: true }); renameSync(from, to); };
+  for (const rel of listed) move(join(worktreePath, rel), join(aside, rel));
   try {
     return fn();
   } finally {
-    for (const b of backups) {
-      if (!b.present) continue;
-      if (!existsSync(b.dir) || readdirSync(b.dir).length === 0) {
-        mkdirSync(b.dir, { recursive: true });
-        cpSync(b.bak, b.dir, { recursive: true });
-      }
-      rmSync(b.bak, { recursive: true, force: true });
-    }
+    try { for (const rel of listed) move(join(aside, rel), join(worktreePath, rel)); }
+    catch (err) { throw new Error(`forge scratch not restored after the entry rebase — it is kept at ${aside}: ${err instanceof Error ? err.message : String(err)}`); }
+    rmSync(aside, { recursive: true, force: true });
   }
 }
 
@@ -78,11 +69,7 @@ export function preservingForgeScratch<T>(worktreePath: string, relDirs: string[
  * main for a unifier resume, preserving .forge scratch dirs across the rebase.
  */
 export function rebaseForResume(input: CycleInput, logger: EventLogger): void {
-  const rebase = preservingForgeScratch(
-    input.worktreePath,
-    ['.forge/work-items', '.forge/unifier-items'],
-    () => rebasePreservedBranchOntoMain(input.worktreePath),
-  );
+  const rebase = preservingForgeScratch(input.worktreePath, () => rebasePreservedBranchOntoMain(input.worktreePath));
   // forge-mfv5.1.37: the same rebase runs at a Kickoff Start onto a preserved
   // branch; `entry` says which, the shas say what moved.
   const entry = input.resumeFrom ? 'resume' : 'start';

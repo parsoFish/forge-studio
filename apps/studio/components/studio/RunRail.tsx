@@ -6,7 +6,7 @@ import Link from 'next/link';
 import type { Flow, Run } from '@/lib/studio-client';
 import { gateArtifactHref } from '@/lib/gate-artifact-href';
 import { initialCollapsed, railStorageKey, serializeCollapsed, visibleGroupRuns, type RailCollapsed } from '@/lib/run-rail-collapse';
-import { describeOperatorStop, describeStopOnBudget, runFailureNoteKind } from '@/lib/run-controls';
+import { describeOperatorStop, describeRoundHalt, describeStopOnBudget, runFailureNoteKind } from '@/lib/run-controls';
 
 // ---------------------------------------------------------------------------
 // RunRail — left panel listing runs grouped by status. Each group is a
@@ -361,6 +361,11 @@ function RunCard({
           }}
         >
           {describeOperatorStop()}
+        </div>
+      )}
+      {failureNoteKind === 'round-halt' && (
+        <div data-round-halt={run.roundHalt!.classification} style={{ fontSize: 'var(--text-xs)', color: 'var(--red)', lineHeight: 1.4, marginTop: 'var(--space-1)' }}>
+          {describeRoundHalt(run.roundHalt!)}
         </div>
       )}
       {failureNoteKind === 'fail-note' && (

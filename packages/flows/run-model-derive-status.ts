@@ -480,6 +480,18 @@ export function deriveOperatorStop(events: readonly EventLogEntry[]): boolean {
   return events.some((e) => e.message === 'flow.operator-stop');
 }
 
+/** forge-mfv5.1.39: the halted fix round, when the LATEST attempt (after the last `cycle.start`) ended in `sendback.loop-halted`. */
+export function deriveRoundHalt(events: readonly EventLogEntry[]): { round: number; classification: string; reason: string } | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.message === 'cycle.start') return undefined;
+    if (e.message !== 'sendback.loop-halted') continue;
+    const md = e.metadata ?? {};
+    return { round: typeof md.round === 'number' ? md.round : 0, classification: String(md.classification ?? 'UNKNOWN'), reason: String(md.reason ?? 'no reason recorded') };
+  }
+  return undefined;
+}
+
 /**
  * forge-mfv5.1.37 row 2: the commit the run's branch was rebased onto at
  * entry (a Kickoff Start onto a preserved branch, or a resume) — the base the

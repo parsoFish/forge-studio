@@ -10,6 +10,7 @@
  * DOM-as-metrics contract — REUSING vocabulary that already exists, no
  * parallel vocabulary invented:
  *   [data-page="flow-run"][data-run-id][data-run-found][data-run-status][data-flow-id]
+ *   [data-round-halt]                                     (forge-mfv5.1.39) classification of a halted fix round, else ''
  *   [data-review-round]                                   (`forge-8vfn.8.1.23`) —
  *     completed adversarial-review passes THIS cycle, "0" absent any
  *   [data-component="run-not-found"]                     the honest 404 body
@@ -147,6 +148,8 @@ export function FlowRunDetail({
       data-review-round={String(run?.reviewRound ?? 0)}
       // forge-mfv5.1.37 row 2: the commit the dev loop started on (`Run.runBase`); empty when none was recorded.
       data-run-base={run?.runBase ?? ''}
+      // forge-mfv5.1.39: the latest attempt was a fix round the drain halted — its classification; empty otherwise.
+      data-round-halt={run?.roundHalt?.classification ?? ''}
       data-page-ready={ready ? 'true' : 'false'}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >

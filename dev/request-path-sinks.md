@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-254 files, 1446 sink calls; 184 classified (accidentally-safe 8, guarded 47, not-request-derived 37, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+254 files, 1444 sink calls; 184 classified (accidentally-safe 8, guarded 47, not-request-derived 37, other 78, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -47,7 +47,7 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/flows/claim-validator.ts` | 2 | not-request-derived |  | read | realpathSync only canonicalises the claimed manifest's project_repo_path (validated upstream by assertManifestPathFields) and the roster's own paths, to match the project against the roster Studio reads (forge-8vfn.30.4); no content is read through it |
 | `packages/flows/cost-by-class.ts` | 5 | not-request-derived |  |  | `forgeRoot` |
 | `packages/flows/cycle-context.ts` | 2 | unclassified |  |  |  |
-| `packages/flows/cycle-helpers.ts` | 22 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `packages/flows/cycle-helpers.ts` | 20 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. forge-mfv5.1.40: preservingForgeScratch moves the paths git ls-files --others lists under <worktreePath>/.forge aside to <worktreePath>.forge-scratch-resume-bak and back (renameSync/rmSync/one execFileSync); worktreePath reaches rebaseForResume from a claimed manifest that drain-fix-loop.ts / scheduler-run-one.ts containment-check (isContainedWorktreePath) first; the cpSync/readdirSync backup it replaces is gone. |
 | `packages/flows/cycle-pr-open.ts` | 2 | not-request-derived | `isContainedWorktreePath` | read | Not a route: the develop flow's PR-open step |
 | `packages/flows/cycle-report.ts` | 1 | unclassified |  |  |  |
 | `packages/flows/cycle.ts` | 14 | unclassified |  |  |  |
