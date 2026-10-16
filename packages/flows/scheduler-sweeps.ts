@@ -7,16 +7,14 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { initiativeWorktreeRefusal, isSafeSegment, readHalt } from '@forge/kernel';
-import { getPaths, recover, type QueuePaths, type RecoveryResult } from './queue.ts';
+import { createLogger, isSafeSegment, readHalt } from '@forge/kernel';
+import { getPaths, recover, type QueuePaths, type RecoveryResult, type StrandedClassification } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
 import type { PhaseWiring } from './phase-wiring.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { syncCronTriggers } from './cron-triggers.ts';
-import { parseManifest as parseFullManifest } from './manifest.ts';
-import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { notify, type NotifyConfig } from './notify.ts';
 
 /**
@@ -111,94 +109,83 @@ export function runCronSync(): void {
 }
 
 export async function runRecoverySweep(
-  cfg: { queueRoot: string; staleHeartbeatMs: number; notify: NotifyConfig },
+  cfg: { queueRoot: string; staleHeartbeatMs: number; notify: NotifyConfig; logsRoot?: string },
+  isLive: (filename: string) => boolean,
 ): Promise<void> {
   try {
-    const recoveries = recover({
-      paths: getPaths(cfg.queueRoot),
-      staleHeartbeatMs: cfg.staleHeartbeatMs,
-      worktreeExists: worktree.exists,
-    });
-    for (const r of recoveries) await announceRecovery(r, getPaths(cfg.queueRoot), cfg.notify);
+    const paths = getPaths(cfg.queueRoot);
+    const recoveries = recover({ paths, staleHeartbeatMs: cfg.staleHeartbeatMs, worktreeExists: worktree.exists, isLive });
+    for (const r of recoveries) await announceRecovery(r, paths, cfg.notify, recoveryLogsRoot(paths, cfg.logsRoot));
   } catch {
     /* sweep is best-effort — never throw out of setInterval */
   }
 }
 
+/** The logs root a recovery event lands in: the configured one, else `<forgeRoot>/_logs` beside the queue. */
+export function recoveryLogsRoot(paths: QueuePaths, logsRoot: string | undefined): string {
+  return logsRoot ? resolve(logsRoot) : join(dirname(paths.root), '_logs');
+}
+
 /**
- * Clean up + announce one `recover()` result. A `worktree-path-refused` result was parked in
- * failed/ (never re-dispatched), so it is NOT cleaned up and is announced as a failure.
+ * Announce one `recover()` result (forge-mfv5.1.47). Every result was parked in
+ * failed/ — none is re-dispatched and none is cleaned up: a stranded run's
+ * branch, worktree and `.forge/` scratch are the operator's to resume (D-06).
+ * Each stranded manifest gets a `recovery.stranded-classified` event in its own
+ * cycle log naming the reason, the operator-stop flag and the last cycle event.
  */
-export async function announceRecovery(r: RecoveryResult, paths: QueuePaths, cfg: NotifyConfig): Promise<void> {
+export async function announceRecovery(r: RecoveryResult, paths: QueuePaths, cfg: NotifyConfig, logsRoot: string): Promise<void> {
   const refused = r.reason === 'worktree-path-refused';
-  if (!refused) cleanupRecoveredWorktrees(r.recovered, paths);
+  for (const c of r.classified) emitStrandedClassified(c, paths, logsRoot);
   await notify(
     {
-      type: refused ? 'failed' : 'recovered',
-      title: refused ? `Refused ${r.recovered.length} manifest(s): worktree_path not the initiative's own` : `Recovered ${r.recovered.length} initiative(s)`,
-      body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}`,
+      type: 'failed',
+      title: refused
+        ? `Refused ${r.recovered.length} manifest(s): worktree_path not the initiative's own`
+        : `Parked ${r.recovered.length} stranded run(s) in failed/ — needs operator`,
+      body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}. ${refused ? '' : 'Resume or requeue from the initiative card; nothing was re-run or cleaned up.'}`.trim(),
     },
     cfg,
   );
 }
 
-/**
- * Best-effort cleanup of orphaned worktrees + scratch branches for a set of
- * filenames recovered to `pending/`. Reads each recovered manifest to extract
- * `worktree_path` (annotated at claim time) and `project_repo_path`, then
- * spawns `worktree.cleanup()` against the corresponding handle. Idempotent —
- * a worktree that no longer exists is fine. Shared by `runRecoverySweep`
- * above and scheduler.ts's own startup recovery sweep (which is NOT
- * try/catch-wrapped like the interval version — a startup failure should be
- * loud).
- */
-export function cleanupRecoveredWorktrees(filenames: string[], paths: QueuePaths): void {
-  for (const filename of filenames) {
-    const recoveredPath = join(paths.pending, filename);
-    if (!existsSync(recoveredPath)) continue;
-    try {
-      const m = parseManifestFile(recoveredPath);
-      if (!m || !m.worktree_path) continue;
-      // forge-nk1y.20: cleanup is `git worktree remove --force` + `branch -D` on what the
-      // manifest names; only the initiative's own `_worktrees/<id>` is cleaned.
-      const refusal = initiativeWorktreeRefusal(m.worktree_path, {
-        forgeRoot: dirname(paths.root),
-        initiativeId: m.initiative_id,
-      });
-      if (refusal !== null) {
-        console.error(`[serve] worktree-path.refused initiative=${m.initiative_id} reason=${refusal} — recovery cleanup skipped`);
-        // The event is keyed by the manifest FILE stem (a directory-entry name), never the manifest's own id text.
-        const stem = filename.replace(/\.md$/, '');
-        if (isSafeSegment(stem)) emitOrchestratorEvent(join(dirname(paths.root), '_logs'), stem, 'error', 'worktree-path.refused', { reason: refusal });
-        continue;
-      }
-      worktree.cleanup({
-        path: m.worktree_path,
-        branch: `forge/${m.initiative_id}`,
-        projectRepoPath: m.project_repo_path,
-      });
-    } catch {
-      /* malformed manifest or git error — non-fatal */
-    }
+function emitStrandedClassified(c: StrandedClassification, paths: QueuePaths, logsRoot: string): void {
+  const logId = c.cycleId !== null && isSafeSegment(c.cycleId) ? c.cycleId : c.initiativeId;
+  if (!isSafeSegment(logId)) {
+    console.error(`[serve] recovery.stranded-classified not logged: unsafe log id for ${c.filename}`);
+    return;
   }
+  createLogger(logId, logsRoot).emit({
+    initiative_id: c.initiativeId,
+    phase: 'orchestrator',
+    skill: 'scheduler',
+    event_type: 'error',
+    input_refs: [join(paths.failed, c.filename)],
+    output_refs: [],
+    message: 'recovery.stranded-classified',
+    metadata: {
+      reason: c.reason,
+      stop_flag: c.stopFlag,
+      heartbeat_age_ms: c.heartbeatAgeMs,
+      resume_from: c.resumeFrom,
+      last_event: lastCycleEvent(join(logsRoot, logId, 'events.jsonl')),
+      queue_state: 'failed',
+      needs: 'operator',
+    },
+  });
 }
 
-/**
- * Manifest read for cleanup hot-path. Returns null if the frontmatter is
- * malformed or required fields are missing.
- */
-function parseManifestFile(
-  manifestPath: string,
-): { initiative_id: string; project_repo_path: string; worktree_path?: string } | null {
-  try {
-    const m = parseFullManifest(readFileSync(manifestPath, 'utf8'));
-    if (!m.initiative_id || !m.project_repo_path) return null;
-    return {
-      initiative_id: m.initiative_id,
-      project_repo_path: m.project_repo_path,
-      worktree_path: m.worktree_path,
-    };
-  } catch {
-    return null;
+/** The last parseable event of a cycle log, or null when there is none to read. */
+function lastCycleEvent(logPath: string): { message: string; phase: string | null; at: string | null } | null {
+  if (!existsSync(logPath)) return null;
+  const lines = readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const e = JSON.parse(lines[i]!) as { message?: unknown; phase?: unknown; started_at?: unknown };
+      if (typeof e.message !== 'string') continue;
+      return { message: e.message, phase: typeof e.phase === 'string' ? e.phase : null, at: typeof e.started_at === 'string' ? e.started_at : null };
+    } catch {
+      /* a torn last line (the SIGKILL) — read the one before it */
+    }
   }
+  return null;
 }

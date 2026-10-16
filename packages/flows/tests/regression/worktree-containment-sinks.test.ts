@@ -18,7 +18,6 @@ import { join } from 'node:path';
 
 import { serializeManifest, type InitiativeManifest } from '../../manifest.ts';
 import { getPaths, recover } from '../../queue.ts';
-import { cleanupRecoveredWorktrees } from '../../scheduler-sweeps.ts';
 import { DEVELOP_FLOW_ID, enqueueFlowRun } from '../../enqueue-flow-run.ts';
 import { recoveryInspect } from '../../bridge-recovery.ts';
 
@@ -71,63 +70,6 @@ function seed(w: World, state: string, m: InitiativeManifest): void {
   writeFileSync(join(dir, `${m.initiative_id}.md`), serializeManifest(m));
 }
 
-/** A REAL linked worktree of `w.repo` on branch forge/<ID> at `at`. */
-function linkedWorktree(w: World, at: string): void {
-  mkdirSync(join(at, '..'), { recursive: true });
-  git(w.repo, ['worktree', 'add', '-q', '-b', `forge/${ID}`, at]);
-  writeFileSync(join(at, 'SENTINEL'), 'real target');
-}
-
-const branchExists = (w: World): boolean => git(w.repo, ['branch', '--list', `forge/${ID}`]).includes(`forge/${ID}`);
-
-// ---------------------------------------------------------------------------
-// scheduler-sweeps: cleanupRecoveredWorktrees  (git worktree remove --force + branch -D)
-// ---------------------------------------------------------------------------
-
-for (const [label, where] of [
-  ['an in-place worktree under projects/', (w: World) => join(w.forgeRoot, 'projects', 'demo-inplace', ID)],
-  ['a worktree entirely outside the forge root', (w: World) => join(w.outside, 'wt')],
-] as const) {
-  test(`cleanupRecoveredWorktrees: a worktree_path naming ${label} is REFUSED — no worktree remove, no branch -D, a named refusal`, (t) => {
-    withWorld((w) => {
-      const wt = where(w);
-      linkedWorktree(w, wt);
-      seed(w, 'pending', manifest(w, wt));
-      const errors = t.mock.method(console, 'error', () => {});
-
-      cleanupRecoveredWorktrees([`${ID}.md`], getPaths(w.queueRoot));
-
-      assert.ok(existsSync(join(wt, 'SENTINEL')), 'the uncontained directory is untouched');
-      assert.ok(branchExists(w), 'the branch was not deleted');
-      const logged = errors.mock.calls.map((c) => c.arguments.join(' ')).join('\n');
-      assert.match(logged, /worktree-path\.refused/);
-      assert.match(logged, new RegExp(ID));
-      assert.match(logged, /not-under-forge-worktrees/);
-      assert.ok(!logged.includes(w.base), 'the refusal never echoes a resolved path');
-
-      const events = readFileSync(join(w.forgeRoot, '_logs', ID, 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-      const refused = events.filter((e) => e.message === 'worktree-path.refused');
-      assert.equal(refused.length, 1, 'exactly one JSONL refusal event for the initiative');
-      assert.equal(refused[0].initiative_id, ID);
-      assert.equal(refused[0].metadata.reason, 'not-under-forge-worktrees');
-      assert.ok(!JSON.stringify(refused[0]).includes(w.base), 'the event never carries a resolved path');
-    });
-  });
-}
-
-test('cleanupRecoveredWorktrees: control — the initiative\'s own _worktrees/<id> IS cleaned up (worktree removed, branch deleted)', () => {
-  withWorld((w) => {
-    const wt = join(w.forgeRoot, '_worktrees', ID);
-    linkedWorktree(w, wt);
-    seed(w, 'pending', manifest(w, wt));
-
-    cleanupRecoveredWorktrees([`${ID}.md`], getPaths(w.queueRoot));
-
-    assert.ok(!existsSync(wt), 'the contained worktree was removed');
-    assert.ok(!branchExists(w), 'its branch was deleted');
-  });
-});
-
 // ---------------------------------------------------------------------------
 // queue: recover  (existence probe on the manifest's worktree_path)
 // ---------------------------------------------------------------------------
@@ -148,7 +90,7 @@ test('recover: an uncontained worktree_path is never probed and the manifest goe
     });
 
     assert.deepEqual(probed, [], 'the foreign path never reached the probe');
-    assert.deepEqual(out, [{ recovered: [`${ID}.md`], reason: 'worktree-path-refused' }]);
+    assert.deepEqual(out, [{ recovered: [`${ID}.md`], reason: 'worktree-path-refused', classified: [] }]);
     assert.ok(existsSync(join(w.queueRoot, 'failed', `${ID}.md`)), 'parked in failed/');
     assert.ok(!existsSync(join(w.queueRoot, 'pending', `${ID}.md`)), 'NOT re-dispatchable from pending/');
     assert.ok(!existsSync(join(w.queueRoot, 'in-flight', `${ID}.md.heartbeat`)), 'the heartbeat left with it');

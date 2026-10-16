@@ -3,7 +3,7 @@
  *   - claim() atomically renames pending → in-flight
  *   - heartbeat is written
  *   - moveTo() advances to ready-for-review / failed / done
- *   - recover() returns stale-heartbeat items to pending
+ *   - recover() classifies stale-heartbeat items into failed/ (forge-mfv5.1.47)
  */
 
 import { test } from 'node:test';
@@ -112,7 +112,7 @@ test('queue: promoteMergedToDone moves merged/ → done/ (the second terminal mo
   }
 });
 
-test('queue: recover returns stale-heartbeat items to pending', () => {
+test('queue: recover classifies stale-heartbeat items into failed/ — never back to pending (forge-mfv5.1.47)', () => {
   const { dir, paths } = mkQueue();
   try {
     const filename = 'INIT-stale.md';
@@ -132,7 +132,9 @@ test('queue: recover returns stale-heartbeat items to pending', () => {
     assert.equal(result.length, 1);
     assert.equal(result[0].reason, 'stale-heartbeat');
     assert.deepEqual(result[0].recovered, [filename]);
-    assert.ok(existsSync(join(paths.pending, filename)), 'item back in pending');
+    assert.ok(existsSync(join(paths.failed, filename)), 'item parked in failed/');
+    assert.ok(!existsSync(join(paths.pending, filename)), 'never back in pending/ (no re-dispatch)');
+    assert.equal(result[0].classified[0]?.reason, 'stale-heartbeat');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
