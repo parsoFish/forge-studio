@@ -30,7 +30,12 @@ export function renderDemoPlannerPrompt(input: DemoPlannerInput): string {
     `Routes (screenshot):\n${list(input.allowed.routes)}`,
     '',
     ...(input.revise
-      ? [`## Revise: your last plan was sent back\n\nWhy: ${input.revise.reason}\n\n${input.revise.details.map((d) => `- ${d}`).join('\n')}\n`, 'Choose means that avoid this, from the allowed means only.', '']
+      ? [
+          `## Revise: your last plan was sent back\n\nWhy: ${input.revise.reason}\n\n${input.revise.details.map((d) => `- ${d}`).join('\n')}\n`,
+          ...(input.revise.invalidPlan !== undefined ? [`The refused plan:\n\n\`\`\`json\n${input.revise.invalidPlan}\n\`\`\`\n`] : []),
+          'Choose means that avoid this, from the allowed means only.',
+          '',
+        ]
       : []),
     'Reply with the plan JSON only.',
   ].join('\n');

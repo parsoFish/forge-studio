@@ -20,7 +20,10 @@ import { serializeManifest } from '@forge/flows';
 import type { AgentDefinition, InitiativeManifest } from '@forge/contracts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
+import { classifyCycleFailure } from '@forge/agents';
+
 import { runIntegrateBand } from '../../phases/integrate.ts';
+import { integrateDeliveryFailure } from '../../phases/executor-table.ts';
 import type { DemoPlannerInput, DemoPlannerOutcome, DemoPlannerPort } from '../../demo-planner-port.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 
@@ -30,6 +33,7 @@ const CLI_CMD = 'git --version';
 const NARRATIVE = 'Platform admins can now read the whole org back in one call and see what the last apply changed.';
 
 let root: string;
+let logsDir: string;
 let events: EventLogEntry[];
 const logger = {
   emit(entry: Partial<EventLogEntry>): EventLogEntry {
@@ -37,6 +41,8 @@ const logger = {
     events.push(full);
     return full;
   },
+  // The cycle's own log dir is a tmp dir beside the worktree, never the repo's _logs.
+  get logFilePath(): string { return join(logsDir, 'events.jsonl'); },
 } as unknown as EventLogger;
 const DEF = { slug: 'demo-agent', path: '/nonexistent/SKILL.md' } as unknown as AgentDefinition;
 const GATES = [{ gate: 'local' as const, cmd: ['npm', 'test'], ok: true, outputTail: '12 passing' }];
@@ -96,6 +102,7 @@ const demoDir = (): string => join(root, 'demo', ID);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'forge-demo-planner-'));
+  logsDir = mkdtempSync(join(tmpdir(), 'forge-demo-planner-logs-'));
   events = [];
   git(['init', '-q', '-b', 'main']);
   git(['config', 'user.email', 'test@forge.local']);
@@ -116,7 +123,10 @@ beforeEach(() => {
   writeWorkItem('WI-2', 'the org is read', 'As a platform admin I want to read the org back after an apply.');
 });
 
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true });
+  rmSync(logsDir, { recursive: true, force: true });
+});
 
 describe('D-45: the planner picks the form and the narrative; the orchestrator validates, captures and compares', () => {
   it('one API AC + one CLI AC → demo.json carries two forms + the narrative; capture ran under the nonce; the plan carries no output', async () => {
@@ -233,6 +243,22 @@ describe('nk1y.42: an unproducible plan gets one revise turn, told why', () => {
     assert.ok(!existsSync(join(root, 'capture-ran')));
   });
 
+  it('mfv5.1.41: a call has ONE more turn — a repaired plan that is unproducible is not revised again (no third call)', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan('curl --version'), plan(GW), plan(CLI_CMD)], seen));
+    assert.equal(seen.length, 2);
+    assert.match(seen[1]!.revise!.reason, /failed validation/);
+    assert.equal(result.status === 'failed' && result.reason, 'tooling-unavailable');
+  });
+
+  it('mfv5.1.41: an unproducible plan whose revise is refused fails by name with the recovery act, no third call', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(GW), plan('curl --version'), plan(CLI_CMD)], seen));
+    assert.equal(seen.length, 2);
+    assert.equal(result.status === 'failed' && result.reason, 'plan-invalid');
+    assert.match(result.status === 'failed' ? result.detail : '', /^Demo plan invalid \(Resume from integrate re-runs the planner\): plan-invalid:checkpoints\[0\]\.command/);
+  });
+
   it('a producible plan is never sent back', async () => {
     const seen: DemoPlannerInput[] = [];
     const result = await run(sequence([plan(CLI_CMD)], seen));
@@ -310,5 +336,100 @@ describe('nk1y.43: a no-change capture gets one revise turn with the identical o
     assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
     assert.equal(seen.length, 1);
     assert.equal(readFileSync(join(root, 'capture-count'), 'utf8'), '1');
+  });
+});
+
+// forge-mfv5.1.41 (D-49 shape on D-45): a plan the validator refuses gets exactly ONE repair turn, fed the
+// validator's errors verbatim, the declared means and the invalid plan; a second refusal fails the band by
+// name with both outputs and the recovery act. The raw invalid plan is persisted beside the cycle's events.
+describe('mfv5.1.41: a refused plan gets one error-fed repair turn, then fails by name', () => {
+  // The I3b shape: the planner narrows a declared AC span to one file under it.
+  const NARROWED = `${CLI_CMD} --build-options`;
+  const rawOf = (command: string) => ({ narrative: NARRATIVE, checkpoints: [{ form: 'cli-before-after', caption: 'c', acRef: 'WI-1', command }] });
+  const plan = (command: string, costUsd = 0.18): DemoPlannerOutcome => ({ ok: true, costUsd, raw: rawOf(command) });
+  function sequence(outcomes: DemoPlannerOutcome[], seen: DemoPlannerInput[]): DemoPlannerPort {
+    return { plan: async (_def, input) => { seen.push(input); return outcomes[Math.min(seen.length - 1, outcomes.length - 1)]!; } };
+  }
+  const named = (m: string): Array<{ metadata: Record<string, unknown>; cost_usd?: number }> =>
+    events.filter((e) => (e as { message?: string }).message === m) as unknown as Array<{ metadata: Record<string, unknown>; cost_usd?: number }>;
+
+  it('invalid then valid: the repair turn sees the error verbatim, the means and the invalid plan; capture proceeds', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(NARROWED), plan(CLI_CMD)], seen));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0]!.revise, undefined);
+    const error = `plan-invalid:checkpoints[0].command: ${JSON.stringify(NARROWED)} is not a declared means (demoMeans or an acceptance criterion's span)`;
+    assert.match(seen[1]!.revise!.reason, /failed validation/);
+    assert.deepEqual(seen[1]!.revise!.details, [error]);
+    assert.deepEqual(JSON.parse(seen[1]!.revise!.invalidPlan!), rawOf(NARROWED));
+    assert.deepEqual(seen[1]!.allowed, seen[0]!.allowed, 'the repair turn carries the full declared means');
+    const repair = named('demo.plan.repair-turn');
+    assert.equal(repair.length, 1);
+    assert.deepEqual(repair[0]!.metadata.errors, [error]);
+    // The raw refused plan is on disk beside the cycle's events and named in the event.
+    const invalid = named('demo.plan.invalid');
+    assert.equal(invalid.length, 1);
+    assert.equal(invalid[0]!.metadata.attempt, 1);
+    assert.equal(invalid[0]!.metadata.raw_plan_path, join(logsDir, 'demo-plan-invalid-1.json'));
+    assert.deepEqual(JSON.parse(readFileSync(join(logsDir, 'demo-plan-invalid-1.json'), 'utf8')), rawOf(NARROWED));
+    // Both turns are metered.
+    assert.equal(invalid[0]!.cost_usd, 0.18);
+    assert.equal(named('demo.plan.validated')[0]!.cost_usd, 0.18);
+    assert.ok(existsSync(join(root, 'capture-ran')));
+    const demo = JSON.parse(readFileSync(join(demoDir(), 'demo.json'), 'utf8'));
+    assert.equal(demo.checkpoints[0].command, CLI_CMD);
+  });
+
+  it('invalid twice: fails by name with BOTH validator outputs and the recovery act — no third call, no capture', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(NARROWED), plan('curl --version'), plan(CLI_CMD)], seen));
+    assert.equal(seen.length, 2, 'exactly one repair turn');
+    assert.equal(result.status === 'failed' && result.reason, 'plan-invalid');
+    const detail = result.status === 'failed' ? result.detail : '';
+    assert.match(detail, /^Demo plan invalid after a repair turn \(Resume from integrate re-runs the planner\): plan-invalid:checkpoints\[0\]\.command: "curl --version" is not a declared means/);
+    assert.match(detail, /first plan: plan-invalid:checkpoints\[0\]\.command: "git --version --build-options" is not a declared means/);
+    const invalid = named('demo.plan.invalid');
+    assert.deepEqual(invalid.map((e) => e.metadata.attempt), [1, 2]);
+    assert.ok(existsSync(join(logsDir, 'demo-plan-invalid-2.json')));
+    assert.ok(!existsSync(join(root, 'capture-ran')));
+    assert.ok(!existsSync(join(demoDir(), 'demo.json')));
+    // The run page's failure note is the classifier's reason over the executor's own throw: it names the
+    // band's headline and the recovery act, never a bare "integrate band failed".
+    const thrown = integrateDeliveryFailure('plan-invalid', detail);
+    const c = classifyCycleFailure([{ ...events[0]!, phase: 'orchestrator', skill: 'cycle', event_type: 'error', message: thrown }]);
+    assert.equal(c.kind, 'terminal');
+    assert.match(c.reason, /integrate band failed \(plan-invalid\): Demo plan invalid after a repair turn \(Resume from integrate re-runs the planner\): plan-invalid:checkpoints\[0\]\.command/);
+    // A long two-refusal detail is bounded on the run page, and the headline and the recovery act survive it.
+    const long = classifyCycleFailure([{ ...events[0]!, phase: 'orchestrator', skill: 'cycle', event_type: 'error', message: integrateDeliveryFailure('plan-invalid', `${detail} ${'x'.repeat(5000)}`) }]);
+    assert.ok(long.reason.length < 1400, `bounded: ${long.reason.length}`);
+    assert.match(long.reason, /Demo plan invalid after a repair turn \(Resume from integrate re-runs the planner\)/);
+  });
+
+  it('a refused plan whose record cannot be written is named, and the repair turn still runs', async () => {
+    rmSync(logsDir, { recursive: true, force: true });
+    writeFileSync(logsDir, 'a file where the log dir should be');
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(NARROWED), plan(CLI_CMD)], seen));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 2);
+    assert.equal(named('demo.plan.raw-persist-failed').length, 1);
+    assert.equal(named('demo.plan.invalid')[0]!.metadata.raw_plan_path, null);
+  });
+
+  it('a valid first plan gets no repair turn (control)', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(CLI_CMD)], seen));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 1);
+    assert.equal(named('demo.plan.repair-turn').length, 0);
+    assert.equal(named('demo.plan.invalid').length, 0);
+  });
+
+  it('D-45 untouched: the repaired plan is validated the same way — an undeclared command is still refused', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(NARROWED), plan(NARROWED)], seen));
+    assert.equal(result.status === 'failed' && result.reason, 'plan-invalid');
+    assert.match(result.status === 'failed' ? result.detail : '', /is not a declared means/);
   });
 });

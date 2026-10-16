@@ -5,8 +5,8 @@
  * captures and compares the evidence itself (D-15). A factory that wires none keeps the derived checkpoints.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { extractDrivableCommand, type AgentDefinition } from '@forge/contracts';
 import { preflightDemoCommands, projectRunPrefixes, worktreeDemoDir } from '@forge/flows';
@@ -25,8 +25,9 @@ export type DemoPlannerInput = {
   /** A work item's body carries its user story. */
   workItems: ReadonlyArray<{ id: string; title: string; story: string }>;
   acceptanceCriteria: readonly string[]; diffStat: string; changedFiles: readonly string[]; allowed: AllowedDemoMeans;
-  /** Set on the ONE revise turn: why the previous plan was sent back, with the facts that sent it. */
-  revise?: { reason: string; details: readonly string[] };
+  /** Set on the ONE revise turn: why the previous plan was sent back, with the facts that sent it;
+   *  on a repair turn (forge-mfv5.1.41) also the refused plan itself, as JSON. */
+  revise?: { reason: string; details: readonly string[]; invalidPlan?: string };
 };
 export type DemoPlannerOutcome =
   | { ok: true; raw: unknown; costUsd: number }
@@ -63,16 +64,20 @@ export async function planDemo(
     workItems: d.workItems.map((wi) => ({ id: wi.id, title: wi.title, story: wi.story ?? '' })),
     acceptanceCriteria: d.acceptanceCriteria.map(renderAcceptanceCriterion), diffStat: d.diffStat, changedFiles: d.changedFiles, allowed,
   };
-  const first = await askAndValidate(planner, revise ? { ...base, revise } : base, ctx.logger, emit);
+  // forge-mfv5.1.41 (D-49 shape): ONE more turn per planning call — the repair of a refused plan, or
+  // nk1y.42's revise of an unproducible one — so a call never asks the planner a third time.
+  const repair = { used: false };
+  const first = await askRepairing(planner, revise ? { ...base, revise } : base, ctx.logger, emit, repair);
   if (!first.ok) return first;
   let plan = first.plan;
   // forge-nk1y.42: a command that would not run the tree under capture is sent
   // back ONCE, with the refusal by name. A plan still refused after it reaches
   // the band's own preflight, which fails `tooling-unavailable` by name.
   const refused = unproducible(plan, input.worktreePath);
-  if (refused.length > 0 && !revise) {
+  if (refused.length > 0 && !revise && !repair.used) {
+    repair.used = true;
     emit('demo.plan.revise', { reason: 'unproducible', problems: refused });
-    const second = await askAndValidate(planner, { ...base, revise: { reason: 'checkpoint command(s) not producible from the tree under capture', details: refused } }, ctx.logger, emit);
+    const second = await askRepairing(planner, { ...base, revise: { reason: 'checkpoint command(s) not producible from the tree under capture', details: refused } }, ctx.logger, emit, repair);
     if (!second.ok) return second;
     plan = second.plan;
   }
@@ -90,12 +95,71 @@ function unproducible(plan: DemoPlan, worktreePath: string): string[] {
   return preflightDemoCommands(commands, worktreePath, { runPrefixes: prefixes.runPrefixes }).problems;
 }
 
+/** The operator's act after a refusal the repair turn could not fix. */
+const RECOVERY = 'Resume from integrate re-runs the planner';
+
+/** A refused plan shown back to the planner is bounded: the validator caps its rows, this caps the echo. */
+const INVALID_PLAN_MAX_CHARS = 8000;
+
+type Asked = { ok: true; plan: DemoPlan } | { ok: false; reason: 'plan-failed' | 'plan-invalid'; detail: string; errors?: string[]; raw?: unknown };
+
+/**
+ * Ask; on a refused plan spend the call's ONE repair turn (forge-mfv5.1.41, D-49 shape): the planner is shown
+ * the validator's errors verbatim, the refused plan and — as on every ask — the declared means, and its answer
+ * is validated the same way (D-45 unchanged). A second refusal fails by name with both outputs and the recovery act.
+ */
+async function askRepairing(
+  planner: NonNullable<IntegrateBandInput['planner']>,
+  plannerInput: DemoPlannerInput,
+  logger: EventLogger,
+  emit: Emit,
+  repair: { used: boolean },
+): Promise<Asked> {
+  const first = await askAndValidate(planner, plannerInput, logger, emit, repair.used ? 2 : 1);
+  if (first.ok || first.reason !== 'plan-invalid') return first;
+  if (repair.used) return { ok: false, reason: 'plan-invalid', detail: `Demo plan invalid (${RECOVERY}): ${first.detail}` };
+  repair.used = true;
+  const errors = first.errors ?? [];
+  emit('demo.plan.repair-turn', { errors });
+  const shownPlan = JSON.stringify(first.raw, null, 2) ?? String(first.raw);
+  const invalidPlan = shownPlan.length > INVALID_PLAN_MAX_CHARS ? `${shownPlan.slice(0, INVALID_PLAN_MAX_CHARS)}\n… (truncated)` : shownPlan;
+  const earlier = plannerInput.revise ? ` (it was itself a revise: ${plannerInput.revise.reason})` : '';
+  const second = await askAndValidate(planner, {
+    ...plannerInput,
+    revise: { reason: `your last plan failed validation${earlier} — fix every row below, naming only the allowed means verbatim`, details: errors, invalidPlan },
+  }, logger, emit, 2);
+  if (second.ok || second.reason !== 'plan-invalid') return second;
+  return {
+    ok: false, reason: 'plan-invalid',
+    // The headline and the recovery act lead: the run page shows a bounded prefix of this.
+    detail: `Demo plan invalid after a repair turn (${RECOVERY}): ${second.detail} (first plan: ${first.detail})`,
+  };
+}
+
+/** Write the refused plan beside the cycle's events so a refusal is diagnosable; a failed write is named, never silent. */
+function persistInvalidPlan(raw: unknown, logger: EventLogger, attempt: number, emit: Emit): string | null {
+  try {
+    const dir = dirname(logger.logFilePath);
+    mkdirSync(dir, { recursive: true });
+    // A later planning call in the same cycle (the band's no-change revise) never overwrites an earlier record.
+    let n = attempt;
+    while (existsSync(join(dir, `demo-plan-invalid-${n}.json`))) n += 1;
+    const path = join(dir, `demo-plan-invalid-${n}.json`);
+    writeFileSync(path, `${JSON.stringify(raw, null, 2) ?? String(raw)}\n`);
+    return path;
+  } catch (err) {
+    emit('demo.plan.raw-persist-failed', { attempt, detail: err instanceof Error ? err.message : String(err) }, { event_type: 'error' });
+    return null;
+  }
+}
+
 async function askAndValidate(
   planner: NonNullable<IntegrateBandInput['planner']>,
   plannerInput: DemoPlannerInput,
   logger: EventLogger,
   emit: Emit,
-): Promise<{ ok: true; plan: DemoPlan } | { ok: false; reason: 'plan-failed' | 'plan-invalid'; detail: string }> {
+  attempt: number,
+): Promise<Asked> {
   const out = await planner.port.plan(planner.def, plannerInput, logger, planner.signal);
   const cost = out.costUsd !== undefined ? { cost_usd: out.costUsd } : {};
   if (!out.ok) {
@@ -104,8 +168,9 @@ async function askAndValidate(
   }
   const v = validateDemoPlan(out.raw, plannerInput.allowed);
   if (!v.ok) {
-    emit('demo.plan.invalid', { errors: v.errors }, { event_type: 'error', ...cost });
-    return { ok: false, reason: 'plan-invalid', detail: v.errors.join('; ') };
+    const rawPlanPath = persistInvalidPlan(out.raw, logger, attempt, emit);
+    emit('demo.plan.invalid', { errors: v.errors, attempt, raw_plan_path: rawPlanPath }, { event_type: 'error', ...cost });
+    return { ok: false, reason: 'plan-invalid', detail: v.errors.join('; '), errors: v.errors, raw: out.raw };
   }
   emit('demo.plan.validated', { forms: v.plan.checkpoints.map((c) => c.form), ...(plannerInput.revise ? { revise: true } : {}) }, cost);
   return { ok: true, plan: v.plan };
