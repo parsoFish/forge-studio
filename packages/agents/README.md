@@ -17,7 +17,7 @@ rather than importing what they need.
 | run one agent | `runAgent` · `isSafeRunId` · `resolveOneShotBudgetUsd` · `dispatchAgentRun` · `findSessionProject` |
 | dispatch terminus recording | `installDispatchSignalGuard` · `recordDispatchTerminal` |
 | bands | `resolveBandGuard` · `BAND_GUARD_IDS` · `PLATFORM_GUARD_IDS` · `BAND_CANONICAL_SLUG` · `runBandAgentStandalone` · `isStandaloneBandAgent` · `dispatchStandaloneBand` |
-| the Ralph loop | `runRalphLoop` · `makeQualityGateFromCmd` · `resolveGateTimeoutMs` |
+| the Ralph loop | `runRalphLoop` · `makeQualityGateFromCmd` · `parseGateTestSummary` · `resolveGateTimeoutMs` |
 | the Agent kind | `loadAgentDefinition` · `listAgentDefinitions` · `listStarterAgents` · `isStudioAgent` · `isUnfilteredStudioAgent` · `deriveAgentSpec` · `agentCapabilityDescriptor` · `serializeAgentDefinition` · `PHASE_EXECUTOR_KINDS` |
 | the reverse index | `agentUsageIndex` · `agentsUsing` |
 | adapters | `getAdapter` · `resolveSdkId` · `isSdkAvailable` |
