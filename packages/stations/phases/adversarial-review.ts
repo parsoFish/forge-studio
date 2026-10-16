@@ -46,7 +46,7 @@ import type { AgentDefinition } from '@forge/contracts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile, mergeSplitRecords, diffSha, readChunkRecord, writeChunkRecord,
 } from './review-chunks.ts';
-import { criterionCommands, deliveredSince, recordedDeliveries, runCriterion } from './review-truth.ts';
+import { criterionCommands, deliveredSince, escalateAcFindings, recordedDeliveries, runCriterion } from './review-truth.ts';
 import {
   buildAdversarialReviewSystemPrompt,
   renderAdversarialReviewUserPrompt,
@@ -721,8 +721,10 @@ async function reviewInitiative(
     // Band 5 — merge into the ONE artifact the verdict gate reads, validate the
     // MERGED record against the whole initiative's criteria (each chunk was only
     // validated against its own), persist, scrub.
+    const mergedChunks = mergeChunkRecords(chunkRecords, unjudgedCriteria);
     const merged: ReviewFindingsRecord = {
-      ...mergeChunkRecords(chunkRecords, unjudgedCriteria),
+      ...mergedChunks,
+      findings: escalateAcFindings(mergedChunks.findings, acceptanceCriteria), // forge-mfv5.1.43
       ...(scope.notReviewed.length > 0 ? { notReviewed: scope.notReviewed } : {}),
     };
     const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria, scope: 'the initiative' });
