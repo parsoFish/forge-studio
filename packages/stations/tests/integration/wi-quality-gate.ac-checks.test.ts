@@ -155,11 +155,11 @@ test('close: each check logs its own gate.ac-* event naming the criterion, and f
   writeFileSync(spec, serializeWorkItem({ ...wi(acs), body: '# WI-14\n\n- [ ] AC1: GIVEN the CLI\n- [ ] AC1b: GIVEN GW_CALLER_TOKEN unset\n' }));
   const { logger, emitted } = recordingLogger();
   let satisfied: readonly string[] = [];
-  // The wiring `developer-loop.ts` uses: onAcCheck → emitGateEvent(…, ac); onChecksJudged → the ticked set.
+  // The wiring `developer-loop.ts` uses: onRun → emitGateEvent (a check's info carries `ac`); onChecksJudged → the ticked set.
   const gateFor = () => buildWiQualityGate({
     worktreePath: dir, effective: GATE, accGate: undefined, wi: wi(acs), requiredPathsSource: 'files-in-scope',
-    ciGateUnsetEnv: undefined, localGateTimeoutMs: 60_000, initiativeId: 'INIT-2026-10-11-i3b-self-service', onRun: () => {},
-    onAcCheck: ({ label, expect, info }) => emitGateEvent(logger, 'INIT-2026-10-11-i3b-self-service', 'p', 'WI-14', info, undefined, { label, expect }),
+    ciGateUnsetEnv: undefined, localGateTimeoutMs: 60_000, initiativeId: 'INIT-2026-10-11-i3b-self-service',
+    onRun: (info) => { if (info.ac) emitGateEvent(logger, 'INIT-2026-10-11-i3b-self-service', 'p', 'WI-14', info); },
     onChecksJudged: (s) => { satisfied = s; },
   });
   assert.equal(gateFor()({ iteration: 1 }), false);

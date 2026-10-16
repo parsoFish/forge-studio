@@ -27,15 +27,16 @@ export type WiQualityGateArgs = {
    *  initiatives running in parallel never collide over, or sweep, each
    *  other's live resources. */
   initiativeId: string;
-  onRun: (info: GateRunInfo) => void;
-  /** forge-mfv5.1.43: each acceptance criterion's check, judged (`info.passed` = satisfied). */
+  onRun: (info: AcGateRunInfo) => void;
+  /** forge-mfv5.1.43: each acceptance criterion's check, judged — also handed to `onRun` (its `info.ac` names the criterion). */
   onAcCheck?: (run: AcCheckRun) => void;
   /** forge-mfv5.1.43: after a gate pass, the labels whose checks were satisfied this run (all of them ⇔ the composite passed). */
   onChecksJudged?: (satisfied: readonly string[]) => void;
 };
 
 /** One acceptance check's run: `info` is the gate run with `passed` restated as "satisfied", and `command` labelled. */
-export type AcCheckRun = { label: string; expect: AcceptanceCheck['expect']; satisfied: boolean; info: GateRunInfo };
+export type AcCheckRun = { label: string; expect: AcceptanceCheck['expect']; satisfied: boolean; info: AcGateRunInfo };
+export type AcGateRunInfo = GateRunInfo & { ac?: { label: string; expect: AcceptanceCheck['expect'] } };
 
 /**
  * Build the per-WI quality-gate closure `runRalph`'s `LoopInput.qualityGate`
@@ -57,6 +58,7 @@ export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration:
     const satisfied: string[] = [];
     for (const { label, check } of checks) {
       const run = runAcCheck(args, label, check, ctx);
+      args.onRun(run.info);
       args.onAcCheck?.(run);
       if (!run.satisfied) break;
       satisfied.push(label);
@@ -69,18 +71,19 @@ export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration:
 function runAcCheck(args: WiQualityGateArgs, label: string, check: AcceptanceCheck, ctx?: { iteration: number }): AcCheckRun {
   const unsetEnv = [...(args.ciGateUnsetEnv ?? []), ...(check.unsetEnv ?? [])];
   const requiredEnv = [...(liveAcceptanceEnvFor(args.accGate, check.argv) ?? []), ...(check.requiresEnv ?? [])].filter((n) => !unsetEnv.includes(n));
-  let info: GateRunInfo | undefined;
-  makeQualityGateFromCmd(args.worktreePath, check.argv, (i) => { info = i; }, {
+  let got: GateRunInfo | undefined;
+  makeQualityGateFromCmd(args.worktreePath, check.argv, (i) => { got = i; }, {
     ...(requiredEnv.length > 0 ? { requiredEnv } : {}),
     ...(unsetEnv.length > 0 ? { unsetEnv } : {}),
     initiativeId: args.initiativeId,
     timeoutMs: resolveGateTimeoutMs(args.localGateTimeoutMs),
   })(ctx);
-  const ran = info ?? { passed: false, exitCode: -1, durationMs: 0, stdoutTail: '', stderrTail: '[forge] the check reported no run', command: check.argv.join(' '), errored: true };
+  const ran: GateRunInfo = got ?? { passed: false, exitCode: -1, durationMs: 0, stdoutTail: '', stderrTail: '[forge] the check reported no run', command: check.argv.join(' '), errored: true };
   const why = check.expect === 'pass' ? null : expectFailVerdict(ran);
   const satisfied = check.expect === 'pass' ? ran.passed : why === null;
   const stderrTail = why === null ? ran.stderrTail : `${ran.stderrTail}\n[forge ac-check] ${label} expected the check to FAIL: ${why}`;
-  return { label, expect: check.expect, satisfied, info: { ...ran, passed: satisfied, stderrTail, command: `[${label} expect ${check.expect}] ${ran.command}` } };
+  const info = { ...ran, passed: satisfied, stderrTail, command: `[${label} expect ${check.expect}] ${ran.command}`, ac: { label, expect: check.expect } };
+  return { label, expect: check.expect, satisfied, info };
 }
 
 /** Why an `expect: fail` run is NOT the falsifying failure it must be, or null: a real non-zero exit, and ≥1 test ran when a runner summary says so. */

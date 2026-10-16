@@ -90,14 +90,13 @@ export function emitGateEvent(
   initiativeId: string,
   parentEventId: string,
   workItemId: string,
-  info: GateRunInfo,
+  info: GateRunInfo & { ac?: { label: string; expect: 'pass' | 'fail' } }, // `ac`: forge-mfv5.1.43, an acceptance check's own `gate.ac-*` event
   // D-20: a code-fix UWI runs in the unifier phase wearing the dev role —
   // attribute its gate events to `unifier` so post-mortems don't mis-file them
   // under developer-loop. Defaults to the dev-loop's own phase/skill.
   attr: { phase: 'developer-loop' | 'unifier'; skill: string } = { phase: 'developer-loop', skill: 'developer-ralph' },
-  /** forge-mfv5.1.43: an acceptance criterion's check — its own `gate.ac-*` event naming the criterion. */
-  ac?: { label: string; expect: 'pass' | 'fail' },
 ): void {
+  const ac = info.ac;
   // 2026-05-25: iter-0 gate fails are EXPECTED (the L2 sharp-gate
   // check proves the gate isn't hollow before the agent has done any
   // work). Emit as `log` with `expected_fail: true` so the UI doesn't
