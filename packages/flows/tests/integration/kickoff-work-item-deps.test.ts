@@ -25,7 +25,7 @@ import { I2_INIT, I2_PLAN_LEAVES, plantI2Kickoff } from '../test-fixtures/kickof
 const noCoverage = (): string[] => [];
 const SOURCE: KickoffWorkItemSource = {
   summary: 'Live proof that gw apply --json resets before applying',
-  acceptanceCriteria: [{ given: 'a stray prefixed team', when: '`python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py` runs', then: 'the team is gone' }],
+  acceptanceCriteria: [{ given: 'a stray prefixed team', when: '`python3 -m pytest tests/acceptance/test_gw_reset_before_apply.py` runs', then: 'the team is gone' , check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' as const } }],
   qualityGateCmd: ['python3', '-m', 'pytest', 'tests/acceptance/test_gw_reset_before_apply.py'],
   filesInScope: ['tests/acceptance/test_gw_reset_before_apply.py'],
 };
