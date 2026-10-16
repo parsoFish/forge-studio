@@ -48,6 +48,8 @@ test('a malformed check is refused by name: shell chain, empty argv, bad expect,
   const errs = (c: unknown, id?: string) => acceptanceCheckErrors([{ given: 'g', when: 'w', then: 't', ...(id ? { id } : {}), check: c } as never]);
   assert.match(errs({ argv: ['bash', '-c', 'pytest && rm -rf x'], expect: 'pass' }).join(), /AC1.*ONE runnable command/);
   assert.match(errs({ argv: [], expect: 'pass' }).join(), /AC1.*argv/);
+  assert.match(errs({ argv: Array.from({ length: 65 }, () => 'x'), expect: 'pass' }).join(), /AC1: check\.argv must be 1\.\.64/);
+  assert.match(errs({ argv: ['pytest', 'x'.repeat(501)], expect: 'pass' }).join(), /at most 500 characters/);
   assert.match(errs({ argv: ['pytest'], expect: 'maybe' }).join(), /AC1.*expect must be pass \| fail/);
   assert.match(errs({ argv: ['pytest'], expect: 'fail', unsetEnv: ['gw token'] }).join(), /AC1.*unsetEnv/);
   assert.match(errs({ argv: ['pytest'], expect: 'pass' }, 'has space').join(), /id must match/);

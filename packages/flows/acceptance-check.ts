@@ -19,7 +19,7 @@ export function acLabel(ac: Pick<AcceptanceCriterion, 'id'>, index: number): str
 
 function checkErrors(label: string, c: Record<string, unknown>): string[] {
   const errors: string[] = [];
-  if (!strings(c.argv) || c.argv.length === 0) errors.push(`${label}: check.argv must be a non-empty array of non-empty strings`);
+  if (!strings(c.argv) || c.argv.length === 0 || c.argv.length > 64 || c.argv.some((t) => t.length > 500)) errors.push(`${label}: check.argv must be 1..64 non-empty strings of at most 500 characters`);
   else if (gateIsShellPipeline(c.argv)) errors.push(`${label}: check.argv must be ONE runnable command — not a shell pipeline or chain (bash -c "… | …", &&, ;)`);
   if (c.expect !== 'pass' && c.expect !== 'fail') errors.push(`${label}: check.expect must be pass | fail, got ${String(c.expect)}`);
   for (const k of ['unsetEnv', 'requiresEnv'] as const) {
