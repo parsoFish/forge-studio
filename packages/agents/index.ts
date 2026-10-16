@@ -53,6 +53,7 @@ export { runBandAgentStandalone, isStandaloneBandAgent, dispatchStandaloneBand }
 // ---- The Ralph loop and its stop conditions -------------------------------
 export { run as runRalphLoop } from './ralph/runner.ts';
 export { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from './ralph/stop-conditions.ts';
+export { parseGateTestSummary } from './ralph/gate-test-summary.ts';
 
 // ---- The Agent kind of the studio object model ----------------------------
 export {

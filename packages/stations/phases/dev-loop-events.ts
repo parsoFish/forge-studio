@@ -95,6 +95,8 @@ export function emitGateEvent(
   // attribute its gate events to `unifier` so post-mortems don't mis-file them
   // under developer-loop. Defaults to the dev-loop's own phase/skill.
   attr: { phase: 'developer-loop' | 'unifier'; skill: string } = { phase: 'developer-loop', skill: 'developer-ralph' },
+  /** forge-mfv5.1.43: an acceptance criterion's check — its own `gate.ac-*` event naming the criterion. */
+  ac?: { label: string; expect: 'pass' | 'fail' },
 ): void {
   // 2026-05-25: iter-0 gate fails are EXPECTED (the L2 sharp-gate
   // check proves the gate isn't hollow before the agent has done any
@@ -119,7 +121,9 @@ export function emitGateEvent(
     input_refs: [],
     output_refs: [],
     duration_ms: info.durationMs,
-    message: info.timedOut
+    message: ac
+      ? (info.passed ? 'gate.ac-pass' : 'gate.ac-fail')
+      : info.timedOut
       ? 'gate.timeout'
       : info.errored
         ? 'gate.errored'
@@ -140,6 +144,7 @@ export function emitGateEvent(
       ...(info.rejectReason ? { reject_reason: info.rejectReason } : {}),
       ...(info.iteration !== undefined ? { iteration: info.iteration } : {}),
       ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
+      ...(ac ? { acceptance_criterion: ac.label, check_expect: ac.expect } : {}),
     },
   });
 }

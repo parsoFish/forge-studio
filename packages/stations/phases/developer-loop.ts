@@ -659,6 +659,7 @@ export async function runDeveloperLoop(
     );
 
     let result: LoopResult | null = null;
+    let acsSatisfied: string[] = [];
     let runnerError: { kind: string; message: string } | undefined;
     // G3 (plan 2.3): remember the previous crash so classifyCrash can spot an
     // IDENTICAL repeat — the deterministic no-third-attempt rule.
@@ -672,6 +673,8 @@ export async function runDeveloperLoop(
         // re-review #1: captured by the gate's onRun each run; read by the
         // runner's gateErrored predicate to stop early on a broken gate.
         let lastGateErrored = false;
+        // forge-mfv5.1.43: the criteria whose checks passed on the gate's last pass — what forge ticks at close.
+        acsSatisfied = [];
         // forge-nk1y.35: the brief carries the gate's own output at the HEAD it judged.
         const gateFeedback = createGateFeedbackTracker({
           worktreePath: wiWorktree.path,
@@ -729,6 +732,12 @@ export async function runDeveloperLoop(
               // distinct gate.timeout event classifies as transient/environment
               // so the scheduler retries instead of failing the work as wrong.
               onRun: (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); gateFeedback.onRun(gateInfo); },
+              onAcCheck: ({ label, expect, satisfied, info }) => {
+                lastGateErrored = (info.errored ?? false) || (info.timedOut ?? false);
+                emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, info, undefined, { label, expect });
+                if (!satisfied) gateFeedback.onRun(info);
+              },
+              onChecksJudged: (satisfied) => { acsSatisfied = [...satisfied]; },
             });
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut
@@ -902,6 +911,7 @@ export async function runDeveloperLoop(
           wiBranch: wiWorktree.branch,
           workItemId: wi.work_item_id,
           specPath,
+          tickedAcs: acsSatisfied,
           startPointRef: wiBaseSha,
           wiWorktreePath: wiWorktree.path,
         }),

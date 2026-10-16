@@ -74,8 +74,8 @@ test('an operator-authored criterion with a prose WHEN and no check is refused n
 });
 
 test('labels: the declared id, else AC<n>', () => {
-  assert.equal(acLabel({ id: 'M1', given: '', when: '', then: '' }, 0), 'M1');
-  assert.equal(acLabel({ given: '', when: '', then: '' }, 2), 'AC3');
+  assert.equal(acLabel({ id: 'M1' }, 0), 'M1');
+  assert.equal(acLabel({}, 2), 'AC3');
 });
 
 test('ticking marks exactly the named boxes; a label with no box is appended under a forge heading', () => {
