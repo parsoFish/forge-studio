@@ -1,0 +1,172 @@
+{
+  "kind": "send-back",
+  "initiativeId": "INIT-2026-10-11-i3b-self-service",
+  "rationale": "I3b verdict 2 (operator R62): do not merge PR #47 at 2ebd6fe. AC2 (live tier passes) and AC4 (0 offline failures) are met. Unmet at head: AC1 \u2014 every tests/acceptance class still uses @unittest.skipUnless(_have_credentials()); AC3 \u2014 tests/acceptance/test_gw_self_serve.py prefixes from FORGE_RESOURCE_PREFIX with a 'gw-acc-' fallback and gitweave/{plan,reset}.py and managers/{teams,rulesets}.py let FORGE_RESOURCE_PREFIX override; AC5 \u2014 check_permission (gitweave/policy.py:106) is never called; AC6 \u2014 jsonschema absent from requirements.txt, ImportError fallback kept in policy.py. Review majors carried in: remove-member subcommand unregistered, PolicyError uncaught on the CLI path, fail-open on empty allow-lists. Each AC carries one falsifying check; the WI closes only when the whole-suite gate AND every check pass.",
+  "acceptanceCriteria": [
+    {
+      "id": "AC1",
+      "given": "tests/acceptance with GW_CALLER_TOKEN unset (the other GW_* set)",
+      "when": "python3 -m pytest tests/acceptance -q",
+      "then": "the run FAILS naming GW_CALLER_TOKEN; no acceptance test uses skipUnless/skipTest/pytest.mark.skip on credentials",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/acceptance",
+          "-q"
+        ],
+        "expect": "fail",
+        "unsetEnv": [
+          "GW_CALLER_TOKEN"
+        ]
+      }
+    },
+    {
+      "id": "AC1b",
+      "given": "tests/acceptance with GW_RESOURCE_PREFIX unset (the other GW_* set)",
+      "when": "python3 -m pytest tests/acceptance -q",
+      "then": "the run FAILS naming GW_RESOURCE_PREFIX",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/acceptance",
+          "-q"
+        ],
+        "expect": "fail",
+        "unsetEnv": [
+          "GW_RESOURCE_PREFIX"
+        ]
+      }
+    },
+    {
+      "id": "AC3",
+      "given": "the gitweave package and the live acceptance tests",
+      "when": "searching gitweave/ and tests/acceptance/ for FORGE_RESOURCE_PREFIX or the 'gw-acc-' fallback",
+      "then": "there is no match: every created resource name derives from GW_RESOURCE_PREFIX only (FORGE_RESOURCE_PREFIX is forge's gate-isolation var, not GitWeave's ownership marker)",
+      "check": {
+        "argv": [
+          "python3",
+          "-c",
+          "import subprocess,sys; r=subprocess.run(['grep','-rqnE','FORGE_RESOURCE_PREFIX|gw-acc-']+['gitweave', 'tests/acceptance']).returncode; sys.exit(0 if r==1 else 1)"
+        ],
+        "expect": "pass"
+      }
+    },
+    {
+      "id": "AC5",
+      "given": "a caller whose team policy.yaml does not permit the request type, name pattern or target repo",
+      "when": "python3 -m pytest tests/test_cli_check_permission.py -q",
+      "then": "each gw self-serve CLI subcommand dispatch calls gitweave.policy.check_permission (asserted by spy, not by reimplemented inline checks) and the refusal message cites the denying rule; exit non-zero, nothing written to the org",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/test_cli_check_permission.py",
+          "-q"
+        ],
+        "expect": "pass"
+      }
+    },
+    {
+      "id": "AC6",
+      "given": "a fresh install from requirements.txt or pyproject.toml",
+      "when": "python3 -m pytest tests/test_policy_jsonschema_required.py -q",
+      "then": "jsonschema is declared in both files; policy.py imports jsonschema unconditionally (no ImportError fallback / minimal validation path); a schema-invalid policy.yaml is rejected with a ValidationError-derived PolicyError",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/test_policy_jsonschema_required.py",
+          "-q"
+        ],
+        "expect": "pass"
+      }
+    },
+    {
+      "id": "M1",
+      "given": "the gw CLI",
+      "when": "python3 -m pytest tests/test_cli_remove_member.py -q",
+      "then": "`gw self-serve remove-member` (or the documented subcommand name) is registered in the argparse tree and dispatches to self_serve_remove_member through check_permission",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/test_cli_remove_member.py",
+          "-q"
+        ],
+        "expect": "pass"
+      }
+    },
+    {
+      "id": "M2",
+      "given": "a missing or schema-invalid team policy.yaml",
+      "when": "python3 -m pytest tests/test_cli_policy_error.py -q",
+      "then": "every self-serve CLI handler catches PolicyError (not only PolicyDenied) and exits non-zero with a one-line error naming the policy file; no traceback",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/test_cli_policy_error.py",
+          "-q"
+        ],
+        "expect": "pass"
+      }
+    },
+    {
+      "id": "M3",
+      "given": "a policy whose allowed_repo_patterns or allowed_exceptions is absent or empty",
+      "when": "python3 -m pytest tests/test_policy_fail_closed.py -q",
+      "then": "check_permission and the allowed_exceptions guard DENY (fail closed) and name the empty list; nothing is permitted by absence",
+      "check": {
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "tests/test_policy_fail_closed.py",
+          "-q"
+        ],
+        "expect": "pass"
+      }
+    }
+  ],
+  "qualityGateCmd": [
+    "python3",
+    "-m",
+    "pytest",
+    "tests/"
+  ],
+  "filesInScope": [
+    "tests/acceptance/test_gw_self_serve.py",
+    "tests/acceptance/test_gw_reset_readback.py",
+    "tests/acceptance/test_gw_reset_before_apply.py",
+    "tests/acceptance/test_gw_containment.py",
+    "tests/acceptance/test_gw_workflow.py",
+    "tests/acceptance/test_gw_apply_path.py",
+    "gitweave/cli.py",
+    "gitweave/policy.py",
+    "gitweave/plan.py",
+    "gitweave/reset.py",
+    "gitweave/managers/teams.py",
+    "gitweave/managers/rulesets.py",
+    "gitweave/self_serve/new_repo.py",
+    "gitweave/self_serve/update_content.py",
+    "gitweave/self_serve/membership.py",
+    "gitweave/self_serve/exceptions.py",
+    "requirements.txt",
+    "pyproject.toml",
+    "tests/test_cli_check_permission.py",
+    "tests/test_policy_jsonschema_required.py",
+    "tests/test_cli_remove_member.py",
+    "tests/test_cli_policy_error.py",
+    "tests/test_policy_fail_closed.py",
+    "tests/test_cli_self_serve.py",
+    "tests/test_policy.py"
+  ]
+}

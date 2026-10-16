@@ -445,12 +445,13 @@ export async function handleStudioPostRoutes(
         kind: (kind as 'approve' | 'send-back') ?? 'send-back',
         rationale: typeof b['rationale'] === 'string' ? b['rationale'] : '',
         acceptanceCriteria: Array.isArray(b['acceptanceCriteria'])
-          ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
+          ? (b['acceptanceCriteria'] as Parameters<typeof applyReviewVerdict>[3]['acceptanceCriteria'])
           : undefined,
         concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
         // forge-mfv5.1.28: both lists are validated in applyReviewVerdict, the one boundary check for both doors.
         qualityGateCmd: b['qualityGateCmd'] as string[] | undefined,
         filesInScope: b['filesInScope'] as string[] | undefined,
+        derivedFrom: b['derivedFrom'] as 'comments' | undefined,
       });
       return true;
     }

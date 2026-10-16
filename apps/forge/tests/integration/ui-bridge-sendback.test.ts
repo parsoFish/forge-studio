@@ -112,6 +112,7 @@ test('send-back: 200, ONE fix work item appended (origin review-fix), manifest +
       kind: 'send-back',
       rationale,
       acceptanceCriteria: [ac],
+      derivedFrom: 'comments',
       concernKind: 'code-fix',
     });
     assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(json)}`);
@@ -185,6 +186,7 @@ test('second send-back: round 2, next WI id (WI-2)', async () => {
       kind: 'send-back',
       rationale: 'first round of feedback',
       acceptanceCriteria: [ac],
+      derivedFrom: 'comments',
     });
     assert.equal(first.status, 200, `round 1 failed: ${JSON.stringify(first.json)}`);
 
@@ -193,6 +195,7 @@ test('second send-back: round 2, next WI id (WI-2)', async () => {
       kind: 'send-back',
       rationale: 'second round of feedback',
       acceptanceCriteria: [ac],
+      derivedFrom: 'comments',
     });
     assert.equal(second.status, 200, `round 2 failed: ${JSON.stringify(second.json)}`);
     const body = second.json as Record<string, unknown>;
@@ -230,6 +233,7 @@ test('send-back cap exhaustion: round cap reached → 409 parked needs-operator,
       kind: 'send-back',
       rationale: 'round 1 — within cap',
       acceptanceCriteria: [ac],
+      derivedFrom: 'comments',
     });
     assert.equal(first.status, 200, `round 1 (within cap) should succeed: ${JSON.stringify(first.json)}`);
 
@@ -238,6 +242,7 @@ test('send-back cap exhaustion: round cap reached → 409 parked needs-operator,
       kind: 'send-back',
       rationale: 'round 2 — exceeds cap of 1',
       acceptanceCriteria: [ac],
+      derivedFrom: 'comments',
     });
     assert.equal(second.status, 409, `expected 409 on cap exhaustion, got ${second.status}`);
     const body = second.json as Record<string, unknown>;
@@ -323,7 +328,7 @@ async function withBridge(slug: string, fn: (url: string, s: ReturnType<typeof s
   try { await fn(url, s); } finally { await close(); rmSync(s.forgeRoot, { recursive: true, force: true }); }
 }
 
-const TYPED_AC = { given: 'the whole tests/ directory', when: '`python3 -m pytest tests/` runs', then: 'zero tests fail' };
+const TYPED_AC = { given: 'the whole tests/ directory', when: '`python3 -m pytest tests/` runs', then: 'zero tests fail', check: { argv: ['python3', '-m', 'pytest', 'tests/'], expect: 'pass' } };
 
 test('forge-mfv5.1.28: a typed send-back\'s qualityGateCmd + filesInScope reach the compiled fix WI', async () => {
   await withBridge('typed', async (url, { initiativeId, worktreePath }) => {
@@ -405,5 +410,61 @@ test('forge-mfv5.1.28: POST /api/runs/:id/gates/verdict refuses malformed lists 
       assert.match(String((json as Record<string, unknown>).error), new RegExp(field));
     }
     assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false, 'nothing compiled');
+  });
+});
+
+/**
+ * forge-mfv5.1.43 (D-20 amended) — a typed send-back carries ONE falsifying
+ * check per criterion. The fixture is the shape the gitweave I3b round-3
+ * send-back was authored in: eight criteria, expect-fail checks with
+ * `unsetEnv`, an argv-only `python3 -c` guard, named pytest files.
+ */
+const ROUND3 = JSON.parse(readFileSync(new URL('../test-fixtures/typed-send-back-per-ac-checks.json', import.meta.url), 'utf8')) as {
+  rationale: string; acceptanceCriteria: Array<Record<string, unknown>>; qualityGateCmd: string[]; filesInScope: string[];
+};
+
+test('forge-mfv5.1.43: a typed send-back with a check per criterion compiles them verbatim, labelled by id', async () => {
+  await withBridge('perac', async (url, { initiativeId, worktreePath }) => {
+    const { status, json } = await postVerdict(url, { ...ROUND3, initiativeId, kind: 'send-back' });
+    assert.equal(status, 200, JSON.stringify(json));
+    const wi = parseWorkItem(readFileSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md'), 'utf8'));
+    assert.deepEqual(wi.acceptance_criteria, ROUND3.acceptanceCriteria);
+    assert.deepEqual(wi.acceptance_criteria[0]!.check, { argv: ['python3', '-m', 'pytest', 'tests/acceptance', '-q'], expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'] });
+    for (const id of ['AC1', 'AC1b', 'AC3', 'AC5', 'AC6', 'M1', 'M2', 'M3']) assert.match(wi.body, new RegExp(`- \\[ \\] ${id}: GIVEN`));
+  });
+});
+
+test('forge-mfv5.1.43: a typed send-back whose criterion has a prose WHEN and no check is refused by name, nothing written', async () => {
+  for (const post of [postVerdict, (u: string, b: Record<string, unknown>) => postGate(u, String(b.initiativeId), { ...b, verdict: 'send-back' })]) {
+    await withBridge('prose', async (url, { initiativeId, worktreePath }) => {
+      const acs = [ROUND3.acceptanceCriteria[0], { given: 'the CLI', when: 'the operator reads the help text', then: 'remove-member is listed' }];
+      const { status, json } = await post(url, { initiativeId, kind: 'send-back', rationale: 'r', acceptanceCriteria: acs });
+      assert.equal(status, 400, JSON.stringify(json));
+      assert.match(String((json as Record<string, unknown>).error), /AC2 \(when: the operator reads the help text\) has no falsifying check/);
+      assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false, 'nothing compiled');
+    });
+  }
+});
+
+test('forge-mfv5.1.43: a malformed check is refused naming the criterion; an unknown derivedFrom is refused naming the field', async () => {
+  await withBridge('badcheck', async (url, { initiativeId, worktreePath }) => {
+    const bad = { ...ROUND3.acceptanceCriteria[0], check: { argv: ['bash', '-c', 'pytest && rm -rf x'], expect: 'fail' } };
+    const r1 = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'r', acceptanceCriteria: [bad] });
+    assert.equal(r1.status, 400, JSON.stringify(r1.json));
+    assert.match(String((r1.json as Record<string, unknown>).error), /AC1: check\.argv must be ONE runnable command/);
+    const r2 = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'r', acceptanceCriteria: [TYPED_AC], derivedFrom: 'typed' });
+    assert.equal(r2.status, 400, JSON.stringify(r2.json));
+    assert.match(String((r2.json as Record<string, unknown>).error), /derivedFrom/);
+    assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false, 'nothing compiled');
+  });
+});
+
+test('forge-mfv5.1.43: the comment door (derivedFrom: comments) still compiles a prose criterion — D-20 blocking comments unchanged', async () => {
+  await withBridge('comments', async (url, { initiativeId, worktreePath }) => {
+    const prose = { given: 'the report', when: 'both filters are given', then: 'exclude wins' };
+    const { status, json } = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'r', acceptanceCriteria: [prose], derivedFrom: 'comments' });
+    assert.equal(status, 200, JSON.stringify(json));
+    const wi = parseWorkItem(readFileSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md'), 'utf8'));
+    assert.deepEqual(wi.acceptance_criteria, [prose]);
   });
 });

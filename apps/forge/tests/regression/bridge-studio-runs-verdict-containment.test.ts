@@ -361,6 +361,7 @@ test('non-regression [Finding 2]: send-back with a LEGITIMATE cycle_id still wri
         kind: 'send-back',
         rationale: 'x',
         acceptanceCriteria: [{ given: 'a', when: 'b', then: 'c' }],
+        derivedFrom: 'comments',
       });
       assert.equal(status, 200, `expected a legitimate send-back to succeed — got ${status}: ${JSON.stringify(json)}`);
       const body = json as Record<string, unknown>;
