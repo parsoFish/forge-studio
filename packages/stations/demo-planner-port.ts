@@ -64,7 +64,8 @@ export async function planDemo(
     workItems: d.workItems.map((wi) => ({ id: wi.id, title: wi.title, story: wi.story ?? '' })),
     acceptanceCriteria: d.acceptanceCriteria.map(renderAcceptanceCriterion), diffStat: d.diffStat, changedFiles: d.changedFiles, allowed,
   };
-  // forge-mfv5.1.41 (D-49 shape): ONE repair turn per planning call, spent on the first refused plan.
+  // forge-mfv5.1.41 (D-49 shape): ONE more turn per planning call — the repair of a refused plan, or
+  // nk1y.42's revise of an unproducible one — so a call never asks the planner a third time.
   const repair = { used: false };
   const first = await askRepairing(planner, revise ? { ...base, revise } : base, ctx.logger, emit, repair);
   if (!first.ok) return first;
@@ -73,7 +74,8 @@ export async function planDemo(
   // back ONCE, with the refusal by name. A plan still refused after it reaches
   // the band's own preflight, which fails `tooling-unavailable` by name.
   const refused = unproducible(plan, input.worktreePath);
-  if (refused.length > 0 && !revise) {
+  if (refused.length > 0 && !revise && !repair.used) {
+    repair.used = true;
     emit('demo.plan.revise', { reason: 'unproducible', problems: refused });
     const second = await askRepairing(planner, { ...base, revise: { reason: 'checkpoint command(s) not producible from the tree under capture', details: refused } }, ctx.logger, emit, repair);
     if (!second.ok) return second;
@@ -93,6 +95,9 @@ function unproducible(plan: DemoPlan, worktreePath: string): string[] {
   return preflightDemoCommands(commands, worktreePath, { runPrefixes: prefixes.runPrefixes }).problems;
 }
 
+/** The operator's act after a refusal the repair turn could not fix. */
+const RECOVERY = 'Resume from integrate re-runs the planner';
+
 /** A refused plan shown back to the planner is bounded: the validator caps its rows, this caps the echo. */
 const INVALID_PLAN_MAX_CHARS = 8000;
 
@@ -111,11 +116,13 @@ async function askRepairing(
   repair: { used: boolean },
 ): Promise<Asked> {
   const first = await askAndValidate(planner, plannerInput, logger, emit, repair.used ? 2 : 1);
-  if (first.ok || first.reason !== 'plan-invalid' || repair.used) return first;
+  if (first.ok || first.reason !== 'plan-invalid') return first;
+  if (repair.used) return { ok: false, reason: 'plan-invalid', detail: `Demo plan invalid (${RECOVERY}): ${first.detail}` };
   repair.used = true;
   const errors = first.errors ?? [];
   emit('demo.plan.repair-turn', { errors });
-  const invalidPlan = (JSON.stringify(first.raw, null, 2) ?? String(first.raw)).slice(0, INVALID_PLAN_MAX_CHARS);
+  const shownPlan = JSON.stringify(first.raw, null, 2) ?? String(first.raw);
+  const invalidPlan = shownPlan.length > INVALID_PLAN_MAX_CHARS ? `${shownPlan.slice(0, INVALID_PLAN_MAX_CHARS)}\n… (truncated)` : shownPlan;
   const earlier = plannerInput.revise ? ` (it was itself a revise: ${plannerInput.revise.reason})` : '';
   const second = await askAndValidate(planner, {
     ...plannerInput,
@@ -124,7 +131,8 @@ async function askRepairing(
   if (second.ok || second.reason !== 'plan-invalid') return second;
   return {
     ok: false, reason: 'plan-invalid',
-    detail: `Demo plan invalid after a repair turn: ${second.detail} (first plan: ${first.detail}) — Resume from integrate re-runs the planner`,
+    // The headline and the recovery act lead: the run page shows a bounded prefix of this.
+    detail: `Demo plan invalid after a repair turn (${RECOVERY}): ${second.detail} (first plan: ${first.detail})`,
   };
 }
 

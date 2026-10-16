@@ -243,6 +243,22 @@ describe('nk1y.42: an unproducible plan gets one revise turn, told why', () => {
     assert.ok(!existsSync(join(root, 'capture-ran')));
   });
 
+  it('mfv5.1.41: a call has ONE more turn — a repaired plan that is unproducible is not revised again (no third call)', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan('curl --version'), plan(GW), plan(CLI_CMD)], seen));
+    assert.equal(seen.length, 2);
+    assert.match(seen[1]!.revise!.reason, /failed validation/);
+    assert.equal(result.status === 'failed' && result.reason, 'tooling-unavailable');
+  });
+
+  it('mfv5.1.41: an unproducible plan whose revise is refused fails by name with the recovery act, no third call', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(GW), plan('curl --version'), plan(CLI_CMD)], seen));
+    assert.equal(seen.length, 2);
+    assert.equal(result.status === 'failed' && result.reason, 'plan-invalid');
+    assert.match(result.status === 'failed' ? result.detail : '', /^Demo plan invalid \(Resume from integrate re-runs the planner\): plan-invalid:checkpoints\[0\]\.command/);
+  });
+
   it('a producible plan is never sent back', async () => {
     const seen: DemoPlannerInput[] = [];
     const result = await run(sequence([plan(CLI_CMD)], seen));
@@ -371,9 +387,8 @@ describe('mfv5.1.41: a refused plan gets one error-fed repair turn, then fails b
     assert.equal(seen.length, 2, 'exactly one repair turn');
     assert.equal(result.status === 'failed' && result.reason, 'plan-invalid');
     const detail = result.status === 'failed' ? result.detail : '';
-    assert.match(detail, /^Demo plan invalid after a repair turn: plan-invalid:checkpoints\[0\]\.command: "curl --version" is not a declared means/);
+    assert.match(detail, /^Demo plan invalid after a repair turn \(Resume from integrate re-runs the planner\): plan-invalid:checkpoints\[0\]\.command: "curl --version" is not a declared means/);
     assert.match(detail, /first plan: plan-invalid:checkpoints\[0\]\.command: "git --version --build-options" is not a declared means/);
-    assert.match(detail, /Resume from integrate re-runs the planner/);
     const invalid = named('demo.plan.invalid');
     assert.deepEqual(invalid.map((e) => e.metadata.attempt), [1, 2]);
     assert.ok(existsSync(join(logsDir, 'demo-plan-invalid-2.json')));
@@ -384,8 +399,22 @@ describe('mfv5.1.41: a refused plan gets one error-fed repair turn, then fails b
     const thrown = integrateDeliveryFailure('plan-invalid', detail);
     const c = classifyCycleFailure([{ ...events[0]!, phase: 'orchestrator', skill: 'cycle', event_type: 'error', message: thrown }]);
     assert.equal(c.kind, 'terminal');
-    assert.match(c.reason, /integrate band failed \(plan-invalid\): Demo plan invalid after a repair turn: plan-invalid:checkpoints\[0\]\.command/);
-    assert.match(c.reason, /Resume from integrate re-runs the planner/);
+    assert.match(c.reason, /integrate band failed \(plan-invalid\): Demo plan invalid after a repair turn \(Resume from integrate re-runs the planner\): plan-invalid:checkpoints\[0\]\.command/);
+    // A long two-refusal detail is bounded on the run page, and the headline and the recovery act survive it.
+    const long = classifyCycleFailure([{ ...events[0]!, phase: 'orchestrator', skill: 'cycle', event_type: 'error', message: integrateDeliveryFailure('plan-invalid', `${detail} ${'x'.repeat(5000)}`) }]);
+    assert.ok(long.reason.length < 1400, `bounded: ${long.reason.length}`);
+    assert.match(long.reason, /Demo plan invalid after a repair turn \(Resume from integrate re-runs the planner\)/);
+  });
+
+  it('a refused plan whose record cannot be written is named, and the repair turn still runs', async () => {
+    rmSync(logsDir, { recursive: true, force: true });
+    writeFileSync(logsDir, 'a file where the log dir should be');
+    const seen: DemoPlannerInput[] = [];
+    const result = await run(sequence([plan(NARROWED), plan(CLI_CMD)], seen));
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.equal(seen.length, 2);
+    assert.equal(named('demo.plan.raw-persist-failed').length, 1);
+    assert.equal(named('demo.plan.invalid')[0]!.metadata.raw_plan_path, null);
   });
 
   it('a valid first plan gets no repair turn (control)', async () => {
