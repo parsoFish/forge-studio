@@ -59,16 +59,16 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 54 | 12,027 | **10,230** | ratified 10,230 — row 4 of forge-nk1y.45: `demo-browser-steps.ts` — a planned screenshot's `steps`/`regions`, validated by name for the plan and at capture; +49 measured on main 10,181 (after #1212), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
-| `agents` | 45 | 12,583 | **12,583** | ratified 12,583 — forge-mfv5.1.38: `gate-test-summary.ts` — an exit-0 WI gate whose runner executed zero tests (pytest/vitest/node:test/go -v summary) fails by name; +54 measured on main 12,529, lane-ratified (≤100, ruling 666). |
+| `agents` | 45 | 12,602 | **12,602** | ratified 12,602 — forge-mfv5.1.41: the failure classifier carries the integrate band's own `(reason): detail`, so a refused demo plan names itself on the run page; +19 measured on main 12,583, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
 | `flows` | 94 | 26,179 | **25,980** | ratified 25,980 — row 4 of forge-nk1y.45: the capture preflight refuses a screenshot checkpoint with no route and no steps (a bare root-page load); +8 measured on main 25,972 (after #1212), lane-ratified (≤100, ruling 666). |
-| `factory` | 17 | 3,152 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 53 | 13,213 | **13,213** | ratified 13,213 — forge-nk1y.43: the demo outcome on demo.json, the PR body and `demo.no-change`, and the planner's one revise turn with the identical outputs; +45 measured on main 13,168, lane-ratified (≤100, ruling 666). |
+| `factory` | 17 | 3,157 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 53 | 13,270 | **13,270** | ratified 13,270 — forge-mfv5.1.41: the demo planner's one error-fed repair turn on plan-invalid (D-49 shape) and the refused plan persisted beside the cycle's events; +57 measured on main 13,213, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,171 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **530** | **137,618** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **530** | **137,699** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -345,7 +345,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 83 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 424 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
-| packages/agents/failure-classifier.ts | agents | verbatim | 745 |
+| packages/agents/failure-classifier.ts | agents | verbatim | 764 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 519 |
 | packages/flows/fix-work-items.ts | flows | verbatim | 400 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 468 |
@@ -464,7 +464,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 105 |
 | packages/stations/demo-delta.ts | stations | verbatim | 145 |
 | packages/stations/demo-form.ts | stations | rewritten | 73 |
-| packages/stations/demo-planner-port.ts | stations | rewritten | 112 |
+| packages/stations/demo-planner-port.ts | stations | rewritten | 169 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 288 |
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 374 |
@@ -594,7 +594,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/index.ts | factory | verbatim | 8 |
 | packages/factory/demo.ts | factory | verbatim | 504 |
 | packages/factory/demo-api-capture.ts | factory | rewritten | 42 |
-| packages/factory/demo-planner.ts | factory | rewritten | 86 |
+| packages/factory/demo-planner.ts | factory | rewritten | 91 |
 | packages/flows/index.ts | flows | verbatim | 140 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 474 |
