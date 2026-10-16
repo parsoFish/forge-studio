@@ -120,9 +120,7 @@ export function emitGateEvent(
     input_refs: [],
     output_refs: [],
     duration_ms: info.durationMs,
-    message: ac
-      ? (info.passed ? 'gate.ac-pass' : 'gate.ac-fail')
-      : info.timedOut
+    message: info.timedOut
       ? 'gate.timeout'
       : info.errored
         ? 'gate.errored'

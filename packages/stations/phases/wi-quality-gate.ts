@@ -49,7 +49,7 @@ export type AcGateRunInfo = GateRunInfo & { ac?: { label: string; expect: Accept
  * test directly instead of only a hand-written mirror of it.
  */
 export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration: number }) => boolean {
-  const wiGate = buildWiGateOnly(args);
+  const wiGate = args.effective.length > 0 ? buildWiGateOnly(args) : () => true; // no gate: the checks alone decide
   const checks = args.wi.acceptance_criteria.flatMap((ac, i) => (ac.check ? [{ label: acLabel(ac, i), check: ac.check }] : []));
   // forge-mfv5.1.43 (D-20): the WI closes only when its gate AND every criterion's check pass —
   // first unsatisfied check stops the run (its output is the agent's next brief).

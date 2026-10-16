@@ -513,9 +513,9 @@ export function writeWorkItem(w: WorkItem, worktreeDir: string, opts: WriteWorkI
  * Update the `status` field in an existing work-item file's YAML frontmatter,
  * leaving every other field and the markdown body byte-identical (round-trip
  * via gray-matter). Used by the developer-loop runner to mark each WI
- * complete | failed after the Ralph loop returns.
+ * complete | failed after the Ralph loop returns. `ticked` (forge-mfv5.1.43): the criteria labels
+ * whose checks passed at close — forge ticks them in the body, never the agent.
  */
-/** `ticked` (forge-mfv5.1.43): the criteria labels whose checks passed at close — forge ticks them, never the agent. */
 export function writeWorkItemStatus(specPath: string, status: WorkItemStatus, ticked: readonly string[] = []): void {
   if (!WORK_ITEM_STATUSES.includes(status)) {
     throw new Error(`invalid status: ${status}`);

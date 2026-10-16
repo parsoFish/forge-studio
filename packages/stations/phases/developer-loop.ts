@@ -710,10 +710,10 @@ export async function runDeveloperLoop(
               });
             }
             const effective = derived.cmd;
-            if (!effective) return undefined;
+            if (!effective && !wi.acceptance_criteria.some((a) => a.check)) return undefined; // forge-mfv5.1.43: checks run even with no gate
             return buildWiQualityGate({
               worktreePath: wiWorktree.path,
-              effective,
+              effective: effective ?? [],
               accGate,
               wi,
               requiredPathsSource,

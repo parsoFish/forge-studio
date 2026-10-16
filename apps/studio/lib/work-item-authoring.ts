@@ -13,6 +13,8 @@ import type { AcceptanceCriterion } from './bridge-client-runs.ts';
  * whether it must pass or fail, and env var names to unset / require.
  */
 export type AcceptanceCriterionDraft = {
+  /** A declared criterion id (`M1`), kept through an edit so its label never drifts. */
+  id?: string;
   given: string;
   when: string;
   then: string;
@@ -70,7 +72,7 @@ export function workItemDraftFrom(f: WorkItemSource): WorkItemDraft {
   return {
     summary: f.summary,
     acceptanceCriteria: f.acceptanceCriteria.map((a) => ({
-      given: a.given, when: a.when, then: a.then, check: (a.check?.argv ?? []).join(' '), expect: a.check?.expect ?? 'pass',
+      ...(a.id !== undefined ? { id: a.id } : {}), given: a.given, when: a.when, then: a.then, check: (a.check?.argv ?? []).join(' '), expect: a.check?.expect ?? 'pass',
       unsetEnv: (a.check?.unsetEnv ?? []).join(' '), requiresEnv: (a.check?.requiresEnv ?? []).join(' '),
     })),
     gateCmd: f.qualityGateCmd.join(' '),
@@ -98,7 +100,7 @@ const completeAcs = (acs: readonly AcceptanceCriterionDraft[]): AcceptanceCriter
   acs.filter(isComplete).map((a) => {
     const unsetEnv = names(a.unsetEnv), requiresEnv = names(a.requiresEnv);
     return {
-      given: a.given.trim(), when: a.when.trim(), then: a.then.trim(),
+      ...(a.id !== undefined ? { id: a.id } : {}), given: a.given.trim(), when: a.when.trim(), then: a.then.trim(),
       check: {
         argv: (parseGateCmd(a.check) as { argv: string[] }).argv, expect: a.expect,
         ...(unsetEnv.length > 0 ? { unsetEnv } : {}), ...(requiresEnv.length > 0 ? { requiresEnv } : {}),

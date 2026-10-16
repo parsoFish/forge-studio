@@ -3,7 +3,7 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-20",
-      "digest": "9da0d4139cc5164d",
+      "digest": "faacd38fb2dcfb71",
       "why": "D-20: the review-loop beats (S10.review.mjs) drive one anchored blocking comment -> fix-WI -> re-dispatch -> re-review; mfv5.1.28 and mfv5.1.43 keep that comment path (checks bind typed WIs only)"
     },
     {

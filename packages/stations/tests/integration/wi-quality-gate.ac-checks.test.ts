@@ -147,7 +147,7 @@ function recordingLogger(): { logger: EventLogger; emitted: EventLogEntry[] } {
   return { logger, emitted };
 }
 
-test('close: each check logs its own gate.ac-* event naming the criterion, and forge ticks exactly the satisfied boxes', () => withDir((dir) => {
+test('close: each check logs its own gate event naming the criterion, and forge ticks exactly the satisfied boxes', () => withDir((dir) => {
   writeFileSync(join(dir, 'pass.test.mjs'), PASSES);
   writeFileSync(join(dir, 'live.test.mjs'), SKIPS_WITHOUT_TOKEN);
   const acs = TWO_ACS(dir);
@@ -167,12 +167,20 @@ test('close: each check logs its own gate.ac-* event naming the criterion, and f
   assert.equal(gateFor()({ iteration: 2 }), true);
   const ac = emitted.map((e) => [e.message, (e.metadata as Record<string, unknown>).acceptance_criterion, e.event_type]);
   assert.deepEqual(ac, [
-    ['gate.ac-pass', 'AC1', 'log'], ['gate.ac-fail', 'AC1b', 'error'],
-    ['gate.ac-pass', 'AC1', 'log'], ['gate.ac-pass', 'AC1b', 'log'],
+    ['gate.pass', 'AC1', 'log'], ['gate.fail', 'AC1b', 'error'],
+    ['gate.pass', 'AC1', 'log'], ['gate.pass', 'AC1b', 'log'],
   ]);
   writeWorkItemStatus(spec, 'complete', satisfied);
   const closed = parseWorkItem(readFileSync(spec, 'utf8'));
   assert.equal(closed.status, 'complete');
   assert.match(closed.body, /- \[x\] AC1: GIVEN the CLI/);
   assert.match(closed.body, /- \[x\] AC1b: GIVEN GW_CALLER_TOKEN unset/);
+}));
+
+test('no WI gate at all: the checks alone decide — a WI with checks never closes unchecked', () => withDir((dir) => {
+  writeFileSync(join(dir, 'live.test.mjs'), SKIPS_WITHOUT_TOKEN);
+  const w = wi([{ given: 'g', when: 'w', then: 't', check: { argv: nodeTest(join(dir, 'live.test.mjs')), expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'] } }]);
+  const h = harness(w, dir, { effective: [] });
+  assert.equal(h.gate({ iteration: 1 }), false);
+  assert.deepEqual(h.runs.map((r) => [r.label, r.satisfied]), [['AC1', false]]);
 }));

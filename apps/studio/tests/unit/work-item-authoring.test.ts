@@ -60,11 +60,11 @@ test('the verdict gate\'s typed send-back shares the refusal', () => {
 test('a kickoff-added work item\'s fields prefill a draft (argv joined, one path per line)', () => {
   expect(workItemDraftFrom({
     summary: 'No Terraform',
-    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't', check: { argv: ['pytest', 'tests/acceptance'], expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'] } }],
+    acceptanceCriteria: [{ id: 'M1', given: 'g', when: 'w', then: 't', check: { argv: ['pytest', 'tests/acceptance'], expect: 'fail', unsetEnv: ['GW_CALLER_TOKEN'] } }],
     qualityGateCmd: ['python3', '-m', 'pytest', 'tests/t.py'], filesInScope: ['tests/t.py', '.github/c.md'],
   })).toEqual({
     summary: 'No Terraform',
-    acceptanceCriteria: [{ given: 'g', when: 'w', then: 't', check: 'pytest tests/acceptance', expect: 'fail', unsetEnv: 'GW_CALLER_TOKEN', requiresEnv: '' }],
+    acceptanceCriteria: [{ id: 'M1', given: 'g', when: 'w', then: 't', check: 'pytest tests/acceptance', expect: 'fail', unsetEnv: 'GW_CALLER_TOKEN', requiresEnv: '' }],
     gateCmd: 'python3 -m pytest tests/t.py', files: 'tests/t.py\n.github/c.md',
   });
 });
