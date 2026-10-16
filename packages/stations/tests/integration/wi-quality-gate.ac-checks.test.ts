@@ -184,3 +184,46 @@ test('no WI gate at all: the checks alone decide — a WI with checks never clos
   assert.equal(h.gate({ iteration: 1 }), false);
   assert.deepEqual(h.runs.map((r) => [r.label, r.satisfied]), [['AC1', false]]);
 }));
+
+/**
+ * forge-mfv5.1.44 — I3b round 3 WI-15 AC3: a guard check (`python3 -c <grep program>`, expect pass) whose program TEXT names the
+ * live suite's `match` was classed as the live suite, inherited its requiresEnv, and its clean exit 0 was refused as an acceptance gate
+ * with no runner summary (−7 no-tests-ran). An inline program is code, not the suite the command targets: the guard keeps its exit code.
+ */
+const ACC = { match: 'tests/acceptance', requires_env: ['GW_CALLER_TOKEN'] };
+const guard = (exit: number): string[] => [process.execPath, '-e', `/* grep -rqnE 'gw-acc-' gitweave tests/acceptance */ process.exit(${exit})`];
+
+test('forge-mfv5.1.44: a guard check whose program names the suite match passes on exit 0 (gate.pass naming AC3), fails on exit 1', () => withDir((dir) => {
+  const ac = (exit: number): WorkItem['acceptance_criteria'] => [{ id: 'AC3', given: 'g', when: 'w', then: 't', check: { argv: guard(exit), expect: 'pass' } }];
+  const { logger, emitted } = recordingLogger();
+  const onRun = (info: AcCheckRun['info']): void => { if (info.ac) emitGateEvent(logger, 'INIT-x', 'p', 'WI-15', info); };
+  const passing = harness(wi(ac(0)), dir, { accGate: ACC, effective: [], onRun });
+  assert.equal(passing.gate({ iteration: 1 }), true, JSON.stringify(passing.runs[0]?.info));
+  assert.equal(passing.runs[0]!.info.rejectReason, undefined);
+  assert.deepEqual(emitted.map((e) => [e.message, (e.metadata as Record<string, unknown>).acceptance_criterion]), [['gate.pass', 'AC3']]);
+  const failing = harness(wi(ac(1)), dir, { accGate: ACC, effective: [] });
+  assert.equal(failing.gate({ iteration: 1 }), false);
+  assert.equal(failing.runs[0]!.info.exitCode, 1);
+}));
+
+test('forge-mfv5.1.44: explicit requiresEnv on a guard check does not make it an acceptance gate — exit 0 keeps its verdict', () => withDir((dir) => {
+  const w = wi([{ id: 'AC3', given: 'g', when: 'w', then: 't', check: { argv: guard(0), expect: 'pass', requiresEnv: ['GW_CALLER_TOKEN'] } }]);
+  const h = harness(w, dir, { effective: [] });
+  assert.equal(h.gate({ iteration: 1 }), true, JSON.stringify(h.runs[0]?.info));
+}));
+
+test('forge-mfv5.1.44 control: a check that targets the suite and prints no runner summary is still refused by name', () => withDir((dir) => {
+  // The suite path is an argument the command targets (after the program), so the check is classed as the live suite.
+  const argv = [process.execPath, '-e', 'process.exit(0)', 'tests/acceptance'];
+  const h = harness(wi([{ id: 'AC2', given: 'g', when: 'w', then: 't', check: { argv, expect: 'pass' } }]), dir, { accGate: ACC, effective: [] });
+  assert.equal(h.gate({ iteration: 1 }), false);
+  assert.equal(h.runs[0]!.info.rejectReason, 'no-tests-ran');
+  assert.match(h.runs[0]!.info.stderrTail, /acceptance gate output carries no recognised test summary/);
+}));
+
+test('forge-mfv5.1.44 control: the WI gate itself keeps the D-34 substring match — an inline program naming the suite is still an acceptance gate', () => withDir((dir) => {
+  const infos: AcCheckRun['info'][] = [];
+  const h = harness(wi([{ given: 'g', when: 'w', then: 't' }]), dir, { accGate: ACC, effective: guard(0), onRun: (i) => { infos.push(i); } });
+  assert.equal(h.gate({ iteration: 1 }), false);
+  assert.equal(infos[0]!.rejectReason, 'no-tests-ran');
+}));

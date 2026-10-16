@@ -2,7 +2,7 @@ import { acLabel, gateRequiredPaths, type AcceptanceCheck, type RequiredPathsSou
 import { makeQualityGateFromCmd, parseGateTestSummary, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { WI_GATE_PACKAGE_PLACEHOLDER, type AcceptanceGateConfig } from '@forge/projects';
 
-import { liveAcceptanceEnvFor } from './live-acceptance-env.ts';
+import { liveAcceptanceEnvFor, liveAcceptanceEnvForCheck } from './live-acceptance-env.ts';
 
 /**
  * `buildWiQualityGate`'s arguments — exactly what `developer-loop.ts`'s
@@ -70,9 +70,11 @@ export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration:
 
 function runAcCheck(args: WiQualityGateArgs, label: string, check: AcceptanceCheck, ctx?: { iteration: number }): AcCheckRun {
   const unsetEnv = [...(args.ciGateUnsetEnv ?? []), ...(check.unsetEnv ?? [])];
-  const requiredEnv = [...(liveAcceptanceEnvFor(args.accGate, check.argv) ?? []), ...(check.requiresEnv ?? [])].filter((n) => !unsetEnv.includes(n));
+  const suiteEnv = liveAcceptanceEnvForCheck(args.accGate, check.argv); // forge-mfv5.1.44: classing keys on the suite match, never on requiredEnv presence
+  const requiredEnv = [...(suiteEnv ?? []), ...(check.requiresEnv ?? [])].filter((n) => !unsetEnv.includes(n));
   let got: GateRunInfo | undefined;
   makeQualityGateFromCmd(args.worktreePath, check.argv, (i) => { got = i; }, {
+    acceptance: suiteEnv !== undefined,
     ...(requiredEnv.length > 0 ? { requiredEnv } : {}),
     ...(unsetEnv.length > 0 ? { unsetEnv } : {}),
     initiativeId: args.initiativeId,
@@ -114,6 +116,7 @@ function buildWiGateOnly(args: WiQualityGateArgs): (ctx?: { iteration: number })
       // set the rule.
       requiredPaths: gateRequiredPaths(args.wi, args.requiredPathsSource),
       ...(requiredEnv ? { requiredEnv } : {}),
+      acceptance: requiredEnv !== undefined,
       ...(args.ciGateUnsetEnv && args.ciGateUnsetEnv.length > 0 ? { unsetEnv: args.ciGateUnsetEnv } : {}),
       // forge-mfv5.3.7: namespaces whatever cloud resources this
       // WI's gate command creates (FORGE_RESOURCE_PREFIX,

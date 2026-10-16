@@ -258,6 +258,8 @@ export type GateTighteningOptions = {
    * live creds, and independent of whether `requiredEnv`/`unsetEnv` are set.
    */
   initiativeId?: string;
+  /** forge-mfv5.1.44: the gate targets the live-acceptance suite, so an exit 0 with no runner summary is refused — never inferred from requiredEnv. */
+  acceptance?: boolean;
 };
 
 /** Default wall-clock bound for orchestrator-run gate commands (30 min). */
@@ -395,11 +397,8 @@ function runGateCapturing(
   // 2026-06-11: the vars are resolved from the process env AND the project's
   // `secrets.env` at the worktree root (process env wins), and the merged env
   // is handed to the gate child process — see GateTighteningOptions.requiredEnv.
-  // R5-02 F2: build gateEnv whenever EITHER requiredEnv OR unsetEnv is
-  // declared — previously this only ran for requiredEnv, so a gate with no
-  // requiredEnv (the common case) inherited process.env completely
-  // unscrubbed and a project's declared `ci_gate_unset_env` (e.g. TF_ACC)
-  // never actually got stripped.
+  // R5-02 F2: unsetEnv alone builds gateEnv too, else a gate with no
+  // requiredEnv never had its declared `ci_gate_unset_env` stripped.
   let gateEnv: NodeJS.ProcessEnv | undefined;
   const requiredEnv = options?.requiredEnv ?? [];
   const unsetEnv = options?.unsetEnv ?? [];
@@ -519,7 +518,7 @@ function runGateCapturing(
 
   // Tightening: only relevant when exit-code already said "pass". A non-zero
   // exit is a clear fail regardless of paths.
-  const noTests = passed ? judgeGateTestSummary(`${stdout}\n${stderr}`, { acceptance: requiredEnv.length > 0 }) : null;
+  const noTests = passed ? judgeGateTestSummary(`${stdout}\n${stderr}`, { acceptance: options?.acceptance === true }) : null;
   if (noTests) { passed = false;
     exitCode = -7; // synthetic — exit 0, but the runner executed nothing
     rejectReason = 'no-tests-ran';
