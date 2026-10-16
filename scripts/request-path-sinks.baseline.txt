@@ -111,12 +111,11 @@ packages/flows/cost-by-class.ts readdirSync 1
 packages/flows/cost-by-class.ts readFileSync 2
 packages/flows/cycle-context.ts existsSync 1
 packages/flows/cycle-context.ts readFileSync 1
-packages/flows/cycle-helpers.ts cpSync 2
-packages/flows/cycle-helpers.ts execFileSync 9
-packages/flows/cycle-helpers.ts existsSync 4
+packages/flows/cycle-helpers.ts execFileSync 10
+packages/flows/cycle-helpers.ts existsSync 2
 packages/flows/cycle-helpers.ts mkdirSync 2
-packages/flows/cycle-helpers.ts readdirSync 1
-packages/flows/cycle-helpers.ts rmSync 2
+packages/flows/cycle-helpers.ts renameSync 1
+packages/flows/cycle-helpers.ts rmSync 3
 packages/flows/cycle-helpers.ts unlinkSync 1
 packages/flows/cycle-helpers.ts writeFileSync 1
 packages/flows/cycle-pr-open.ts existsSync 2

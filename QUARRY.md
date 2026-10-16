@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 45 | 12,583 | **12,583** | ratified 12,583 — forge-mfv5.1.38: `gate-test-summary.ts` — an exit-0 WI gate whose runner executed zero tests (pytest/vitest/node:test/go -v summary) fails by name; +54 measured on main 12,529, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 94 | 26,258 | **26,059** | ratified 26,059 — forge-mfv5.1.39 (lane drain-halt): a fix round that fails without moving halts by name (`sendback.loop-halted`, failed/, refused once if re-presented) and `Run.roundHalt` is derived for the surfaces; +79 measured on main 25,980, lane-ratified (≤100, ruling 666). |
+| `flows` | 94 | 26,255 | **26,059** | ratified 26,059 — forge-mfv5.1.39 (lane drain-halt): a fix round that fails without moving halts by name (`sendback.loop-halted`, failed/, refused once if re-presented) and `Run.roundHalt` is derived for the surfaces; +79 measured on main 25,980, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,152 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 53 | 13,213 | **13,213** | ratified 13,213 — forge-nk1y.43: the demo outcome on demo.json, the PR body and `demo.no-change`, and the planner's one revise turn with the identical outputs; +45 measured on main 13,168, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,171 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **530** | **137,699** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **530** | **137,696** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -330,7 +330,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |
 | packages/flows/ci-gate.ts | flows | verbatim | 147 |
 | packages/flows/cycle-context.ts | flows | verbatim | 391 |
-| packages/flows/cycle-helpers.ts | flows | verbatim | 734 |
+| packages/flows/cycle-helpers.ts | flows | verbatim | 721 |
 | packages/flows/cycle-pr-open.ts | flows | rewritten | 148 |
 | packages/flows/cycle-report.ts | flows | verbatim | 31 |
 | packages/flows/cycle.ts | flows | verbatim | 540 |
@@ -422,7 +422,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 193 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 95 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
-| packages/flows/pr-branch-sync.ts | flows | verbatim | 632 |
+| packages/flows/pr-branch-sync.ts | flows | verbatim | 642 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 172 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 482 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
