@@ -12,10 +12,11 @@ the weight, cut the tree along its real boundaries, make the example factory
 deletable, and prove it with ten operator stories that are the e2e test, the
 demo and the usage doc at once.* Eight milestones (M0–M7) driven as parallel
 lanes, PRs #228 onward, each milestone closed by a real merge on a real
-ground or recorded NOT MET. The version stays 0.x until the tag is cut after
-the capstones; the plan and its exit tables are in
-[`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md). The work below ships on main
-as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
+ground or recorded NOT MET. The version stays 0.x until the tag; the plan and
+its exit tables are in [`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md). The
+work below ships on main as **0.10.0** (2026-10-05) and through the gitweave
+capstone's I1–I3; 1.0.0 is tagged after the capstone's I4–I6, an operator
+review of what GitWeave does, and an improve-and-simplify runway.
 
 ### Added
 
@@ -69,6 +70,55 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
 - **The forge repo's refs are guarded** (M7): a `reference-transaction` hook
   refuses any agent commit to, or ref move in, the forge repo; a session turn's
   budget is the lesser of what the session declared and what the bridge funded.
+- **The published site** (docs refactor W0–W7, R13/R16): one Astro site under `apps/docs` — a getting-started
+  path, one guide per primitive, a how-to per story rendered from the story itself (`generated_from:`, never
+  hand-edited), and `covers:` front matter tying every page to the code it documents. Agent-dev material
+  (SPEC, DECISIONS, QUARRY, plans) stays out of the site. Word budgets are ceilings (D-37); word ceilings, a
+  stale-path citation check and a banned-content lint run in CI.
+- **One readiness verdict** ([SPEC §6](./SPEC.md)): a project is ready when its five Face-A declarations and
+  its dependencies hold, and every claim is gated on it. **The demo planner plans, the orchestrator proves**
+  ([D-45](./DECISIONS.md)): the planner chooses evidence form and narrative as inert data; the declaration is
+  the means, the orchestrator captures and compares.
+- **Kickoff gate with operator-authored work items** ([D-48](./DECISIONS.md)): after the plan is approved the
+  operator can add, edit and delete work items (title, typed criteria, gate command, files, dependencies —
+  defaulting to the plan's leaves) before the first build; D-47 coverage re-evaluates with them; refused by
+  name once built.
+- **PM repair turns** ([D-49](./DECISIONS.md)): a set-validation failure gives the project manager up to two
+  repair turns fed its own errors verbatim; Requeue on such a failure repairs, never re-plans; exhaustion is
+  terminal by name with the errors recorded.
+- **Typed send-back at the verdict gate** (amended [D-20](./DECISIONS.md)): the verdict surface offers the same
+  typed work items (rationale, criteria, gate command, files); a runnable command found in a blocking comment
+  becomes the fix item's gate.
+- **Save owns its PR** (capstone fixes .22/.23/mfv5.1.33): Save on a protected branch opens the PR, merges
+  only on the presence of green, and deletes the merged remote branch so the next Save fast-forwards.
+- **Truthful review** (mfv5.1.30): a review scopes an appended work item by the commits recorded for it,
+  refuses to reuse prior findings once a work item has delivered since the judged head, and judges a runnable
+  WHEN by running it. **Truthful verdict card** (nk1y.33/.34): the headline reads from reviewer blockers and operator comments
+  alike; approving over an open blocker requires the operator's rationale, recorded in the verdict and PR body.
+- **A dev loop that cites the gate** (nk1y.35): every iteration brief carries the gate's own stdout; a repeat
+  failure shows both outputs side by side; "stale" without a run at head is refused.
+- **Reflection folds the operator's answers back** (nk1y.27/.26): themes are amended after the operator answers,
+  with a named event; multi-answer questions render as checkboxes.
+- **UI design constraints** ([D-46](./DECISIONS.md), `dev/UI-CONSTRAINTS.md`): height budgets per surface
+  type, a density-token scale with no literal pixels, at most five top-level sections; every Studio route and
+  generated how-to measured and brought inside (the S10 how-to 43,436 → 7,161 px; seven Studio routes brought
+  inside their budgets).
+- **Brain index per category** ([D-44](./DECISIONS.md)): every committed theme is linked from its category
+  index; `forge brain lint` flags an orphan theme.
+- **Minimal verdict page** (mfv5.1.31): the verdict/demo gate is a story-led page in forge's identity, stdout as
+  the default evidence for CLI checkpoints, review above demo (16,788 → 1,598 px).
+- **Capstone: GitWeave through forge** (R13, forge-mfv5): onboarding, I1 "honest baseline" (543 tests from 242
+  failing, GitWeave #42), I2 "apply engine, Terraform retired" (live acceptance against a real org,
+  GitWeave #44) and I3 "self-service" — I3a, the green apply path (GitWeave #45, `93fbaec`), and I3b,
+  self-service with request-time policy (GitWeave #47, `285848c`, after four verdict rounds) — each planned,
+  built, reviewed, demoed and reflected by the example factory under declared ceilings. The forge gaps I3
+  surfaced were fixed on main: a Kickoff Start rebases onto main (#1211); a gate whose only result is skipped
+  does not pass (#1216); the fix-loop drain halts on a terminal failure (#1218); a resume rebase tolerates
+  forge's own scratch (#1219); the demo planner gets a repair turn (#1220); an operator-authored work item's
+  criteria each carry a falsifying check ([D-20](./DECISIONS.md), [D-47](./DECISIONS.md); #1221), and a guard
+  check keeps its exit-code verdict (#1222); a
+  boot classifies a stranded run and a resume never recreates its branch from main
+  ([D-06](./DECISIONS.md); #1223).
 
 ### Changed
 
@@ -82,6 +132,10 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
 - **Resume** keeps a halted attempt's work: `resume_from` gains `plan` and
   `pr-open`, and a resumed develop run rebases once at re-entry
   ([D-06](./DECISIONS.md)).
+- **Session ceilings** (nk1y.5): every session kind runs under a declared ceiling; an unpriced or crashed call
+  is charged its remaining cap; the architect fails closed by name with the resume act shown.
+- **Studio's first bridge call uses the launched port** (nk1y.29); the brain write lease lives under
+  `_logs/`, is released on SIGTERM and a dead holder's lease is reaped at boot (nk1y.28).
 
 ### Removed
 
@@ -93,6 +147,8 @@ as **0.10.0** (2026-10-05); 1.0.0 is tagged after the capstones.
   ≤ 25 pages.
 - Every open bead the plan produced (M7): closed as fixed and merged or
   closed with a named reason; the flake register emptied.
+- The 320-px filmstrip composite as a checkpoint's evidence: the native still is kept, the grid is a thumbnail
+  (nk1y.30).
 
 ## [0.9.0] - 2026-08-28
 
