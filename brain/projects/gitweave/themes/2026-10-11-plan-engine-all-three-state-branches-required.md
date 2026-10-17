@@ -5,7 +5,7 @@ category: antipattern
 keywords: [plan, plan-engine, delete, state-diff, snapshot, create, unchanged, gitweave/plan.py, test_plan.py]
 created_at: 2026-10-12T00:00:00Z
 updated_at: 2026-10-12T00:00:00Z
-related_themes: [2026-10-11-acceptance-tests-require-live-credentials, sharp-edges]
+related_themes: [2026-10-11-acceptance-tests-require-live-credentials, sharp-edges, 2026-10-17-review-fix-wis-signal-upfront-coverage-gaps, 2026-10-17-integration-gate-wi-cost-spike-on-send-back]
 ---
 
 ## What happened
@@ -25,6 +25,8 @@ Add to `gitweave/plan.py` spec: "Given a resource present in snapshot but absent
 ## See also
 
 - [[2026-10-11-acceptance-tests-require-live-credentials]] — the other WI that failed in this cycle
+- [[2026-10-17-review-fix-wis-signal-upfront-coverage-gaps]] — I3b extension: PM coverage gaps in CLI routing and env-var absence caused 3 send-back rounds
+- [[2026-10-17-integration-gate-wi-cost-spike-on-send-back]] — I3b extension: integration-gate WI cost spike from new test files on send-back
 
 ## Sources
 
