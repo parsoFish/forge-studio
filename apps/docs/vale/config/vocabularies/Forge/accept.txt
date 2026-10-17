@@ -2,3 +2,5 @@ forge
 Starlight
 parsoFish
 [Oo]nboarding
+[Rr]equeue
+[Ww]orktree
