@@ -14,8 +14,10 @@
 import { SHELL_METACHARACTERS, isSafeDemoRoute } from '@forge/contracts';
 import { validateRunPrefix } from '@forge/kernel';
 
+import { parseDemoPortal, type DemoPortal } from './demo-portal.ts';
+
 /** The closed set of evidence forms a demo checkpoint may take; the planner picks one per checkpoint. */
-export const DEMO_EVIDENCE_FORMS = ['cli-before-after', 'api-before-after', 'screenshot', 'test-evidence'] as const;
+export const DEMO_EVIDENCE_FORMS = ['cli-before-after', 'api-before-after', 'screenshot', 'portal-before-after', 'test-evidence'] as const;
 export type DemoEvidenceForm = (typeof DEMO_EVIDENCE_FORMS)[number];
 
 export type DemoMeans = {
@@ -25,6 +27,8 @@ export type DemoMeans = {
   /** Bare command → the in-tree argv prefix capture runs instead (forge-nk1y.42):
    *  a checkpoint command must execute the tree it is evidence for. */
   run?: Record<string, string>;
+  /** A third-party portal the project configures (forge-8vfn.31): see demo-portal.ts. */
+  portal?: DemoPortal;
 };
 
 /** An in-app path on the tree's own server: absolute, no traversal, no host. */
@@ -65,7 +69,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 export function parseDemoMeans(v: unknown): DemoMeans | undefined {
   if (v === undefined || v === null) return undefined;
   if (!isObject(v)) throw new Error('project-config: demoMeans must be an object');
-  closedKeys(v, ['commands', 'routes', 'api', 'run'], 'demoMeans');
+  closedKeys(v, ['commands', 'routes', 'api', 'run', 'portal'], 'demoMeans');
   const commands = stringList(v.commands, 'demoMeans.commands', command);
   const routes = stringList(v.routes, 'demoMeans.routes', route);
   let api: DemoMeans['api'];
@@ -78,7 +82,8 @@ export function parseDemoMeans(v: unknown): DemoMeans | undefined {
     api = { ...(paths ? { paths } : {}), ...(apiCommands ? { commands: apiCommands } : {}), ...(ignoreKeys ? { ignoreKeys } : {}) };
   }
   const run = parseRunPrefixes(v.run);
-  return { ...(commands ? { commands } : {}), ...(routes ? { routes } : {}), ...(api ? { api } : {}), ...(run ? { run } : {}) };
+  const portal = parseDemoPortal(v.portal);
+  return { ...(commands ? { commands } : {}), ...(routes ? { routes } : {}), ...(api ? { api } : {}), ...(run ? { run } : {}), ...(portal ? { portal } : {}) };
 }
 
 function parseRunPrefixes(v: unknown): Record<string, string> | undefined {

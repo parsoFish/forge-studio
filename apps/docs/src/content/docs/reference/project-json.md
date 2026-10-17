@@ -95,6 +95,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `routes` | array of string | no | - | In-app paths a screenshot checkpoint may open, starting `/` with no traversal. |
 | `api` | object | no | - | Means for an API before/after checkpoint, compared as JSON. |
 | `run` | object | no | - | How a command runs from the tree under capture, such as `{ "gw": "python3 -m gitweave.cli" }`. Each key is a command name; its value replaces that name. A command the project installs (a script declared in `pyproject.toml`) that is found only on `PATH` runs one installed copy for both before and after, so forge refuses it unless it is declared here. A value may not hold shell operators, an absolute path or `..`. |
+| `portal` | object | no | - | A third-party site the project configures, such as its GitHub organisation, shown as page frames before and after. Capture runs `apply` from the before tree and records each page, then does the same from the after tree, so the site is left in the after state. |
 
 ### `demoMeans.api`
 
@@ -103,6 +104,15 @@ A project's forge configuration, stored at `.forge/project.json`.
 | `paths` | array of string | no | - | Paths forge requests with GET on each capture tree's own server. No scheme or host: reach an external API through `commands`. |
 | `commands` | array of string | no | - | Commands that print a JSON body to standard output, such as the project's own CLI reading a live service with its own credentials. |
 | `ignoreKeys` | array of string | no | - | Extra key names dropped at any depth before before/after JSON is compared, on top of the default volatile keys (`id`, `node_id`, timestamps, `url`, `*_url`, `etag`, `size`, `watchers`, `watchers_count`). |
+
+### `demoMeans.portal`
+
+| Name | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `origins` | array of string | yes | - | Exact origins, such as `https://github.com`: no trailing slash or path. Plain `http` only on a loopback host. Pages open on the first origin; a page that navigates to any origin not listed here is refused. |
+| `pages` | array of string | yes | - | Literal paths opened on the first origin, such as `/orgs/acme/repositories`. No host, placeholder or `..`. |
+| `apply` | array of string | yes | - | The project's own commands, run in order, that make the site match the tree under capture, such as `["gw reset", "gw apply"]`. Each runs without a shell, through `run`; write a sequence as a list, never with `&&`. If the before tree's run does not undo the change, the frames read unchanged. |
+| `authState` | string | no | - | Name of an environment variable whose value is the path to a Playwright storage-state file the operator exported once. forge reads it at capture and never logs or copies it; if declared and unreadable, capture refuses. |
 
 ### `buildProcess`
 
@@ -172,6 +182,9 @@ A project's forge configuration, stored at `.forge/project.json`.
 - `demoProcess[].kind` is one of `capture`, `verify`, `present`.
 - `demoMeans` rejects unknown keys.
 - `demoMeans.api` rejects unknown keys.
+- `demoMeans.portal` requires `origins`, `pages`, `apply`.
+- `demoMeans.portal` rejects unknown keys.
+- `demoMeans.portal.authState` matches `^[A-Z_][A-Z0-9_]*$`.
 - `appType` is not blank.
 - `logging.heartbeat_seconds` must be greater than 0.
 - `releaseProcess` requires `steps`.
