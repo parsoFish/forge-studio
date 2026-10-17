@@ -79,6 +79,8 @@ export type WorkItem = {
    * unifier's `kind` dispatch selector was removed in R4-01-F4.)
    */
   origin?: 'review-fix' | 'demo-fix' | 'gate-fix';
+  /** forge-mfv5.1.56 (D-06): set when the WI ended unmerged with committed work — its branch is kept and the next dispatch resumes from it. */
+  kept_branch?: string;
   body: string;
 };
 
@@ -180,6 +182,7 @@ export function parseWorkItem(content: string): WorkItem {
   if (data.behavior_preserving === true) {
     w.behavior_preserving = true;
   }
+  if (typeof data.kept_branch === 'string') w.kept_branch = data.kept_branch;
 
   return w;
 }
@@ -218,6 +221,7 @@ export function serializeWorkItem(w: WorkItem): string {
   if (w.behavior_preserving === true) {
     data.behavior_preserving = true;
   }
+  if (w.kept_branch !== undefined) data.kept_branch = w.kept_branch;
   return matter.stringify('\n' + w.body.replace(/^\n+/, ''), data);
 }
 
@@ -423,6 +427,9 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
         }
       }
     }
+  }
+  if (w.kept_branch !== undefined && w.kept_branch !== `forge/wi/${w.initiative_id}/${w.work_item_id}`) {
+    errors.push(`kept_branch must be forge/wi/${w.initiative_id}/${w.work_item_id} when set: got ${w.kept_branch}`);
   }
   if (w.origin !== undefined && !FIX_WI_ORIGINS.includes(w.origin)) {
     errors.push(`origin must be one of ${FIX_WI_ORIGINS.join(' | ')} when set: got ${String(w.origin)}`);

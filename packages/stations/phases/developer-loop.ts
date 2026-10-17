@@ -40,7 +40,8 @@ import { makeToolEventSink } from '@forge/agents';
 import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
-import { createWiWorktree, removeWiWorktree, wedgeKillRunnerError } from '@forge/flows';
+import { createWiWorktree, wedgeKillRunnerError } from '@forge/flows';
+import { closeWiWorktree, fixRoundHaltReason, haltFixRound, recordWiOutcome, roundFixWorkItemIds } from './dev-loop-keep.ts';
 import { emitDepsLinkProblems, emitGateEvent, emitGateFeedbackEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
 import { createGateFeedbackTracker, writeMergeConflictFeedback } from './gate-feedback.ts';
 // forge-nk1y.35: the feedback writers moved to gate-feedback.ts; re-exported for their existing tests.
@@ -319,6 +320,8 @@ export async function runDeveloperLoop(
   // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
   const skipsPerWiWork = resumeSkipsPerWiWork(input.resumeFrom);
   const toRun = skipsPerWiWork ? [] : ordered;
+  // forge-mfv5.1.56: a fix round (D-20 develop re-entry) halts before integrate when one of these fails.
+  const roundFixIds = input.resumeFrom === 'develop' ? roundFixWorkItemIds(items) : [];
 
   // cascade-v4 #2: establish a known-green baseline ONCE before any WI work.
   // On a fresh (non-resume) dev-loop the worktree sits at the initiative
@@ -514,6 +517,8 @@ export async function runDeveloperLoop(
       cycleWorktreePath: input.worktreePath,
     });
     emitDepsLinkProblems(logger, { initiativeId: input.initiativeId, parentEventId: wiStart.event_id, skill: agentDef.slug, workItemId: wi.work_item_id }, wiWorktree);
+    // forge-mfv5.1.56: a kept branch (a failed or crashed prior attempt) is resumed at its tip, with a fresh iteration budget.
+    if (wiWorktree.resumedFrom !== null) logger.emit({ initiative_id: input.initiativeId, parent_event_id: wiStart.event_id, phase: 'developer-loop', skill: agentDef.slug, event_type: 'log', input_refs: [specPath], output_refs: [wiWorktree.path], message: 'dev-loop.resumed-from-kept', metadata: { work_item_id: wi.work_item_id, branch: wiWorktree.branch, tip: wiWorktree.resumedFrom } });
 
     // Conflict-context injection: this dispatch is a requeued attempt iff a
     // PRIOR attempt for this same WI id already conflicted (the map is only
@@ -544,12 +549,6 @@ export async function runDeveloperLoop(
     let finalStatus: WorkItem['status'] = 'failed';
     let mergeConflict = false;
     let environmentFailure = false;
-    let wiDelta: { files: number; insertions: number; deletions: number; commits: number } = {
-      files: 0,
-      insertions: 0,
-      deletions: 0,
-      commits: 0,
-    };
     let pushResult: PushResult | null = null;
     // Phase 4 step 7: set inside the try block below when this attempt hits
     // a fan-in conflict that hasn't exhausted its retry yet — threaded out
@@ -1029,36 +1028,12 @@ export async function runDeveloperLoop(
       });
     }
 
-    // M5: per-WI delivered — this WI's net git delta (carries work_item_id so the
-    // monitor shows real per-WI stats, not the cycle aggregate on every hex).
-    // Phase 4/2 (honest delivery events, brain/cycles/themes/2026-07-11-dev-
-    // loop-delivered-event-fires-for-failed-wi.md): `dev-loop.delivered` is
-    // SUCCESS-ONLY. A failed WI carries the SAME diff-stat fields on
-    // `dev-loop.discarded` instead — nothing is lost, but the event name never
-    // implies a shipped WI when it wasn't.
-    //
-    // Phase 4 step 5: computed against the per-WI worktree (not the cycle
-    // worktree) so the stats are correct whether or not this WI ever merged
-    // — and read here, BEFORE the `finally` below removes the worktree.
-    //
-    // Phase 4 step 7: skipped entirely on a requeue — this attempt's outcome
-    // isn't concluded (it's being retried), so neither `delivered` nor
-    // `discarded` honestly describes it; the eventual terminal attempt fires
-    // exactly one of the two, same as before Step 7.
+    // M5 + forge-mfv5.1.56 (D-06): the per-WI delivery record, read BEFORE the
+    // `finally` removes the worktree — delivered (complete), kept (unmerged with
+    // commits; branch + spec kept_branch) and discarded (uncommitted residue
+    // only). Skipped on a requeue: this attempt's outcome is not concluded.
     if (!requeueForMergeConflict) {
-      wiDelta = gitNetDelta(wiWorktree.path, wiBaseSha);
-      const deliveryEvent = wiDeliveryEvent(finalStatus, wi.work_item_id, wiDelta);
-      logger.emit({
-        initiative_id: input.initiativeId,
-        parent_event_id: wiStart.event_id,
-        phase: 'developer-loop',
-        skill: agentDef.slug,
-        event_type: 'log',
-        input_refs: [wiWorktree.path],
-        output_refs: [],
-        message: deliveryEvent.message,
-        metadata: deliveryEvent.metadata,
-      });
+      recordWiOutcome({ logger, initiativeId: input.initiativeId, parentEventId: wiStart.event_id, skill: agentDef.slug, workItemId: wi.work_item_id, specPath, wiWorktree, wiBaseSha, finalStatus });
     }
 
     // G8: the CYCLE branch is pushed to origin after a successful merge-back
@@ -1114,17 +1089,9 @@ export async function runDeveloperLoop(
       });
     }
     } finally {
-      // Phase 4 step 5: per-WI worktrees are pure scratch — remove them on
-      // EVERY outcome (success, ralph failure, merge conflict) so the next
-      // WI never inherits stale state. No D-06 preserve semantics here;
-      // the WI's outcome lives on in the cycle branch (merge) or the event
-      // log (failure), never in the per-WI worktree itself.
-      removeWiWorktree({
-        projectRepoPath: input.projectRepoPath,
-        path: wiWorktree.path,
-        branch: wiWorktree.branch,
-        deleteBranch: true,
-      });
+      // forge-mfv5.1.56 (D-06): the worktree dir is scratch on every outcome; the branch
+      // goes only when merged (or requeued) — an unmerged WI's commits are its resume base.
+      closeWiWorktree({ projectRepoPath: input.projectRepoPath, wiWorktree, cycleWorktreePath: input.worktreePath, requeue: requeueForMergeConflict });
     }
 
     if (pushResult && !pushResult.pushed) {
@@ -1245,6 +1212,9 @@ export async function runDeveloperLoop(
       ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
     },
   });
+
+  const halt = fixRoundHaltReason({ items, roundFixIds, outcomes: wiOutcomes, logFilePath: logger.logFilePath });
+  if (halt !== null) haltFixRound({ logger, initiativeId: input.initiativeId, parentEventId: start.event_id, skill: agentDef.slug, manifestPath: input.manifestPath, worktreePath: input.worktreePath, ...halt });
 
   // Partial dev-loop completion is NOT fatal to the cycle. The reviewer's
   // send-back loop is the gap-filler — once gates flip green from any WI

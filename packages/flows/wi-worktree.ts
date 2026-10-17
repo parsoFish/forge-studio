@@ -54,6 +54,8 @@ import { createLogger } from '@forge/kernel';
 export type WiWorktreeHandle = {
   path: string;
   branch: string;
+  /** forge-mfv5.1.56: the kept tip this WI resumed from (its branch carried unmerged commits), else null. */
+  resumedFrom: string | null;
   /** What linking this worktree's deps could not do (linkProjectDeps); the caller emits it — never swallowed. */
   depsProblems: string[];
 };
@@ -76,18 +78,37 @@ export function wiBranchName(opts: { initiativeId: string; workItemId: string })
 }
 
 /**
- * Removes any leftover worktree dir/registry entry AND branch at the
- * target path/name before a fresh create. A crashed prior run of the SAME
- * work item is the only legitimate source of a collision here (per-WI
- * branches are 1:1 scratch, never reused across runs) — so unlike
- * worktree.ts's silent selfHealWorktreeState, this logs loudly: a collision
- * means a prior run died mid-flight and evidence is being discarded.
+ * forge-mfv5.1.56 (D-06): the commits `branch` carries outside every one of
+ * `againstRefs` — the work a `branch -D` would discard. 'UNKNOWN' when the
+ * branch is missing, none of the refs exists, or git cannot answer (§6.15:
+ * a caller never deletes on UNKNOWN).
+ */
+export function unmergedCommitCount(projectRepoPath: string, branch: string, againstRefs: readonly string[]): number | 'UNKNOWN' {
+  const git = (args: string[]): string => execFileSync('git', ['-C', projectRepoPath, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
+  const resolves = (ref: string): boolean => { try { git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]); return true; } catch { return false; } };
+  const present = againstRefs.filter(resolves);
+  if (!resolves(branch) || present.length === 0) return 'UNKNOWN';
+  try {
+    const n = Number(git(['rev-list', '--count', branch, '--not', ...present, '--']));
+    return Number.isInteger(n) ? n : 'UNKNOWN';
+  } catch {
+    return 'UNKNOWN';
+  }
+}
+
+/**
+ * Removes any leftover worktree dir/registry entry before a create. A
+ * leftover BRANCH is deleted only when it carries no commit outside the start
+ * point; one with committed work is the WI's kept tip (a budget-failed WI, or
+ * a crashed attempt — D-06) and is returned for the caller to resume, and an
+ * unanswerable check refuses by name rather than delete.
  */
 function selfHealWiCollision(opts: {
   projectRepoPath: string;
   path: string;
   branch: string;
-}): void {
+  startPointRef: string;
+}): { resumeTip: string | null } {
   if (existsSync(opts.path)) {
     console.warn(
       `[wi-worktree] stale worktree at ${opts.path} (crashed prior run?) — self-healing: remove + recreate`,
@@ -95,27 +116,20 @@ function selfHealWiCollision(opts: {
   }
   selfHealWorktreeState(opts.projectRepoPath, opts.path);
 
-  let branchPresent = false;
+  let tip: string | null = null;
   try {
-    execFileSync('git', ['-C', opts.projectRepoPath, 'rev-parse', '--verify', opts.branch], {
-      stdio: 'pipe',
-    });
-    branchPresent = true;
+    tip = execFileSync('git', ['-C', opts.projectRepoPath, 'rev-parse', '--verify', '--quiet', `refs/heads/${opts.branch}`], { stdio: 'pipe', encoding: 'utf8' }).trim();
   } catch {
     /* branch doesn't exist — nothing to heal */
   }
-  if (branchPresent) {
-    console.warn(
-      `[wi-worktree] stale branch ${opts.branch} (crashed prior run?) — deleting so it can be recreated at the current start point`,
-    );
-    try {
-      execFileSync('git', ['-C', opts.projectRepoPath, 'branch', '-D', opts.branch], {
-        stdio: 'pipe',
-      });
-    } catch {
-      /* best-effort — the branch-create step below will surface any real problem */
-    }
+  if (tip === null) return { resumeTip: null };
+  const unmerged = unmergedCommitCount(opts.projectRepoPath, opts.branch, [opts.startPointRef]);
+  if (unmerged === 'UNKNOWN') {
+    throw new Error(`wi-worktree: cannot tell whether ${opts.branch} carries committed work outside ${opts.startPointRef} — refusing to delete or re-cut it (D-06)`);
   }
+  if (unmerged > 0) return { resumeTip: tip };
+  execFileSync('git', ['-C', opts.projectRepoPath, 'branch', '-D', opts.branch], { stdio: 'pipe' });
+  return { resumeTip: null };
 }
 
 export function createWiWorktree(opts: {
@@ -131,16 +145,15 @@ export function createWiWorktree(opts: {
   const path = wiWorktreePath(opts);
   const branch = wiBranchName(opts);
 
-  selfHealWiCollision({ projectRepoPath: opts.projectRepoPath, path, branch });
+  const { resumeTip } = selfHealWiCollision({ projectRepoPath: opts.projectRepoPath, path, branch, startPointRef: opts.startPointRef });
 
-  // Create the branch at the explicit start point FIRST. `worktree.ts`'s
-  // `add()` only checks out a branch by name (new or existing) — it has no
-  // notion of an explicit start point — so we create the ref ourselves and
-  // let `add()` see an already-existing branch and check it out as-is. This
-  // keeps worktree.ts's contract completely untouched.
-  execFileSync('git', ['-C', opts.projectRepoPath, 'branch', branch, opts.startPointRef], {
-    stdio: 'pipe',
-  });
+  // Create the branch at the explicit start point FIRST (unless a kept tip is
+  // resumed). `worktree.ts`'s `add()` only checks out a branch by name — it
+  // has no notion of an explicit start point — so we create the ref ourselves
+  // and let `add()` check the existing branch out as-is.
+  if (resumeTip === null) {
+    execFileSync('git', ['-C', opts.projectRepoPath, 'branch', branch, opts.startPointRef], { stdio: 'pipe' });
+  }
 
   // Reuse add(): its path formula is `resolve(worktreesRoot, initiativeId)`,
   // so passing the compound `wi/<initiativeId>/<workItemId>` as its
@@ -168,14 +181,14 @@ export function createWiWorktree(opts: {
     cpSync(wiSrc, wiDst, { recursive: true, force: true });
   }
 
-  return { path: handle.path, branch: handle.branch, depsProblems: depsLink.problems };
+  return { path: handle.path, branch: handle.branch, resumedFrom: resumeTip, depsProblems: depsLink.problems };
 }
 
 /**
- * Per-WI worktrees are pure scratch: their outcome lives on in the cycle
- * branch after merge-back (or in the event log, on failure) — never in the
- * per-WI worktree itself. Removal is therefore always force + best-effort;
- * an already-gone worktree/branch is success, not an error.
+ * Per-WI worktree directories are pure scratch: removal is always force +
+ * best-effort; an already-gone worktree/branch is success, not an error. The
+ * BRANCH is deleted only when the caller asks (`deleteBranch`) — a caller
+ * asks only for a branch with no unmerged commits (forge-mfv5.1.56, D-06).
  */
 export function removeWiWorktree(opts: {
   projectRepoPath: string;
@@ -208,6 +221,8 @@ export function removeWiWorktree(opts: {
 export type PruneStaleWiWorktreesResult = {
   prunedPaths: string[];
   prunedBranches: string[];
+  /** forge-mfv5.1.56: WI branches left in place — they carry commits outside the initiative branch and main, or that could not be told (UNKNOWN). */
+  keptBranches: string[];
 };
 
 /**
@@ -216,12 +231,11 @@ export type PruneStaleWiWorktreesResult = {
  * A mid-fan-out crash (or an operator `forge requeue`) can leave per-WI
  * worktrees/branches behind for an initiative: the cycle-level preserve
  * logic (`scheduler.ts`, D-06) protects only the CYCLE worktree.
- * Per-WI worktrees are pure scratch — merged WI work already lives on the
- * cycle branch after merge-back, and any UNMERGED work from a crashed
- * attempt is simply re-run by the next attempt's own dev-loop dispatch —
- * so a leftover here can only cause harm (confusing worktree-state
- * inference, or colliding with the next attempt's `createWiWorktree`
- * call), never lose anything of value.
+ * Per-WI worktree DIRECTORIES are pure scratch and always go. A per-WI
+ * BRANCH goes only when it carries no commit outside the initiative branch
+ * and main (forge-mfv5.1.56, D-06): an unmerged one is a budget-failed or
+ * crashed WI's committed work, which the next dispatch resumes from
+ * (`createWiWorktree`), so it is kept and named in the event.
  *
  * Called once per cycle start/requeue, BEFORE the new attempt dispatches
  * any of its own per-WI worktrees (see `scheduler.ts`, alongside
@@ -246,6 +260,18 @@ export function pruneStaleWiWorktrees(opts: {
 }): PruneStaleWiWorktreesResult {
   const prunedPaths: string[] = [];
   const prunedBranches: string[] = [];
+  const keptBranches: string[] = [];
+  const settleBranch = (name: string): void => {
+    if (prunedBranches.includes(name) || keptBranches.includes(name)) return;
+    const unmerged = unmergedCommitCount(opts.projectRepoPath, name, [`refs/heads/forge/${opts.initiativeId}`, 'refs/heads/main', 'refs/heads/master']);
+    if (unmerged !== 0) { keptBranches.push(name); return; }
+    try {
+      execFileSync('git', ['-C', opts.projectRepoPath, 'branch', '-D', name], { stdio: 'pipe' });
+      prunedBranches.push(name);
+    } catch {
+      keptBranches.push(name); // a failed delete leaves it in place — named, never counted as pruned
+    }
+  };
 
   const wiRoot = resolve(opts.worktreesRoot, 'wi', opts.initiativeId);
   const registered = list(opts.projectRepoPath).filter((w) => {
@@ -253,23 +279,16 @@ export function pruneStaleWiWorktrees(opts: {
     return p === wiRoot || p.startsWith(wiRoot + sep);
   });
   for (const entry of registered) {
-    removeWiWorktree({
-      projectRepoPath: opts.projectRepoPath,
-      path: entry.path,
-      branch: entry.branch,
-      deleteBranch: true,
-    });
+    removeWiWorktree({ projectRepoPath: opts.projectRepoPath, path: entry.path, branch: entry.branch });
     prunedPaths.push(entry.path);
-    prunedBranches.push(entry.branch);
+    settleBranch(entry.branch);
   }
 
   // Orphan branches: a per-WI branch can survive with no registered
   // worktree left to key off — e.g. the worktree dir was already gone and
   // an earlier `worktree prune` (anyone's) reclaimed the registry entry
-  // while the branch, a wholly separate git object, was untouched. Sweep
-  // by naming convention so the next `createWiWorktree` for this
-  // initiative never hits "branch already exists" for a WI it isn't even
-  // retrying yet.
+  // while the branch, a wholly separate git object, was untouched. Swept by
+  // naming convention under the same merged-only rule.
   const branchPrefix = `forge/wi/${opts.initiativeId}/`;
   let branchListing = '';
   try {
@@ -286,13 +305,7 @@ export function pruneStaleWiWorktrees(opts: {
     // `+ ` (checked out in another worktree), or two plain spaces —
     // strip whichever marker is present before comparing the name.
     const name = rawLine.replace(/^[*+]?\s+/, '').trim();
-    if (!name || !name.startsWith(branchPrefix) || prunedBranches.includes(name)) continue;
-    try {
-      execFileSync('git', ['-C', opts.projectRepoPath, 'branch', '-D', name], { stdio: 'pipe' });
-      prunedBranches.push(name);
-    } catch {
-      /* best-effort — a branch delete failure here must not block the sweep */
-    }
+    if (name.startsWith(branchPrefix)) settleBranch(name);
   }
 
   // Sweep stale `git worktree` ADMIN entries for the whole project repo —
@@ -305,7 +318,7 @@ export function pruneStaleWiWorktrees(opts: {
     /* non-fatal */
   }
 
-  if (prunedPaths.length > 0 || prunedBranches.length > 0) {
+  if (prunedPaths.length > 0 || prunedBranches.length > 0 || keptBranches.length > 0) {
     try {
       createLogger(opts.initiativeId, opts.logsRoot ?? join(FORGE_ROOT, '_logs')).emit({
         initiative_id: opts.initiativeId,
@@ -319,6 +332,7 @@ export function pruneStaleWiWorktrees(opts: {
           reason: 'stale per-WI worktree/branch left behind by a prior attempt',
           paths: prunedPaths,
           branches: prunedBranches,
+          kept_branches: keptBranches,
         },
       });
     } catch {
@@ -326,5 +340,5 @@ export function pruneStaleWiWorktrees(opts: {
     }
   }
 
-  return { prunedPaths, prunedBranches };
+  return { prunedPaths, prunedBranches, keptBranches };
 }

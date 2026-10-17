@@ -28,6 +28,7 @@ import {
   topologicalOrder,
   validateWorkItemSet,
   writeWorkItem,
+  writeWorkItemStatus,
   type AcceptanceCriterion,
   type FixWiOrigin,
   type WorkItem,
@@ -246,6 +247,18 @@ export function readPendingFixWorkItems(worktreePath: string): WorkItem[] | { un
     if (guardedFile(worktreePath, ['.forge', 'work-items'], 'readdir') !== null) return pendingFixWorkItems(worktreePath);
     return existsSync(devWorkItemsDir(worktreePath)) ? { unreadable: 'the work-items dir failed the path guard (a symlink is never followed)' } : [];
   } catch (err) { return { unreadable: err instanceof Error ? err.message : String(err) }; }
+}
+
+/** forge-mfv5.1.56 (D-06): failed fix WIs whose committed work is kept on their branch — a Requeue re-arms them to resume a halted round. */
+export function resumableFixWorkItems(worktreePath: string): WorkItem[] {
+  return fixWorkItems(worktreePath).filter((w) => w.status === 'failed' && w.kept_branch !== undefined);
+}
+
+/** forge-mfv5.1.56: the Requeue of a halted round puts each resumable fix WI back to `pending` (its `kept_branch` stays); returns their ids. */
+export function rearmResumableFixWorkItems(worktreePath: string): string[] {
+  const items = resumableFixWorkItems(worktreePath);
+  for (const w of items) writeWorkItemStatus(join(devWorkItemsDir(worktreePath), `${w.work_item_id}.md`), 'pending');
+  return items.map((w) => w.work_item_id);
 }
 
 /** True if any fix WI is `failed` — the drain parks needs-operator, never retries. */
