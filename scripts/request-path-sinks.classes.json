@@ -125,6 +125,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/agents/ralph/branch-diff.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": "exec",
+  "note": "no request field (git diff/rev-parse in the gate's own worktree; moved out of stop-conditions.ts)"
+ },
  "packages/agents/ralph/stop-conditions.ts": {
   "class": "not-request-derived",
   "guard": null,

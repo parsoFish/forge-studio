@@ -4,7 +4,7 @@
 
 A request-path sink is a filesystem or process call, in a module reachable from a bridge route or a CLI dispatch entry, whose path may derive from request data. `node scripts/check-request-path-sinks.mjs` counts them per file and fails when a count grows. To add one: run the checker, route the path through a guard, add the file's entry (class, guard, verified, note) to `scripts/request-path-sinks.classes.json`, then run the checker with `--write` and `node scripts/dev-gen.mjs`. The model behind the classes is `dev/security-model.md`.
 
-256 files, 1462 sink calls; 187 classified (accidentally-safe 8, guarded 47, not-request-derived 37, other 81, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
+257 files, 1462 sink calls; 188 classified (accidentally-safe 8, guarded 47, not-request-derived 38, other 81, unguarded 14). Verified: exec = escape reproduced live, read = code read only, unver = never claimed safe. Designated unguarded functions (callers are counted as `<fn>@caller`): `readSessionStatus`, `writeSessionStatus`, `architectSessionDir`, `instructionsSessionDir`, `projectBrainSessionDir`, `demoSessionDir`, `readStatus`, `sessionPaths`, `_architectSessionDir`, `_readStatus`.
 
 | file | sinks | class | guard | verified | note |
 |---|---|---|---|---|---|
@@ -32,9 +32,10 @@ A request-path sink is a filesystem or process call, in a module reachable from 
 | `packages/agents/bridge-agents-studio.ts` | 11 | guarded | `resolveGuardedPath` | exec | URL param `slug`, gated by `SLUG_RE` + `isReservedId` before any path is built |
 | `packages/agents/materials-staging.ts` | 2 | guarded | `resolveGuardedPath` | exec | `POST /api/agents/:slug/run` body `materials[].filename` |
 | `packages/agents/phases/agent-scope-guard.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
+| `packages/agents/ralph/branch-diff.ts` | 2 | not-request-derived |  | exec | no request field (git diff/rev-parse in the gate's own worktree; moved out of stop-conditions.ts) |
 | `packages/agents/ralph/claude-agent.ts` | 2 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/agents/ralph/runner.ts` | 9 | unclassified |  |  |  |
-| `packages/agents/ralph/stop-conditions.ts` | 13 | not-request-derived |  | exec | no request field |
+| `packages/agents/ralph/stop-conditions.ts` | 11 | not-request-derived |  | exec | no request field |
 | `packages/agents/run-agent.ts` | 3 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/agents/skill-path.ts` | 1 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |
 | `packages/agents/spawn-marker.ts` | 6 | other |  |  | Narrative mention only in the retired audit; no per-file classification was recorded. |

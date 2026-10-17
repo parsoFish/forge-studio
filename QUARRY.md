@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 162 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 164 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -57,18 +57,18 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 10 | 1,887 | **1,887** | ratified 1,887 — forge-mfv5.1.39: `Run.roundHalt`, the halted fix round the run page and the verdict card name; +2 measured on main 1,885, lane-ratified (≤100, ruling 666). |
 | `kernel` | 42 | 7,043 | **5,896** | ratified 5,896 — forge-nk1y.42: `run-prefix.ts` (`demoMeans.run` validation + the tree's own pyproject commands) and the in-tree-first checkpoint head resolver; +98 measured on main 5,798 after trimming its comments 122 → 98, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 54 | 12,027 | **10,230** | ratified 10,230 — row 4 of forge-nk1y.45: `demo-browser-steps.ts` — a planned screenshot's `steps`/`regions`, validated by name for the plan and at capture; +49 measured on main 10,181 (after #1212), lane-ratified (≤100, ruling 666). |
+| `projects` | 54 | 12,040 | **10,243** | ratified 10,243 — forge-mfv5.1.52: `globMatches` replaces `globToRegExp` — a linear `*`-only matcher (the backtracking regex took 15 s on an 8-star scope entry, now reachable from the dev-loop gate); +13 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
-| `agents` | 45 | 12,606 | **12,606** | ratified 12,606 — forge-mfv5.1.47: a develop resume's unrestorable work-item queue classifies terminal by name, outranking an earlier attempt's signals; +4 measured on main 12,602 after a read for slack found none, lane-ratified (≤100, ruling 666). |
+| `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 96 | 26,419 | **26,220** | ratified 26,220 — forge-mfv5.1.47: a boot only classifies a stranded run into failed/, a resume settles its branch from origin, never main, and a send-back item re-mints from its event; +73 measured on main 26,147, lane-ratified (≤100, ruling 666). |
+| `flows` | 97 | 26,514 | **26,315** | ratified 26,315 — forge-mfv5.1.52: the Kickoff and send-back doors judge every files_in_scope entry against the worktree (dir needs its slash; a new file needs creates or an existing parent); +95 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `factory` | 17 | 3,160 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 54 | 13,466 | **13,466** | ratified 13,466 — forge-mfv5.1.47: a develop resume restores a lost work-item queue from the cycle snapshot, the typed send-back record and the branch's delivery record, or refuses by name; +100 measured on main 13,366, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **533** | **138,150** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **535** | **138,281** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -140,7 +140,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/halt-watch.ts | flows | rewritten | 38 **New file, row 207 (forge-8vfn.8.5.57):** the serve tick's view of the emergency halt — logs on transition and at most every `HALT_REMINDER_MS`. |
 | packages/flows/kickoff-facts.ts | flows | rewritten | 61 **New file, forge-mfv5.1.25:** the one reader of the Kickoff-gate facts. |
 | packages/flows/acceptance-check.ts | flows | rewritten | 67 **New file, forge-mfv5.1.43:** the falsifying check an operator-authored acceptance criterion carries (D-20 amended) — validate, label, tick. |
-| packages/flows/kickoff-add-work-item.ts | flows | rewritten | 265 **New file, forge-nk1y.12:** add a plan work item at the Kickoff gate (D-48); forge-nk1y.32: edit one added there in full, or delete it. |
+| packages/flows/kickoff-add-work-item.ts | flows | rewritten | 279 **New file, forge-nk1y.12:** add a plan work item at the Kickoff gate (D-48); forge-nk1y.32: edit one added there in full, or delete it. |
+| packages/flows/scope-entry-worktree.ts | flows | rewritten | 73 **New file, forge-mfv5.1.52:** a submitted files_in_scope entry judged against the worktree at the Kickoff and send-back doors. |
 | packages/flows/legacy-fix-gate.ts | flows | rewritten | 92 **New file, forge-nk1y.22:** re-entry rewrites a legacy no-op gate-fix WI gate to the failing gate's command. |
 | packages/flows/operator-stop.ts | flows | rewritten | 205 |
 | packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 385 |
@@ -171,7 +172,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/bridge-studio-kbs.ts | knowledge | verbatim | 773 |
 | packages/sessions/bridge-studio-lifecycle.ts | sessions | verbatim | 422 |
 | packages/flows/bridge-studio-runs.ts | flows | verbatim | 479 |
-| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 546 |
+| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 554 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 211 |
 | packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 696 **Ceiling re-keyed +4 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | packages/sessions/session-resolution.ts | sessions | rewritten | 446 |
@@ -293,8 +294,9 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/_adapters/types.ts | agents | verbatim | 56 |
 | packages/agents/ralph/claude-agent.ts | agents | verbatim | 577 |
 | packages/agents/ralph/runner.ts | agents | verbatim | 484 |
-| packages/agents/ralph/stop-conditions.ts | agents | verbatim | 799 |
+| packages/agents/ralph/stop-conditions.ts | agents | verbatim | 747 |
 | packages/agents/ralph/gate-test-summary.ts | agents | rewritten | 54 **New file, forge-mfv5.1.38: parses the gate runner's own summary; zero executed tests is not a pass.** |
+| packages/agents/ralph/branch-diff.ts | agents | rewritten | 75 **New file, forge-mfv5.1.52:** the branch diff and the one scope matcher the required-paths gate and the autocommit sweep share (moved out of stop-conditions.ts). |
 | packages/agents/agent-bands.ts | agents | verbatim | 76 |
 | packages/agents/agent-dispatch.ts | agents | verbatim | 372 |
 | packages/agents/dispatch-terminal.ts | agents | verbatim | 194 |
@@ -327,7 +329,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/routes.ts | apps/forge | verbatim | 251 |
 | packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 449 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
-| packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
+| packages/projects/constraint-blocks.ts | projects | verbatim | 270 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |
 | packages/flows/ci-gate.ts | flows | verbatim | 147 |
 | packages/flows/cycle-context.ts | flows | verbatim | 391 |
