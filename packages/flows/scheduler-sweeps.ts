@@ -16,6 +16,7 @@ import type { PhaseWiring } from './phase-wiring.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { syncCronTriggers } from './cron-triggers.ts';
 import { notify, type NotifyConfig } from './notify.ts';
+import { strandedFailureClassification } from './requeue-resume.ts';
 
 /**
  * F-W5-7 sweep: finalize ready-for-review cycles whose PR the operator has
@@ -129,14 +130,19 @@ export function recoveryLogsRoot(paths: QueuePaths, logsRoot: string | undefined
 /**
  * Announce one `recover()` result (forge-mfv5.1.47): every manifest was parked in failed/, none is
  * re-dispatched or cleaned up (D-06). Each stranded one gets a `recovery.stranded-classified` event in
- * its own cycle log naming the reason, the operator-stop flag and the last cycle event.
+ * its own cycle log naming the reason, the operator-stop flag and the last cycle event, then the
+ * `failure_classification` that strand stands for (forge-mfv5.1.54).
  */
 export async function announceRecovery(r: RecoveryResult, paths: QueuePaths, cfg: NotifyConfig, logsRoot: string): Promise<void> {
   for (const c of r.classified) {
     const logId = c.cycleId !== null && isSafeSegment(c.cycleId) ? c.cycleId : c.initiativeId;
     if (!isSafeSegment(logId)) { console.error(`[serve] recovery.stranded-classified not logged: unsafe log id for ${c.filename}`); continue; }
     const metadata = { reason: c.reason, stop_flag: c.stopFlag, heartbeat_age_ms: c.heartbeatAgeMs, resume_from: c.resumeFrom, last_event: lastCycleEvent(join(logsRoot, logId, 'events.jsonl')), queue_state: 'failed', needs: 'operator' };
-    createLogger(logId, logsRoot).emit({ initiative_id: c.initiativeId, phase: 'orchestrator', skill: 'scheduler', event_type: 'error', input_refs: [join(paths.failed, c.filename)], output_refs: [], message: 'recovery.stranded-classified', metadata });
+    const log = createLogger(logId, logsRoot);
+    log.emit({ initiative_id: c.initiativeId, phase: 'orchestrator', skill: 'scheduler', event_type: 'error', input_refs: [join(paths.failed, c.filename)], output_refs: [], message: 'recovery.stranded-classified', metadata });
+    // forge-mfv5.1.54: the same strand as the reader's own contract, so a Requeue resumes instead of re-running fresh.
+    const cls = strandedFailureClassification({ reason: c.reason, stopFlag: c.stopFlag });
+    if (cls) log.emit({ initiative_id: c.initiativeId, phase: 'orchestrator', skill: 'cycle', event_type: 'log', input_refs: [join(paths.failed, c.filename)], output_refs: [], message: 'failure_classification', metadata: { cycle_id: logId, ...cls, evidence_event_ids: [] } });
   }
   const refused = r.reason === 'worktree-path-refused';
   const title = refused ? `Refused ${r.recovered.length} manifest(s): worktree_path not the initiative's own` : `Parked ${r.recovered.length} stranded run(s) in failed/ — needs operator`;
