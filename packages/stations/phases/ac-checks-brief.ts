@@ -12,7 +12,7 @@ import type { AcCheckRun, AcGateRunInfo } from './wi-quality-gate.ts';
 /** The checks' brief budget (bytes): fixed lines first, the tails split fairly across the unsatisfied checks, each ≤ the per-stream cap. */
 export const CHECKS_BRIEF_MAX = 16_384;
 const PER_STREAM_MAX = 1_024;
-const COMMAND_MAX = 300;
+const COMMAND_MAX = 200;
 /** The cap is printed in each capped header; measured at 0, it may print up to this many more digits. */
 const CAP_DIGITS = 4;
 
@@ -24,10 +24,18 @@ function status(info: GateRunInfo): string {
   return `exit ${info.exitCode}${info.rejectReason ? ` (${info.rejectReason})` : ''}`;
 }
 
+const bytes = (s: string): number => Buffer.byteLength(s, 'utf8');
+
+/** The last `cap` UTF-8 bytes, never a split character (a cut sequence's remnant is dropped). */
+function lastBytes(text: string, cap: number): string {
+  const buf = Buffer.from(text, 'utf8');
+  return buf.subarray(Math.max(0, buf.length - cap)).toString('utf8').replace(/^\uFFFD+/, '');
+}
+
 function stream(name: string, text: string, cap: number): string[] {
   if (text === '') return [`--- ${name}: (empty)`];
-  if (text.length <= cap) return [`--- ${name}`, text];
-  return [`--- ${name} (last ${cap} of ${text.length} bytes — capped: the ${CHECKS_BRIEF_MAX}-byte checks brief is shared by every unsatisfied check)`, text.slice(text.length - cap)];
+  if (bytes(text) <= cap) return [`--- ${name}`, text];
+  return [`--- ${name} (last ${cap} of ${bytes(text)} bytes — capped)`, lastBytes(text, cap)];
 }
 
 function section(r: AcCheckRun, cap: number): string[] {
@@ -44,8 +52,8 @@ function section(r: AcCheckRun, cap: number): string[] {
 
 /** Every section at tail cap 0 measures the fixed text; the tails share what is left of the budget (0 when headers alone fill it). */
 function composeBody(headline: string, bad: readonly AcCheckRun[]): string {
-  const lines = [`[forge ac-checks] ${headline} — every check ran; fix them ALL (the work item closes only when its gate and every check pass).`, ''];
-  const fixed = [...lines, ...bad.flatMap((r) => section(r, 0))].join('\n').length;
+  const lines = [`[forge ac-checks] ${headline} — every check ran; fix them ALL (the work item closes only when its gate and every check pass). Tails share a ${CHECKS_BRIEF_MAX}-byte budget; a cut one says capped.`, ''];
+  const fixed = bytes([...lines, ...bad.flatMap((r) => section(r, 0))].join('\n'));
   const cap = Math.max(0, Math.min(PER_STREAM_MAX, Math.floor((CHECKS_BRIEF_MAX - fixed - CAP_DIGITS * 2 * bad.length) / (2 * bad.length))));
   return [...lines, ...bad.flatMap((r) => section(r, cap))].join('\n');
 }

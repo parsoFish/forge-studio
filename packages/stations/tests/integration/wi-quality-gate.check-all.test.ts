@@ -47,8 +47,8 @@ function recordingLogger(): { logger: EventLogger; emitted: EventLogEntry[] } {
   return { logger, emitted };
 }
 
-/** The developer-loop wiring: events per run, the brief once per gate pass. */
-function run(acs: Ac[], iteration = 1) {
+/** The developer-loop wiring: events per run, the brief once per gate pass (one pass per listed iteration). */
+function run(acs: Ac[], iterations: readonly number[] = [1]) {
   const dir = mkdtempSync(join(tmpdir(), 'forge-check-all-'));
   const ctx = process.env.NODE_TEST_CONTEXT;
   delete process.env.NODE_TEST_CONTEXT;
@@ -62,7 +62,7 @@ function run(acs: Ac[], iteration = 1) {
       onRun: (info) => { if (info.ac) emitGateEvent(logger, INIT, 'p', 'WI-17', info); },
       onVerdict: (info) => { verdicts.push(info); tracker.onRun(info); },
     });
-    const passed = gate({ iteration });
+    const passed = iterations.map((iteration) => gate({ iteration })).at(-1)!;
     const briefPath = lastGateFailurePath(dir);
     const brief = existsSync(briefPath) ? readFileSync(briefPath, 'utf8') : null;
     const events = emitted.map((e) => [e.message, (e.metadata as Record<string, unknown>).acceptance_criterion]);
@@ -145,4 +145,12 @@ test('the WI gate failing: its own run is the verdict (checks do not run — unc
     assert.equal(verdicts[0]!.exitCode, 3);
     assert.equal(verdicts[0]!.ac, undefined);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a repeat with IDENTICAL check output names the repeat once and does not re-print it (the brief stays one budget)', () => {
+  const r = run(FIVE(), [1, 2]);
+  assert.equal(r.verdicts.length, 2);
+  assert.match(r.brief!, /Repeat failure — the previous gate run \(iteration 1\)/);
+  assert.match(r.brief!, /Output IDENTICAL to this run/);
+  assert.equal(r.brief!.split('SB1A_OUT stdout\n# pass').length - 1, 1, 'the identical previous tails are not printed a second time');
 });

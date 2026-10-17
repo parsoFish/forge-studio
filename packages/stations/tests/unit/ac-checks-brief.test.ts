@@ -19,18 +19,20 @@ test('20 unsatisfied checks with 4 KB streams: the brief stays within CHECKS_BRI
   const v = composeAcChecksVerdict(runs, 3);
   assert.equal(v.passed, false);
   assert.equal(v.iteration, 3);
-  assert.ok(v.stderrTail.length <= CHECKS_BRIEF_MAX, `brief ${v.stderrTail.length} bytes > ${CHECKS_BRIEF_MAX}`);
+  const size = Buffer.byteLength(v.stderrTail, 'utf8');
+  assert.ok(size <= CHECKS_BRIEF_MAX, `brief ${size} bytes > ${CHECKS_BRIEF_MAX}`);
   for (let i = 0; i < 20; i++) {
     assert.match(v.stderrTail, new RegExp(`=== SB${i} \\(expect pass\\) — exit 1`));
     assert.ok(v.stderrTail.includes(`TAIL_${i}`), `SB${i} keeps the end of its output`);
   }
-  assert.match(v.stderrTail, /last \d+ of 4006 bytes — capped: the 16384-byte checks brief/);
+  assert.match(v.stderrTail, /last \d+ of 4006 bytes — capped/);
+  assert.match(v.stderrTail, /Tails share a 16384-byte budget/);
 });
 
 test('a small output is carried whole, with no cap line', () => {
   const v = composeAcChecksVerdict([run('AC1', false, 'short failure'), run('AC2', true, 'ok')], 1);
   assert.match(v.stderrTail, /short failure/);
-  assert.doesNotMatch(v.stderrTail, /capped/);
+  assert.doesNotMatch(v.stderrTail, /bytes — capped\)/);
   assert.doesNotMatch(v.stderrTail, /=== AC2/);
   assert.match(v.command, /1 of 2 acceptance checks unsatisfied: AC1/);
 });
@@ -45,4 +47,13 @@ test('verdict flags: all satisfied → pass with an empty body; only errored/tim
   const mixed = composeAcChecksVerdict([err, run('F', false, 'boom')], 1);
   assert.deepEqual([mixed.errored, mixed.timedOut, mixed.exitCode], [undefined, undefined, 1]);
   assert.match(mixed.stderrTail, /=== E \(expect pass\) — ERRORED \(live-env-missing\) — the check could not run; reported, never a pass/);
+});
+
+test('the budget is UTF-8 bytes: multi-byte output stays within CHECKS_BRIEF_MAX and no character is split', () => {
+  const runs = Array.from({ length: 10 }, (_, i) => run(`U${i}`, false, `${'日'.repeat(4096)}末${i}`));
+  const v = composeAcChecksVerdict(runs, 1);
+  const size = Buffer.byteLength(v.stderrTail, 'utf8');
+  assert.ok(size <= CHECKS_BRIEF_MAX, `brief ${size} bytes > ${CHECKS_BRIEF_MAX}`);
+  assert.doesNotMatch(v.stderrTail, /\uFFFD/, 'no split character');
+  for (let i = 0; i < 10; i++) assert.ok(v.stderrTail.includes(`末${i}`), `U${i} keeps the end of its output`);
 });
