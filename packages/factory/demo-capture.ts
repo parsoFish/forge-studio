@@ -17,7 +17,7 @@
  * about whether a recording actually happened.
  */
 
-import { chromium, type Browser, type BrowserContext, type Page, type Video } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type Page, type Request, type Video } from 'playwright-core';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -100,6 +100,19 @@ export type RecordTerminalInput = {
 
 export type BrowserStep = { fill: string; text: string } | { press: string } | { click: string };
 
+/** A declared portal page (forge-8vfn.31): opened on `origins[0]`, every main-frame navigation pinned to `origins`. */
+export type RecordPortalInput = {
+  side: RecordSide;
+  label: string;
+  origins: readonly string[];
+  page: string;
+  /** The operator's Playwright storage state, by path (resolved from the declared env var by the caller). */
+  authStatePath?: string;
+  steps?: BrowserStep[];
+  regions?: OverlayRegion[];
+  bundleDir: string;
+};
+
 export type RecordBrowserInput = {
   side: RecordSide;
   label: string;
@@ -125,7 +138,7 @@ export function videoDirRoot(bundleDir: string): string {
   return join(bundleDir, '_trees', 'video');
 }
 
-async function launchRecording(bundleDir: string): Promise<Recording> {
+async function launchRecording(bundleDir: string, opts: { storageState?: string } = {}): Promise<Recording> {
   const videoRoot = videoDirRoot(bundleDir);
   mkdirSync(videoRoot, { recursive: true });
   const videoDir = mkdtempSync(join(videoRoot, 'rec-'));
@@ -137,9 +150,11 @@ async function launchRecording(bundleDir: string): Promise<Recording> {
     throw new DemoRecordError('demo-capture: chromium failed to launch', err);
   }
   try {
+    // A storage state is passed BY PATH: Playwright reads it; forge never copies, logs or writes it.
     const context = await browser.newContext({
       recordVideo: { dir: videoDir, size: VIEWPORT },
       viewport: VIEWPORT,
+      ...(opts.storageState ? { storageState: opts.storageState } : {}),
     });
     await context.addInitScript(installForgeOverlay);
     const page = await context.newPage();
@@ -293,14 +308,20 @@ export async function recordTerminal(input: RecordTerminalInput): Promise<Record
 
 // ── recordBrowser ────────────────────────────────────────────────────────────
 
-/** Navigate, run declared steps, settle, outline regions, then finalise the
- *  webm + filmstrip. The last still doubles as the checkpoint's screenshot. */
-export async function recordBrowser(input: RecordBrowserInput): Promise<RecordResult> {
-  const side = assertSide(input.side, 'recordBrowser');
-  const label = assertPathSegment(input.label, 'recordBrowser: label');
-  const { browser, context, page, videoDir } = await launchRecording(input.bundleDir);
+type DriveInput = { who: string; side: RecordSide; label: string; url: string; steps?: BrowserStep[]; regions?: OverlayRegion[]; bundleDir: string };
+
+/**
+ * Navigate, run declared steps, settle, outline regions, then finalise the webm + filmstrip. The last still
+ * doubles as the checkpoint's frame. `pin` is installed on the page before the first navigation and asked,
+ * after the drive and on any failure, whether the evidence came from where it must.
+ */
+async function drive(input: DriveInput, opts: { storageState?: string; pin: (page: Page) => Promise<() => string | null> }): Promise<RecordResult> {
+  const { who, side, label } = input;
+  const { browser, context, page, videoDir } = await launchRecording(input.bundleDir, { storageState: opts.storageState });
   let contextClosed = false;
+  let violation: () => string | null = () => null;
   try {
+    violation = await opts.pin(page);
     await page.goto(input.url, { timeout: NAV_TIMEOUT_MS });
     const stills: string[] = [];
     for (const step of input.steps ?? []) {
@@ -314,14 +335,12 @@ export async function recordBrowser(input: RecordBrowserInput): Promise<RecordRe
       } else if ('press' in step) {
         await page.keyboard.press(step.press);
       } else {
-        throw new DemoRecordError(`recordBrowser: unrecognised step ${JSON.stringify(step)}`);
+        throw new DemoRecordError(`${who}: unrecognised step ${JSON.stringify(step)}`);
       }
     }
     await page.waitForTimeout(SETTLE_MS);
-    // A declared step may click a link; the evidence must still be the tree's own page.
-    if (new URL(page.url()).origin !== new URL(input.url).origin) {
-      throw new DemoRecordError(`recordBrowser: ${side}/${label} left the tree's own server (now at ${new URL(page.url()).origin}) — refused`);
-    }
+    const refused = violation();
+    if (refused) throw new DemoRecordError(`${who}: ${side}/${label} ${refused}`);
     if (input.regions && input.regions.length > 0) {
       await overlay(page).outline(input.regions);
     }
@@ -330,14 +349,78 @@ export async function recordBrowser(input: RecordBrowserInput): Promise<RecordRe
     const video = page.video();
     await context.close();
     contextClosed = true;
-    if (!video) throw new DemoRecordError(`recordBrowser: no video was recorded for ${side}/${label}`);
+    if (!video) throw new DemoRecordError(`${who}: no video was recorded for ${side}/${label}`);
     return await writeArtifacts({ browser, video, bundleDir: input.bundleDir, side, label, stills });
   } catch (err) {
     if (err instanceof DemoRecordError) throw err;
-    throw new DemoRecordError(`recordBrowser: failed recording ${side}/${label} at ${input.url}`, err);
+    // An aborted off-origin navigation surfaces as a navigation error: the refusal is the truth, by name.
+    const refused = violation();
+    if (refused) throw new DemoRecordError(`${who}: ${side}/${label} ${refused}`, err);
+    throw new DemoRecordError(`${who}: failed recording ${side}/${label} at ${input.url}`, err);
   } finally {
     if (!contextClosed) await context.close().catch(() => {});
     await browser.close().catch(() => {});
     rmSync(videoDir, { recursive: true, force: true });
+  }
+}
+
+/** Navigate the tree's own page through declared steps; the evidence must stay on the tree's own server. */
+export async function recordBrowser(input: RecordBrowserInput): Promise<RecordResult> {
+  const side = assertSide(input.side, 'recordBrowser');
+  const label = assertPathSegment(input.label, 'recordBrowser: label');
+  const own = new URL(input.url).origin;
+  // A declared step may click a link; the evidence must still be the tree's own page.
+  const pin = async (page: Page) => () => {
+    const now = landedOrigin(page);
+    return now === null || now === own ? null : `left the tree's own server (now at ${now}) — refused`;
+  };
+  return drive({ ...input, who: 'recordBrowser', side, label }, { pin });
+}
+
+/**
+ * Record a declared portal page (forge-8vfn.31). Every main-frame navigation — the first load, each
+ * redirect hop, a step's click — must stay on a declared origin: an undeclared one is aborted before it is
+ * fetched and the recording refused by name. Sub-resources (a portal's asset CDN) load as the page needs.
+ */
+export async function recordPortal(input: RecordPortalInput): Promise<RecordResult> {
+  const side = assertSide(input.side, 'recordPortal');
+  const label = assertPathSegment(input.label, 'recordPortal: label');
+  const origins = new Set(input.origins);
+  const home = input.origins[0];
+  if (!home) throw new DemoRecordError('recordPortal: no declared portal origin');
+  const url = new URL(input.page, home);
+  if (url.origin !== home || !input.page.startsWith('/') || input.page.startsWith('//')) {
+    throw new DemoRecordError(`recordPortal: page ${JSON.stringify(input.page)} does not resolve on the declared origin ${home} — refused`);
+  }
+  const pin = async (page: Page) => {
+    let offOrigin: string | null = null;
+    const isOff = (req: Request): boolean => req.isNavigationRequest() && req.frame() === page.mainFrame() && !origins.has(originOf(req.url()));
+    // Redirect hops reach `request`, not `route`; both record, `route` also aborts.
+    page.on('request', (req) => { if (isOff(req)) offOrigin ??= originOf(req.url()); });
+    await page.route('**/*', (route) => {
+      if (!isOff(route.request())) return route.continue();
+      offOrigin ??= originOf(route.request().url());
+      return route.abort('blockedbyclient');
+    });
+    return () => {
+      const now = landedOrigin(page);
+      const at = offOrigin ?? (now === null || origins.has(now) ? null : now);
+      return at === null ? null : `navigated to ${at}, which is not a declared portal origin — refused`;
+    };
+  };
+  return drive({ who: 'recordPortal', side, label, url: url.toString(), steps: input.steps, regions: input.regions, bundleDir: input.bundleDir }, { storageState: input.authStatePath, pin });
+}
+
+/** Where the page now stands, or null before any document loaded (a failed first navigation leaves about:blank). */
+function landedOrigin(page: Page): string | null {
+  return page.url() === 'about:blank' ? null : originOf(page.url());
+}
+
+/** `URL#origin`, or the raw string when it does not parse (never matches a declared origin). */
+function originOf(raw: string): string {
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return raw;
   }
 }
