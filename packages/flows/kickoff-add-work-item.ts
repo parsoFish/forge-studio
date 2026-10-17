@@ -1,7 +1,8 @@
 /** forge-nk1y.12 (D-48): add a plan WI (no `origin`) at the Kickoff gate, under the manifest lock; D-47 coverage injected, reported only.
  *  forge-mfv5.1.36: an added WI depends on the plan's leaves unless `dependsOn` is set.
  *  forge-nk1y.32: a WI ADDED at the gate (its `kickoff.work-item-added` event) is edited in full or deleted; a plan WI's
- *  dependencies only; every submitted scope entry is one relative path (`scopeEntryErrors`). */
+ *  dependencies only; every submitted scope entry is one relative path (`scopeEntryErrors`).
+ *  forge-mfv5.1.52: and is judged against the worktree (`scopeEntryWorktreeErrors`) — a directory needs its trailing `/`. */
 import { dirname } from 'node:path';
 import lockfile from 'proper-lockfile';
 
@@ -13,6 +14,7 @@ import { validateManifestPathFields } from './manifest-path-guard.ts';
 import { manifestAwaitsKickoff, readKickoffFacts } from './kickoff-facts.ts';
 import { nextDevWorkItemId } from './fix-work-items.ts';
 import { missingCheckErrors } from './acceptance-check.ts';
+import { createsEntryWorktreeErrors, scopeEntryWorktreeErrors } from './scope-entry-worktree.ts';
 import { readCycleEvents } from './legacy-fix-gate.ts';
 import { readWorkItemsFromDir, serializeWorkItem, validateWorkItemSet, writeWorkItem, type AcceptanceCriterion, type WorkItem } from './work-item.ts';
 
@@ -82,6 +84,12 @@ function gateSetErrors(set: WorkItem[], authored: WorkItem | null, criteriaAutho
   return [...pathErrors, ...setErrorList(validateWorkItemSet(set))];
 }
 
+/** forge-mfv5.1.52: the authored scope against the worktree; an absent entry passes only when `creates` lists it. */
+const worktreeScopeErrors = (worktree: string, wi: WorkItem): string[] => [
+  ...scopeEntryWorktreeErrors(worktree, wi.files_in_scope, { door: 'kickoff', creates: wi.creates ?? [] }),
+  ...createsEntryWorktreeErrors(worktree, wi.creates ?? []),
+];
+
 const setErrorList = (set: ReturnType<typeof validateWorkItemSet>): string[] =>
   [...set.setErrors, ...Object.entries(set.perItem).flatMap(([wid, es]) => es.map((e) => `${wid}: ${e}`))];
 
@@ -124,6 +132,8 @@ export async function addKickoffWorkItem(a: AddKickoffWorkItemArgs): Promise<Add
     const built = buildPlanWorkItem(existing, nextDevWorkItemId(worktree), a.initiativeId, a.source);
     if ('errors' in built) return { status: 'invalid', detail: built.errors.join('; ') };
     const wi = built.workItem;
+    const scopeErrors = worktreeScopeErrors(worktree, wi);
+    if (scopeErrors.length > 0) return { status: 'invalid', detail: scopeErrors.join('; ') };
     writeWorkItem(wi, worktree, { workItemsDir: g.wiDir });
     if (!persistManifestSpecs(g.manifestPath, [...(g.manifest.specs ?? []), wi.work_item_id])) {
       guardedUnlink(a.forgeRoot, ['_worktrees', a.initiativeId, '.forge', 'work-items', `${wi.work_item_id}.md`]); // no stray WI
@@ -213,7 +223,11 @@ export async function editKickoffWorkItem(a: EditKickoffWorkItemArgs): Promise<E
     const refused = full ? kickoffAddedRefusal(a.logsRoot, cycleIdOf(a, g), a.workItemId) : null;
     if (refused) return refused;
     const wi = applyEdit(current, a.edit);
-    const errors = gateSetErrors(existing.map((w) => (w === current ? wi : w)), full ? wi : null, a.edit.acceptanceCriteria !== undefined);
+    const scopeEdited = a.edit.filesInScope !== undefined || a.edit.creates !== undefined;
+    const errors = [
+      ...gateSetErrors(existing.map((w) => (w === current ? wi : w)), full ? wi : null, a.edit.acceptanceCriteria !== undefined),
+      ...(full && scopeEdited ? worktreeScopeErrors(worktree, wi) : []),
+    ];
     if (errors.length > 0) return { status: 'invalid', detail: errors.join('; ') };
     writeWorkItem(wi, worktree, { workItemsDir: g.wiDir });
     writeSnapshotCopy(a, g, wi);

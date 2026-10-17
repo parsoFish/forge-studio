@@ -7,7 +7,7 @@
  * work item's gate carries, beside one prose criterion.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { parseManifest, serializeManifest } from '../../manifest.ts';
 import { serializeWorkItem, type WorkItem } from '../../work-item.ts';
@@ -21,6 +21,21 @@ export const KICKOFF_ACS = [
 ];
 /** Existing WIs' estimated_iterations; the median rounded up is 4. */
 const ITERATIONS = [2, 3, 4, 5, 8];
+
+/**
+ * forge-mfv5.1.52: the files the Kickoff tests name in a submitted scope, present
+ * in the worktree as they would be in a real one (the routes judge every scope
+ * entry against the worktree).
+ */
+export const KICKOFF_WORKTREE_FILES = ['specs/legacy.md', 'tests/retire.test.ts'];
+
+/** Plant `rels` (worktree-relative) as stub files under `worktree`. */
+export function seedWorktreeFiles(worktree: string, rels: readonly string[]): void {
+  for (const rel of rels) {
+    mkdirSync(dirname(join(worktree, rel)), { recursive: true });
+    writeFileSync(join(worktree, rel), `stub ${rel}\n`);
+  }
+}
 
 export type KickoffWorktreePaths = StrandedPaths & { wiDir: string };
 
@@ -37,6 +52,7 @@ export function plantKickoffWorktree(forgeRoot: string, built?: StrandedBuilt): 
   const paths = plantStrandedKickoff(forgeRoot, built);
   const wiDir = join(forgeRoot, '_worktrees', STRANDED_INIT, '.forge', 'work-items');
   mkdirSync(wiDir, { recursive: true });
+  seedWorktreeFiles(join(forgeRoot, '_worktrees', STRANDED_INIT), KICKOFF_WORKTREE_FILES);
   for (let n = 1; n <= STRANDED_WI_COUNT; n++) {
     const text = serializeWorkItem(existingWorkItem(n, built === 'wi-complete' && n === 1 ? 'complete' : 'pending'));
     writeFileSync(join(wiDir, `WI-${n}.md`), text);

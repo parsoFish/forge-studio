@@ -22,6 +22,7 @@
  */
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { seedWorktreeFiles } from './kickoff-worktree.ts';
 
 export const I2_INIT = 'INIT-2026-10-11-i2-apply-engine-terraform-retired';
 export const I2_CYCLE = '2026-10-11T02-16-05_INIT-2026-10-11-i2-apply-engine-terraform-retired';
@@ -39,6 +40,9 @@ export function i2WorkItemFiles(opts: I2PlantOpts): Array<{ name: string; path: 
   const adds = ['WI-13', 'WI-14'].map((id) => ({ name: `${id}.md`, path: join(KICKOFF_DIR, `${id}${suffix}`) }));
   return opts.withKickoffAdds ? [...plan, ...adds] : plan;
 }
+
+/** forge-mfv5.1.52: stubs for every file the Kickoff tests name in a submitted scope (the routes judge entries against the worktree). */
+export const I2_WORKTREE_FILES = ['tests/acceptance/test_gw_reset_before_apply.py', 'tests/test_docs_no_terraform_tokens.py', '.github/copilot-context.md', 'tests/x.py'];
 
 /** `live`: WI-13/14 as they are now (row 11's edits) plus the kickoff events (forge-nk1y.32). */
 export type I2PlantOpts = { withKickoffAdds: boolean; live?: boolean };
@@ -59,6 +63,7 @@ export function plantI2Kickoff(forgeRoot: string, opts: I2PlantOpts = { withKick
   const logDir = join(forgeRoot, '_logs', I2_CYCLE);
   const snapshotDir = join(logDir, 'work-items-snapshot');
   for (const d of [repo, wiDir, snapshotDir]) mkdirSync(d, { recursive: true });
+  seedWorktreeFiles(worktree, I2_WORKTREE_FILES);
   const manifestPath = join(forgeRoot, '_queue', 'ready-for-review', `${I2_INIT}.md`);
   writeFileSync(manifestPath, readFileSync(join(KICKOFF_DIR, 'manifest.md.fixture'), 'utf8')
     .replace('PROJECT_REPO_PATH', repo).replace('WORKTREE_PATH', worktree));

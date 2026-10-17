@@ -24,6 +24,9 @@ function setup(slug: string): { forgeRoot: string; worktreePath: string; initiat
   const worktreePath = join(forgeRoot, '_worktrees', initiativeId);
   const projectRepoPath = join(forgeRoot, 'projects', 'test-project');
   mkdirSync(join(worktreePath, '.forge', 'work-items'), { recursive: true });
+  // forge-mfv5.1.52: the typed send-back's scope file exists in the worktree (the route judges each entry).
+  mkdirSync(join(worktreePath, 'tests', 'acceptance'), { recursive: true });
+  writeFileSync(join(worktreePath, 'tests', 'acceptance', 'test_x.py'), 'stub\n');
   execFileSync('git', ['init', '-q', '-b', 'main', worktreePath]);
   execFileSync('git', ['-C', worktreePath, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base']);
   mkdirSync(projectRepoPath, { recursive: true });

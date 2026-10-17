@@ -130,3 +130,36 @@ test('Start development while an add holds the manifest lock: the per-id result 
     assert.ok(existsSync(manifestPath));
   } finally { await release(); }
 }));
+
+// ---- forge-mfv5.1.52: every scope entry is judged against the initiative's worktree ----
+
+test('forge-mfv5.1.52: an existing file and an existing directory WITH its slash are accepted (the I4 WI-13 scope shape)', () => withBridge(async (post) => {
+  const r = await post({ ...BODY, filesInScope: ['tests/', 'specs/', 'tests/retire.test.ts'] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+}));
+
+test('forge-mfv5.1.52: a directory without its slash → 400 naming the entry and the corrected form; nothing written', () => withBridge(async (post, root) => {
+  const r = await post({ ...BODY, filesInScope: ['tests'] });
+  assert.equal(r.status, 400);
+  assert.match(String(r.body.error), /files_in_scope entry "tests" refused: is a directory — did you mean "tests\/"\?/);
+  assert.equal(existsSync(join(root, '_worktrees', STRANDED_INIT, '.forge', 'work-items', 'WI-6.md')), false);
+}));
+
+test('forge-mfv5.1.52: a missing path → 400 by name, unless the same work item lists it under creates', () => withBridge(async (post) => {
+  const missing = await post({ ...BODY, filesInScope: ['tests/new_retire.test.ts', 'nowhere/x.py'] });
+  assert.equal(missing.status, 400);
+  const error = String(missing.body.error);
+  assert.match(error, /"tests\/new_retire\.test\.ts" refused: not in the worktree — list a file this work item creates under creates too, or name its existing directory as "tests\/"/);
+  assert.match(error, /"nowhere\/x\.py" refused: not in the worktree/);
+  const created = await post({ ...BODY, filesInScope: ['tests/new_retire.test.ts'], creates: ['tests/new_retire.test.ts'] });
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+}));
+
+test('forge-mfv5.1.52: a file written as a directory, or a non-normalised path, is refused with the corrected form', () => withBridge(async (post) => {
+  const asDir = await post({ ...BODY, filesInScope: ['specs/legacy.md/'] });
+  assert.equal(asDir.status, 400);
+  assert.match(String(asDir.body.error), /is a file, not a directory — did you mean "specs\/legacy\.md"\?/);
+  const dotted = await post({ ...BODY, filesInScope: ['./tests/'] });
+  assert.equal(dotted.status, 400);
+  assert.match(String(dotted.body.error), /did you mean "tests\/"\?/);
+}));

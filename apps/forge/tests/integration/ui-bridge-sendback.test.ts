@@ -69,6 +69,10 @@ function setup(slug: string): { forgeRoot: string; worktreePath: string; initiat
   // The initiative's own forge worktree; project_repo_path (projects/test-project) must exist too.
   const worktreePath = join(forgeRoot, '_worktrees', initiativeId);
   mkdirSync(worktreePath, { recursive: true });
+  // forge-mfv5.1.52: the files a typed send-back names in its scope exist in the worktree (the route judges each entry).
+  // The I3b round-3 fixture names files its fix created — their directories exist, as they did live.
+  for (const d of ['tests/acceptance', 'gitweave/managers', 'gitweave/self_serve']) mkdirSync(join(worktreePath, d), { recursive: true });
+  for (const rel of ['tests/test_structure.py', 'pytest.ini']) writeFileSync(join(worktreePath, rel), `stub ${rel}\n`);
   mkdirSync(join(forgeRoot, 'projects', 'test-project'), { recursive: true });
   const cycleId = `${initiativeId}-20260101T000000`;
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
@@ -466,5 +470,35 @@ test('forge-mfv5.1.43: the comment door (derivedFrom: comments) still compiles a
     assert.equal(status, 200, JSON.stringify(json));
     const wi = parseWorkItem(readFileSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md'), 'utf8'));
     assert.deepEqual(wi.acceptance_criteria, [prose]);
+  });
+});
+
+// ---- forge-mfv5.1.52: a typed send-back's scope is judged against the live worktree ----
+
+const sendBack = (initiativeId: string, filesInScope: string[]) => ({
+  initiativeId, kind: 'send-back', rationale: 'scope door', acceptanceCriteria: [TYPED_AC], qualityGateCmd: ['python3', '-m', 'pytest', 'tests/'], filesInScope,
+});
+
+test('forge-mfv5.1.52: send-back scope — a file ok · "tests/" ok · a new file in an existing directory ok', async () => {
+  for (const [slug, scope] of [['sbfile', ['pytest.ini']], ['sbdir', ['tests/']], ['sbnew', ['tests/test_new_fix.py']]] as const) {
+    await withBridge(slug, async (url, { initiativeId, worktreePath }) => {
+      const { status, json } = await postVerdict(url, sendBack(initiativeId, [...scope]));
+      assert.equal(status, 200, `${slug}: ${JSON.stringify(json)}`);
+      assert.deepEqual(parseWorkItem(readFileSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md'), 'utf8')).files_in_scope, scope);
+    });
+  }
+});
+
+test('forge-mfv5.1.52: send-back scope — "tests" → 400 "did you mean tests/" · a file under a missing directory → 400 naming the deepest existing one · nothing compiled', async () => {
+  await withBridge('sbbad', async (url, { initiativeId, worktreePath }) => {
+    const slashless = await postVerdict(url, sendBack(initiativeId, ['tests']));
+    assert.equal(slashless.status, 400);
+    assert.match(String((slashless.json as Record<string, unknown>).error), /files_in_scope entry "tests" refused: is a directory — did you mean "tests\/"\?/);
+    const orphan = await postVerdict(url, sendBack(initiativeId, ['tests/unit/deep/test_x.py']));
+    assert.equal(orphan.status, 400);
+    assert.match(String((orphan.json as Record<string, unknown>).error), /"tests\/unit\/deep\/test_x\.py" refused: not in the worktree and neither is its directory — name its existing directory as "tests\/"/);
+    const gateDoor = await postGate(url, initiativeId, { verdict: 'send-back', rationale: 'r', acceptanceCriteria: [TYPED_AC], filesInScope: ['tests'] });
+    assert.equal(gateDoor.status, 400, 'the run-gate door refuses the same way');
+    assert.equal(existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), false, 'nothing compiled');
   });
 });

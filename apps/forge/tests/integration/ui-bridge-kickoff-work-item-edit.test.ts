@@ -140,3 +140,18 @@ test('the roadmap serves kickoff-added WIs\' editable fields at the gate — WI-
   assert.deepEqual(k.creates, []);
   assert.deepEqual(k.qualityGateCmd, ['python3', '-m', 'pytest', 'tests/test_docs_no_terraform_tokens.py']);
 }));
+
+// ---- forge-mfv5.1.52: an edited scope is judged against the worktree, as the add is ----
+
+test('forge-mfv5.1.52: PATCH filesInScope ["tests"] → 400 "did you mean tests/"; ["tests/"] → 200; a missing file → 400 by name', () => withBridge(async (c) => {
+  const slashless = await patch(c, 'WI-14', { initiativeId: I2_INIT, filesInScope: ['tests'] });
+  assert.equal(slashless.status, 400);
+  assert.match(String(slashless.body.error), /files_in_scope entry "tests" refused: is a directory — did you mean "tests\/"\?/);
+  assert.equal(wi(c.paths.wiDir, 'WI-14').files_in_scope.includes('tests'), false, 'the refused edit wrote nothing');
+  const missing = await patch(c, 'WI-14', { initiativeId: I2_INIT, filesInScope: ['tests/test_nope.py'] });
+  assert.equal(missing.status, 400);
+  assert.match(String(missing.body.error), /"tests\/test_nope\.py" refused: not in the worktree — list a file this work item creates under creates too/);
+  const dir = await patch(c, 'WI-14', { initiativeId: I2_INIT, filesInScope: ['tests/'] });
+  assert.equal(dir.status, 200, JSON.stringify(dir.body));
+  assert.deepEqual(wi(c.paths.wiDir, 'WI-14').files_in_scope, ['tests/']);
+}));

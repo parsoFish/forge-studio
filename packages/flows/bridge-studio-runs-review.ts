@@ -24,6 +24,8 @@ import { writeVerdictJson } from './flow-artifacts.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
 import { loadProjectConfig } from '@forge/projects';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
+import { scopeEntryWorktreeErrors } from './scope-entry-worktree.ts';
+import { scopeEntryErrors } from '@forge/contracts';
 import { isDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from '@forge/kernel';
 
 /** Default per-WI iteration budget for compiled review-fix work items (was the
@@ -349,6 +351,12 @@ export async function applyReviewVerdict(
   if (!existsSync(worktreePath)) {
     sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
     return;
+  }
+  // forge-mfv5.1.52: a typed send-back's scope, judged against the live worktree — a
+  // directory needs its trailing '/'; an absent file needs its parent directory to exist.
+  if (body.filesInScope !== undefined) {
+    const scopeErrors = [...scopeEntryErrors('files_in_scope', body.filesInScope), ...scopeEntryWorktreeErrors(worktreePath, body.filesInScope, { door: 'send-back' })];
+    if (scopeErrors.length > 0) { sendJson(res, 400, { error: scopeErrors.join('; '), initiativeId }, origin); return; }
   }
   // SEC-02 round 2 (Finding 2, headline): cycle_id feeds
   // resolve(logsRoot, cycleId) at THREE write sites downstream (the two
