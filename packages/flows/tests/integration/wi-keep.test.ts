@@ -22,6 +22,7 @@ import { FIX_BRANCH, FIX_INIT, plantStrandedFixRound } from '../test-fixtures/st
 import { drainPendingFixWorkItems } from '../../drain-fix-loop.ts';
 import { aggregateRun } from '../../run-model.ts';
 import { findDelivered, findLatestWiVerdict } from '../../run-model-derive-cost.ts';
+import { deriveWorkItems } from '../../run-model-derive-status.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 
@@ -107,7 +108,7 @@ test('prune: a per-WI branch already merged into the initiative branch is delete
   }
 });
 
-test('createWiWorktree: an existing UNMERGED WI branch is resumed at its kept tip — never deleted and re-cut from the start point', () => {
+test('createWiWorktree: a KEPT branch (spec kept_branch) is resumed at its tip and brought onto the moved cycle tip — never deleted, never run on a stale base', () => {
   const w = repoWithCycle('INIT-resume');
   try {
     const base = git(w.repo, ['rev-parse', 'main']);
@@ -115,13 +116,66 @@ test('createWiWorktree: an existing UNMERGED WI branch is resumed at its kept ti
     const tip = commitIterations(first.path, 3);
     removeWiWorktree({ projectRepoPath: w.repo, path: first.path, branch: first.branch });
     writeFileSync(join(w.cycle, '.forge', 'work-items', 'WI-1.md'), 'spec v2\n');
+    git(w.repo, ['checkout', '-q', 'forge/INIT-resume']); // a sibling WI merged meanwhile: the cycle tip moved
+    writeFileSync(join(w.repo, 'sibling.txt'), 'sibling\n');
+    git(w.repo, ['add', 'sibling.txt']);
+    git(w.repo, ['commit', '-q', '-m', 'wi(WI-2): merge']);
+    const moved = git(w.repo, ['rev-parse', 'HEAD']);
+    git(w.repo, ['checkout', '-q', 'main']);
 
-    const second = createWiWorktree({ projectRepoPath: w.repo, worktreesRoot: w.worktreesRoot, initiativeId: 'INIT-resume', workItemId: 'WI-1', startPointRef: base, cycleWorktreePath: w.cycle });
+    const second = createWiWorktree({ projectRepoPath: w.repo, worktreesRoot: w.worktreesRoot, initiativeId: 'INIT-resume', workItemId: 'WI-1', startPointRef: moved, cycleWorktreePath: w.cycle, resumeKept: true });
 
     assert.equal(second.resumedFrom, tip, 'the handle names the kept tip it resumed from');
-    assert.equal(git(second.path, ['rev-parse', 'HEAD']), tip);
-    assert.ok(existsSync(join(second.path, 'iter-3.txt')), 'every committed iteration is in the resumed worktree');
+    assert.equal(second.parkedAs, null);
+    assert.doesNotThrow(() => git(w.repo, ['merge-base', '--is-ancestor', tip, second.branch]), 'the kept tip is in the resumed branch');
+    assert.equal(git(second.path, ['rev-list', '--count', `${moved}..HEAD`]), '4', 'its 3 iterations + the resume merge, on top of the moved cycle tip');
+    assert.ok(existsSync(join(second.path, 'iter-3.txt')) && existsSync(join(second.path, 'sibling.txt')));
     assert.equal(readFileSync(join(second.path, '.forge', 'work-items', 'WI-1.md'), 'utf8'), 'spec v2\n');
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test('createWiWorktree: a kept branch that conflicts with the cycle tip is refused by name — the kept branch untouched, no worktree left', () => {
+  const w = repoWithCycle('INIT-clash');
+  try {
+    const base = git(w.repo, ['rev-parse', 'main']);
+    const first = createWiWorktree({ projectRepoPath: w.repo, worktreesRoot: w.worktreesRoot, initiativeId: 'INIT-clash', workItemId: 'WI-1', startPointRef: base, cycleWorktreePath: w.cycle });
+    writeFileSync(join(first.path, 'README.md'), 'kept edit\n');
+    git(first.path, ['commit', '-q', '-am', 'wip']);
+    const tip = git(first.path, ['rev-parse', 'HEAD']);
+    removeWiWorktree({ projectRepoPath: w.repo, path: first.path, branch: first.branch });
+    git(w.repo, ['checkout', '-q', 'forge/INIT-clash']);
+    writeFileSync(join(w.repo, 'README.md'), 'cycle edit\n');
+    git(w.repo, ['commit', '-q', '-am', 'cycle']);
+    const moved = git(w.repo, ['rev-parse', 'HEAD']);
+    git(w.repo, ['checkout', '-q', 'main']);
+
+    assert.throws(
+      () => createWiWorktree({ projectRepoPath: w.repo, worktreesRoot: w.worktreesRoot, initiativeId: 'INIT-clash', workItemId: 'WI-1', startPointRef: moved, cycleWorktreePath: w.cycle, resumeKept: true }),
+      /kept branch forge\/wi\/INIT-clash\/WI-1 \(tip [0-9a-f]{12}\) does not merge onto the cycle tip [0-9a-f]{12} — resolve it by hand, then Requeue/,
+    );
+    assert.equal(git(w.repo, ['rev-parse', first.branch]), tip);
+    assert.equal(existsSync(first.path), false);
+  } finally {
+    rmSync(w.dir, { recursive: true, force: true });
+  }
+});
+
+test('createWiWorktree: an unmerged leftover whose spec names NO kept branch (a fresh plan reusing the id, a crash) is parked — never resurrected, never deleted', () => {
+  const w = repoWithCycle('INIT-park');
+  try {
+    const base = git(w.repo, ['rev-parse', 'main']);
+    const first = createWiWorktree({ projectRepoPath: w.repo, worktreesRoot: w.worktreesRoot, initiativeId: 'INIT-park', workItemId: 'WI-1', startPointRef: base, cycleWorktreePath: w.cycle });
+    const tip = commitIterations(first.path, 2);
+    removeWiWorktree({ projectRepoPath: w.repo, path: first.path, branch: first.branch });
+
+    const second = createWiWorktree({ projectRepoPath: w.repo, worktreesRoot: w.worktreesRoot, initiativeId: 'INIT-park', workItemId: 'WI-1', startPointRef: base, cycleWorktreePath: w.cycle });
+
+    assert.equal(second.resumedFrom, null);
+    assert.equal(second.parkedAs, `forge/parked/INIT-park/WI-1-${tip.slice(0, 12)}`);
+    assert.equal(git(w.repo, ['rev-parse', second.parkedAs!]), tip, 'the old work survives on the parked ref');
+    assert.equal(git(w.repo, ['rev-parse', second.branch]), base, 'the new attempt is cut fresh from the start point');
   } finally {
     rmSync(w.dir, { recursive: true, force: true });
   }
@@ -219,4 +273,16 @@ test('run model: dev-loop.kept is the WI\'s latest verdict — never read as del
   ].map((e) => ({ ...e, started_at: at })) as unknown as EventLogEntry[];
   assert.deepEqual(findLatestWiVerdict(evs, 'WI-17'), { message: 'dev-loop.kept', outcome: 'failed', files: 22, insertions: 567, commits: 15 });
   assert.equal(findDelivered(evs, 'WI-17'), undefined);
+});
+
+test('run model: a WI whose latest verdict is dev-loop.kept reads failed (halted, resumable by Requeue) — never "retrying"', () => {
+  const at = new Date().toISOString();
+  const e = (event_type: string, message: string | undefined, metadata: Record<string, unknown>) => ({ phase: 'developer-loop', skill: 'developer-ralph', event_type, message, metadata, started_at: at }) as unknown as EventLogEntry;
+  const evs = [
+    e('start', 'ralph.start', { work_item_id: 'WI-17' }),
+    e('end', 'ralph.end', { work_item_id: 'WI-17', status: 'failed', stop_reason: 'iteration-budget' }),
+    e('log', 'dev-loop.kept', { work_item_id: 'WI-17', branch: 'forge/wi/I/WI-17', files_changed: 22, insertions: 567, deletions: 46, commits: 15, outcome: 'failed', resumable: true }),
+  ];
+  const [wi] = deriveWorkItems(evs, new Map<string, string | null>([['developer-loop', 'dev']]), new Map());
+  assert.equal(wi?.status, 'failed');
 });

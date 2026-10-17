@@ -1125,7 +1125,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "forge-mfv5.1.56: git -C projectRepoPath (rev-parse / rev-list --count / branch -D) on `forge/wi/<initiativeId>/<workItemId>` refs; projectRepoPath reaches here only from a claimed manifest scheduler-run-one / drain-fix-loop containment-check (isContainedProjectRepoPath), ids are WORK_ITEM_ID_PATTERN / validated initiative ids, execFileSync with argv arrays, never a shell."
+  "note": "forge-mfv5.1.56: git -C projectRepoPath (rev-parse / rev-list --count / branch -D / branch -m to `forge/parked/…`) on `forge/wi/<initiativeId>/<workItemId>` refs, and a `merge` of the cycle tip inside the per-WI worktree it just created; projectRepoPath reaches here only from a claimed manifest scheduler-run-one / drain-fix-loop containment-check (isContainedProjectRepoPath), ids are WORK_ITEM_ID_PATTERN / validated initiative ids, execFileSync with argv arrays, never a shell."
  },
  "packages/flows/worktree.ts": {
   "class": "other",

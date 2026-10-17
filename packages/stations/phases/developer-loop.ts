@@ -41,7 +41,7 @@ import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
 import { createWiWorktree, wedgeKillRunnerError } from '@forge/flows';
-import { closeWiWorktree, fixRoundHaltReason, haltFixRound, recordWiOutcome, roundFixWorkItemIds } from './dev-loop-keep.ts';
+import { closeWiWorktree, recordWiOutcome, roundFixWorkItemIds, stopIncompleteFixRound } from './dev-loop-keep.ts';
 import { emitDepsLinkProblems, emitGateEvent, emitGateFeedbackEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
 import { createGateFeedbackTracker, writeMergeConflictFeedback } from './gate-feedback.ts';
 // forge-nk1y.35: the feedback writers moved to gate-feedback.ts; re-exported for their existing tests.
@@ -515,10 +515,11 @@ export async function runDeveloperLoop(
       workItemId: wi.work_item_id,
       startPointRef: wiBaseSha,
       cycleWorktreePath: input.worktreePath,
+      resumeKept: wi.kept_branch !== undefined, // forge-mfv5.1.56: else an unmerged leftover is parked, never resurrected
     });
     emitDepsLinkProblems(logger, { initiativeId: input.initiativeId, parentEventId: wiStart.event_id, skill: agentDef.slug, workItemId: wi.work_item_id }, wiWorktree);
     // forge-mfv5.1.56: a kept branch (a failed or crashed prior attempt) is resumed at its tip, with a fresh iteration budget.
-    if (wiWorktree.resumedFrom !== null) logger.emit({ initiative_id: input.initiativeId, parent_event_id: wiStart.event_id, phase: 'developer-loop', skill: agentDef.slug, event_type: 'log', input_refs: [specPath], output_refs: [wiWorktree.path], message: 'dev-loop.resumed-from-kept', metadata: { work_item_id: wi.work_item_id, branch: wiWorktree.branch, tip: wiWorktree.resumedFrom } });
+    if (wiWorktree.resumedFrom !== null || wiWorktree.parkedAs !== null) logger.emit({ initiative_id: input.initiativeId, parent_event_id: wiStart.event_id, phase: 'developer-loop', skill: agentDef.slug, event_type: 'log', input_refs: [specPath], output_refs: [wiWorktree.path], message: wiWorktree.resumedFrom !== null ? 'dev-loop.resumed-from-kept' : 'dev-loop.branch-parked', metadata: { work_item_id: wi.work_item_id, branch: wiWorktree.branch, tip: wiWorktree.resumedFrom, parked_as: wiWorktree.parkedAs } });
 
     // Conflict-context injection: this dispatch is a requeued attempt iff a
     // PRIOR attempt for this same WI id already conflicted (the map is only
@@ -1213,8 +1214,7 @@ export async function runDeveloperLoop(
     },
   });
 
-  const halt = fixRoundHaltReason({ items, roundFixIds, outcomes: wiOutcomes, logFilePath: logger.logFilePath });
-  if (halt !== null) haltFixRound({ logger, initiativeId: input.initiativeId, parentEventId: start.event_id, skill: agentDef.slug, manifestPath: input.manifestPath, worktreePath: input.worktreePath, ...halt });
+  stopIncompleteFixRound({ logger, initiativeId: input.initiativeId, parentEventId: start.event_id, skill: agentDef.slug, items, roundFixIds, outcomes: wiOutcomes, manifestPath: input.manifestPath, worktreePath: input.worktreePath });
 
   // Partial dev-loop completion is NOT fatal to the cycle. The reviewer's
   // send-back loop is the gap-filler — once gates flip green from any WI

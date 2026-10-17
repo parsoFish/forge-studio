@@ -23,7 +23,7 @@ import { add, createWiWorktree, parseWorkItem, writeWorkItem, writeWorkItemStatu
 import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';
-import { closeWiWorktree, fixRoundHaltReason, haltFixRound, recordWiOutcome } from '../../phases/dev-loop-keep.ts';
+import { closeWiWorktree, fixRoundHaltReason, haltFixRound, recordWiOutcome, stopIncompleteFixRound } from '../../phases/dev-loop-keep.ts';
 import type { WiOutcome } from '../../phases/developer-loop.ts';
 
 const INIT = 'INIT-2026-10-17-wi-keep';
@@ -193,6 +193,39 @@ test('row 2: haltFixRound records sendback.loop-halted (the #1218 surface) and t
     assert.equal(halt[0]!.event_type, 'error');
     assert.deepEqual({ ...halt[0]!.metadata, head_sha: undefined }, { round: 2, classification: 'fix-work-items-failed', reason, pending_work_items: ['WI-17'], head_sha: undefined });
     assert.equal(halt[0]!.metadata?.head_sha, sh(f.cycle, ['rev-parse', 'HEAD']));
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('review fix 1: a fix WI that ran clean but failed its merge (terminal conflict) halts the round; an environment stop fails the node plainly — neither reaches integrate', () => {
+  const f = setup();
+  try {
+    const manifestPath = join(f.root, 'm.md');
+    writeFileSync(manifestPath, `---\ninitiative_id: ${INIT}\nproject: p\ncreated_at: '2026-10-17T00:00:00Z'\niteration_budget: 5\ncost_budget_usd: 5\nclass: code\nreview_rounds: 1\n---\n`);
+    f.logger.emit({ initiative_id: INIT, phase: 'developer-loop', skill: 'developer-ralph', event_type: 'start', input_refs: [], output_refs: [] });
+    const items = [checked('WI-17', ['A'])];
+    const base = { ...ctx(f), items, roundFixIds: ['WI-17'], manifestPath, worktreePath: f.cycle };
+    const conflict: WiOutcome = { id: 'WI-17', status: 'failed', result: { status: 'complete', stop_reason: 'gate-pass' } as never, environment: true };
+    assert.throws(() => stopIncompleteFixRound({ ...base, outcomes: new Map([['WI-17', conflict]]) }), /fix work item\(s\) failed: WI-17 \(merge conflict; 0\/1 checks passing\)/);
+    assert.equal(f.events().filter((e) => e.message === 'sendback.loop-halted').length, 1);
+
+    const rateLimited = outcome('WI-17', 'failed', 'crashed', true);
+    assert.throws(() => stopIncompleteFixRound({ ...base, outcomes: new Map([['WI-17', rateLimited]]) }), /^Error: developer-loop: fix work item\(s\) stopped for an environment reason: WI-17 — the round does not proceed to integrate$/);
+    assert.equal(f.events().filter((e) => e.message === 'sendback.loop-halted').length, 1, 'an environment stop records no halt — the classifier retries it');
+    assert.doesNotThrow(() => stopIncompleteFixRound({ ...base, outcomes: new Map([['WI-17', outcome('WI-17', 'complete')]]) }));
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('review fix 3: a merge-conflict requeue of a RESUMED kept branch keeps it — only a freshly cut attempt is re-cut', async () => {
+  const f = setup();
+  try {
+    const { wt } = await failAtBudget(f, 'WI-17');
+    const tip = sh(wt.path, ['rev-parse', 'HEAD']);
+    closeWiWorktree({ projectRepoPath: f.repo, wiWorktree: { ...wt, resumedFrom: tip }, cycleWorktreePath: f.cycle, requeue: true });
+    assert.equal(sh(f.repo, ['rev-parse', wt.branch]), tip);
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

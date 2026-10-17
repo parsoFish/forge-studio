@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 97 | 26,640 | **26,441** | ratified 26,441 — forge-mfv5.1.56: a budget-failed WI keeps its branch (merged-only prune, resume at the kept tip) and Requeue re-arms a halted round's fix WIs; +57 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
+| `flows` | 97 | 26,671 | **26,472** | ratified 26,472 — forge-mfv5.1.56: a budget-failed WI keeps its branch (merged-only prune, resume onto the cycle tip, unmerged leftovers parked) and Requeue re-arms a halted round's fix WIs; +88 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 56 | 13,664 | **13,664** | ratified 13,664 — forge-mfv5.1.56: dev-loop-keep.ts keeps an unmerged WI's branch (dev-loop.kept) and halts a fix round whose fix WIs failed before integrate; +98 measured on this PR's tree after a read for slack (−11), lane-ratified (≤100, ruling 666). |
+| `stations` | 56 | 13,657 | **13,657** | ratified 13,657 — forge-mfv5.1.56: dev-loop-keep.ts keeps an unmerged WI's branch (dev-loop.kept) and halts a fix round whose fix WIs failed before integrate; +91 measured on this PR's tree after a read for slack (−32), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **539** | **138,986** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **539** | **139,010** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -350,8 +350,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 424 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
 | packages/agents/failure-classifier.ts | agents | verbatim | 768 |
-| packages/flows/finalize-merged.ts | flows | verbatim | 519 |
-| packages/flows/fix-work-items.ts | flows | verbatim | 430 |
+| packages/flows/finalize-merged.ts | flows | verbatim | 520 |
+| packages/flows/fix-work-items.ts | flows | verbatim | 433 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 468 |
 | packages/flows/flow-budgets.ts | flows | verbatim | 558 |
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
@@ -407,7 +407,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
 | packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 99 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
-| packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 134 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
+| packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 127 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1617 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 41 |
 | packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 203 |
@@ -474,7 +474,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-planner-port.ts | stations | rewritten | 177 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 288 |
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
-| packages/flows/requeue-resume.ts | flows | verbatim | 454 |
+| packages/flows/requeue-resume.ts | flows | verbatim | 460 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |
@@ -555,7 +555,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/webhook-verify.ts | flows | verbatim | 114 |
 | packages/flows/wi-dispatch-scheduler.ts | flows | verbatim | 151 |
 | packages/flows/wi-merge-back.ts | flows | verbatim | 466 |
-| packages/flows/wi-worktree.ts | flows | verbatim | 344 |
+| packages/flows/wi-worktree.ts | flows | verbatim | 365 |
 | packages/flows/work-item.ts | flows | verbatim | 771 |
 | packages/flows/worktree.ts | flows | verbatim | 209 |
 | packages/flows/testing.ts | flows | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `hasMergeGateConfigErrorMarker`/`mergeGateConfigErrorPath` (fix-work-items.ts), `CostTracker` (flow-budgets.ts) and `validateCompiledWorkItemSet` (phases/wi-spec-compile.ts) have no production consumer outside this package, only `apps/forge`/`packages/factory` tests reach for them.** |

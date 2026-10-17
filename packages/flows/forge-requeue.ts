@@ -46,7 +46,7 @@ import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, persistManifestSpecs, serializeManifest } from './manifest.ts';
 import { readWorkItemsFromDir } from './work-item.ts';
 import { KICKOFF_SOURCE_FLOW_ID } from '@forge/contracts';
-import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, unmergedBranchCommits, type RequeueResumeDecision } from './requeue-resume.ts';
+import { FixRoundRefusedError, fixRoundHeadRefusal, haltedFixIds, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, unmergedBranchCommits, type RequeueResumeDecision } from './requeue-resume.ts';
 import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
@@ -245,7 +245,7 @@ export function runRequeue(
     // forge-nk1y.22: a pre-#1172 gate-fix WI carries the no-op gate ['true'] — give it the failing gate's own command.
     normaliseLegacyFixGatesAtReentry({ worktreePath, initiativeId, cycleId: manifest.cycle_id ?? initiativeId, logsRoot: join(forgeRoot, '_logs') });
     // forge-mfv5.1.56: a round halted on budget-failed fix WIs resumes them from their kept branches.
-    rearmResumableFixWorkItems(worktreePath);
+    rearmResumableFixWorkItems(worktreePath, haltedFixIds(forgeRoot, manifest.cycle_id));
   }
 
   // A resume preserves the worktree + branch (the salvaged per-WI work the

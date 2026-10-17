@@ -45,7 +45,7 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel';
+import { FORGE_ROOT, gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 import { add, list, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
 import { linkProjectDeps } from './scheduler-run-one.ts'; // bead forge-8vfn.15: moved from scheduler.ts
@@ -56,6 +56,8 @@ export type WiWorktreeHandle = {
   branch: string;
   /** forge-mfv5.1.56: the kept tip this WI resumed from (its branch carried unmerged commits), else null. */
   resumedFrom: string | null;
+  /** forge-mfv5.1.56: where an unmerged branch with no kept_branch on its spec was parked (never deleted), else null. */
+  parkedAs: string | null;
   /** What linking this worktree's deps could not do (linkProjectDeps); the caller emits it — never swallowed. */
   depsProblems: string[];
 };
@@ -98,17 +100,21 @@ export function unmergedCommitCount(projectRepoPath: string, branch: string, aga
 
 /**
  * Removes any leftover worktree dir/registry entry before a create. A
- * leftover BRANCH is deleted only when it carries no commit outside the start
- * point; one with committed work is the WI's kept tip (a budget-failed WI, or
- * a crashed attempt — D-06) and is returned for the caller to resume, and an
- * unanswerable check refuses by name rather than delete.
+ * leftover BRANCH with no commit outside the start point is deleted. One with
+ * committed work (D-06) is the kept tip the caller resumes when its spec says
+ * so (`resumeKept`); otherwise — a fresh plan reusing the id, or a crash
+ * before the keep was recorded — it is PARKED under `forge/parked/…`, never
+ * resurrected and never deleted. An unanswerable check refuses by name.
  */
 function selfHealWiCollision(opts: {
   projectRepoPath: string;
   path: string;
   branch: string;
   startPointRef: string;
-}): { resumeTip: string | null } {
+  initiativeId: string;
+  workItemId: string;
+  resumeKept: boolean;
+}): { resumeTip: string | null; parkedAs: string | null } {
   if (existsSync(opts.path)) {
     console.warn(
       `[wi-worktree] stale worktree at ${opts.path} (crashed prior run?) — self-healing: remove + recreate`,
@@ -116,20 +122,19 @@ function selfHealWiCollision(opts: {
   }
   selfHealWorktreeState(opts.projectRepoPath, opts.path);
 
+  const git = (args: string[]): string => execFileSync('git', ['-C', opts.projectRepoPath, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
   let tip: string | null = null;
-  try {
-    tip = execFileSync('git', ['-C', opts.projectRepoPath, 'rev-parse', '--verify', '--quiet', `refs/heads/${opts.branch}`], { stdio: 'pipe', encoding: 'utf8' }).trim();
-  } catch {
-    /* branch doesn't exist — nothing to heal */
-  }
-  if (tip === null) return { resumeTip: null };
+  try { tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${opts.branch}`]); } catch { /* no branch — nothing to heal */ }
+  if (tip === null) return { resumeTip: null, parkedAs: null };
   const unmerged = unmergedCommitCount(opts.projectRepoPath, opts.branch, [opts.startPointRef]);
   if (unmerged === 'UNKNOWN') {
     throw new Error(`wi-worktree: cannot tell whether ${opts.branch} carries committed work outside ${opts.startPointRef} — refusing to delete or re-cut it (D-06)`);
   }
-  if (unmerged > 0) return { resumeTip: tip };
-  execFileSync('git', ['-C', opts.projectRepoPath, 'branch', '-D', opts.branch], { stdio: 'pipe' });
-  return { resumeTip: null };
+  if (unmerged === 0) { git(['branch', '-D', opts.branch]); return { resumeTip: null, parkedAs: null }; }
+  if (opts.resumeKept) return { resumeTip: tip, parkedAs: null };
+  const parkedAs = `forge/parked/${opts.initiativeId}/${opts.workItemId}-${tip.slice(0, 12)}`;
+  git(['branch', '-m', opts.branch, parkedAs]);
+  return { resumeTip: null, parkedAs };
 }
 
 export function createWiWorktree(opts: {
@@ -141,11 +146,13 @@ export function createWiWorktree(opts: {
   startPointRef: string;
   /** The cycle worktree's working tree, to copy untracked `.forge/work-items/` from. */
   cycleWorktreePath: string;
+  /** forge-mfv5.1.56: the WI's spec names a kept branch (`kept_branch`) — resume it rather than park it. */
+  resumeKept?: boolean;
 }): WiWorktreeHandle {
   const path = wiWorktreePath(opts);
   const branch = wiBranchName(opts);
 
-  const { resumeTip } = selfHealWiCollision({ projectRepoPath: opts.projectRepoPath, path, branch, startPointRef: opts.startPointRef });
+  const { resumeTip, parkedAs } = selfHealWiCollision({ projectRepoPath: opts.projectRepoPath, path, branch, startPointRef: opts.startPointRef, initiativeId: opts.initiativeId, workItemId: opts.workItemId, resumeKept: opts.resumeKept === true });
 
   // Create the branch at the explicit start point FIRST (unless a kept tip is
   // resumed). `worktree.ts`'s `add()` only checks out a branch by name — it
@@ -166,6 +173,20 @@ export function createWiWorktree(opts: {
     initiativeId: join('wi', opts.initiativeId, opts.workItemId),
   });
 
+  // A resumed kept tip is brought onto the current cycle tip first, so the WI
+  // never runs (or merges back) on a stale base; a conflict refuses by name,
+  // the kept branch untouched.
+  if (resumeTip !== null) {
+    try {
+      execFileSync('git', ['-C', handle.path, ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY), 'merge', '--no-edit', '-m', `wi(${opts.workItemId}): resume onto the cycle tip`, opts.startPointRef], { stdio: 'pipe' });
+    } catch (err) {
+      try { execFileSync('git', ['-C', handle.path, 'merge', '--abort'], { stdio: 'pipe' }); } catch { /* nothing to abort */ }
+      removeWiWorktree({ projectRepoPath: opts.projectRepoPath, path: handle.path, branch });
+      const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
+      throw new Error(`wi-worktree: kept branch ${branch} (tip ${resumeTip.slice(0, 12)}) does not merge onto the cycle tip ${opts.startPointRef.slice(0, 12)} — resolve it by hand, then Requeue (${detail})`);
+    }
+  }
+
   const depsLink = linkProjectDeps(opts.projectRepoPath, handle.path);
 
   // `git worktree add` only checks out TRACKED files. `.forge/work-items/`
@@ -181,7 +202,7 @@ export function createWiWorktree(opts: {
     cpSync(wiSrc, wiDst, { recursive: true, force: true });
   }
 
-  return { path: handle.path, branch: handle.branch, resumedFrom: resumeTip, depsProblems: depsLink.problems };
+  return { path: handle.path, branch: handle.branch, resumedFrom: resumeTip, parkedAs, depsProblems: depsLink.problems };
 }
 
 /**
