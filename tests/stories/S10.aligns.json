@@ -3,7 +3,7 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-20",
-      "digest": "faacd38fb2dcfb71",
+      "digest": "d123b12841ae7486",
       "why": "D-20: the review-loop beats (S10.review.mjs) drive one anchored blocking comment -> fix-WI -> re-dispatch -> re-review; mfv5.1.28 and mfv5.1.43 keep that comment path (checks bind typed WIs only)"
     },
     {
@@ -15,7 +15,7 @@
     {
       "path": "DECISIONS.md",
       "anchor": "D-06",
-      "digest": "bd0103d182493063",
+      "digest": "0caf2872aabf6834",
       "why": "D-06: Act2 (S10.act2.mjs): stop/resume-run (ruling 1794's inferRequeueResume path) keeps the finished work item and re-runs the unfinished one — \"the second attempt starts from what the first one…"
     },
     {
