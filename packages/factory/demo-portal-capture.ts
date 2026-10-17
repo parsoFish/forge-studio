@@ -10,14 +10,14 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { checkpointArtifactStem } from '@forge/stations/demo-types.ts';
 import { resolveCheckpointHead } from '@forge/kernel';
-import { checkBrowserSteps, type BrowserStepDecl, type DemoPortal } from '@forge/projects';
+import { checkBrowserSteps, type DemoPortal } from '@forge/projects';
 
-export type PortalCheckpoint = { label: string; page: string; steps?: BrowserStepDecl[]; regions?: string[] };
+export type PortalCheckpoint = { label: string; page: string; regions?: string[] };
 export type PortalCapture = { means: DemoPortal; checkpoints: PortalCheckpoint[] };
 export type AuthStateResolution = { ok: true; path?: string } | { ok: false; reason: string };
 
@@ -53,14 +53,11 @@ export function portalCheckpointsOf(
     if (!c.label || (c.form !== 'portal-before-after' && c.page === undefined)) continue;
     if (!means) { refused.push(`${c.label}: the project declares no demoMeans.portal`); continue; }
     if (typeof c.page !== 'string' || !means.pages.includes(c.page)) { refused.push(`${c.label}: ${JSON.stringify(c.page)} is not a declared portal page`); continue; }
+    if (c.steps !== undefined) { refused.push(`${c.label}: a portal checkpoint takes no steps — a step would act on the live site as the operator`); continue; }
     const errors: string[] = [];
-    checkBrowserSteps(c.steps, c.regions, 'checkpoint', errors);
+    checkBrowserSteps(undefined, c.regions, 'checkpoint', errors);
     if (errors.length > 0) { refused.push(`${c.label}: ${errors.join('; ')}`); continue; }
-    checkpoints.push({
-      label: c.label, page: c.page,
-      ...(c.steps !== undefined ? { steps: c.steps as BrowserStepDecl[] } : {}),
-      ...(c.regions !== undefined ? { regions: c.regions as string[] } : {}),
-    });
+    checkpoints.push({ label: c.label, page: c.page, ...(c.regions !== undefined ? { regions: c.regions as string[] } : {}) });
   }
   return { checkpoints, refused };
 }
@@ -68,12 +65,14 @@ export function portalCheckpointsOf(
 type ApplyResult = { ok: true; log: string } | { ok: false; reason: string; log: string };
 
 /** Run the apply commands in order from the tree under capture; the first that cannot run or exits non-zero stops it. */
-export function runPortalApply(worktreePath: string, commands: readonly string[], runPrefixes: Readonly<Record<string, string>>): ApplyResult {
+export function runPortalApply(worktreePath: string, commands: readonly string[], runPrefixes: Readonly<Record<string, string>>, authState?: string): ApplyResult {
+  // The apply child never sees the auth-state env var: what it prints lands in the bundle.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== authState));
   let log = '';
   for (const command of commands) {
     const head = resolveCheckpointHead(command.trim().split(/\s+/), worktreePath, { runPrefixes });
     if (!head.ok) return { ok: false, reason: `\`${command}\` did not run: ${head.reason}`, log };
-    const r = spawnSync(head.file, head.args, { cwd: worktreePath, encoding: 'utf8', timeout: APPLY_TIMEOUT_MS });
+    const r = spawnSync(head.file, head.args, { cwd: worktreePath, env, encoding: 'utf8', timeout: APPLY_TIMEOUT_MS });
     const out = `${r.stdout ?? ''}${r.stderr ? `[stderr] ${r.stderr}` : ''}`;
     log += `$ ${command}\n${out.length > APPLY_OUTPUT_MAX_CHARS ? `${out.slice(0, APPLY_OUTPUT_MAX_CHARS)}\n…[truncated]` : out}\n`;
     if (r.error) return { ok: false, reason: `\`${command}\` did not run: ${r.error.message}`, log };
@@ -92,14 +91,17 @@ export async function capturePortalSide(opts: {
   runPrefixes: Readonly<Record<string, string>>; auth: AuthStateResolution;
 }): Promise<string[]> {
   const { portal, side, worktreePath, bundleDir } = opts;
-  const record = (text: string): void => appendFileSync(join(bundleDir, PORTAL_APPLY_RECORD), text);
-  if (side === 'before') record(`# Portal apply\n\nEach capture tree ran the project's apply before its frames; the sides run before then after, so when both applies succeed the portal is left in the AFTER state.\n\n`);
+  const file = join(bundleDir, PORTAL_APPLY_RECORD);
+  // Each capture starts the record afresh; a re-capture never inherits an earlier run's sections.
+  if (side === 'before') writeFileSync(file, '# Portal apply\n\n');
+  const record = (text: string): void => appendFileSync(file, text);
   if (!opts.auth.ok) {
     process.stderr.write(`[demo] portal ${side}: ${opts.auth.reason} — no portal frames\n`);
     record(`## ${side}\n\nRefused: ${opts.auth.reason}. Nothing applied, no page opened.\n\n`);
     return [];
   }
-  const applied = runPortalApply(worktreePath, portal.means.apply, opts.runPrefixes);
+  const applied = runPortalApply(worktreePath, portal.means.apply, opts.runPrefixes, portal.means.authState);
+  if (side === 'before') record('The before tree applied first, then the after tree, so when both succeed the portal is left in the AFTER state.\n\n');
   record(`## ${side}\n\n\`\`\`\n${applied.log}\`\`\`\n\n${applied.ok ? '' : `Refused: ${applied.reason}. No page opened.\n\n`}`);
   if (!applied.ok) {
     process.stderr.write(`[demo] portal ${side}: apply failed (${applied.reason}) — no portal frames${side === 'after' ? '; the portal may be left in the BEFORE state' : ''}\n`);
@@ -111,8 +113,7 @@ export async function capturePortalSide(opts: {
     try {
       await recordPortal({
         side, label: checkpointArtifactStem(cp.label), origins: portal.means.origins, page: cp.page, bundleDir,
-        ...(opts.auth.path ? { authStatePath: opts.auth.path } : {}),
-        ...(cp.steps ? { steps: cp.steps } : {}), ...(cp.regions ? { regions: cp.regions } : {}),
+        ...(opts.auth.path ? { authStatePath: opts.auth.path } : {}), ...(cp.regions ? { regions: cp.regions } : {}),
       });
       captured.push(cp.label);
     } catch (err) {

@@ -13,7 +13,7 @@ export type DemoPlanCheckpoint = {
   form: DemoEvidenceForm; caption: string; acRef?: string; command?: string; route?: string; apiPath?: string;
   /** portal-before-after only: a declared portal page (forge-8vfn.31). */
   page?: string;
-  /** screenshot / portal only: the interaction driven before the final still, and the regions outlined. */
+  /** screenshot only: the interaction driven before the final still; screenshot / portal: the regions outlined. */
   steps?: BrowserStepDecl[]; regions?: string[];
 };
 export type DemoPlan = { narrative: string; checkpoints: DemoPlanCheckpoint[] };
@@ -91,6 +91,10 @@ function checkCheckpoint(raw: unknown, i: number, allowed: AllowedDemoMeans, err
   checkDriver(raw, 'page', allowed.portalPages, at, errors);
   for (const key of ['steps', 'regions']) {
     if (raw[key] !== undefined && !BROWSER_FORMS.includes(form)) errors.push(`plan-invalid:${at}.${key}: form ${form} takes no ${key}`);
+  }
+  // A step on a portal page would act on the live third-party site as the operator; regions only outline.
+  if (form === 'portal-before-after' && raw.steps !== undefined) {
+    errors.push(`plan-invalid:${at}.steps: form portal-before-after takes no steps — a step would act on the live site as the operator`);
   }
   if (BROWSER_FORMS.includes(form)) checkBrowserSteps(raw.steps, raw.regions, `plan-invalid:${at}`, errors);
 }

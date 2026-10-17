@@ -457,6 +457,7 @@ describe('forge-8vfn.31: portal-before-after is planned only from declared pages
     assert.equal(demo.checkpoints[0].form, 'portal-before-after');
     assert.equal(demo.checkpoints[0].page, PAGES[0]);
     assert.deepEqual(demo.checkpoints[0].regions, ['#repos']);
+    assert.ok(existsSync(join(root, 'capture-ran')), 'a portal-only plan still reaches the orchestrated capture');
   });
 
   it('control: with no portal declared, the planner is offered no portal pages', async () => {

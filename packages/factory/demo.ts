@@ -339,7 +339,12 @@ export async function captureCheckpoints(
       }
 
       if (portal) {
-        captured.push(...await capturePortalSide({ portal, side, worktreePath: wt.path, bundleDir, runPrefixes: input.runPrefixes ?? {}, auth: portalAuth }));
+        // Best-effort per D-07, like every recorder here: a failure is named and the tree's other evidence still lands.
+        try {
+          captured.push(...await capturePortalSide({ portal, side, worktreePath: wt.path, bundleDir, runPrefixes: input.runPrefixes ?? {}, auth: portalAuth }));
+        } catch (err) {
+          process.stderr.write(`[demo] portal ${side} failed — no portal frames: ${err instanceof Error ? err.message : String(err)}\n`);
+        }
       }
 
       // Screenshot checkpoints (browser) DO need a working build + a live server.

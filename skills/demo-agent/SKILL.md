@@ -68,7 +68,8 @@ Choose per checkpoint what shows THIS change best:
   the same steps on both sides.
 - **`portal-before-after`** — the change alters a third-party site the
   project configures, such as its GitHub organisation. Name one `page` from
-  the allowed portal pages; `steps` and `regions` work as for a screenshot.
+  the allowed portal pages, and up to 6 `regions` to outline. No `steps`: an
+  interaction would act on the live site as the operator.
   The orchestrator runs the project's own apply from each tree before taking
   that tree's frames. When the project's effect lives on such a site, prefer
   this form: the reviewer sees the site itself, not the JSON behind it. Say
@@ -87,8 +88,8 @@ the band fails.
 ## Rules the orchestrator enforces
 
 Each checkpoint has a `form`, a non-empty `caption`, an optional `acRef`, and
-exactly the one driver field its form takes; a `screenshot` or
-`portal-before-after` may add `steps` and `regions`. A plan carries no other field —
+exactly the one driver field its form takes; a `screenshot` may add `steps`
+and `regions`, a `portal-before-after` only `regions`. A plan carries no other field —
 no output, no delta, no verdict. At most 12 checkpoints. The narrative is
 labelled *agent narrative, not evidence* in DEMO.md and never moves a verdict.
 

@@ -57,18 +57,18 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 10 | 1,887 | **1,887** | ratified 1,887 — forge-mfv5.1.39: `Run.roundHalt`, the halted fix round the run page and the verdict card name; +2 measured on main 1,885, lane-ratified (≤100, ruling 666). |
 | `kernel` | 42 | 7,043 | **5,896** | ratified 5,896 — forge-nk1y.42: `run-prefix.ts` (`demoMeans.run` validation + the tree's own pyproject commands) and the in-tree-first checkpoint head resolver; +98 measured on main 5,798 after trimming its comments 122 → 98, lane-ratified (≤100, ruling 666). |
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 55 | 12,133 | **10,336** | ratified 10,336 — forge-8vfn.31: `demoMeans.portal` (`demo-portal.ts`) and the `portal-before-after` plan form; +93 measured on this PR's tree after a read for slack found none (one refusal per line), lane-ratified (≤100, ruling 666). |
+| `projects` | 55 | 12,134 | **10,337** | ratified 10,337 — forge-8vfn.31: `demoMeans.portal` (`demo-portal.ts`) and the `portal-before-after` plan form; +94 measured on this PR's tree after a read for slack (−8), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
 | `flows` | 97 | 26,583 | **26,384** | ratified 26,384 — forge-mfv5.1.54: Requeue resumes a stranded run and refuses to delete a branch with commits not on origin/main; +69 measured on this PR's tree after a read for slack (−4), lane-ratified (≤100, ruling 666). |
-| `factory` | 18 | 3,390 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 54 | 13,473 | **13,473** | ratified 13,473 — forge-8vfn.31: demo.json's portal `page` validated on its form alone and named in DEMO.md; +7 measured on this PR's tree (demo-model.ts held at 800 by compacting two comments), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **537** | **138,680** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **537** | **138,738** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -200,7 +200,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/merge-boundary.ts | stations | verbatim | 116 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-overlay.ts | factory | rewritten | 195 |
-| packages/factory/demo-capture.ts | factory | rewritten | 426 |
+| packages/factory/demo-capture.ts | factory | rewritten | 476 |
 | packages/factory/demo-runtime.ts | factory | verbatim | 308 |
 | packages/stations/demo-types.ts | stations | verbatim | 115 |
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
@@ -232,8 +232,8 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/preflight-build.ts | projects | verbatim | 138 |
 | packages/projects/preflight-demo.ts | projects | verbatim | 179 |
 | packages/projects/demo-means.ts | projects | rewritten | 99 |
-| packages/projects/demo-portal.ts | projects | rewritten | 80 **New file, forge-8vfn.31: `demoMeans.portal` — exact origins, literal pages, the apply list and the auth-state env var name, each refused by name.** |
-| packages/projects/demo-plan.ts | projects | rewritten | 111 |
+| packages/projects/demo-portal.ts | projects | rewritten | 77 **New file, forge-8vfn.31: `demoMeans.portal` — exact origins, literal pages, the apply list and the auth-state env var name, each refused by name.** |
+| packages/projects/demo-plan.ts | projects | rewritten | 115 |
 | packages/projects/demo-browser-steps.ts | projects | rewritten | 39 **New file, row 4 of forge-nk1y.45: a planned screenshot's `steps`/`regions`, validated by name for the plan and again at capture.** |
 | packages/projects/preflight-gate.ts | projects | verbatim | 281 |
 | packages/projects/preflight-instructions.ts | projects | verbatim | 135 |
@@ -569,7 +569,7 @@ operator-ratified new cap — never a silent raise.
 | skills/contract-check/SKILL.md | projects | verbatim | 89 |
 | skills/creation-agent/SKILL.md | library | verbatim | 118 |
 | skills/cruft-sweep/SKILL.md | kernel | verbatim | 91 |
-| skills/demo-agent/SKILL.md | factory | verbatim | 104 |
+| skills/demo-agent/SKILL.md | factory | verbatim | 105 |
 | skills/demo-builder/SKILL.md | projects | verbatim | 134 |
 | skills/demo-design/SKILL.md | projects | verbatim | 110 |
 | skills/demo/SKILL.md | factory | verbatim | 305 |
@@ -598,10 +598,10 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/demo-outcome.ts | contracts | rewritten | 30 **New file, forge-nk1y.43: the demo capture's named outcome (`no-change` is a state, never a silent pass), shared by the integrate band and the verdict card.** |
 | packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (D-29 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/factory/demo.ts | factory | verbatim | 519 |
+| packages/factory/demo.ts | factory | verbatim | 524 |
 | packages/factory/demo-api-capture.ts | factory | rewritten | 42 |
 | packages/factory/demo-planner.ts | factory | rewritten | 92 |
-| packages/factory/demo-portal-capture.ts | factory | rewritten | 123 **New file, forge-8vfn.31: portal capture — resolve the auth state by env var, run each tree's apply, record declared pages pinned to the declared origins.** |
+| packages/factory/demo-portal-capture.ts | factory | rewritten | 124 **New file, forge-8vfn.31: portal capture — resolve the auth state by env var, run each tree's apply, record declared pages pinned to the declared origins.** |
 | packages/flows/index.ts | flows | verbatim | 141 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 474 |

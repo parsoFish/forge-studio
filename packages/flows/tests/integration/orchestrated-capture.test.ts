@@ -117,6 +117,15 @@ test('demoJsonWantsCapture: command checkpoint → true', () => {
   }
 });
 
+test('demoJsonWantsCapture: a portal checkpoint (page, no command) → true (forge-8vfn.31)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-'));
+  try {
+    assert.equal(demoJsonWantsCapture(writeDemo(dir, [{ label: 'org', form: 'portal-before-after', page: '/orgs/acme/repositories' }])), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('demoJsonWantsCapture: an api-before-after path checkpoint (apiPath, no command) → true (forge-mfv5.1.19)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-oc-'));
   try {

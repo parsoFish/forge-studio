@@ -143,10 +143,10 @@ test('portal: the declared pages are the allowed portal means', () => {
   assert.deepEqual(PORTAL_ALLOWED.portalPages, ['/orgs/acme/repositories', '/acme/svc/pulls']);
 });
 
-test('portal: a declared page plans a portal-before-after checkpoint, with steps and regions', () => {
+test('portal: a declared page plans a portal-before-after checkpoint, with regions', () => {
   const r = validateDemoPlan(plan([
     { form: 'portal-before-after', caption: 'The org lists the new repository', acRef: 'WI-1', page: '/orgs/acme/repositories', regions: ['#org-repositories'] },
-    { form: 'portal-before-after', caption: 'The empty list is the story: no pull request was opened', page: '/acme/svc/pulls', steps: [{ click: '#closed' }] },
+    { form: 'portal-before-after', caption: 'The empty list is the story: no pull request was opened', page: '/acme/svc/pulls' },
   ]), PORTAL_ALLOWED);
   assert.equal(r.ok, true, JSON.stringify(r));
 });
@@ -175,4 +175,9 @@ test('portal: the form takes only page — no command, route or apiPath; page be
   assert.match((none as { errors: string[] }).errors.join('\n'), /form portal-before-after needs exactly one of page/);
   const shot = validateDemoPlan(plan([{ form: 'screenshot', caption: 'c', route: '/dashboard', page: '/acme/svc/pulls' }]), PORTAL_ALLOWED);
   assert.match((shot as { errors: string[] }).errors.join('\n'), /checkpoints\[0\]\.page: form screenshot takes no page/);
+});
+
+test('portal: steps are refused — a step would act on the live site as the operator', () => {
+  const r = validateDemoPlan(plan([{ form: 'portal-before-after', caption: 'c', page: '/acme/svc/pulls', steps: [{ click: '#delete-repo' }] }]), PORTAL_ALLOWED);
+  assert.match((r as { errors: string[] }).errors.join('\n'), /checkpoints\[0\]\.steps: form portal-before-after takes no steps — a step would act on the live site as the operator/);
 });

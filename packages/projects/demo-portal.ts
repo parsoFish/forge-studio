@@ -19,18 +19,14 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 function nonEmptyStrings(v: unknown, at: string, noun: string): string[] {
   if (!Array.isArray(v) || v.some((s) => typeof s !== 'string')) throw new Error(`project-config: ${at} must be an array of strings`);
   if (v.length === 0) throw new Error(`project-config: ${at} must declare at least one ${noun}`);
+  v.forEach((x: string, i) => { if (v.indexOf(x) !== i) throw new Error(`project-config: ${at}[${i}] ${JSON.stringify(x)} is declared twice`); });
   return [...v];
 }
 
 /** `scheme://host[:port]` exactly as `URL#origin` prints it; https anywhere, http only on loopback. */
 export function checkPortalOrigin(s: string, at: string): void {
-  let url: URL;
-  try {
-    url = new URL(s);
-  } catch {
-    throw new Error(`project-config: ${at} ${JSON.stringify(s)} must be an exact origin such as "https://github.com"`);
-  }
-  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.origin === 'null') {
+  const url = URL.canParse(s) ? new URL(s) : null;
+  if (!url || !['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.origin === 'null' || url.hostname.includes('*')) {
     throw new Error(`project-config: ${at} ${JSON.stringify(s)} must be an exact origin such as "https://github.com"`);
   }
   if (url.protocol === 'http:' && !LOOPBACK_HOSTS.has(url.hostname)) {
@@ -42,8 +38,8 @@ export function checkPortalOrigin(s: string, at: string): void {
 /** A literal absolute path under the declared origin: no host, no template, no traversal (plain or encoded). */
 export function checkPortalPage(s: string, at: string): void {
   if (/\.\.|%2e/i.test(s)) throw new Error(`project-config: ${at} ${JSON.stringify(s)} contains traversal`);
-  if (!isSafeDemoRoute(s) || s.startsWith('//')) {
-    throw new Error(`project-config: ${at} ${JSON.stringify(s)} must be a literal path under the declared origin, starting "/" (no host, no placeholder)`);
+  if (!isSafeDemoRoute(s) || s.startsWith('//') || /[?%&=]/.test(s)) {
+    throw new Error(`project-config: ${at} ${JSON.stringify(s)} must be a literal path under the declared origin, starting "/" (no host, placeholder, query or encoded byte)`);
   }
 }
 
@@ -56,6 +52,7 @@ function parseApply(v: unknown): string[] {
   if (!Array.isArray(v) || v.some((s) => typeof s !== 'string')) throw new Error('project-config: demoMeans.portal.apply must be an array of strings');
   v.forEach((s: string, i) => {
     if (s.trim() === '') throw new Error(`project-config: demoMeans.portal.apply[${i}] is empty`);
+    if (/['"]/.test(s)) throw new Error(`project-config: demoMeans.portal.apply[${i}] \`${s}\` contains a quote — each entry is split on whitespace into a bare argv, so a quote would reach the command literally`);
     if (SHELL_METACHARACTERS.test(s)) throw new Error(`project-config: demoMeans.portal.apply[${i}] \`${s}\` contains shell metacharacters — capture runs a bare argv with no shell`);
   });
   return [...v];

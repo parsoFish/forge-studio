@@ -217,7 +217,7 @@ export function buildDemoCaptureArgv(initiativeId: string): string[] {
 /**
  * Does this demo.json declare evidence the orchestrator must produce?
  * True when ≥1 checkpoint carries a `command` (real CLI stdout evidence) or is
- * an explicit screenshot/video checkpoint. Notes-only demos (the trivial tier)
+ * an explicit screenshot/video checkpoint, an api path or a portal page. Notes-only demos (the trivial tier)
  * skip capture entirely — same rule the demo skill states for agents.
  * Unreadable/invalid demo.json ⇒ false (the pr_self_contained gate reports it).
  */
@@ -225,13 +225,13 @@ export function demoJsonWantsCapture(demoJsonPath: string): boolean {
   if (!existsSync(demoJsonPath)) return false;
   try {
     const parsed = JSON.parse(readFileSync(demoJsonPath, 'utf8')) as {
-      checkpoints?: Array<{ command?: unknown; kind?: unknown; apiPath?: unknown }>;
+      checkpoints?: Array<{ command?: unknown; kind?: unknown; apiPath?: unknown; page?: unknown }>;
     };
     const cps = Array.isArray(parsed?.checkpoints) ? parsed.checkpoints : [];
     return cps.some(
       (c) =>
         (typeof c?.command === 'string' && c.command.trim().length > 0) ||
-        typeof c?.apiPath === 'string' ||
+        typeof c?.apiPath === 'string' || typeof c?.page === 'string' ||
         c?.kind === 'screenshot' ||
         c?.kind === 'video',
     );

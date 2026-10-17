@@ -40,6 +40,15 @@ function startTenant(): Promise<Tenant> {
         res.writeHead(302, { location: `http://localhost:${port}${PAGE}` });
         return void res.end();
       }
+      if (req.url === '/hop') {
+        res.writeHead(302, { location: PAGE });
+        return void res.end();
+      }
+      if (req.url === '/script-away' || req.url === '/popup') {
+        const go = req.url === '/popup' ? `window.open('http://localhost:${port}/pop')` : `location.href = 'http://localhost:${port}${PAGE}'`;
+        res.writeHead(200, { 'content-type': 'text/html' });
+        return void res.end(`<html><body>leaving<script>${go}</script></body></html>`);
+      }
       if (!authed) {
         res.writeHead(401, { 'content-type': 'text/html' });
         return void res.end('<html><body><h1>Sign in</h1></body></html>');
@@ -65,13 +74,13 @@ function storageState(origin: string): string {
 }
 
 /** A project whose base commit declares one repository and whose change declares two; `apply` writes its tree's state. */
-function projectRepo(): string {
+function projectRepo(applySource = "import { copyFileSync } from 'node:fs';\ncopyFileSync('declared.json', process.env.FIXTURE_TENANT_STATE);\nconsole.log('applied');\n"): string {
   const repo = mkdtempSync(join(tmpdir(), 'portal-project-'));
   const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 't@forge.local');
   git('config', 'user.name', 't');
-  writeFileSync(join(repo, 'apply.mjs'), "import { copyFileSync } from 'node:fs';\ncopyFileSync('declared.json', process.env.FIXTURE_TENANT_STATE);\nconsole.log('applied');\n");
+  writeFileSync(join(repo, 'apply.mjs'), applySource);
   writeFileSync(join(repo, 'declared.json'), JSON.stringify({ repos: ['alpha'] }));
   git('add', '--', 'apply.mjs', 'declared.json');
   git('commit', '-q', '-m', 'base');
@@ -131,6 +140,7 @@ test('portal capture: frames differ before/after because each tree applied its o
     rmSync(bundleDir, { recursive: true, force: true });
   } finally {
     delete process.env[AUTH_ENV];
+    delete process.env.FIXTURE_TENANT_STATE;
     await tenant.close();
     rmSync(repo, { recursive: true, force: true });
   }
@@ -146,8 +156,12 @@ test('portal capture: a declared authState whose env var is unset is refused by 
     assert.equal(tenant.requests.length, 0, 'no page was opened');
     assert.deepEqual(JSON.parse(readFileSync(tenant.stateFile, 'utf8')), { repos: ['seed'] }, 'no apply ran');
     assert.ok(!existsSync(join(bundleDir, 'before', `${checkpointArtifactStem(LABEL)}.png`)));
+    const record = readFileSync(join(bundleDir, 'portal-apply.md'), 'utf8');
+    assert.match(record, /Refused: portal auth state not declared\/readable: FORGE_TEST_PORTAL_STATE is unset or empty/);
+    assert.doesNotMatch(record, /left in the AFTER state/, 'nothing ran, so the record claims no apply');
     rmSync(bundleDir, { recursive: true, force: true });
   } finally {
+    delete process.env.FIXTURE_TENANT_STATE;
     await tenant.close();
     rmSync(repo, { recursive: true, force: true });
   }
@@ -176,6 +190,8 @@ test('portalCheckpointsOf: only a page the project declares is captured; anythin
   ], means);
   assert.deepEqual(r.checkpoints, [{ label: 'Plan 1', page: PAGE, regions: ['#repos'] }]);
   assert.deepEqual(r.refused, ['Plan 2: "/acme/elsewhere" is not a declared portal page']);
+  const stepped = portalCheckpointsOf([{ label: 'Plan 1', form: 'portal-before-after', page: PAGE, steps: [{ click: '#delete-repo' }] }], means);
+  assert.deepEqual(stepped, { checkpoints: [], refused: ['Plan 1: a portal checkpoint takes no steps — a step would act on the live site as the operator'] });
   const none = portalCheckpointsOf([{ label: 'Plan 1', form: 'portal-before-after', page: PAGE }], undefined);
   assert.deepEqual(none, { checkpoints: [], refused: ['Plan 1: the project declares no demoMeans.portal'] });
 });
@@ -189,9 +205,7 @@ test('recordPortal: a page that redirects off the declared origin is refused by 
       () => recordPortal({ side: 'after', label: 'escape', origins: [tenant.origin], page: '/redirect-away', authStatePath: auth, bundleDir }),
       (err: Error) => err.name === 'DemoRecordError' && /navigated to http:\/\/localhost:\d+, which is not a declared portal origin — refused/.test(err.message),
     );
-    // A redirect hop is not interceptable (Playwright routes the first request only); it is refused, no frame
-    // is kept, and the browser's own cookie scoping kept the auth state off the other origin.
-    assert.ok(tenant.requests.filter((r) => r.path === PAGE).every((r) => !r.authed), 'the off-origin hop carried no auth state');
+    assert.ok(!tenant.requests.some((r) => r.path === PAGE), 'the off-origin hop was never fetched');
     assert.ok(!existsSync(join(bundleDir, 'after', 'escape.png')), 'no frame was kept');
   } finally {
     await tenant.close();
@@ -199,18 +213,66 @@ test('recordPortal: a page that redirects off the declared origin is refused by 
   }
 });
 
-test('recordPortal: a step that navigates off the declared origin is refused by name', { timeout: 120_000 }, async () => {
+for (const [name, page, expected] of [
+  ['a script navigation off the declared origin', '/script-away', /navigated to http:\/\/localhost:\d+, which is not a declared portal origin — refused/],
+  ['a popup', '/popup', /opened a second page — refused/],
+] as const) {
+  test(`recordPortal: ${name} is refused by name and never fetched`, { timeout: 120_000 }, async () => {
+    const tenant = await startTenant();
+    const bundleDir = mkdtempSync(join(tmpdir(), 'portal-escape-js-'));
+    try {
+      await assert.rejects(() => recordPortal({ side: 'after', label: 'escape', origins: [tenant.origin], page, authStatePath: storageState(tenant.origin), bundleDir }), expected);
+      assert.ok(!tenant.requests.some((r) => r.path === PAGE || r.path === '/pop'), 'nothing off the declared origin was fetched');
+    } finally {
+      await tenant.close();
+      rmSync(bundleDir, { recursive: true, force: true });
+    }
+  });
+}
+
+test('recordPortal: a redirect hop that stays on the declared origin is followed and recorded', { timeout: 120_000 }, async () => {
   const tenant = await startTenant();
-  const auth = storageState(tenant.origin);
-  writeFileSync(tenant.stateFile, JSON.stringify({ repos: [`<a id="away" href="http://localhost:${tenant.port}${PAGE}">away</a>`] }));
-  const bundleDir = mkdtempSync(join(tmpdir(), 'portal-escape-step-'));
+  const bundleDir = mkdtempSync(join(tmpdir(), 'portal-hop-'));
   try {
-    await assert.rejects(
-      () => recordPortal({ side: 'after', label: 'escape', origins: [tenant.origin], page: PAGE, authStatePath: auth, steps: [{ click: '#away' }], bundleDir }),
-      /navigated to http:\/\/localhost:\d+, which is not a declared portal origin — refused/,
-    );
+    const r = await recordPortal({ side: 'after', label: 'hop', origins: [tenant.origin], page: '/hop', authStatePath: storageState(tenant.origin), bundleDir });
+    assert.ok(existsSync(r.still));
+    assert.ok(tenant.requests.some((q) => q.path === PAGE && q.authed), 'the hop landed on the page with the auth state');
   } finally {
     await tenant.close();
     rmSync(bundleDir, { recursive: true, force: true });
+  }
+});
+
+test('recordPortal: a page the portal answers 401 (auth state missing or rejected) is refused by name, not recorded as evidence', { timeout: 120_000 }, async () => {
+  const tenant = await startTenant();
+  const bundleDir = mkdtempSync(join(tmpdir(), 'portal-401-'));
+  try {
+    await assert.rejects(() => recordPortal({ side: 'before', label: 'signin', origins: [tenant.origin], page: PAGE, bundleDir }), /answered 401 — the auth state is missing or was rejected/);
+    assert.ok(!existsSync(join(bundleDir, 'before', 'signin.png')));
+  } finally {
+    await tenant.close();
+    rmSync(bundleDir, { recursive: true, force: true });
+  }
+});
+
+test('portal capture: apply runs without the auth env var; a failing apply records no frame and names itself in the bundle', { timeout: 180_000 }, async () => {
+  const tenant = await startTenant();
+  const echo = projectRepo(`console.log('auth=' + (process.env.${AUTH_ENV} ?? 'absent'));\nprocess.exit(3);\n`);
+  const auth = storageState(tenant.origin);
+  process.env.FIXTURE_TENANT_STATE = tenant.stateFile;
+  process.env[AUTH_ENV] = auth;
+  try {
+    const bundleDir = await capture(echo, tenant);
+    const record = readFileSync(join(bundleDir, 'portal-apply.md'), 'utf8');
+    assert.match(record, /auth=absent/, 'the apply child never sees the auth env var');
+    assert.match(record, /Refused: `node apply\.mjs` exited 3\. No page opened\./);
+    assert.ok(!record.includes(auth));
+    assert.equal(tenant.requests.length, 0, 'no page was opened after a failed apply');
+    rmSync(bundleDir, { recursive: true, force: true });
+  } finally {
+    delete process.env[AUTH_ENV];
+    delete process.env.FIXTURE_TENANT_STATE;
+    await tenant.close();
+    rmSync(echo, { recursive: true, force: true });
   }
 });

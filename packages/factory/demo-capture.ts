@@ -17,7 +17,7 @@
  * about whether a recording actually happened.
  */
 
-import { chromium, type Browser, type BrowserContext, type Page, type Request, type Video } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Route, type Video } from 'playwright-core';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -108,7 +108,6 @@ export type RecordPortalInput = {
   page: string;
   /** The operator's Playwright storage state, by path (resolved from the declared env var by the caller). */
   authStatePath?: string;
-  steps?: BrowserStep[];
   regions?: OverlayRegion[];
   bundleDir: string;
 };
@@ -309,20 +308,24 @@ export async function recordTerminal(input: RecordTerminalInput): Promise<Record
 // ── recordBrowser ────────────────────────────────────────────────────────────
 
 type DriveInput = { who: string; side: RecordSide; label: string; url: string; steps?: BrowserStep[]; regions?: OverlayRegion[]; bundleDir: string };
+type Pin = (page: Page, context: BrowserContext) => Promise<() => string | null>;
 
 /**
  * Navigate, run declared steps, settle, outline regions, then finalise the webm + filmstrip. The last still
- * doubles as the checkpoint's frame. `pin` is installed on the page before the first navigation and asked,
- * after the drive and on any failure, whether the evidence came from where it must.
+ * doubles as the checkpoint's frame. `pin` is installed before the first navigation and asked, after the drive
+ * and on any failure, whether the evidence came from where it must; `refuseStatus` names a first response
+ * that is no evidence at all.
  */
-async function drive(input: DriveInput, opts: { storageState?: string; pin: (page: Page) => Promise<() => string | null> }): Promise<RecordResult> {
+async function drive(input: DriveInput, opts: { storageState?: string; pin: Pin; refuseStatus?: (status: number) => string | null }): Promise<RecordResult> {
   const { who, side, label } = input;
   const { browser, context, page, videoDir } = await launchRecording(input.bundleDir, { storageState: opts.storageState });
   let contextClosed = false;
   let violation: () => string | null = () => null;
   try {
-    violation = await opts.pin(page);
-    await page.goto(input.url, { timeout: NAV_TIMEOUT_MS });
+    violation = await opts.pin(page, context);
+    const response = await page.goto(input.url, { timeout: NAV_TIMEOUT_MS });
+    const badStatus = response ? opts.refuseStatus?.(response.status()) : null;
+    if (badStatus) throw new DemoRecordError(`${who}: ${side}/${label} ${badStatus}`);
     const stills: string[] = [];
     for (const step of input.steps ?? []) {
       if ('fill' in step) {
@@ -341,6 +344,7 @@ async function drive(input: DriveInput, opts: { storageState?: string; pin: (pag
     await page.waitForTimeout(SETTLE_MS);
     const refused = violation();
     if (refused) throw new DemoRecordError(`${who}: ${side}/${label} ${refused}`);
+    if (page.url() === 'about:blank') throw new DemoRecordError(`${who}: ${side}/${label} landed on no document (still about:blank) — refused`);
     if (input.regions && input.regions.length > 0) {
       await overlay(page).outline(input.regions);
     }
@@ -354,9 +358,11 @@ async function drive(input: DriveInput, opts: { storageState?: string; pin: (pag
   } catch (err) {
     if (err instanceof DemoRecordError) throw err;
     // An aborted off-origin navigation surfaces as a navigation error: the refusal is the truth, by name.
+    // With a storage state the cause is dropped: Playwright's own message can carry the state file's path.
+    const cause = opts.storageState ? undefined : err;
     const refused = violation();
-    if (refused) throw new DemoRecordError(`${who}: ${side}/${label} ${refused}`, err);
-    throw new DemoRecordError(`${who}: failed recording ${side}/${label} at ${input.url}`, err);
+    if (refused) throw new DemoRecordError(`${who}: ${side}/${label} ${refused}`, cause);
+    throw new DemoRecordError(`${who}: failed recording ${side}/${label} at ${input.url}`, cause);
   } finally {
     if (!contextClosed) await context.close().catch(() => {});
     await browser.close().catch(() => {});
@@ -364,23 +370,38 @@ async function drive(input: DriveInput, opts: { storageState?: string; pin: (pag
   }
 }
 
+/** `new URL`, refused by name rather than thrown as a bare TypeError. */
+function parseUrl(raw: string, base: string | undefined, who: string): URL {
+  try {
+    return new URL(raw, base);
+  } catch (err) {
+    throw new DemoRecordError(`${who}: ${JSON.stringify(raw)} is not a URL`, err);
+  }
+}
+
 /** Navigate the tree's own page through declared steps; the evidence must stay on the tree's own server. */
 export async function recordBrowser(input: RecordBrowserInput): Promise<RecordResult> {
   const side = assertSide(input.side, 'recordBrowser');
   const label = assertPathSegment(input.label, 'recordBrowser: label');
-  const own = new URL(input.url).origin;
+  const own = parseUrl(input.url, undefined, 'recordBrowser').origin;
   // A declared step may click a link; the evidence must still be the tree's own page.
-  const pin = async (page: Page) => () => {
+  const pin: Pin = async (page) => () => {
     const now = landedOrigin(page);
     return now === null || now === own ? null : `left the tree's own server (now at ${now}) — refused`;
   };
   return drive({ ...input, who: 'recordBrowser', side, label }, { pin });
 }
 
+/** A first response that shows the portal's sign-in, not the page: the operator's auth state is missing or stale. */
+const AUTH_REFUSED_STATUSES = new Set([401, 407]);
+
 /**
- * Record a declared portal page (forge-8vfn.31). Every main-frame navigation — the first load, each
- * redirect hop, a step's click — must stay on a declared origin: an undeclared one is aborted before it is
- * fetched and the recording refused by name. Sub-resources (a portal's asset CDN) load as the page needs.
+ * Record a declared portal page (forge-8vfn.31). Every main-frame navigation in the context — the first load,
+ * each redirect hop, a script's navigation — must stay on a declared origin: a document request for any other
+ * origin is answered by forge, never fetched, and the recording refused by name. A redirect is fetched without
+ * following it, so an off-origin hop is refused before the browser asks for it. A second page (a popup) is
+ * closed and refused. Sub-resources (a portal's asset CDN) load as the page needs. No steps: an interaction
+ * would act on the live site as the operator.
  */
 export async function recordPortal(input: RecordPortalInput): Promise<RecordResult> {
   const side = assertSide(input.side, 'recordPortal');
@@ -388,27 +409,56 @@ export async function recordPortal(input: RecordPortalInput): Promise<RecordResu
   const origins = new Set(input.origins);
   const home = input.origins[0];
   if (!home) throw new DemoRecordError('recordPortal: no declared portal origin');
-  const url = new URL(input.page, home);
+  const url = parseUrl(input.page, home, 'recordPortal');
   if (url.origin !== home || !input.page.startsWith('/') || input.page.startsWith('//')) {
     throw new DemoRecordError(`recordPortal: page ${JSON.stringify(input.page)} does not resolve on the declared origin ${home} — refused`);
   }
-  const pin = async (page: Page) => {
-    let offOrigin: string | null = null;
-    const isOff = (req: Request): boolean => req.isNavigationRequest() && req.frame() === page.mainFrame() && !origins.has(originOf(req.url()));
-    // Redirect hops reach `request`, not `route`; both record, `route` also aborts.
-    page.on('request', (req) => { if (isOff(req)) offOrigin ??= originOf(req.url()); });
-    await page.route('**/*', (route) => {
-      if (!isOff(route.request())) return route.continue();
-      offOrigin ??= originOf(route.request().url());
-      return route.abort('blockedbyclient');
-    });
+  const pin: Pin = async (page, context) => {
+    let refusal: string | null = null;
+    const off = (raw: string): boolean => !origins.has(originOf(raw));
+    const refuse = (why: string): void => { refusal ??= why; };
+    context.on('page', (extra) => { refuse('opened a second page — refused'); void extra.close().catch(() => {}); });
+    const frameOf = (req: Request): Frame | null => {
+      try {
+        return req.frame();
+      } catch {
+        return null; // a popup's first request is issued before its frame exists
+      }
+    };
+    const guarded = async (route: Route): Promise<void> => {
+      try {
+        await gate(route);
+      } catch (err) {
+        // Fail closed: a check that could not decide never lets the request through.
+        refuse(`could not check a navigation (${err instanceof Error ? err.message : String(err)}) — refused`);
+        await route.abort('blockedbyclient').catch(() => {});
+      }
+    };
+    const gate = async (route: Route): Promise<void> => {
+      const req = route.request();
+      if (!req.isNavigationRequest()) return route.continue();
+      const frame = frameOf(req);
+      if (frame === null || frame.page() !== page) { refuse('opened a second page — refused'); return route.abort('blockedbyclient'); }
+      if (frame.parentFrame() !== null) return route.continue();
+      if (off(req.url())) { refuse(`navigated to ${originOf(req.url())}, which is not a declared portal origin — refused`); return route.abort('blockedbyclient'); }
+      // Fetch without following: a hop is checked here, and the browser asks for it (through this route) only if it stays.
+      const response = await route.fetch({ maxRedirects: 0 });
+      const location = response.headers()['location'];
+      if (response.status() >= 300 && response.status() < 400 && location && off(new URL(location, req.url()).toString())) {
+        refuse(`navigated to ${originOf(new URL(location, req.url()).toString())}, which is not a declared portal origin — refused`);
+        return route.abort('blockedbyclient');
+      }
+      return route.fulfill({ response });
+    };
+    await context.route('**/*', guarded);
     return () => {
       const now = landedOrigin(page);
-      const at = offOrigin ?? (now === null || origins.has(now) ? null : now);
-      return at === null ? null : `navigated to ${at}, which is not a declared portal origin — refused`;
+      return refusal ?? (now === null || origins.has(now) ? null : `navigated to ${now}, which is not a declared portal origin — refused`);
     };
   };
-  return drive({ who: 'recordPortal', side, label, url: url.toString(), steps: input.steps, regions: input.regions, bundleDir: input.bundleDir }, { storageState: input.authStatePath, pin });
+  const refuseStatus = (status: number): string | null =>
+    AUTH_REFUSED_STATUSES.has(status) ? `the portal answered ${status} — the auth state is missing or was rejected (export it again)` : null;
+  return drive({ who: 'recordPortal', side, label, url: url.toString(), regions: input.regions, bundleDir: input.bundleDir }, { storageState: input.authStatePath, pin, refuseStatus });
 }
 
 /** Where the page now stands, or null before any document loaded (a failed first navigation leaves about:blank). */
