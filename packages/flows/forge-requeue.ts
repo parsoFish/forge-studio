@@ -251,7 +251,8 @@ export function runRequeue(
   // for a fresh-from-main re-run.
   const preserveWorktree = resumeDecision.resume;
   // forge-mfv5.1.54 (D-06): committed work is never discarded silently — checked before ANY mutation below.
-  if (!preserveWorktree && !opts.discardBranch && projectRepoPath && existsSync(projectRepoPath)) {
+  const repoPresent = projectRepoPath !== '' && existsSync(projectRepoPath);
+  if (!preserveWorktree && !opts.discardBranch && repoPresent) {
     const unmerged = unmergedBranchCommits(projectRepoPath, `forge/${initiativeId}`);
     if (unmerged === 'UNKNOWN' || unmerged.length > 0) throw new BranchDiscardRefusedError(`forge/${initiativeId}`, unmerged);
   }
@@ -322,7 +323,7 @@ export function runRequeue(
   let worktreeRemoved = false;
   let branchDeleted = false;
   if (!preserveWorktree) {
-    if (existsSync(worktreePath) && projectRepoPath && existsSync(projectRepoPath)) {
+    if (existsSync(worktreePath) && repoPresent) {
       try {
         execFileSync('git', ['-C', projectRepoPath, 'worktree', 'remove', '--force', worktreePath], { stdio: 'pipe' });
         worktreeRemoved = true;
@@ -335,7 +336,7 @@ export function runRequeue(
     // Delete the stale initiative branch (local + remote) so the re-run's
     // worktree add recreates it fresh from current main. Best-effort: the
     // branch may not exist, or there may be no origin remote.
-    if (projectRepoPath && existsSync(projectRepoPath)) {
+    if (repoPresent) {
       const branch = `forge/${initiativeId}`;
       try {
         execFileSync('git', ['-C', projectRepoPath, 'branch', '-D', branch], { stdio: 'pipe' });

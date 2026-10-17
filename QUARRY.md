@@ -209,7 +209,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/dry-bridge.ts | kernel | rewritten | 332 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 788 |
-| packages/flows/forge-requeue.ts | flows | verbatim | 362 |
+| packages/flows/forge-requeue.ts | flows | verbatim | 363 |
 | apps/forge/forge-watch.ts | apps/forge | verbatim | 800 |
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 742 |
 | packages/knowledge/brain-write-lease.ts | knowledge | verbatim | 197 |
@@ -471,7 +471,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-planner-port.ts | stations | rewritten | 177 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 288 |
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
-| packages/flows/requeue-resume.ts | flows | verbatim | 439 |
+| packages/flows/requeue-resume.ts | flows | verbatim | 438 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |

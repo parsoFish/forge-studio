@@ -231,6 +231,9 @@ export function readPriorFailureSignal(
   return readPriorFailureSignalFromLog(join(forgeRoot, '_logs', cycleId, 'events.jsonl'));
 }
 
+/** One read-only git call in the project repo (callers own their error handling). */
+const gitIn = (repo: string, args: string[]): string => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
+
 /**
  * True iff `branch` exists in the project repo AND carries at least one
  * commit beyond its merge-base with main/master — i.e. there is committed
@@ -238,11 +241,7 @@ export function readPriorFailureSignal(
  * repo) yields false.
  */
 export function branchHasCommittedWork(projectRepoPath: string, branch: string): boolean {
-  const git = (args: string[]): string =>
-    execFileSync('git', ['-C', projectRepoPath, ...args], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    }).trim();
+  const git = (args: string[]): string => gitIn(projectRepoPath, args);
   try {
     git(['rev-parse', '--verify', '--quiet', branch]);
   } catch {
@@ -267,7 +266,7 @@ export function branchHasCommittedWork(projectRepoPath: string, branch: string):
  * 'UNKNOWN' when git cannot answer (no origin/main, any other git error) — the caller refuses on it (§6.15).
  */
 export function unmergedBranchCommits(projectRepoPath: string, branch: string): string[] | 'UNKNOWN' {
-  const git = (args: string[]): string => execFileSync('git', ['-C', projectRepoPath, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
+  const git = (args: string[]): string => gitIn(projectRepoPath, args);
   const exists = (ref: string): boolean | 'UNKNOWN' => {
     try { git(['rev-parse', '--verify', '--quiet', ref]); return true; } catch (e) { return (e as { status?: number }).status === 1 ? false : 'UNKNOWN'; }
   };
