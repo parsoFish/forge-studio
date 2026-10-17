@@ -164,7 +164,7 @@ export function deriveWorkItems(
     // fires-for-failed-wi.md.
     if (status === 'failed') {
       const verdict = findLatestWiVerdict(events, id);
-      if (verdict !== undefined && verdict.commits > 0) {
+      if (verdict !== undefined && verdict.commits > 0 && verdict.message !== 'dev-loop.kept') { // forge-mfv5.1.56: a kept WI failed for real (halted, resumable by Requeue)
         status = 'retrying';
       }
     }

@@ -231,13 +231,17 @@ export function computeIterations(
  *
  * Exported so run-model-derive-status.ts's `deriveWorkItems` can call it.
  */
+/** forge-mfv5.1.56: `dev-loop.kept` (an unmerged WI's commits kept on its branch) is a per-WI verdict beside delivered/discarded. */
+type WiVerdictMessage = 'dev-loop.delivered' | 'dev-loop.discarded' | 'dev-loop.kept';
+const isWiVerdict = (m: string | undefined): m is WiVerdictMessage => m === 'dev-loop.delivered' || m === 'dev-loop.discarded' || m === 'dev-loop.kept';
+
 export function findLatestWiVerdict(
   events: readonly EventLogEntry[],
   wiId?: string,
-): { message: 'dev-loop.delivered' | 'dev-loop.discarded'; outcome?: string; files: number; insertions: number; commits: number } | undefined {
+): { message: WiVerdictMessage; outcome?: string; files: number; insertions: number; commits: number } | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    if (e.message !== 'dev-loop.delivered' && e.message !== 'dev-loop.discarded') continue;
+    if (!isWiVerdict(e.message)) continue;
     if (!e.metadata) continue;
     const m = e.metadata;
     // M5: a wiId selects that WI's per-WI event; the phase aggregate (no
@@ -254,7 +258,7 @@ export function findLatestWiVerdict(
     const insertions = typeof m.insertions === 'number' ? m.insertions : 0;
     const commits = typeof m.commits === 'number' ? m.commits : 0;
     const outcome = typeof m.outcome === 'string' ? m.outcome : undefined;
-    return { message: e.message as 'dev-loop.delivered' | 'dev-loop.discarded', outcome, files, insertions, commits };
+    return { message: e.message as WiVerdictMessage, outcome, files, insertions, commits };
   }
   return undefined;
 }
@@ -292,7 +296,7 @@ export function findDelivered(
 ): { files: number; insertions: number; commits: number } | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    if (e.message !== 'dev-loop.delivered' && e.message !== 'dev-loop.discarded') continue;
+    if (!isWiVerdict(e.message)) continue;
     if (!e.metadata) continue;
     const m = e.metadata;
     // M5: a wiId selects that WI's per-WI event; the phase aggregate (no
@@ -302,9 +306,9 @@ export function findDelivered(
     } else if (typeof m.work_item_id === 'string') {
       continue;
     }
-    // A discarded verdict is decisive — never delivered, never overridden
-    // by an earlier delivered event.
-    if (e.message === 'dev-loop.discarded') return undefined;
+    // A discarded or kept verdict is decisive — never delivered, never
+    // overridden by an earlier delivered event.
+    if (e.message !== 'dev-loop.delivered') return undefined;
     const outcome = typeof m.outcome === 'string' ? m.outcome : undefined;
     if (outcome !== undefined && outcome !== 'complete') return undefined;
     // Accept both files_changed and files

@@ -357,7 +357,7 @@
   "class": "other",
   "guard": null,
   "verified": "exec",
-  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed"
+  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.27 `fixRoundHeadRefusal` reads `_logs/<cycle_id>/events.jsonl` and runs `git -C project_repo_path` only after `runRequeue`'s `assertManifestPathFields` passed; forge-mfv5.1.56 `recordedRoundHalt` reads the drain's own `_logs/<cycle_id>/events.jsonl` (cycle_id `isSafeCycleId`-checked first) and `resumableFixCount` probes the guarded worktree's work-items"
  },
  "packages/flows/review-comments.ts": {
   "class": "guarded",
@@ -1013,6 +1013,12 @@
   "verified": null,
   "note": "Narrative mention only in the retired audit; no per-file classification was recorded."
  },
+ "packages/stations/phases/dev-loop-keep.ts": {
+  "class": "not-request-derived",
+  "guard": null,
+  "verified": null,
+  "note": "forge-mfv5.1.56: every path is the orchestrator's own — the per-WI worktree (`git status`/`rev-parse`), the cycle worktree's `.forge/work-items/<id>.md` spec, the cycle's own `logger.logFilePath`, and the claimed manifest the dev loop runs under; no request field reaches a sink"
+ },
  "packages/stations/phases/gate-feedback.ts": {
   "class": "not-request-derived",
   "guard": null,
@@ -1114,6 +1120,12 @@
   "guard": null,
   "verified": null,
   "note": "forge-mfv5.1.47: one execFileSync('git', ['-C', projectRepoPath, ...]) arg-array helper; projectRepoPath and the forge/<initiativeId> branch come from a claimed manifest that runOne's validateClaimable has already contained, never request bytes."
+ },
+ "packages/flows/wi-worktree.ts": {
+  "class": "other",
+  "guard": null,
+  "verified": null,
+  "note": "forge-mfv5.1.56: git -C projectRepoPath (rev-parse / rev-list --count / branch -D / branch -m to `forge/parked/…`) on `forge/wi/<initiativeId>/<workItemId>` refs, and a `merge` of the cycle tip inside the per-WI worktree it just created; projectRepoPath reaches here only from a claimed manifest scheduler-run-one / drain-fix-loop containment-check (isContainedProjectRepoPath), ids are WORK_ITEM_ID_PATTERN / validated initiative ids, execFileSync with argv arrays, never a shell."
  },
  "packages/flows/worktree.ts": {
   "class": "other",

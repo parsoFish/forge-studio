@@ -239,6 +239,7 @@ function pruneMergedWorktrees(
     emit('finalize.wi-worktrees-pruned', false, {
       pruned_paths: result.prunedPaths,
       pruned_branches: result.prunedBranches,
+      kept_branches: result.keptBranches, // forge-mfv5.1.56: unmerged WI work left in place, named
       wi_dir: wiDir,
     });
   } catch (err) {

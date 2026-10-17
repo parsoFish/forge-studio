@@ -22,12 +22,14 @@ import { guardedFile, guardedWriteFile } from '@forge/kernel';
 import { worktreeDemoJsonRelPath } from './demo-paths.ts';
 import { acLabel, missingCheckErrors } from './acceptance-check.ts';
 import {
+  DEV_WORK_ITEM_ID_PATTERN,
   devWorkItemIdStem,
   gateIsShellPipeline,
   readWorkItemsFromDir,
   topologicalOrder,
   validateWorkItemSet,
   writeWorkItem,
+  writeWorkItemStatus,
   type AcceptanceCriterion,
   type FixWiOrigin,
   type WorkItem,
@@ -246,6 +248,20 @@ export function readPendingFixWorkItems(worktreePath: string): WorkItem[] | { un
     if (guardedFile(worktreePath, ['.forge', 'work-items'], 'readdir') !== null) return pendingFixWorkItems(worktreePath);
     return existsSync(devWorkItemsDir(worktreePath)) ? { unreadable: 'the work-items dir failed the path guard (a symlink is never followed)' } : [];
   } catch (err) { return { unreadable: err instanceof Error ? err.message : String(err) }; }
+}
+
+/** forge-mfv5.1.56 (D-06): the failed fix WIs a halted round names — a Requeue re-arms them (a kept branch resumes at its tip). */
+export function resumableFixWorkItems(worktreePath: string, haltedIds: readonly string[]): WorkItem[] {
+  return fixWorkItems(worktreePath).filter((w) => w.status === 'failed' && haltedIds.includes(w.work_item_id));
+}
+
+/** forge-mfv5.1.56: the Requeue of a halted round puts each of its failed fix WIs back to `pending` (`kept_branch` stays); returns their ids. */
+export function rearmResumableFixWorkItems(worktreePath: string, haltedIds: readonly string[]): string[] {
+  const items = resumableFixWorkItems(worktreePath, haltedIds);
+  const bad = items.find((w) => !DEV_WORK_ITEM_ID_PATTERN.test(w.work_item_id));
+  if (bad) throw new Error(`requeue: fix work item id ${JSON.stringify(bad.work_item_id)} is not a work-item id — refusing to re-arm it`);
+  for (const w of items) writeWorkItemStatus(join(devWorkItemsDir(worktreePath), `${w.work_item_id}.md`), 'pending');
+  return items.map((w) => w.work_item_id);
 }
 
 /** True if any fix WI is `failed` — the drain parks needs-operator, never retries. */

@@ -44,7 +44,7 @@ import {
   pendingFixWorkItems,
 } from './fix-work-items.ts';
 import type { CycleInput } from './cycle-context.ts';
-import { fixRoundHeadRefusal, haltedRoundRefusal, roundHaltFromLog } from './requeue-resume.ts';
+import { fixRoundHeadRefusal, haltedRoundRefusal, recordedRoundHalt, roundHaltFromLog } from './requeue-resume.ts';
 import { annotateManifest } from './scheduler-run-one.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
 
@@ -289,9 +289,11 @@ export async function drainPendingFixWorkItems(
         const after = pendingFixWorkItems(worktreePath).map((p) => p.work_item_id).sort();
         const headAfter = worktreeHeadSha(worktreePath);
         const untouched = after.join(',') === pending.map((p) => p.work_item_id).sort().join(',') && headAfter === headBefore;
-        const halt = result.status === 'failed' && untouched ? roundHaltFromLog(logPath) : null;
+        // forge-mfv5.1.56: a round whose fix WIs failed is halted by the dev loop itself (recorded, before integrate).
+        const recorded = result.status === 'failed' ? recordedRoundHalt(logPath) : null;
+        const halt = recorded ?? (result.status === 'failed' && untouched ? roundHaltFromLog(logPath) : null);
         if (halt !== null) {
-          createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: headAfter } });
+          if (recorded === null) createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [inFlightPath], output_refs: [], message: 'sendback.loop-halted', metadata: { round, classification: halt.classification, reason: halt.reason, pending_work_items: after, head_sha: headAfter } });
           try { // the event is the record the surfaces read; the manifest copy never blocks the move to failed/
             annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason).replace(/\$/g, '\\u0024') }); // `$` is a String.replace pattern there
           } catch (err) { deps.notify?.(`${initiativeId} · halted round's manifest record not written: ${err instanceof Error ? err.message : String(err)}`); }

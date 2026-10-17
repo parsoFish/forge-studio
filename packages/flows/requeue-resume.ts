@@ -42,7 +42,7 @@ import { join } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
 import { isSafeCycleId } from './manifest-path-guard.ts';
-import { readPendingFixWorkItems } from './fix-work-items.ts';
+import { readPendingFixWorkItems, resumableFixWorkItems } from './fix-work-items.ts';
 import { fixRoundDeliveredHead, fixRoundHeadVerdict } from '@forge/contracts';
 
 export type RequeueResumeDecision =
@@ -190,6 +190,16 @@ export function roundHaltFromLog(logPath: string): { classification: string; rea
   const error = attempt[lastIndex(attempt, (e) => e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end')]?.metadata?.error;
   const reason = typeof error === 'string' ? error.replace(/^\w*Error: /, '') : typeof cls?.reason === 'string' ? cls.reason : 'the run failed with no failure classification and no error recorded in its attempt';
   return { classification, reason };
+}
+
+/** forge-mfv5.1.56: the halt the dev loop recorded in the latest attempt (a fix round whose fix WIs failed), or null. */
+export function recordedRoundHalt(logPath: string): { classification: string; reason: string; workItems: string[] } | null {
+  const events = readLogEvents(logPath) ?? [];
+  const at = lastIndex(events, (e) => e.message === 'sendback.loop-halted');
+  if (at < 0 || at < lastIndex(events, (e) => e.message === 'cycle.start')) return null;
+  const md = events[at]!.metadata ?? {};
+  const ids = Array.isArray(md.pending_work_items) ? md.pending_work_items.filter((x): x is string => typeof x === 'string') : [];
+  return { classification: String(md.classification ?? 'UNKNOWN'), reason: String(md.reason ?? 'no reason recorded'), workItems: md.classification === 'fix-work-items-failed' ? ids : [] };
 }
 
 /** forge-mfv5.1.39: the latest attempt was a halted fix round over these pending WIs — the drain refuses it by name (`alreadyRefused`: said once per halt). */
@@ -419,8 +429,18 @@ export function inferRequeueResume(args: {
       existsSync(args.projectRepoPath) &&
       branchHasCommittedWork(args.projectRepoPath, `forge/${args.initiativeId}`),
     workItems: summarizeWorkItemStatuses(args.worktreePath),
-    pendingFixWorkItems: [readPendingFixWorkItems(args.worktreePath)].map((p) => (Array.isArray(p) ? p.length : 1))[0],
+    pendingFixWorkItems: [readPendingFixWorkItems(args.worktreePath)].map((p) => (Array.isArray(p) ? p.length : 1))[0] + resumableFixCount(args.worktreePath, haltedFixIds(args.forgeRoot, args.cycleId)),
   });
+}
+
+/** forge-mfv5.1.56: the fix WIs the latest attempt halted on (its recorded halt), [] when none. */
+export function haltedFixIds(forgeRoot: string, cycleId: string | undefined): string[] {
+  return cycleId && isSafeCycleId(cycleId) ? recordedRoundHalt(join(forgeRoot, '_logs', cycleId, 'events.jsonl'))?.workItems ?? [] : [];
+}
+
+/** The halted round's failed fix WIs are owed work too; an unreadable queue counts toward resuming (as above). */
+function resumableFixCount(worktreePath: string, halted: readonly string[]): number {
+  try { return existsSync(worktreePath) ? resumableFixWorkItems(worktreePath, halted).length : 0; } catch { return 1; }
 }
 
 /**
