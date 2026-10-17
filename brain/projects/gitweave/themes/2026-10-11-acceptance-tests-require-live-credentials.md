@@ -5,7 +5,7 @@ category: antipattern
 keywords: [acceptance-tests, live-credentials, gw-apply, forge-resource-prefix, ci-workflow, post-merge-red, GW_APP_ID, tests/acceptance, WI-12, WI-15]
 created_at: 2026-10-12T00:00:00Z
 updated_at: 2026-10-12T00:00:00Z
-related_themes: [2026-10-11-plan-engine-all-three-state-branches-required, sharp-edges, 2026-10-12-forge-resource-prefix-missing-in-ci-workflow]
+related_themes: [2026-10-11-plan-engine-all-three-state-branches-required, sharp-edges, 2026-10-12-forge-resource-prefix-missing-in-ci-workflow, 2026-10-13-autouse-fixture-env-masking, 2026-10-13-reset-and-containment-via-api-state]
 ---
 
 ## What happened

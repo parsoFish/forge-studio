@@ -5,7 +5,7 @@ category: antipattern
 keywords: [adversarial-review, send-back, stale-findings, false-positive, review-round, forge, gate, honest-baseline]
 created_at: 2026-10-10T09:30:00Z
 updated_at: 2026-10-10T09:30:00Z
-related_themes: [2026-10-10-all-wis-rerun-on-send-back, 2026-08-22-verifier-without-a-repro-produces-agreement]
+related_themes: [2026-10-10-all-wis-rerun-on-send-back, 2026-08-22-verifier-without-a-repro-produces-agreement, 2026-10-13-adversarial-review-enobufs-large-diff]
 ---
 
 # Adversarial review reports stale findings in rounds 2+ after send-back
