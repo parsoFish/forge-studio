@@ -116,7 +116,8 @@ test('bridgePost surfaces a halted refusal as the mapped message', async () => {
   vi.stubGlobal('window', { __FORGE_BRIDGE_PORT__: 4123, location: { protocol: 'http:', hostname: 'localhost' } });
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'halted', since: SINCE }), { status: 409 }));
   const r = await bridgePost('/api/architect/start', {});
-  expect(r).toEqual({ ok: false, error: HALTED_MESSAGE });
+  // forge-mfv5.1.54: the refusal body's own fields ride along as `data` (a caller reads a refusal's code off it).
+  expect(r).toEqual({ ok: false, error: HALTED_MESSAGE, data: { error: 'halted', since: SINCE } });
 });
 
 test('pull/release client calls hit the halt routes and surface refusals', async () => {
