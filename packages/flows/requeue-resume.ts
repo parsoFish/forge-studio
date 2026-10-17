@@ -265,6 +265,27 @@ export function branchHasCommittedWork(projectRepoPath: string, branch: string):
 }
 
 /**
+ * forge-mfv5.1.54 (D-06): the commits a fresh re-run would discard — `<sha> <subject>` of
+ * `branch` (local, and the remote-tracking ref `push --delete` would remove) not on
+ * origin/main. [] when the path is no git repository, neither ref exists or nothing is ahead;
+ * 'UNKNOWN' when git cannot answer (no origin/main, any other git error) — the caller refuses on it (§6.15).
+ */
+export function unmergedBranchCommits(projectRepoPath: string, branch: string): string[] | 'UNKNOWN' {
+  const git = (args: string[]): string => execFileSync('git', ['-C', projectRepoPath, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
+  const exists = (ref: string): boolean | 'UNKNOWN' => {
+    try { git(['rev-parse', '--verify', '--quiet', ref]); return true; } catch (e) { return (e as { status?: number }).status === 1 ? false : 'UNKNOWN'; }
+  };
+  // Not a git repository at all: no branch exists for `branch -D` / `push --delete` to remove — a positive answer, not a caught default.
+  try { git(['rev-parse', '--git-dir']); } catch (e) { return /not a git repository/.test(String((e as { stderr?: unknown }).stderr)) ? [] : 'UNKNOWN'; }
+  const refs = [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`].map((r) => [r, exists(r)] as const);
+  if (refs.some(([, x]) => x === 'UNKNOWN')) return 'UNKNOWN';
+  const present = refs.filter(([, x]) => x === true).map(([r]) => r);
+  if (present.length === 0) return [];
+  if (exists('refs/remotes/origin/main') !== true) return 'UNKNOWN';
+  try { return git(['log', '--format=%h %s', ...present, '^refs/remotes/origin/main', '--']).split('\n').filter(Boolean); } catch { return 'UNKNOWN'; }
+}
+
+/**
  * Summarise the preserved `.forge/work-items/` statuses. Returns null when
  * the dir is missing or holds no parseable WI specs — without them the
  * dev/unifier nodes cannot run, so a resume is impossible.

@@ -31,7 +31,7 @@ import { join } from 'node:path';
 
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
-import { runRequeue } from './forge-requeue.ts';
+import { BranchDiscardRefusedError, runRequeue } from './forge-requeue.ts';
 import { sendJson, pathOnly, allowedOrigin, sanitizeError, decodeUrlPart, guardedReadFile } from '@forge/kernel';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
@@ -337,7 +337,7 @@ export async function handleRecoveryRoutes(
     return true;
   }
 
-  // POST /api/recovery/:id/requeue {resetRetries?, resumeFromIntegrate?}
+  // POST /api/recovery/:id/requeue {resetRetries?, resumeFromIntegrate?, discardBranch?}
   const requeueMatch = url.match(/^\/api\/recovery\/([^/]+)\/requeue$/);
   if (method === 'POST' && requeueMatch) {
     if (isDryBridge()) {
@@ -351,11 +351,15 @@ export async function handleRecoveryRoutes(
       const result = runRequeue(id, {
         resetRetries: body['resetRetries'] === true,
         resumeFromIntegrate: body['resumeFromIntegrate'] === true,
+        discardBranch: body['discardBranch'] === true,
         forgeRoot: ctx.forgeRoot,
         projectsRoot: ctx.projectsRoot,
       });
       sendJson(res, 200, { ok: true, ...result }, origin);
-    } catch (err) { sendJson(res, 409, { error: sanitizeError(err) }, origin); }
+    } catch (err) {
+      if (err instanceof BranchDiscardRefusedError) sendJson(res, 400, { error: err.message, code: 'branch-discard-refused', branch: err.branch, unmergedCommits: err.unmergedCommits }, origin);
+      else sendJson(res, 409, { error: sanitizeError(err) }, origin);
+    }
     return true;
   }
 
