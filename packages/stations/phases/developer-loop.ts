@@ -1289,15 +1289,9 @@ export function gitNetDelta(wt: string, fromRef: string): { files: number; inser
 }
 
 /**
- * Phase 4/2 (honest delivery events) — decide the per-WI delivery event's
- * message + metadata from the WI's final status. `dev-loop.delivered` is
- * SUCCESS-ONLY (`finalStatus === 'complete'`); any other outcome carries the
- * SAME diff-stat fields on `dev-loop.discarded` instead, so a failed WI's
- * partial work is never silently lost from the log — it just is never
- * misnamed as a shipped delivery. Both variants carry an explicit `outcome`
- * field so a consumer never has to infer success from the message name
- * alone (brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-
- * failed-wi.md). Pure — no I/O. Exported for unit testing.
+ * Phase 4/2 (honest delivery events): the per-WI delivery event — `dev-loop.delivered`
+ * only for `complete`, each carrying an explicit `outcome`. A non-complete WI is
+ * recorded by `recordWiOutcome` (dev-loop-keep.ts) instead. Pure.
  */
 export function wiDeliveryEvent(
   finalStatus: WorkItem['status'],

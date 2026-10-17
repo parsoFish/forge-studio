@@ -1,13 +1,8 @@
 /**
- * forge-mfv5.1.56 (D-06) — a work item's committed work is never discarded,
- * and a fix round whose fix work items failed never reaches review.
- *
- * Gitweave I4 round 2: WI-17, the round's only fix WI, failed at its
- * iteration budget; the per-WI close deleted its branch and 15 commits
- * (`dev-loop.discarded`), and the round went on to demo, review and a verdict
- * on unchanged code. Now an unmerged WI's branch is kept (`dev-loop.kept`, the
- * spec's `kept_branch`), the next dispatch resumes from it (`createWiWorktree`),
- * and a fix round with a failed fix WI halts before integrate by name.
+ * forge-mfv5.1.56 (D-06) — gitweave I4 round 2: WI-17 failed at its iteration
+ * budget, its branch and 15 commits were deleted, and the round reviewed
+ * unchanged code. An unmerged WI's branch is now kept and resumed
+ * (`createWiWorktree`), and a fix round with a failed fix WI halts before integrate.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -76,7 +71,7 @@ function uncommittedFiles(wt: string): string[] | 'UNKNOWN' {
  */
 export function closeWiWorktree(o: { projectRepoPath: string; wiWorktree: { path: string; branch: string }; cycleWorktreePath: string; requeue: boolean }): void {
   let cycleHead = '';
-  try { cycleHead = gitOut(o.cycleWorktreePath, ['rev-parse', 'HEAD']); } catch { /* UNKNOWN below keeps the branch */ }
+  try { cycleHead = gitOut(o.cycleWorktreePath, ['rev-parse', 'HEAD']); } catch { /* '' keeps the branch */ }
   const deleteBranch = o.requeue || (cycleHead !== '' && unmergedCommitCount(o.projectRepoPath, o.wiWorktree.branch, [cycleHead]) === 0);
   removeWiWorktree({ projectRepoPath: o.projectRepoPath, path: o.wiWorktree.path, branch: o.wiWorktree.branch, deleteBranch });
 }

@@ -230,7 +230,7 @@ packages/flows/queue.ts statSync 1
 packages/flows/queue.ts unlinkSync 2
 packages/flows/queue.ts writeFileSync 1
 packages/flows/requeue-resume.ts execFileSync 2
-packages/flows/requeue-resume.ts existsSync 5
+packages/flows/requeue-resume.ts existsSync 6
 packages/flows/requeue-resume.ts readFileSync 2
 packages/flows/resume-branch.ts execFileSync 1
 packages/flows/review-comments.ts existsSync 1
@@ -269,7 +269,7 @@ packages/flows/stale-remote-branch-guard.ts execFileSync 1
 packages/flows/wi-merge-back.ts execFileSync 5
 packages/flows/wi-merge-back.ts rmSync 1
 packages/flows/wi-worktree.ts cpSync 1
-packages/flows/wi-worktree.ts execFileSync 8
+packages/flows/wi-worktree.ts execFileSync 9
 packages/flows/wi-worktree.ts existsSync 2
 packages/flows/wi-worktree.ts mkdirSync 1
 packages/flows/work-item.ts existsSync 2
@@ -699,6 +699,10 @@ packages/stations/phases/capture-nonce.ts readFileSync 1
 packages/stations/phases/dev-binding.ts existsSync 3
 packages/stations/phases/dev-binding.ts readFileSync 1
 packages/stations/phases/dev-binding.ts writeFileSync 3
+packages/stations/phases/dev-loop-keep.ts execFileSync 1
+packages/stations/phases/dev-loop-keep.ts existsSync 1
+packages/stations/phases/dev-loop-keep.ts readFileSync 3
+packages/stations/phases/dev-loop-keep.ts writeFileSync 1
 packages/stations/phases/dev-work-items-restore.ts cpSync 1
 packages/stations/phases/dev-work-items-restore.ts execFileSync 1
 packages/stations/phases/dev-work-items-restore.ts existsSync 5
