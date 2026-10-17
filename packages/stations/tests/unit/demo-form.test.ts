@@ -72,5 +72,5 @@ test('portal: page validates on portal-before-after; refused with a host, traver
 
 test('DEMO.md names the portal page a portal checkpoint opened', () => {
   const md = renderDemoMarkdown(model({}, { command: undefined, form: 'portal-before-after', page: '/orgs/acme/repositories' }));
-  assert.match(md, /- \*\*Page \(the project's declared site\):\*\* `\/orgs\/acme\/repositories`/);
+  assert.match(md, /- \*\*Page \(the project's declared site, read after each tree's own apply; the site is left in the after state\):\*\* `\/orgs\/acme\/repositories`/);
 });

@@ -50,7 +50,7 @@ export const narrativeLines = (narrative: string | undefined): string[] =>
 /** What a captured checkpoint ran: its command, the portal page it opened, or the GET on the tree's own server. */
 export function sourceLine(c: DemoModelCheckpoint): string | null {
   if (c.command) return `- **Command:** \`${c.command}\``;
-  if (c.page) return `- **Page (the project's declared site):** \`${c.page}\``;
+  if (c.page) return `- **Page (the project's declared site, read after each tree's own apply; the site is left in the after state):** \`${c.page}\``;
   return c.apiPath ? `- **GET (each tree's own server):** \`${c.apiPath}\`` : null;
 }
 
