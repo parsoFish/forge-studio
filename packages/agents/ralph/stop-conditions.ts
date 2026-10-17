@@ -6,13 +6,13 @@
  * boolean.
  */
 
-import { globToRegExp } from '@forge/projects';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { deriveResourcePrefix, gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY, RESOURCE_PREFIX_ENV } from '@forge/kernel';
 import { judgeGateTestSummary } from './gate-test-summary.ts';
+import { pathInScope, readBranchDiff, resolveBaseBranch } from './branch-diff.ts';
 
 export type StopCondition =
   | { kind: 'quality-gates-pass' }
@@ -181,6 +181,8 @@ export type GateRunInfo = {
 };
 
 const GATE_OUTPUT_MAX = 4096;
+/** How many required entries / diff paths the −3 feedback lists before eliding the rest. */
+const DIFF_PATHS_SHOWN = 20;
 
 /**
  * Tightening options for `makeQualityGateFromCmd`. When all are absent the
@@ -527,22 +529,16 @@ function runGateCapturing(
   if (passed) {
     // requiredPaths diff inclusion check.
     if (options?.requiredPaths && options.requiredPaths.length > 0) {
-      const diffPaths = gitDiffPathsAgainstMain(worktreePath);
-      const matched = options.requiredPaths.some((p) => diffPaths.has(p));
+      const required = options.requiredPaths;
+      const diff = readBranchDiff(worktreePath);
+      // forge-mfv5.1.52: the autocommit sweep's own matcher — an entry ending
+      // in `/` covers every diff path under that directory.
+      const matched = 'paths' in diff && [...diff.paths].some((p) => pathInScope(p, required));
       if (!matched) {
         passed = false;
         exitCode = -3;
         rejectReason = 'required-paths-missing';
-        // F1.I2 prescriptive: agent now reads exactly which file to create.
-        const required = options.requiredPaths;
-        const pathBullets = required.map((p) => `    - ${p}`).join('\n');
-        stderr =
-          stderr +
-          (stderr.endsWith('\n') ? '' : '\n') +
-          `[forge gate-tightening] REJECTED: 'git diff --name-only main...HEAD' shows NONE of this work item's required output paths.\n` +
-          `  ACTION REQUIRED before exiting this iteration — create AT LEAST ONE of these files in the worktree, then re-run the gate:\n` +
-          pathBullets + '\n' +
-          `  A compiling stub satisfies the path requirement; the substantive test/code body comes second. Without one of these paths in your diff, the iteration WILL fail. Do not exit until at least one is present in 'git diff'.`;
+        stderr = stderr + (stderr.endsWith('\n') ? '' : '\n') + requiredPathsFeedback(required, diff);
       }
     }
   }
@@ -569,7 +565,7 @@ function runGateCapturing(
  *    THIS iteration (the runner already observes these as `result.filesChanged`).
  *  - `scopedPaths` — the work item's own declared boundary, `files_in_scope`
  *    union `creates`, worktree-relative. An entry ending in `/` is a directory
- *    prefix; an entry containing `*` is a wildcard — see `pathInScope` below
+ *    prefix; an entry containing `*` is a wildcard — see `pathInScope` (branch-diff.ts)
  *    for why those two conventions (not a third, new one) are what's matched.
  */
 export type AutoCommitScope = {
@@ -583,23 +579,6 @@ export type AutoCommitSweepResult = {
   restored: string[];
   left: string[];
 };
-
-/**
- * True iff `changedPath` is covered by one of `scope`'s entries — exact
- * match, a directory prefix (entry ends with `/`, matching `isTrackedConfig`
- * in `packages/flows/pr-branch-sync.ts` and `trackedConfigProbe`/
- * `giTextCovers` in `packages/projects/preflight-repo.ts`), or a `*`-only
- * glob (`globToRegExp`, imported from `@forge/projects` — the one glob
- * matcher, never a second copy).
- */
-function pathInScope(changedPath: string, scope: readonly string[]): boolean {
-  return scope.some((entry) => {
-    if (entry === changedPath) return true;
-    if (entry.endsWith('/')) return changedPath.startsWith(entry);
-    if (entry.includes('*')) return globToRegExp(entry).test(changedPath);
-    return false;
-  });
-}
 
 /**
  * Auto-commit any uncommitted (staged or unstaged) changes in the worktree
@@ -700,51 +679,6 @@ export function autoCommitWorktreeIfDirty(
 }
 
 /**
- * Returns the set of paths different on this branch vs the merge base with
- * `main`. Used by the requiredPaths tightening; failures (no git, no main,
- * etc.) return an empty set so the tightening fails-closed only when paths
- * are present-and-required but absent.
- */
-function gitDiffPathsAgainstMain(worktreePath: string): Set<string> {
-  try {
-    const baseBranch = resolveBaseBranch(worktreePath);
-    const out = execFileSync('git', ['diff', '--name-only', `${baseBranch}...HEAD`], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-    });
-    const lines = out.toString('utf8').split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
-    return new Set(lines);
-  } catch {
-    // No git repo / no main+master / detached HEAD: caller's tightening intent is
-    // "fail on missing paths"; an empty set causes the .some() check above
-    // to fail and reject the gate. That's the safe default — better to
-    // false-reject in a degraded git state than to false-pass.
-    return new Set();
-  }
-}
-
-/**
- * Resolve the project's base branch name. Prefers `main`; falls back to
- * `master`. Surfaced by claude-harness cycle 1 (2026-05-24): a fresh
- * `git init` defaults to `master`, but the gate hard-coded `main`, so
- * the diff silently returned empty for 5 iterations even though the
- * agent's commits were on the branch. Throws if neither exists so the
- * caller's catch logs the degraded state.
- */
-function resolveBaseBranch(worktreePath: string): string {
-  for (const candidate of ['main', 'master']) {
-    try {
-      execFileSync('git', ['rev-parse', '--verify', candidate], {
-        cwd: worktreePath,
-        stdio: 'pipe',
-      });
-      return candidate;
-    } catch { /* try next */ }
-  }
-  throw new Error('no main or master branch in worktree');
-}
-
-/**
  * Wave B (2026-06-04): 3-way iter-0 gate decision.
  *
  * Returns true when the worktree branch already has commits AND/OR file-level
@@ -768,8 +702,8 @@ function resolveBaseBranch(worktreePath: string): string {
  */
 export function branchHasAllCreates(worktreePath: string, creates: readonly string[]): boolean {
   if (!creates || creates.length === 0) return false;
-  const diff = gitDiffPathsAgainstMain(worktreePath);
-  return creates.every((p) => diff.has(p));
+  const diff = readBranchDiff(worktreePath);
+  return 'paths' in diff && creates.every((p) => diff.paths.has(p));
 }
 
 export function checkBranchHasCommitsVsBase(worktreePath: string): boolean {
@@ -791,6 +725,20 @@ export function checkBranchHasCommitsVsBase(worktreePath: string): boolean {
     // Can't determine — treat as no commits (hollow gate is the safer fail-closed path).
     return false;
   }
+}
+
+/** F1.I2 prescriptive −3 text: what the WI requires, and what the diff actually held (forge-mfv5.1.52). */
+function requiredPathsFeedback(required: readonly string[], diff: ReturnType<typeof readBranchDiff>): string {
+  // Both lists are capped so the 4 KB gate tail keeps the REJECTED header (a send-back may carry 200 entries).
+  const bullets = (xs: readonly string[]) =>
+    [...xs.slice(0, DIFF_PATHS_SHOWN).map((p) => `    - ${p}`), ...(xs.length > DIFF_PATHS_SHOWN ? [`    … ${xs.length - DIFF_PATHS_SHOWN} more`] : [])].join('\n');
+  const seen = 'error' in diff
+    ? `  It could not read the branch diff (${diff.error}) — the gate fails closed until it can.\n`
+    : `  Diff paths seen (${diff.paths.size}):\n${diff.paths.size === 0 ? '    (none)' : bullets([...diff.paths])}\n`;
+  return `[forge gate-tightening] REJECTED: 'git diff --name-only main...HEAD' shows NONE of this work item's required output paths (an entry ending in '/' is met by any file under that directory).\n` +
+    `  ACTION REQUIRED before exiting this iteration — change AT LEAST ONE of these paths in the worktree and commit it, then re-run the gate:\n` +
+    bullets(required) + '\n' + seen +
+    `  A compiling stub satisfies the path requirement; the substantive test/code body comes second. Without one of these paths in your diff, the iteration WILL fail. Do not exit until at least one is present in 'git diff'.`;
 }
 
 function tail(s: string, max: number): string {

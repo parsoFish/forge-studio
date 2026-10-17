@@ -68,12 +68,13 @@ packages/agents/materials-staging.ts writeFileSync 1
 packages/agents/phases/agent-scope-guard.ts execFileSync 1
 packages/agents/phases/agent-scope-guard.ts readdirSync 1
 packages/agents/phases/agent-scope-guard.ts statSync 1
+packages/agents/ralph/branch-diff.ts execFileSync 2
 packages/agents/ralph/claude-agent.ts existsSync 1
 packages/agents/ralph/claude-agent.ts readFileSync 1
 packages/agents/ralph/runner.ts existsSync 3
 packages/agents/ralph/runner.ts readFileSync 3
 packages/agents/ralph/runner.ts writeFileSync 3
-packages/agents/ralph/stop-conditions.ts execFileSync 11
+packages/agents/ralph/stop-conditions.ts execFileSync 9
 packages/agents/ralph/stop-conditions.ts readFileSync 2
 packages/agents/run-agent.ts existsSync 1
 packages/agents/run-agent.ts mkdirSync 1

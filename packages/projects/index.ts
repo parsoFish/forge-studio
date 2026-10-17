@@ -91,7 +91,7 @@ export type { ContractSection, DriftAction, DriftRow, SkillMove, DriftReport, Re
 
 // --- constraint blocks: bound-skill constraints, authored and applied -----
 export { authorConstraintBlocks } from './constraint-author.ts';
-export { globToRegExp, loadProjectConstraintBlocks, selectorMatches } from './constraint-blocks.ts';
+export { globMatches, loadProjectConstraintBlocks, selectorMatches } from './constraint-blocks.ts';
 export type { ConstraintBlock, ConstraintMatchContext } from './constraint-blocks.ts';
 
 // --- gate recipes: the language-detected quality-gate command -------------

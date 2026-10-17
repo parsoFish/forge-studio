@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  globToRegExp,
+  globMatches,
   loadProjectConstraintBlocks,
   parseConstraintBlocks,
   selectorMatches,
@@ -197,15 +197,32 @@ test('parseConstraintBlocks: stray close tag with no open → throws', () => {
   assert.throws(() => parseConstraintBlocks(source, 'profile.md'), /stray forge:constraint close tag/);
 });
 
-// ---------- globToRegExp / selectorMatches ----------
+// ---------- globMatches / selectorMatches ----------
 
-test('globToRegExp: "*" matches any substring at that position, literal chars are anchored', () => {
-  assert.ok(globToRegExp('framework-migrate*').test('framework-migrate-azuredevops'));
-  assert.ok(globToRegExp('framework-migrate*').test('framework-migrate'));
-  assert.ok(!globToRegExp('framework-migrate*').test('other-framework-migrate'));
-  assert.ok(globToRegExp('*-betterado').test('terraform-provider-betterado'));
-  assert.ok(globToRegExp('*').test('anything at all'));
-  assert.ok(!globToRegExp('exact').test('exactly'));
+test('globMatches: "*" matches any substring at that position, literal chars are anchored', () => {
+  assert.ok(globMatches('framework-migrate*', 'framework-migrate-azuredevops'));
+  assert.ok(globMatches('framework-migrate*', 'framework-migrate'));
+  assert.ok(!globMatches('framework-migrate*', 'other-framework-migrate'));
+  assert.ok(globMatches('*-betterado', 'terraform-provider-betterado'));
+  assert.ok(globMatches('*', 'anything at all'));
+  assert.ok(!globMatches('exact', 'exactly'));
+});
+
+test('globMatches: agrees with the anchored `.*` regex it replaced on every glob/value over {a,b,*} up to length 5; regex chars are literal', () => {
+  const words = (alpha: string[], n: number): string[] => n === 0 ? [''] : [...words(alpha, n - 1), ...words(alpha, n - 1).flatMap((w) => w.length === n - 1 ? alpha.map((c) => w + c) : [])];
+  const all = (alpha: string[]) => [...new Set(words(alpha, 5))];
+  for (const glob of all(['a', 'b', '*'])) {
+    const re = new RegExp(`^${glob.replace(/\*/g, '.*')}$`);
+    for (const value of all(['a', 'b'])) assert.equal(globMatches(glob, value), re.test(value), `${glob} vs ${value}`);
+  }
+  assert.ok(!globMatches('a.b', 'axb'));
+  assert.ok(globMatches('src/*.ts', 'src/a/b.ts'), '`*` crosses `/`, as before');
+});
+
+test('globMatches: a many-star glob on a non-matching value is linear (forge-mfv5.1.52: the regex took 15 s at 8 stars)', () => {
+  const started = performance.now();
+  assert.equal(globMatches(`${'*a'.repeat(200)}b`, 'a'.repeat(5000)), false);
+  assert.ok(performance.now() - started < 200, `took ${Math.round(performance.now() - started)} ms`);
 });
 
 test('selectorMatches: "all" always matches regardless of context', () => {

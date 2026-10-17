@@ -143,7 +143,7 @@ export type WiGateCmd = {
 /**
  * forge-mfv5.3.6 — the directory a WI changes: the common directory of its
  * repo-relative paths. A `dir/` entry is itself; a `*` glob (the one wildcard
- * `globToRegExp` in `@forge/projects` knows) contributes its static prefix,
+ * `globMatches` in `@forge/projects` knows) contributes its static prefix,
  * the segments before the first one holding a `*`; a file its directory.
  * `null` when there is none below the repo root — no paths, a root-level file,
  * a glob with no static directory, or a path leaving the repo — and when any

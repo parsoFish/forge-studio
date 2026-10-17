@@ -183,10 +183,24 @@ function parseTerm(raw: string, sourceFile: string, line: number): ConstraintTer
   return { namespace: namespace as 'wi' | 'manifest', field: field!, glob: glob! };
 }
 
-/** Convert a `*`-only glob into an anchored RegExp. */
-export function globToRegExp(glob: string): RegExp {
-  const escaped = glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}$`);
+/**
+ * Anchored `*`-only glob match (`*` = any run of characters). Linear: each literal
+ * segment is found leftmost in order, never a backtracking `.*` regex — a glob
+ * with k stars took O(n^k) there, 15 s at k=8 (forge-mfv5.1.52 security review),
+ * and the dev-loop gate matches every diff path against every scope entry.
+ */
+export function globMatches(glob: string, value: string): boolean {
+  const parts = glob.split('*');
+  const first = parts[0]!, last = parts[parts.length - 1]!;
+  if (parts.length === 1) return glob === value;
+  if (value.length < first.length + last.length || !value.startsWith(first) || !value.endsWith(last)) return false;
+  let at = first.length;
+  for (const mid of parts.slice(1, -1)) {
+    const i = value.indexOf(mid, at);
+    if (i < 0 || i + mid.length > value.length - last.length) return false;
+    at = i + mid.length;
+  }
+  return true;
 }
 
 /** Selector-match context: the plain field-value maps a clause is tested against. */
@@ -202,9 +216,8 @@ export function selectorMatches(selector: ConstraintSelector, ctx: ConstraintMat
 
 function fieldMatches(value: unknown, glob: string): boolean {
   if (value === undefined || value === null) return false;
-  const regex = globToRegExp(glob);
-  if (Array.isArray(value)) return value.some((v) => regex.test(String(v)));
-  return regex.test(String(value));
+  if (Array.isArray(value)) return value.some((v) => globMatches(glob, String(v)));
+  return globMatches(glob, String(value));
 }
 
 /**
