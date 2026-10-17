@@ -109,7 +109,7 @@ A project's forge configuration, stored at `.forge/project.json`.
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `origins` | array of string | yes | - | Exact origins, such as `https://github.com`: no trailing slash or path. Plain `http` only on a loopback host. Pages open on the first origin; a page that navigates to any origin not listed here is refused. |
+| `origins` | array of string | yes | - | Exact origins, such as `https://github.com`: no trailing slash or path. Plain `http` only on a loopback host. Pages open on the first origin; the others are only places a page may navigate to, such as a sign-in hop. A navigation to any origin not listed here is refused; images and scripts the page loads from other hosts still load. |
 | `pages` | array of string | yes | - | Literal paths opened on the first origin, such as `/orgs/acme/repositories`. No host, placeholder or `..`. |
 | `apply` | array of string | yes | - | The project's own commands, run in order, that make the site match the tree under capture, such as `["gw reset", "gw apply"]`. Each runs without a shell, through `run`; write a sequence as a list, never with `&&`. If the before tree's run does not undo the change, the frames read unchanged. |
 | `authState` | string | no | - | Name of an environment variable whose value is the path to a Playwright storage-state file the operator exported once. forge reads it at capture and never logs or copies it; if declared and unreadable, capture refuses. |
