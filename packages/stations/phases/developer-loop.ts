@@ -721,11 +721,11 @@ export async function runDeveloperLoop(
               ciGateUnsetEnv,
               localGateTimeoutMs: localTestProcess?.timeoutMs,
               initiativeId: input.initiativeId,
-              // N10: a TIMED-OUT gate also stops the loop early (iterating
-              // doesn't fix machine load and burns agent spend) — but its
-              // distinct gate.timeout event classifies as transient/environment
-              // so the scheduler retries instead of failing the work as wrong.
-              onRun: (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); gateFeedback.onRun(gateInfo); },
+              // N10: a TIMED-OUT gate also stops the loop early (load is not fixed by iterating); its gate.timeout
+              // event classifies as transient/environment, so the scheduler retries instead of failing the work.
+              // forge-mfv5.1.55: one event per run (onRun), one verdict per gate pass (onVerdict: the brief + the stop).
+              onRun: (gateInfo) => { emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); },
+              onVerdict: (v) => { lastGateErrored = (v.errored ?? false) || (v.timedOut ?? false); gateFeedback.onRun(v); },
               onChecksJudged: (satisfied) => { acsSatisfied = [...satisfied]; },
             });
           })(),
