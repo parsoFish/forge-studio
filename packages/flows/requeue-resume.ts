@@ -96,11 +96,13 @@ const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanB
  * without one (stale heartbeat, missing worktree) ⇒ environment. Never auto-retryable: a
  * boot only classifies, the operator's Requeue resumes. An unknown reason ⇒ null (§6.15).
  */
-export function strandedFailureClassification(s: { reason: unknown; stopFlag: unknown }): Record<string, unknown> | null {
+export function strandedFailureClassification(s: { reason: unknown; stopFlag: unknown; resumeFrom?: unknown }): Record<string, unknown> | null {
   if (s.reason !== 'stale-heartbeat' && s.reason !== 'missing-worktree') return null;
   const stop = s.stopFlag === true;
   return {
     failure_mode: 'terminal', failure_kind: 'terminal', recoverable: false, environment: !stop, cleanBoundaryHalt: stop,
+    // The manifest's own narrow re-entry (an earlier pr-open / plan resume) survives the strand.
+    ...(s.resumeFrom === 'plan' || s.resumeFrom === 'pr-open' ? { resume_from: s.resumeFrom } : {}),
     reason: `stranded run classified at boot (${s.reason}${stop ? ', operator stop flag set' : ''}) — Requeue resumes from the preserved worktree`,
   };
 }
@@ -121,7 +123,7 @@ export function strandedFailureClassification(s: { reason: unknown; stopFlag: un
 export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSignal {
   const events = readLogEvents(logPath) ?? [];
   const e = events[lastIndex(events, (ev) => ev.message === 'failure_classification' || ev.message === 'recovery.stranded-classified')];
-  const md = e?.message === 'recovery.stranded-classified' ? strandedFailureClassification({ reason: e.metadata?.reason, stopFlag: e.metadata?.stop_flag }) : e?.metadata;
+  const md = e?.message === 'recovery.stranded-classified' ? strandedFailureClassification({ reason: e.metadata?.reason, stopFlag: e.metadata?.stop_flag, resumeFrom: e.metadata?.resume_from }) : e?.metadata;
   if (!md) return NO_PRIOR_FAILURE_SIGNAL;
   return {
     environment: md.environment === true,

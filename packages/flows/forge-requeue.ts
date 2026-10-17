@@ -231,7 +231,6 @@ export function runRequeue(
   // (named event) so this Requeue repairs instead of re-planning blind.
   const pmErrors = recordedPmValidationErrors(forgeRoot, manifest);
   const backfilled = !manifest.pm_validation_errors?.length && pmErrors.length > 0;
-  if (backfilled) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'pm-validation-errors-backfilled', { initiative_id: initiativeId, errors: pmErrors });
   const inferred = inferRequeueResume({ forgeRoot, cycleId: manifest.cycle_id, initiativeId, worktreePath, projectRepoPath, pmValidationErrors: pmErrors.length > 0 });
   const fixRound = inferred.resume && inferred.resume_from === 'develop';
   const resumeDecision: RequeueResumeDecision =
@@ -256,6 +255,8 @@ export function runRequeue(
     const unmerged = unmergedBranchCommits(projectRepoPath, `forge/${initiativeId}`);
     if (unmerged === 'UNKNOWN' || unmerged.length > 0) throw new BranchDiscardRefusedError(`forge/${initiativeId}`, unmerged);
   }
+  // After the refusal, so a refused Requeue records nothing.
+  if (backfilled) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'pm-validation-errors-backfilled', { initiative_id: initiativeId, errors: pmErrors });
 
   const updated = {
     ...manifest,

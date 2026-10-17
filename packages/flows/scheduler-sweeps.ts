@@ -141,7 +141,7 @@ export async function announceRecovery(r: RecoveryResult, paths: QueuePaths, cfg
     const log = createLogger(logId, logsRoot);
     log.emit({ initiative_id: c.initiativeId, phase: 'orchestrator', skill: 'scheduler', event_type: 'error', input_refs: [join(paths.failed, c.filename)], output_refs: [], message: 'recovery.stranded-classified', metadata });
     // forge-mfv5.1.54: the same strand as the reader's own contract, so a Requeue resumes instead of re-running fresh.
-    const cls = strandedFailureClassification({ reason: c.reason, stopFlag: c.stopFlag });
+    const cls = strandedFailureClassification({ reason: c.reason, stopFlag: c.stopFlag, resumeFrom: c.resumeFrom });
     if (cls) log.emit({ initiative_id: c.initiativeId, phase: 'orchestrator', skill: 'cycle', event_type: 'log', input_refs: [join(paths.failed, c.filename)], output_refs: [], message: 'failure_classification', metadata: { cycle_id: logId, ...cls, evidence_event_ids: [] } });
   }
   const refused = r.reason === 'worktree-path-refused';

@@ -130,3 +130,13 @@ test('one contract: the classification a strand maps to is the reader\'s own fai
     rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('a strand of a run that was itself a narrow pr-open re-entry keeps resume_from pr-open — the post-develop band is not re-run', () => {
+  const f = i4Root([row('failure_classification', { environment: true, resume_from: 'pr-open' }), row('recovery.stranded-classified', { reason: 'stale-heartbeat', stop_flag: false, resume_from: 'pr-open' })]);
+  try {
+    assert.deepEqual(readPriorFailureSignalFromLog(logOf(f.root)), { environment: true, cleanBoundaryHalt: false, resumeFrom: 'pr-open' });
+    assert.equal(strandedFailureClassification({ reason: 'stale-heartbeat', stopFlag: false, resumeFrom: 'develop' })?.resume_from, undefined, 'only the narrow markers pass through');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
