@@ -126,11 +126,7 @@ export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSign
   return {
     environment: md.environment === true,
     cleanBoundaryHalt: md.cleanBoundaryHalt === true,
-    ...(md.resume_from === 'plan'
-      ? { resumeFrom: 'plan' as const }
-      : md.resume_from === 'pr-open'
-        ? { resumeFrom: 'pr-open' as const }
-        : {}),
+    ...(md.resume_from === 'plan' || md.resume_from === 'pr-open' ? { resumeFrom: md.resume_from as 'plan' | 'pr-open' } : {}),
   };
 }
 
