@@ -37,6 +37,8 @@
  *       [data-initiative-id]  the id these routes actually take (INIT_ID_RE) — a
  *                             harness driving the API keys on THIS one
  *     [data-component="abandon-confirm"] + [data-action="confirm-abandon"|"cancel-abandon"]
+ *     [data-component="discard-branch-confirm"][data-branch][data-unmerged-commits] + [data-action="confirm-discard-branch"|"cancel-discard-branch"]
+ *                             (a Requeue the bridge refused: it would delete branch commits not on origin/main)
  *     [data-component="run-control-error"]      (verbatim failure text)
  *     [data-component="run-control-outcome"][data-outcome-control=<id>]
  *       -> EnqueueOutcomeLine's own contract ([data-component="enqueue-outcome"] …)
@@ -65,15 +67,16 @@ import {
   runControlsShouldRender,
   runFailureNoteKind,
   describeRoundHalt,
+  branchDiscardRefusal,
   type RunControl,
   type RunControlId,
 } from '@/lib/run-controls';
 import type { Run } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
-async function post(id: RunControlId, initiativeId: string): Promise<{ ok: boolean; error?: string }> {
+async function post(id: RunControlId, initiativeId: string, discardBranch = false): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
   if (id === 'resume') return resumeRun(initiativeId);
-  if (id === 'requeue') return recoveryRequeue(initiativeId, { resetRetries: true });
+  if (id === 'requeue') return recoveryRequeue(initiativeId, { resetRetries: true, ...(discardBranch ? { discardBranch: true } : {}) });
   if (id === 'stop') return recoveryStop(initiativeId);
   return recoveryAbandon(initiativeId);
 }
@@ -117,6 +120,8 @@ export function RunControls({
   const [pendingDestructive, setPendingDestructive] = useState<RunControlId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<RunControlId | null>(null);
+  /** forge-mfv5.1.54: a Requeue the bridge refused because it would delete unmerged branch commits — the confirm it needs. */
+  const [discard, setDiscard] = useState<{ branch: string; commits: number | null } | null>(null);
 
   // W8-A3 review round 3, S2-5: `done`/`error` must keep the section mounted.
   // A successful Resume flips the run `failed → planned`, which empties
@@ -155,7 +160,7 @@ export function RunControls({
     setPendingDestructive(control.id);
   }
 
-  async function act(control: RunControl): Promise<void> {
+  async function act(control: RunControl, discardBranch = false): Promise<void> {
     if (busy !== null) return;
     // Defence in depth (review round 2 finding 8): the rule that a destructive
     // act needs an arming click lives HERE too, not only in the click handler's
@@ -165,8 +170,9 @@ export function RunControls({
     setBusy(control.id);
     setError(null);
     setDone(null);
+    setDiscard(null);
     try {
-      const r = await post(control.id, initiativeId);
+      const r = await post(control.id, initiativeId, discardBranch);
       if (r.ok) {
         setPendingDestructive(null);
         setDone(control.id);
@@ -174,6 +180,7 @@ export function RunControls({
       } else {
         // flows-49: the old handler had no else branch at all.
         setError(r.error ?? `${control.label} failed`);
+        setDiscard(branchDiscardRefusal(r));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -264,6 +271,37 @@ export function RunControls({
           </button>
         </div>
       )}
+
+      {discard !== null && (() => {
+        const requeue = controls.find((c) => c.id === 'requeue');
+        return requeue === undefined ? null : (
+          <div
+            data-component="discard-branch-confirm"
+            data-branch={discard.branch}
+            data-unmerged-commits={discard.commits ?? 'unknown'}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 8px', border: '1px solid var(--red, #b62324)', borderRadius: 4 }}
+          >
+            <span style={{ fontSize: 12 }}>
+              Requeue deletes <strong>{discard.branch}</strong> and {discard.commits === null ? 'commits it could not count' : `${discard.commits} commit(s)`} not on origin/main. Resume keeps them. This cannot be undone.
+            </span>
+            <button
+              data-action="confirm-discard-branch"
+              {...disabledAttrs(busy !== null ? 'Requeueing…' : null)}
+              onClick={() => void act(requeue, true)}
+              style={{ ...buttonStyle, background: 'var(--red, #b62324)' }}
+            >
+              Discard and requeue
+            </button>
+            <button
+              data-action="cancel-discard-branch"
+              onClick={() => setDiscard(null)}
+              style={{ fontSize: 12, padding: '3px 12px', background: 'transparent', color: 'var(--dim)', border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+        );
+      })()}
 
       {error !== null && (
         <span data-component="run-control-error" style={{ fontSize: 12, color: 'var(--red)' }}>{error}</span>

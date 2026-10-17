@@ -90,10 +90,28 @@ export type PriorFailureSignal = {
 const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanBoundaryHalt: false };
 
 /**
- * Read the prior cycle's `failure_classification` event straight from its
- * `events.jsonl` path. Missing log / classification event both yield the
- * all-false signal — the caller then behaves exactly as it would for an
- * unclassified failure (fresh re-run / no special-casing).
+ * forge-mfv5.1.54 (D-06): the `failure_classification` a boot STRANDED classification
+ * (`recovery.stranded-classified`, scheduler-sweeps.ts) stands for — the ONE map both the
+ * emitter and the reader use. An operator stop flag ⇒ clean-boundary halt; a run killed
+ * without one (stale heartbeat, missing worktree) ⇒ environment. Never auto-retryable: a
+ * boot only classifies, the operator's Requeue resumes. An unknown reason ⇒ null (§6.15).
+ */
+export function strandedFailureClassification(s: { reason: unknown; stopFlag: unknown; resumeFrom?: unknown }): Record<string, unknown> | null {
+  if (s.reason !== 'stale-heartbeat' && s.reason !== 'missing-worktree') return null;
+  const stop = s.stopFlag === true;
+  return {
+    failure_mode: 'terminal', failure_kind: 'terminal', recoverable: false, environment: !stop, cleanBoundaryHalt: stop,
+    // The manifest's own narrow re-entry (an earlier pr-open / plan resume) survives the strand.
+    ...(s.resumeFrom === 'plan' || s.resumeFrom === 'pr-open' ? { resume_from: s.resumeFrom } : {}),
+    reason: `stranded run classified at boot (${s.reason}${stop ? ', operator stop flag set' : ''}) — Requeue resumes from the preserved worktree`,
+  };
+}
+
+/**
+ * Read the prior cycle's latest `failure_classification` — or `recovery.stranded-classified`,
+ * mapped through `strandedFailureClassification` (forge-mfv5.1.54) — straight from its
+ * `events.jsonl` path. Missing log / no such event both yield the all-false signal — the
+ * caller then behaves exactly as it would for an unclassified failure (fresh re-run).
  *
  * row 163 (S10 run 42, ruling 1899): factored out of `readPriorFailureSignal`
  * so `scheduler-run-one.ts`'s own end-of-attempt cleanup can read the SAME
@@ -104,16 +122,13 @@ const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanB
  */
 export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSignal {
   const events = readLogEvents(logPath) ?? [];
-  const e = events[lastIndex(events, (ev) => ev.message === 'failure_classification')];
-  if (!e) return NO_PRIOR_FAILURE_SIGNAL;
+  const e = events[lastIndex(events, (ev) => ev.message === 'failure_classification' || ev.message === 'recovery.stranded-classified')];
+  const md = e?.message === 'recovery.stranded-classified' ? strandedFailureClassification({ reason: e.metadata?.reason, stopFlag: e.metadata?.stop_flag, resumeFrom: e.metadata?.resume_from }) : e?.metadata;
+  if (!md) return NO_PRIOR_FAILURE_SIGNAL;
   return {
-    environment: e.metadata?.environment === true,
-    cleanBoundaryHalt: e.metadata?.cleanBoundaryHalt === true,
-    ...(e.metadata?.resume_from === 'plan'
-      ? { resumeFrom: 'plan' as const }
-      : e.metadata?.resume_from === 'pr-open'
-        ? { resumeFrom: 'pr-open' as const }
-        : {}),
+    environment: md.environment === true,
+    cleanBoundaryHalt: md.cleanBoundaryHalt === true,
+    ...(md.resume_from === 'plan' || md.resume_from === 'pr-open' ? { resumeFrom: md.resume_from as 'plan' | 'pr-open' } : {}),
   };
 }
 
@@ -218,6 +233,9 @@ export function readPriorFailureSignal(
   return readPriorFailureSignalFromLog(join(forgeRoot, '_logs', cycleId, 'events.jsonl'));
 }
 
+/** One read-only git call in the project repo (callers own their error handling). */
+const gitIn = (repo: string, args: string[]): string => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
+
 /**
  * True iff `branch` exists in the project repo AND carries at least one
  * commit beyond its merge-base with main/master — i.e. there is committed
@@ -225,11 +243,7 @@ export function readPriorFailureSignal(
  * repo) yields false.
  */
 export function branchHasCommittedWork(projectRepoPath: string, branch: string): boolean {
-  const git = (args: string[]): string =>
-    execFileSync('git', ['-C', projectRepoPath, ...args], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    }).trim();
+  const git = (args: string[]): string => gitIn(projectRepoPath, args);
   try {
     git(['rev-parse', '--verify', '--quiet', branch]);
   } catch {
@@ -245,6 +259,27 @@ export function branchHasCommittedWork(projectRepoPath: string, branch: string):
     }
   }
   return false;
+}
+
+/**
+ * forge-mfv5.1.54 (D-06): the commits a fresh re-run would discard — `<sha> <subject>` of
+ * `branch` (local, and the remote-tracking ref `push --delete` would remove) not on
+ * origin/main. [] when the path is no git repository, neither ref exists or nothing is ahead;
+ * 'UNKNOWN' when git cannot answer (no origin/main, any other git error) — the caller refuses on it (§6.15).
+ */
+export function unmergedBranchCommits(projectRepoPath: string, branch: string): string[] | 'UNKNOWN' {
+  const git = (args: string[]): string => gitIn(projectRepoPath, args);
+  const exists = (ref: string): boolean | 'UNKNOWN' => {
+    try { git(['rev-parse', '--verify', '--quiet', ref]); return true; } catch (e) { return (e as { status?: number }).status === 1 ? false : 'UNKNOWN'; }
+  };
+  // Not a git repository at all: no branch exists for `branch -D` / `push --delete` to remove — a positive answer, not a caught default.
+  try { git(['rev-parse', '--git-dir']); } catch (e) { return /not a git repository/.test(String((e as { stderr?: unknown }).stderr)) ? [] : 'UNKNOWN'; }
+  const refs = [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`].map((r) => [r, exists(r)] as const);
+  if (refs.some(([, x]) => x === 'UNKNOWN')) return 'UNKNOWN';
+  const present = refs.filter(([, x]) => x === true).map(([r]) => r);
+  if (present.length === 0) return [];
+  if (exists('refs/remotes/origin/main') !== true) return 'UNKNOWN';
+  try { return git(['log', '--format=%h %s', ...present, '^refs/remotes/origin/main', '--']).split('\n').filter(Boolean); } catch { return 'UNKNOWN'; }
 }
 
 /**

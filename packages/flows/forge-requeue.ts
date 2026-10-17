@@ -46,7 +46,7 @@ import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, persistManifestSpecs, serializeManifest } from './manifest.ts';
 import { readWorkItemsFromDir } from './work-item.ts';
 import { KICKOFF_SOURCE_FLOW_ID } from '@forge/contracts';
-import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, type RequeueResumeDecision } from './requeue-resume.ts';
+import { FixRoundRefusedError, fixRoundHeadRefusal, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, unmergedBranchCommits, type RequeueResumeDecision } from './requeue-resume.ts';
 import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
@@ -73,7 +73,22 @@ export type RequeueOptions = {
    * failure with all WIs complete, to salvage the WI work.
    */
   resumeFromIntegrate?: boolean;
+  /** forge-mfv5.1.54 (D-06): the operator's explicit consent to a fresh re-run deleting a branch that carries commits not on origin/main. */
+  discardBranch?: boolean;
 };
+
+/** forge-mfv5.1.54: a fresh re-run refused because it would discard committed work (the bridge answers 400 with these fields). */
+export class BranchDiscardRefusedError extends Error {
+  readonly branch: string;
+  readonly unmergedCommits: string[] | 'UNKNOWN';
+  constructor(branch: string, unmergedCommits: string[] | 'UNKNOWN') {
+    super(unmergedCommits === 'UNKNOWN'
+      ? `requeue: refusing a fresh re-run — cannot compare ${branch} against origin/main, so deleting it could discard committed work; Resume instead, or Requeue with discardBranch to discard it`
+      : `requeue: refusing a fresh re-run — ${branch} carries ${unmergedCommits.length} commit(s) not on origin/main (${unmergedCommits.slice(0, 10).join('; ')}${unmergedCommits.length > 10 ? '; …' : ''}); Resume instead, or Requeue with discardBranch to discard them`);
+    this.branch = branch;
+    this.unmergedCommits = unmergedCommits;
+  }
+}
 
 export type RequeueResult = {
   initiativeId: string;
@@ -216,7 +231,6 @@ export function runRequeue(
   // (named event) so this Requeue repairs instead of re-planning blind.
   const pmErrors = recordedPmValidationErrors(forgeRoot, manifest);
   const backfilled = !manifest.pm_validation_errors?.length && pmErrors.length > 0;
-  if (backfilled) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'pm-validation-errors-backfilled', { initiative_id: initiativeId, errors: pmErrors });
   const inferred = inferRequeueResume({ forgeRoot, cycleId: manifest.cycle_id, initiativeId, worktreePath, projectRepoPath, pmValidationErrors: pmErrors.length > 0 });
   const fixRound = inferred.resume && inferred.resume_from === 'develop';
   const resumeDecision: RequeueResumeDecision =
@@ -235,6 +249,14 @@ export function runRequeue(
   // resumed cycle runs against). Only a full (non-resume) requeue wipes them
   // for a fresh-from-main re-run.
   const preserveWorktree = resumeDecision.resume;
+  // forge-mfv5.1.54 (D-06): committed work is never discarded silently — checked before ANY mutation below.
+  const repoPresent = projectRepoPath !== '' && existsSync(projectRepoPath);
+  if (!preserveWorktree && !opts.discardBranch && repoPresent) {
+    const unmerged = unmergedBranchCommits(projectRepoPath, `forge/${initiativeId}`);
+    if (unmerged === 'UNKNOWN' || unmerged.length > 0) throw new BranchDiscardRefusedError(`forge/${initiativeId}`, unmerged);
+  }
+  // After the refusal, so a refused Requeue records nothing.
+  if (backfilled) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'pm-validation-errors-backfilled', { initiative_id: initiativeId, errors: pmErrors });
 
   const updated = {
     ...manifest,
@@ -302,7 +324,7 @@ export function runRequeue(
   let worktreeRemoved = false;
   let branchDeleted = false;
   if (!preserveWorktree) {
-    if (existsSync(worktreePath) && projectRepoPath && existsSync(projectRepoPath)) {
+    if (existsSync(worktreePath) && repoPresent) {
       try {
         execFileSync('git', ['-C', projectRepoPath, 'worktree', 'remove', '--force', worktreePath], { stdio: 'pipe' });
         worktreeRemoved = true;
@@ -315,7 +337,7 @@ export function runRequeue(
     // Delete the stale initiative branch (local + remote) so the re-run's
     // worktree add recreates it fresh from current main. Best-effort: the
     // branch may not exist, or there may be no origin remote.
-    if (projectRepoPath && existsSync(projectRepoPath)) {
+    if (repoPresent) {
       const branch = `forge/${initiativeId}`;
       try {
         execFileSync('git', ['-C', projectRepoPath, 'branch', '-D', branch], { stdio: 'pipe' });

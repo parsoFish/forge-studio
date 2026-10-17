@@ -387,7 +387,8 @@ test('runRequeue N7: terminal (non-environment) failure → wipes worktree + bra
     n7CycleLog(root, 'cyc-n7-term', false);
     writeFileSync(join(root, '_queue', 'failed', `${N7_INIT}.md`), n7Manifest(wt, repo, 'cyc-n7-term'));
 
-    const r = runRequeue(N7_INIT, { forgeRoot: root });
+    // forge-mfv5.1.54: the branch carries WI work no origin/main holds — the wipe needs the operator's consent.
+    const r = runRequeue(N7_INIT, { forgeRoot: root, discardBranch: true });
 
     assert.equal(r.resumeDecision.resume, false);
     assert.equal(r.worktreeRemoved, true);
@@ -411,7 +412,8 @@ test('runRequeue N7: no cycle log (legacy manifest without cycle_id) → fresh r
     // No cycle log; manifest carries a cycle_id pointing nowhere.
     writeFileSync(join(root, '_queue', 'failed', `${N7_INIT}.md`), n7Manifest(wt, repo, 'cyc-missing'));
 
-    const r = runRequeue(N7_INIT, { forgeRoot: root });
+    // forge-mfv5.1.54: the branch carries WI work no origin/main holds — the wipe needs the operator's consent.
+    const r = runRequeue(N7_INIT, { forgeRoot: root, discardBranch: true });
     assert.equal(r.resumeDecision.resume, false);
     assert.equal(r.worktreeRemoved, true);
   } finally {

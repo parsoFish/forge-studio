@@ -17,7 +17,7 @@ import type { ArchitectStatus } from '@forge/sessions';
 import { planGateClassRefusals } from './plan-gate-class-check.ts';
 import { getPaths } from './queue.ts';
 import { PROJECT_ID_RE, decodeUrlPart } from '@forge/kernel';
-import { runRequeue } from './forge-requeue.ts';
+import { BranchDiscardRefusedError, runRequeue } from './forge-requeue.ts';
 import { FixRoundRefusedError } from './requeue-resume.ts';
 import { resolveGuardedPath, guardedReadDir, guardedReadFile, guardedWriteFile, sessionDirSegments, ARCHITECT_KIND_DIR } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
@@ -405,7 +405,9 @@ export async function handleStudioPostRoutes(
       runRequeue(runId, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, resumeFromIntegrate: true });
       sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {
-      sendJson(res, err instanceof FixRoundRefusedError ? 409 : 500, { error: sanitizeError(err) }, origin); // forge-mfv5.1.27
+      // forge-mfv5.1.27 · .54 (a branch name + commit subjects, no fs path — sanitizeError would mangle the branch)
+      if (err instanceof BranchDiscardRefusedError) sendJson(res, 400, { error: err.message, code: 'branch-discard-refused', branch: err.branch, unmergedCommits: err.unmergedCommits }, origin);
+      else sendJson(res, err instanceof FixRoundRefusedError ? 409 : 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }

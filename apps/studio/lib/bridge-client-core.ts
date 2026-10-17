@@ -407,7 +407,7 @@ export async function bridgePost(
       ? { method: 'POST', headers: { 'x-forge-csrf': '1' } }
       : { method: 'POST', headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' }, body: JSON.stringify(body) });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string } & Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: bridgeErrorMessage(res.status, data) };
+    if (!res.ok) return { ok: false, error: bridgeErrorMessage(res.status, data), data }; // the body's structured fields (e.g. a refusal's code) reach the caller
     return { ok: !!data.ok, data };
   } catch (err) {
     return { ok: false, error: String(err) };

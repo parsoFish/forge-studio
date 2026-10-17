@@ -136,7 +136,11 @@ test('boot: a stale, .stop-flagged in-flight manifest is classified into failed/
 
     const all = events(f);
     assert.equal(all.filter((e) => e.message === 'cycle.start').length, 0, 'zero cycle.start — nothing runs from a boot');
-    assert.deepEqual(bootEmitted(all), ['recovery.stranded-classified'], 'the boot classifies and does nothing else: no claim, no worktree step');
+    assert.deepEqual(bootEmitted(all), ['recovery.stranded-classified', 'failure_classification'], 'the boot classifies and does nothing else: no claim, no worktree step');
+    const fc = all.find((e) => e.message === 'failure_classification')?.metadata ?? {};
+    assert.equal(fc.cleanBoundaryHalt, true, 'forge-mfv5.1.54: the stop flag is a clean-boundary halt in the reader\'s own shape');
+    assert.equal(fc.environment, false);
+    assert.equal(fc.recoverable, false, 'never auto-retryable: the boot only classifies (D-06)');
     const c = all.filter((e) => e.message === 'recovery.stranded-classified');
     assert.equal(c.length, 1, 'exactly one classification event');
     const m = c[0]!.metadata ?? {};
@@ -162,7 +166,8 @@ test('boot: an in-flight manifest whose worktree is missing (no .stop) is classi
     assert.equal(c.length, 1);
     assert.equal(c[0]!.metadata?.reason, 'missing-worktree');
     assert.equal(c[0]!.metadata?.stop_flag, false);
-    assert.deepEqual(bootEmitted(events(f)), ['recovery.stranded-classified'], 'no claim, no cycle');
+    assert.deepEqual(bootEmitted(events(f)), ['recovery.stranded-classified', 'failure_classification'], 'no claim, no cycle');
+    assert.equal(events(f).find((e) => e.message === 'failure_classification')?.metadata?.environment, true, 'forge-mfv5.1.54: killed without a stop flag = environment');
   } finally {
     rmSync(f.dir, { recursive: true, force: true });
   }
