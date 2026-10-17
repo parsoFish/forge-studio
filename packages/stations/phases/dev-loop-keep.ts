@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest, parseWorkItem, removeWiWorktree, serializeWorkItem, unmergedCommitCount, type WorkItem } from '@forge/flows';
+import { parseManifest, parseWorkItem, removeWiWorktree, serializeWorkItem, supersededFixWorkItemsIn, unmergedCommitCount, type WorkItem } from '@forge/flows';
 import { gitNetDelta, wiDeliveryEvent, type WiOutcome } from './developer-loop.ts';
 
 export type WiCloseContext = { logger: EventLogger; initiativeId: string; parentEventId: string; skill: string };
@@ -60,6 +60,12 @@ export function closeWiWorktree(o: { projectRepoPath: string; wiWorktree: { path
   try { cycleHead = gitOut(o.cycleWorktreePath, ['rev-parse', 'HEAD']); } catch { /* '' keeps the branch */ }
   const deleteBranch = (o.requeue && o.wiWorktree.resumedFrom === null) || (cycleHead !== '' && unmergedCommitCount(o.projectRepoPath, o.wiWorktree.branch, [cycleHead]) === 0);
   removeWiWorktree({ projectRepoPath: o.projectRepoPath, path: o.wiWorktree.path, branch: o.wiWorktree.branch, deleteBranch });
+}
+
+/** forge-mfv5.1.57 (D-20): the WIs a develop pass dispatches, in order — a failed fix WI a later send-back superseded is never rebuilt. */
+export function devLoopRunList(ordered: readonly WorkItem[]): WorkItem[] {
+  const { superseded } = supersededFixWorkItemsIn(ordered);
+  return ordered.filter((w) => !superseded.includes(w.work_item_id));
 }
 
 /** The round's fix WIs: compiled by a fix loop and still owed at develop entry. */

@@ -212,44 +212,98 @@ test('drain: merged PR → pr-merged (finalize-merged domain), runDrainCycle NOT
   }
 });
 
-test('drain: a failed fix work-item → needs-operator (never auto-retry), runDrainCycle NOT called', async () => {
+type LoggedEvent = { message?: string; event_type?: string; metadata?: Record<string, unknown> };
+const loggedEvents = (root: string, cycleId: string): LoggedEvent[] => {
+  const path = join(root, '_logs', cycleId, 'events.jsonl');
+  return existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as LoggedEvent) : [];
+};
+
+test('drain: a failed fix work-item → needs-operator (never auto-retry), runDrainCycle NOT called; ONE event + ONE notify over two sweeps', async () => {
   const { root, queueRoot, wt, repo } = setup();
   try {
     writeWorkItem(baseWi({ work_item_id: 'WI-1', status: 'complete' }), wt);
     writeWorkItem(baseWi({ work_item_id: 'WI-2', status: 'failed', origin: 'review-fix' }), wt);
-    writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
+    writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ', reviewRounds: 1 });
     let called = false;
-    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
+    const notes: string[] = [];
+    const sweep = () => drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
+      logsRoot: join(root, '_logs'),
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
+      notify: (m) => { notes.push(m); },
     });
+    const results = await sweep();
     assert.deepEqual(results.map((r) => r.status), ['needs-operator']);
-    assert.equal(results[0]!.detail, 'failed fix work-item');
+    assert.match(results[0]!.detail ?? '', /^failed fix work-item WI-2\b/);
     assert.equal(called, false);
+    const second = await sweep();
+    assert.deepEqual(second.map((r) => r.status), ['needs-operator'], 'still parked on the next sweep');
+    const parks = loggedEvents(root, 'CYCLE-XYZ').filter((e) => e.message === 'fix-loop.needs-operator');
+    assert.equal(parks.length, 1, 'one event per distinct park, not one per sweep');
+    assert.equal(parks[0]!.event_type, 'error');
+    assert.equal(parks[0]!.metadata?.detail, results[0]!.detail);
+    assert.equal(parks[0]!.metadata?.round, 1);
+    assert.equal(notes.length, 1, `one notify per distinct park: ${JSON.stringify(notes)}`);
+    assert.match(notes[0]!, /WI-2/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('drain: REVIEW-CAP-EXHAUSTED marker present → needs-operator, notify NOT called (no re-notify per sweep)', async () => {
+// forge-mfv5.1.57: gitweave I4 round 3 — WI-17 failed (round 2), the operator's send-back appended WI-18, and the drain parked
+// 'failed fix work-item' silently for 30+ minutes. A later-appended fix WI supersedes the failed one: the drain claims the round.
+test('drain: a failed fix WI followed by a later-appended pending fix WI is superseded → drained, sendback.superseded once', async () => {
+  const { root, queueRoot, wt, repo } = setup();
+  try {
+    writeWorkItem(baseWi({ work_item_id: 'WI-1', status: 'complete' }), wt);
+    writeWorkItem(baseWi({ work_item_id: 'WI-17', status: 'failed', origin: 'review-fix' }), wt);
+    writeWorkItem(baseWi({ work_item_id: 'WI-18', status: 'pending', origin: 'review-fix' }), wt);
+    writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-I4', reviewRounds: 2 });
+    const calls: CycleInput[] = [];
+    const sweep = () => drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => false,
+      runDrainCycle: async (input) => { calls.push(input); return { status: 'pr-open' }; },
+    });
+    const results = await sweep();
+    assert.deepEqual(results.map((r) => r.status), ['drained'], JSON.stringify(results));
+    assert.equal(calls.length, 1, 'runDrainCycle called for the round');
+    await sweep(); // WI-18 still pending (the stub built nothing): the round re-enters, the supersession is not re-announced
+    const sup = loggedEvents(root, 'CYCLE-I4').filter((e) => e.message === 'sendback.superseded');
+    assert.equal(sup.length, 1, 'once per round');
+    assert.deepEqual(sup[0]!.metadata?.superseded, ['WI-17']);
+    assert.equal(sup[0]!.metadata?.by, 'WI-18');
+    assert.equal(sup[0]!.metadata?.round, 2);
+    assert.equal(loggedEvents(root, 'CYCLE-I4').some((e) => e.message === 'fix-loop.needs-operator'), false, 'no park');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('drain: REVIEW-CAP-EXHAUSTED marker present → needs-operator, ONE notify + ONE event, never re-notified per sweep', async () => {
   const { root, queueRoot, wt, repo } = setup();
   try {
     seedDrainableQueue(wt);
     writeReviewCapExhaustedMarker(wt, 'cap exhausted at round 6');
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
-    let notified = false;
+    let notified = 0;
     let called = false;
-    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
+    const sweep = () => drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
+      logsRoot: join(root, '_logs'),
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
-      notify: () => { notified = true; },
+      notify: () => { notified++; },
     });
+    const results = await sweep();
+    await sweep();
     assert.deepEqual(results.map((r) => r.status), ['needs-operator']);
     assert.match(results[0]!.detail ?? '', /marker/);
     assert.equal(called, false);
-    assert.equal(notified, false);
+    assert.equal(notified, 1, 'the park is said once, not every sweep');
+    assert.equal(loggedEvents(root, 'CYCLE-XYZ').filter((e) => e.message === 'fix-loop.needs-operator').length, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

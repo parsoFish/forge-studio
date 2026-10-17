@@ -66,6 +66,16 @@ test('the verdict card heads "Round N halted: <reason>" with the way to Requeue,
   expect(html).not.toMatch(/running/i);
 });
 
+// forge-mfv5.1.57: the drain's park (`fix-loop.needs-operator`) reaches the verdict card through the same Run.roundHalt.
+test('a parked fix round heads "Round N parked: <detail>" on the verdict card — no Requeue link, the send-back is the way out', () => {
+  const park = { round: 3, classification: 'needs-operator', reason: 'failed fix work-item WI-17 — send back a new fix work item to supersede it, or take the worktree over' };
+  const html = card({ halt: park, href: `/flows/forge-develop/run/${RUN.id}` });
+  expect(html).toMatch(/data-headline="not-ready"[^>]*>Round 3 parked: failed fix work-item WI-17/);
+  expect(html).toContain('data-round-halt="needs-operator"');
+  expect(html).toContain('send back a new fix work item below');
+  expect(html).not.toContain('data-action="open-run-recovery"');
+});
+
 test('CONTROL: without a halt the card reads as before', () => {
   const html = card();
   expect(html).toContain('Ready to approve and merge');

@@ -23,7 +23,7 @@ import { add, createWiWorktree, parseWorkItem, writeWorkItem, writeWorkItemStatu
 import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';
-import { closeWiWorktree, fixRoundHaltReason, haltFixRound, recordWiOutcome, stopIncompleteFixRound } from '../../phases/dev-loop-keep.ts';
+import { closeWiWorktree, devLoopRunList, fixRoundHaltReason, haltFixRound, recordWiOutcome, roundFixWorkItemIds, stopIncompleteFixRound } from '../../phases/dev-loop-keep.ts';
 import type { WiOutcome } from '../../phases/developer-loop.ts';
 
 const INIT = 'INIT-2026-10-17-wi-keep';
@@ -173,6 +173,23 @@ test('row 2: one failed + one complete fix WI still halts; all complete, a non-f
     assert.equal(run([outcome('WI-17', 'complete'), outcome('WI-18', 'complete'), outcome('WI-1', 'failed')]), null, 'only the round\'s own fix WIs count');
     assert.equal(run([outcome('WI-17', 'failed', 'crashed', true), outcome('WI-18', 'complete')]), null, 'an environment failure stays the classifier\'s (auto-retry)');
     assert.equal(run([outcome('WI-17', 'failed', 'crashed'), outcome('WI-18', 'complete')]), 'fix work item(s) failed: WI-17 (crashed; 0/1 checks passing)');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+// forge-mfv5.1.57: gitweave I4 round 3 — WI-17 failed in round 2 (discarded), the operator's send-back appended WI-18.
+test('supersede: the develop pass never rebuilds a superseded WI-17; WI-18 complete integrates (no round halt)', () => {
+  const f = setup();
+  try {
+    const items = [wi('WI-1', { status: 'complete' }), wi('WI-17', { status: 'failed', origin: 'review-fix' }), wi('WI-18', { origin: 'review-fix' })];
+    assert.deepEqual(devLoopRunList(items).map((w) => w.work_item_id), ['WI-1', 'WI-18'], 'WI-17 is never dispatched');
+    assert.deepEqual(devLoopRunList([items[0]!, items[1]!]).map((w) => w.work_item_id), ['WI-1', 'WI-17'], 'alone, a failed fix WI is not superseded');
+    const roundFixIds = roundFixWorkItemIds(items);
+    assert.deepEqual(roundFixIds, ['WI-18'], 'only this round\'s WIs are the round');
+    const manifestPath = join(f.root, 'm.md');
+    assert.doesNotThrow(() => stopIncompleteFixRound({ ...ctx(f), items, roundFixIds, outcomes: new Map([['WI-1', outcome('WI-1', 'complete')], ['WI-18', outcome('WI-18', 'complete')]]), manifestPath, worktreePath: f.cycle }));
+    assert.equal(existsSync(f.logger.logFilePath) && f.events().some((e) => e.message === 'sendback.loop-halted'), false, 'no round halt');
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

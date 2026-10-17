@@ -8,11 +8,13 @@ import {
   compileFixWorkItems,
   devWorkItemsDir,
   fixWorkItemCount,
-  hasFailedFixWorkItem,
+  failedFixWorkItemIds,
   hasReviewCapExhaustedMarker,
   nextDevWorkItemId,
   pendingFixWorkItems,
+  resumableFixWorkItems,
   reviewCapExhaustedPath,
+  supersededFixWorkItems,
   writeReviewCapExhaustedMarker,
   FixConcernInvalidError,
   FixLoopCapError,
@@ -428,7 +430,7 @@ test('compileFixWorkItems: append-only ids — WI-1,WI-2,WI-7 present → next c
 });
 
 // ---------------------------------------------------------------------------
-// 8. predicates: pendingFixWorkItems / hasFailedFixWorkItem / fixWorkItemCount
+// 8. predicates: pendingFixWorkItems / failedFixWorkItemIds / fixWorkItemCount
 // ---------------------------------------------------------------------------
 
 test('pendingFixWorkItems: only origin-set pending|in-progress WIs, topo order, PM WIs excluded', () => {
@@ -454,16 +456,73 @@ test('pendingFixWorkItems: only origin-set pending|in-progress WIs, topo order, 
   }
 });
 
-test('hasFailedFixWorkItem: true only for a failed origin-set WI, not a failed PM WI', () => {
+test('failedFixWorkItemIds: true only for a failed origin-set WI, not a failed PM WI', () => {
   const wt = tmpWorktree();
   try {
     seedWorkItem(wt, 'WI-1', { status: 'failed' }); // PM WI, no origin
-    assert.equal(hasFailedFixWorkItem(wt), false, 'a failed PM WI does not count');
+    assert.equal(failedFixWorkItemIds(wt).length > 0, false, 'a failed PM WI does not count');
 
     seedWorkItem(wt, 'WI-2', { status: 'failed', origin: 'review-fix' });
-    assert.equal(hasFailedFixWorkItem(wt), true, 'a failed origin-set WI does count');
+    assert.equal(failedFixWorkItemIds(wt).length > 0, true, 'a failed origin-set WI does count');
   } finally {
     rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+// forge-mfv5.1.57 (D-20): gitweave I4 — WI-17 failed, the operator's send-back appended WI-18, and the drain parked on WI-17 forever.
+test('supersededFixWorkItems: a failed fix WI below a later-appended fix WI is superseded by it; the newest failed one never is', () => {
+  const wt = tmpWorktree();
+  try {
+    seedWorkItem(wt, 'WI-1', { status: 'failed' }); // a failed PM WI is never a fix WI
+    seedWorkItem(wt, 'WI-16', { status: 'complete', origin: 'review-fix' });
+    seedWorkItem(wt, 'WI-17', { status: 'failed', origin: 'review-fix' });
+    assert.deepEqual(supersededFixWorkItems(wt), { superseded: [], by: null }, 'nothing appended after WI-17');
+    assert.equal(failedFixWorkItemIds(wt).length > 0, true, 'alone, a failed fix WI is still operator territory');
+
+    seedWorkItem(wt, 'WI-18', { status: 'pending', origin: 'review-fix' });
+    assert.deepEqual(supersededFixWorkItems(wt), { superseded: ['WI-17'], by: 'WI-18' });
+    assert.equal(failedFixWorkItemIds(wt).length > 0, false, 'a superseded failed fix WI does not park the drain');
+    assert.deepEqual(resumableFixWorkItems(wt, ['WI-17']).map((w) => w.work_item_id), [], 'a Requeue never re-arms a superseded WI');
+
+    seedWorkItem(wt, 'WI-18', { status: 'failed', origin: 'review-fix' });
+    assert.deepEqual(supersededFixWorkItems(wt), { superseded: ['WI-17'], by: 'WI-18' });
+    assert.equal(failedFixWorkItemIds(wt).length > 0, true, 'the superseding WI failing parks the drain again');
+    assert.deepEqual(resumableFixWorkItems(wt, ['WI-17', 'WI-18']).map((w) => w.work_item_id), ['WI-18']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('supersededFixWorkItems: ordered by the numeric stem, never the string (WI-9 sits below WI-10)', () => {
+  const wt = tmpWorktree();
+  try {
+    seedWorkItem(wt, 'WI-9', { status: 'failed', origin: 'gate-fix' });
+    seedWorkItem(wt, 'WI-10', { status: 'pending', origin: 'review-fix' });
+    assert.deepEqual(supersededFixWorkItems(wt), { superseded: ['WI-9'], by: 'WI-10' });
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('compileFixWorkItems: reports the failed fix WIs the appended one supersedes', () => {
+  const wt = tmpWorktree();
+  try {
+    seedWorkItem(wt, 'WI-1', { status: 'complete' });
+    seedWorkItem(wt, 'WI-2', { status: 'failed', origin: 'review-fix' });
+    const source = { origin: 'review-fix' as const, rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] };
+    const first = compileFixWorkItems({ worktreePath: wt, initiativeId: INIT, source, projectGateCmd: PROJECT_GATE, estimatedIterations: 3, caps: DEFAULT_CAPS, currentRound: 2 });
+    assert.deepEqual(first.appended, ['WI-3']);
+    assert.deepEqual(first.supersedes, ['WI-2']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+  const clean = tmpWorktree();
+  try {
+    seedWorkItem(clean, 'WI-1', { status: 'complete' });
+    const source = { origin: 'review-fix' as const, rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] };
+    assert.deepEqual(compileFixWorkItems({ worktreePath: clean, initiativeId: INIT, source, projectGateCmd: PROJECT_GATE, estimatedIterations: 3, caps: DEFAULT_CAPS, currentRound: 1 }).supersedes, []);
+  } finally {
+    rmSync(clean, { recursive: true, force: true });
   }
 });
 

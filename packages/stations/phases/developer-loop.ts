@@ -41,7 +41,7 @@ import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
 import { createWiWorktree, wedgeKillRunnerError } from '@forge/flows';
-import { closeWiWorktree, recordWiOutcome, roundFixWorkItemIds, stopIncompleteFixRound } from './dev-loop-keep.ts';
+import { closeWiWorktree, devLoopRunList, recordWiOutcome, roundFixWorkItemIds, stopIncompleteFixRound } from './dev-loop-keep.ts';
 import { emitDepsLinkProblems, emitGateEvent, emitGateFeedbackEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
 import { createGateFeedbackTracker, writeMergeConflictFeedback } from './gate-feedback.ts';
 // forge-nk1y.35: the feedback writers moved to gate-feedback.ts; re-exported for their existing tests.
@@ -317,9 +317,9 @@ export async function runDeveloperLoop(
   // post-develop band uses it for context), but run the per-WI loop over an empty
   // list so the walk re-enters at the `integrate` node without rebuilding any WI.
   // D-20: resume-from-develop (the fix loop) RUNS the full list — prior WIs
-  // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
+  // fast-exit via the iter-0 already-complete shortcut, fix WIs build; a superseded failed fix WI is skipped (forge-mfv5.1.57).
   const skipsPerWiWork = resumeSkipsPerWiWork(input.resumeFrom);
-  const toRun = skipsPerWiWork ? [] : ordered;
+  const toRun = skipsPerWiWork ? [] : devLoopRunList(ordered);
   // forge-mfv5.1.56: a fix round (D-20 develop re-entry) halts before integrate when one of these fails.
   const roundFixIds = input.resumeFrom === 'develop' ? roundFixWorkItemIds(items) : [];
 

@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 97 | 26,671 | **26,472** | ratified 26,472 — forge-mfv5.1.56: a budget-failed WI keeps its branch (merged-only prune, resume onto the cycle tip, unmerged leftovers parked) and Requeue re-arms a halted round's fix WIs; +88 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
+| `flows` | 97 | 26,730 | **26,531** | ratified 26,531 — forge-mfv5.1.57: a later send-back supersedes a failed fix WI (drain, Requeue, dev loop) and every drain park is said once by event + notify; +59 measured on this PR's tree after a read for slack (−5), lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 56 | 13,657 | **13,657** | ratified 13,657 — forge-mfv5.1.56: dev-loop-keep.ts keeps an unmerged WI's branch (dev-loop.kept) and halts a fix round whose fix WIs failed before integrate; +91 measured on this PR's tree after a read for slack (−32), lane-ratified (≤100, ruling 666). |
+| `stations` | 56 | 13,663 | **13,663** | ratified 13,663 — forge-mfv5.1.57: the dev loop never rebuilds a fix WI a later send-back superseded (devLoopRunList); +6 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **539** | **139,010** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **539** | **139,075** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -172,7 +172,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/bridge-studio-kbs.ts | knowledge | verbatim | 773 |
 | packages/sessions/bridge-studio-lifecycle.ts | sessions | verbatim | 422 |
 | packages/flows/bridge-studio-runs.ts | flows | verbatim | 481 |
-| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 554 |
+| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 556 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 211 |
 | packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 696 **Ceiling re-keyed +4 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | packages/sessions/session-resolution.ts | sessions | rewritten | 446 |
@@ -345,13 +345,13 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 392 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's SPEC §1 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 77 |
 | packages/flows/docs-gate-argv.ts | flows | rewritten | 70 |
-| packages/flows/drain-fix-loop.ts | flows | verbatim | 339 |
+| packages/flows/drain-fix-loop.ts | flows | verbatim | 352 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 83 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 424 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
 | packages/agents/failure-classifier.ts | agents | verbatim | 768 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 520 |
-| packages/flows/fix-work-items.ts | flows | verbatim | 433 |
+| packages/flows/fix-work-items.ts | flows | verbatim | 458 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 468 |
 | packages/flows/flow-budgets.ts | flows | verbatim | 558 |
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
@@ -407,7 +407,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
 | packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 99 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
-| packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 127 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
+| packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 133 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1617 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 41 |
 | packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 203 |
@@ -474,12 +474,12 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-planner-port.ts | stations | rewritten | 177 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 288 |
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
-| packages/flows/requeue-resume.ts | flows | verbatim | 460 |
+| packages/flows/requeue-resume.ts | flows | verbatim | 474 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 47 |
-| packages/flows/run-model-derive-status.ts | flows | verbatim | 510 |
+| packages/flows/run-model-derive-status.ts | flows | verbatim | 515 |
 | packages/flows/run-model-derive-cost.ts | flows | verbatim | 377 |
 | packages/flows/run-model-derive-lineage.ts | flows | verbatim | 135 |
 | packages/flows/run-model-derive-node-id.ts | flows | verbatim | 35 |

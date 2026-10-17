@@ -230,6 +230,28 @@ test('Requeue of a round halted on a budget-failed fix WI resumes develop from t
   }
 });
 
+// forge-mfv5.1.57: a later send-back's fix WI supersedes the halted one — Requeue never re-arms what was replaced.
+test('Requeue never re-arms a superseded fix WI: WI-6 (halted, kept) stays failed, the later WI-7 carries the resumed round', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wi-keep-requeue-superseded-'));
+  try {
+    const fx = plantStrandedFixRound(root, { withGit: true, fixOrigin: 'review-fix' });
+    const specPath = join(fx.worktree, '.forge', 'work-items', 'WI-6.md');
+    const wi6 = parseWorkItem(readFileSync(specPath, 'utf8'));
+    writeFileSync(specPath, serializeWorkItem({ ...wi6, status: 'failed', kept_branch: wiBranchName({ initiativeId: FIX_INIT, workItemId: 'WI-6' }) }));
+    writeFileSync(join(fx.worktree, '.forge', 'work-items', 'WI-7.md'), serializeWorkItem({ ...wi6, work_item_id: 'WI-7', status: 'pending', body: '## WI-7' }));
+    appendFileSync(join(fx.logDir, 'events.jsonl'), `${JSON.stringify({ phase: 'review-loop', skill: 'developer-ralph', event_type: 'error', message: 'sendback.loop-halted', started_at: '2026-10-10T06:00:00.000Z', metadata: { round: 1, classification: 'fix-work-items-failed', reason: 'fix work item(s) failed at the iteration budget: WI-6 (0/1 checks passing)', pending_work_items: ['WI-6'] } })}\n`);
+    renameSync(fx.manifestPath, join(root, '_queue', 'failed', `${FIX_INIT}.md`));
+
+    const r = runRequeue(FIX_INIT, { forgeRoot: root });
+
+    assert.deepEqual([r.resumeDecision.resume, r.resumeDecision.resume && r.resumeDecision.resume_from], [true, 'develop'], r.resumeDecision.reason);
+    assert.equal(parseWorkItem(readFileSync(specPath, 'utf8')).status, 'failed', 'the superseded WI is never re-armed');
+    assert.equal(parseWorkItem(readFileSync(join(fx.worktree, '.forge', 'work-items', 'WI-7.md'), 'utf8')).status, 'pending');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('drain: a round the dev loop halted on a failed fix WI lands in failed/ by name — round_halt on the manifest, one halt event, never ready-for-review or "completed"', async () => {
   const root = mkdtempSync(join(tmpdir(), 'wi-keep-drain-'));
   try {

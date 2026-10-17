@@ -156,8 +156,14 @@ export function DecisionCard({
           </h2>
           {roundHalt && (
             <p data-round-halt={roundHalt.halt.classification} style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>
-              The fix round stopped and will not retry on its own: resolve the reason above, then{' '}
-              <Link href={roundHalt.href} data-action="open-run-recovery" style={{ color: 'var(--ember)', fontWeight: 600 }}>Requeue it on the run page →</Link>
+              {roundHalt.halt.classification === 'needs-operator' ? (
+                <>The fix round is parked and will not start on its own: resolve the reason above, or send back a new fix work item below.</>
+              ) : (
+                <>
+                  The fix round stopped and will not retry on its own: resolve the reason above, then{' '}
+                  <Link href={roundHalt.href} data-action="open-run-recovery" style={{ color: 'var(--ember)', fontWeight: 600 }}>Requeue it on the run page →</Link>
+                </>
+              )}
             </p>
           )}
           <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--dim)' }}>

@@ -229,7 +229,7 @@ export function fixWorkItems(worktreePath: string): WorkItem[] {
  * The fix WIs the loop still owes work on, in dependency order: `pending`
  * (not yet built) and `in-progress` (a crashed run mid-build — the re-entered
  * dev-loop re-runs it). `complete` are done; `failed` fix WIs are operator
- * territory (see {@link hasFailedFixWorkItem}) — never auto-retried.
+ * territory (see {@link failedFixWorkItemIds}) — never auto-retried.
  * The finalize/drain sweeps arbitrate on this predicate (D-20 mutex).
  */
 export function pendingFixWorkItems(worktreePath: string): WorkItem[] {
@@ -250,9 +250,34 @@ export function readPendingFixWorkItems(worktreePath: string): WorkItem[] | { un
   } catch (err) { return { unreadable: err instanceof Error ? err.message : String(err) }; }
 }
 
-/** forge-mfv5.1.56 (D-06): the failed fix WIs a halted round names — a Requeue re-arms them (a kept branch resumes at its tip). */
+/**
+ * forge-mfv5.1.57 (D-20): a failed fix WI below the newest fix WI on the queue (by numeric stem) is SUPERSEDED by it — the
+ * operator's later send-back replaced it. Derived from the queue alone; the newest fix WI, failed or not, is never superseded.
+ */
+export function supersededFixWorkItems(worktreePath: string): { superseded: string[]; by: string | null } {
+  return supersededFixWorkItemsIn(fixWorkItems(worktreePath));
+}
+
+/** {@link supersededFixWorkItems} over an already-read WI set (the dev loop's); non-fix WIs are ignored. */
+export function supersededFixWorkItemsIn(items: readonly WorkItem[]): { superseded: string[]; by: string | null } {
+  const fixItems = items.filter((w) => w.origin !== undefined);
+  const stem = (w: WorkItem): number => devWorkItemIdStem(w.work_item_id) ?? -1;
+  const newest = fixItems.reduce<WorkItem | null>((top, w) => (top === null || stem(w) > stem(top) ? w : top), null);
+  if (newest === null) return { superseded: [], by: null };
+  const superseded = fixItems.filter((w) => w.status === 'failed' && stem(w) < stem(newest)).sort((a, b) => stem(a) - stem(b)).map((w) => w.work_item_id);
+  return { superseded, by: superseded.length > 0 ? newest.work_item_id : null };
+}
+
+/** The fix WIs no later send-back replaced — the ones the drain, Requeue and the dev loop still answer for. */
+function liveFixWorkItems(worktreePath: string): WorkItem[] {
+  const items = fixWorkItems(worktreePath);
+  const { superseded } = supersededFixWorkItemsIn(items);
+  return items.filter((w) => !superseded.includes(w.work_item_id));
+}
+
+/** forge-mfv5.1.56 (D-06): the failed fix WIs a halted round names — a Requeue re-arms them (a kept branch resumes at its tip); never a superseded one. */
 export function resumableFixWorkItems(worktreePath: string, haltedIds: readonly string[]): WorkItem[] {
-  return fixWorkItems(worktreePath).filter((w) => w.status === 'failed' && haltedIds.includes(w.work_item_id));
+  return liveFixWorkItems(worktreePath).filter((w) => w.status === 'failed' && haltedIds.includes(w.work_item_id));
 }
 
 /** forge-mfv5.1.56: the Requeue of a halted round puts each of its failed fix WIs back to `pending` (`kept_branch` stays); returns their ids. */
@@ -264,9 +289,9 @@ export function rearmResumableFixWorkItems(worktreePath: string, haltedIds: read
   return items.map((w) => w.work_item_id);
 }
 
-/** True if any fix WI is `failed` — the drain parks needs-operator, never retries. */
-export function hasFailedFixWorkItem(worktreePath: string): boolean {
-  return fixWorkItems(worktreePath).some((w) => w.status === 'failed');
+/** The failed fix WIs no later send-back superseded — the drain parks needs-operator on them, never retries. */
+export function failedFixWorkItemIds(worktreePath: string): string[] {
+  return liveFixWorkItems(worktreePath).filter((w) => w.status === 'failed').map((w) => w.work_item_id);
 }
 
 /** Total fix WIs ever compiled onto this queue (the `maxTotalFixWorkItems` count). */
@@ -282,7 +307,7 @@ export function fixWorkItemCount(worktreePath: string): number {
  * No terminal re-prep WI: the fix-loop drain re-arms the static UWI-1, whose
  * re-authorship of demo.json + the PR description is the legacy-spine re-demo.
  */
-export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended: string[]; workItem: WorkItem } {
+export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended: string[]; workItem: WorkItem; supersedes: string[] } {
   const { worktreePath, initiativeId, source, caps } = input;
   const dir = devWorkItemsDir(worktreePath);
 
@@ -343,7 +368,7 @@ export function compileFixWorkItems(input: CompileFixWorkItemsInput): { appended
     );
   }
   writeWorkItem(fixWi, worktreePath, { workItemsDir: dir });
-  return { appended: [fixId], workItem: fixWi };
+  return { appended: [fixId], workItem: fixWi, supersedes: supersededFixWorkItemsIn([...existing, fixWi]).superseded };
 }
 
 /** The ONE fix work-item builder (D-20): compile appends with it; a develop resume re-mints a send-back's item with it (forge-mfv5.1.47). */
