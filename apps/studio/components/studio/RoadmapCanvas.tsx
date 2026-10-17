@@ -64,7 +64,7 @@ import { queueStatusToColor, queueStatusLabel, developStateAttr, ROADMAP_TONE_CO
 import { STATUS_COLOR } from '@/lib/status-colors';
 import { attemptInfoFor, type AttemptInfo } from '@/lib/recovery-attrs';
 import { topoLevels } from '@/lib/dep-layout';
-import { InitiativeDetail } from './InitiativeDetail';
+import { InitiativeDetail, type RecoveryActionKind, type RecoveryActionResult } from './InitiativeDetail';
 
 // ---------------------------------------------------------------------------
 // Per-initiative trigger state — SAME two shapes RV-1's RoadmapDag carried
@@ -704,17 +704,15 @@ function RoadmapDrawer({
   }, [selectedId]);
 
   const doRecoveryAction = useCallback(
-    async (kind: 'requeue' | 'abandon'): Promise<void> => {
-      if (!selectedId) return;
+    async (kind: RecoveryActionKind): Promise<RecoveryActionResult | undefined> => {
+      if (!selectedId) return undefined;
       setRecoveryBusy(true);
       setRecoveryNote('');
-      const res = kind === 'requeue' ? await recoveryRequeue(selectedId, { resetRetries: true }) : await recoveryAbandon(selectedId);
+      const res = kind === 'abandon' ? await recoveryAbandon(selectedId) : await recoveryRequeue(selectedId, { resetRetries: true, ...(kind === 'requeue-discard' ? { discardBranch: true } : {}) });
       setRecoveryBusy(false);
       setRecoveryNote(res.ok ? `${kind} ok` : `${kind} failed: ${res.error ?? 'unknown'}`);
-      if (res.ok) {
-        setRecoveryDetail(null);
-        await onRecoveryDone?.();
-      }
+      if (res.ok) { setRecoveryDetail(null); await onRecoveryDone?.(); }
+      return res; // forge-mfv5.1.54: the drawer reads a branch-discard refusal off it
     },
     [selectedId, onRecoveryDone],
   );

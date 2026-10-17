@@ -40,10 +40,15 @@ import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
 import { COST_TERMINAL_CYCLE_STATUSES } from '@/lib/cycle-cost-cache';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { branchDiscardRefusal } from '@/lib/run-controls';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
 import { RepointGate } from '@/components/studio/RepointGate';
 import { KickoffAddWorkItem } from './KickoffAddWorkItem';
+
+/** forge-mfv5.1.54: `requeue-discard` is the Requeue re-posted with `discardBranch: true` after its refusal was confirmed. */
+export type RecoveryActionKind = 'requeue' | 'requeue-discard' | 'abandon';
+export type RecoveryActionResult = { ok: boolean; error?: string; data?: Record<string, unknown> };
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -80,7 +85,7 @@ export type InitiativeDetailProps = {
   recoveryBusy: boolean;
   recoveryNote: string;
   onInspectRecovery: () => void | Promise<void>;
-  onRecoveryAction: (kind: 'requeue' | 'abandon') => void | Promise<void>;
+  onRecoveryAction: (kind: RecoveryActionKind) => void | Promise<RecoveryActionResult | undefined | void>;
   /**
    * Which destructive recovery act is ARMED and waiting for a second press.
    * Defaults to none, so every caller is unchanged.
@@ -133,7 +138,16 @@ export function InitiativeDetail({
   initialPendingRecovery = null,
 }: InitiativeDetailProps) {
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
-  const handleRequeue = useCallback(() => void onRecoveryAction('requeue'), [onRecoveryAction]);
+  const [discard, setDiscard] = useState<{ branch: string; commits: number | null } | null>(null);
+  const handleRequeue = useCallback(async () => {
+    setDiscard(null);
+    const r = await onRecoveryAction('requeue');
+    setDiscard(r ? branchDiscardRefusal(r) : null);
+  }, [onRecoveryAction]);
+  const confirmDiscard = useCallback(() => {
+    setDiscard(null);
+    void onRecoveryAction('requeue-discard');
+  }, [onRecoveryAction]);
   /**
    * ABANDON IS ARM-THEN-CONFIRM, matching `RunControls` (bead
    * `forge-8vfn.7.5.5`). The same destructive act had two contracts: the
@@ -145,7 +159,9 @@ export function InitiativeDetail({
    * confirmation. One act, one contract, and the stricter one is the right one.
    *
    * Requeue is deliberately NOT gated: it is recoverable, and a confirm on a
-   * safe act teaches the operator to click through the one that is not.
+   * safe act teaches the operator to click through the one that is not. When it
+   * is NOT recoverable — the bridge refused it because it would delete branch
+   * commits not on origin/main (forge-mfv5.1.54) — the drawer asks first.
    */
   const [pendingAbandon, setPendingAbandon] = useState<boolean>(initialPendingRecovery === 'abandon');
   const armAbandon = useCallback(() => setPendingAbandon(true), []);
@@ -385,7 +401,7 @@ export function InitiativeDetail({
             </div>
             <span style={{ display: 'flex', gap: 6 }}>
               <button data-action="recovery-inspect" onClick={handleInspect} style={recoveryBtn('var(--line)')}>Inspect</button>
-              <button data-action="recovery-requeue" disabled={recoveryBusy} onClick={handleRequeue} style={recoveryBtn('#1f6feb')}>Requeue</button>
+              <button data-action="recovery-requeue" disabled={recoveryBusy} onClick={() => void handleRequeue()} style={recoveryBtn('#1f6feb')}>Requeue</button>
               <button
                 data-action="recovery-abandon"
                 {...disabledAttrs(recoveryBusy ? 'a recovery action is already running' : null)}
@@ -432,6 +448,25 @@ export function InitiativeDetail({
                 Abandon it
               </button>
               <button data-action="cancel-recovery-abandon" onClick={cancelAbandon} style={recoveryBtn('var(--line)')}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {discard !== null && (
+            <div
+              data-component="discard-branch-confirm"
+              data-branch={discard.branch}
+              data-unmerged-commits={discard.commits ?? 'unknown'}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 8px', border: '1px solid #a33', borderRadius: 4 }}
+            >
+              <span style={{ fontSize: 11 }}>
+                Requeue deletes <strong>{discard.branch}</strong> and {discard.commits === null ? 'commits it could not count' : `${discard.commits} commit(s)`} not on origin/main. This cannot be undone.
+              </span>
+              <button data-action="confirm-discard-branch" {...disabledAttrs(recoveryBusy ? 'Requeueing…' : null)} onClick={confirmDiscard} style={recoveryBtn('#a33')}>
+                Discard and requeue
+              </button>
+              <button data-action="cancel-discard-branch" onClick={() => setDiscard(null)} style={recoveryBtn('var(--line)')}>
                 Cancel
               </button>
             </div>
