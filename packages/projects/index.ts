@@ -54,7 +54,7 @@ export type { ProjectConfig, AcceptanceGateConfig } from './project-config.ts';
 export { parseDemoMeans, isOwnServerPath, DEMO_EVIDENCE_FORMS, type DemoMeans, type DemoEvidenceForm } from './demo-means.ts';
 export { allowedDemoMeans, validateDemoPlan, NARRATIVE_MAX_WORDS, type AllowedDemoMeans, type DemoPlan, type DemoPlanCheckpoint, type DemoPlanResult } from './demo-plan.ts';
 export { checkBrowserSteps, type BrowserStepDecl } from './demo-browser-steps.ts';
-export { parseDemoPortal, type DemoPortal } from './demo-portal.ts';
+export type { DemoPortal } from './demo-portal.ts';
 export { writeProjectConfigPatch } from './project-config-write.ts';
 export { WI_GATE_PACKAGE_PLACEHOLDER } from './project-config-validate.ts';
 export { validateDemoDeclaration } from './preflight-demo.ts';
