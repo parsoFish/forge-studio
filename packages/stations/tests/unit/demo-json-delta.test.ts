@@ -112,3 +112,23 @@ test('the delta summary says JSON keys were normalised away when an api checkpoi
   const out = computeCheckpointDeltas(model(), bundle(BEFORE, SAME_AFTER_NOISE));
   assert.match(deriveDeltaSummary(out.checkpoints) ?? '', /volatile JSON keys/);
 });
+
+// forge-8vfn.31: a portal checkpoint (a page, no command) compares its frames' bytes, like a screenshot —
+// identical frames read unchanged, different frames changed, a missing side unknown (fails closed).
+function frames(before: Buffer | null, after: Buffer | null, stem: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'demo-portal-delta-'));
+  for (const [side, bytes] of [['before', before], ['after', after]] as const) {
+    mkdirSync(join(dir, side), { recursive: true });
+    if (bytes) writeFileSync(join(dir, side, `${stem}.filmstrip.png`), bytes);
+  }
+  return dir;
+}
+
+test('portal checkpoint: frame bytes decide the delta; a missing side is unknown', () => {
+  const portal: Partial<DemoModelCheckpoint> = { label: 'portal', form: 'portal-before-after', page: '/orgs/acme/repositories', command: undefined };
+  const m = model(portal);
+  const a = Buffer.from('frame-a');
+  assert.equal(deltaOf(m, frames(a, Buffer.from('frame-a'), 'portal')).delta, 'unchanged');
+  assert.equal(deltaOf(m, frames(a, Buffer.from('frame-b'), 'portal')).delta, 'changed');
+  assert.equal(deltaOf(m, frames(a, null, 'portal')).delta, 'unknown');
+});

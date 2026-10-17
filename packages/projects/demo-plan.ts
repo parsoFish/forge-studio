@@ -11,11 +11,13 @@ import { checkBrowserSteps, type BrowserStepDecl } from './demo-browser-steps.ts
 
 export type DemoPlanCheckpoint = {
   form: DemoEvidenceForm; caption: string; acRef?: string; command?: string; route?: string; apiPath?: string;
-  /** screenshot only: the interaction driven before the final still, and the regions outlined. */
+  /** portal-before-after only: a declared portal page (forge-8vfn.31). */
+  page?: string;
+  /** screenshot only: the interaction driven before the final still; screenshot / portal: the regions outlined. */
   steps?: BrowserStepDecl[]; regions?: string[];
 };
 export type DemoPlan = { narrative: string; checkpoints: DemoPlanCheckpoint[] };
-export type AllowedDemoMeans = { commands: string[]; routes: string[]; apiPaths: string[]; apiCommands: string[] };
+export type AllowedDemoMeans = { commands: string[]; routes: string[]; apiPaths: string[]; apiCommands: string[]; portalPages: string[] };
 export type DemoPlanResult = { ok: true; plan: DemoPlan } | { ok: false; errors: string[] };
 
 /** A narrative longer than this is a second essay, not a paragraph. */
@@ -39,14 +41,18 @@ export function allowedDemoMeans(means: DemoMeans | undefined, acs: ReadonlyArra
     routes: union(means?.routes, acRoutes),
     apiPaths: union(means?.api?.paths),
     apiCommands: union(means?.api?.commands, acCommands),
+    portalPages: union(means?.portal?.pages),
   };
 }
 
 const PLAN_KEYS = ['narrative', 'checkpoints'];
-const CHECKPOINT_KEYS = ['form', 'caption', 'acRef', 'command', 'route', 'apiPath', 'steps', 'regions'];
+const CHECKPOINT_KEYS = ['form', 'caption', 'acRef', 'command', 'route', 'apiPath', 'page', 'steps', 'regions'];
+const DRIVER_KEYS = ['command', 'route', 'apiPath', 'page'];
+/** The forms that drive a browser, and so may declare steps and regions. */
+const BROWSER_FORMS: readonly DemoEvidenceForm[] = ['screenshot', 'portal-before-after'];
 /** Which driver fields each form takes; every other driver field is refused. */
 const DRIVERS: Record<DemoEvidenceForm, readonly string[]> = {
-  'cli-before-after': ['command'], 'api-before-after': ['command', 'apiPath'], screenshot: ['route'], 'test-evidence': [],
+  'cli-before-after': ['command'], 'api-before-after': ['command', 'apiPath'], screenshot: ['route'], 'portal-before-after': ['page'], 'test-evidence': [],
 };
 
 // An agent value echoed into a logged, thrown error is bounded; agent prose (DEMO.md, the PR body) is one bounded line.
@@ -62,7 +68,7 @@ function checkDriver(cp: Record<string, unknown>, key: string, allowed: readonly
   if (typeof v !== 'string' || v.trim() === '') return void errors.push(`${row}: must be a non-empty string`);
   if (key !== 'command' && hasHost(v)) return void errors.push(`${row}: ${shown(v)} names a host — a plan names no host, only declared means`);
   if (key === 'command' && SHELL_METACHARACTERS.test(v)) return void errors.push(`${row}: ${shown(v)} contains shell metacharacters`);
-  if (key !== 'command' && !isOwnServerPath(v)) return void errors.push(`${row}: ${shown(v)} is not a path on the tree's own server`);
+  if (key !== 'command' && !isOwnServerPath(v)) return void errors.push(`${row}: ${shown(v)} is not ${key === 'page' ? 'a literal portal path' : "a path on the tree's own server"}`);
   if (!allowed.includes(v)) errors.push(`${row}: ${shown(v)} is not a declared means (demoMeans or an acceptance criterion's span)`);
 }
 
@@ -74,7 +80,7 @@ function checkCheckpoint(raw: unknown, i: number, allowed: AllowedDemoMeans, err
   const form = raw.form as DemoEvidenceForm;
   if (!isLine(raw.caption, 160)) errors.push(`plan-invalid:${at}.caption: must be one line of at most 160 characters`);
   if (raw.acRef !== undefined && !(typeof raw.acRef === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(raw.acRef))) errors.push(`plan-invalid:${at}.acRef: must be a work-item id (≤ 40 of A-Z a-z 0-9 . _ -)`);
-  for (const key of ['command', 'route', 'apiPath']) {
+  for (const key of DRIVER_KEYS) {
     if (raw[key] !== undefined && !DRIVERS[form].includes(key)) errors.push(`plan-invalid:${at}.${key}: form ${form} takes no ${key}`);
   }
   const drivers = DRIVERS[form].filter((k) => raw[k] !== undefined);
@@ -82,10 +88,15 @@ function checkCheckpoint(raw: unknown, i: number, allowed: AllowedDemoMeans, err
   checkDriver(raw, 'command', form === 'api-before-after' ? allowed.apiCommands : allowed.commands, at, errors);
   checkDriver(raw, 'route', allowed.routes, at, errors);
   checkDriver(raw, 'apiPath', allowed.apiPaths, at, errors);
+  checkDriver(raw, 'page', allowed.portalPages, at, errors);
   for (const key of ['steps', 'regions']) {
-    if (raw[key] !== undefined && form !== 'screenshot') errors.push(`plan-invalid:${at}.${key}: form ${form} takes no ${key}`);
+    if (raw[key] !== undefined && !BROWSER_FORMS.includes(form)) errors.push(`plan-invalid:${at}.${key}: form ${form} takes no ${key}`);
   }
-  if (form === 'screenshot') checkBrowserSteps(raw.steps, raw.regions, `plan-invalid:${at}`, errors);
+  // A step on a portal page would act on the live third-party site as the operator; regions only outline.
+  if (form === 'portal-before-after' && raw.steps !== undefined) {
+    errors.push(`plan-invalid:${at}.steps: form portal-before-after takes no steps — a step would act on the live site as the operator`);
+  }
+  if (BROWSER_FORMS.includes(form)) checkBrowserSteps(raw.steps, raw.regions, `plan-invalid:${at}`, errors);
 }
 
 /** Validate a raw plan against the allowed means; every refusal names its row. */

@@ -33,8 +33,8 @@ code before and after the change, and compares the two (D-15).
 
 The initiative's title, each work item with its user story, the acceptance
 criteria, the diff stat and changed files, and the **allowed means**: the
-commands, routes, API paths and API commands the project declares, plus each
-acceptance criterion's own inline-code span.
+commands, routes, API paths, API commands and portal pages the project declares,
+plus each acceptance criterion's own inline-code span.
 
 ## What you return
 
@@ -66,6 +66,15 @@ Choose per checkpoint what shows THIS change best:
   `{ "fill": "<selector>", "text": "<value>" }` or `{ "press": "Enter" }` — and
   up to 6 `regions` selectors to outline in the final frame. The capture drives
   the same steps on both sides.
+- **`portal-before-after`** — the change alters a third-party site the
+  project configures, such as its GitHub organisation. Name one `page` from
+  the allowed portal pages, and up to 6 `regions` to outline. No `steps`: an
+  interaction would act on the live site as the operator.
+  The orchestrator runs the project's own apply from each tree before taking
+  that tree's frames. When the project's effect lives on such a site, prefer
+  this form: the reviewer sees the site itself, not the JSON behind it. Say
+  in the caption what should change, or why an unchanged frame is the point
+  (an empty pull-request list means no pull request was opened).
 - **`test-evidence`** — nothing above can show it. No driver field; the
   orchestrator attaches the gate output.
 
@@ -79,8 +88,8 @@ the band fails.
 ## Rules the orchestrator enforces
 
 Each checkpoint has a `form`, a non-empty `caption`, an optional `acRef`, and
-exactly the one driver field its form takes; a `screenshot` may add `steps` and
-`regions`. A plan carries no other field —
+exactly the one driver field its form takes; a `screenshot` may add `steps`
+and `regions`, a `portal-before-after` only `regions`. A plan carries no other field —
 no output, no delta, no verdict. At most 12 checkpoints. The narrative is
 labelled *agent narrative, not evidence* in DEMO.md and never moves a verdict.
 

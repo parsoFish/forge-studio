@@ -59,3 +59,18 @@ test('DEMO.md names the GET a path-driven api checkpoint made', () => {
   const md = renderDemoMarkdown(model({}, { command: undefined, apiPath: '/api/org', beforeOutput: '{}', afterOutput: '{"a":1}' }));
   assert.match(md, /- \*\*GET \(each tree's own server\):\*\* `\/api\/org`/);
 });
+
+// forge-8vfn.31: a portal checkpoint's `page` is a literal path, on the portal form alone; DEMO.md names it.
+test('portal: page validates on portal-before-after; refused with a host, traversal or on another form', () => {
+  const portal = { command: undefined, form: 'portal-before-after', page: '/orgs/acme/repositories' };
+  assert.deepEqual(validateDemoModel(model({}, portal)), []);
+  for (const page of ['https://evil.example/x', '//evil.example/x', '/a/../b', 'relative']) {
+    assert.match(validateDemoModel(model({}, { ...portal, page })).join('\n'), /page must be a literal path on the declared portal/, page);
+  }
+  assert.match(validateDemoModel(model({}, { page: '/orgs/acme' })).join('\n'), /page belongs to form portal-before-after alone/);
+});
+
+test('DEMO.md names the portal page a portal checkpoint opened', () => {
+  const md = renderDemoMarkdown(model({}, { command: undefined, form: 'portal-before-after', page: '/orgs/acme/repositories' }));
+  assert.match(md, /- \*\*Page \(the project's declared site, read after each tree's own apply; the site is left in the after state\):\*\* `\/orgs\/acme\/repositories`/);
+});

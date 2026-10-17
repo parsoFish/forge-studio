@@ -161,6 +161,18 @@
           "type": "object",
           "additionalProperties": { "type": "string" },
           "description": "How a command runs from the tree under capture, such as `{ \"gw\": \"python3 -m gitweave.cli\" }`. Each key is a command name; its value replaces that name. A command the project installs (a script declared in `pyproject.toml`) that is found only on `PATH` runs one installed copy for both before and after, so forge refuses it unless it is declared here. A value may not hold shell operators, an absolute path or `..`."
+        },
+        "portal": {
+          "type": "object",
+          "description": "A third-party site the project configures, such as its GitHub organisation, shown as page frames before and after. Capture runs `apply` from the before tree and records each page, then does the same from the after tree, so the site is left in the after state.",
+          "additionalProperties": false,
+          "required": ["origins", "pages", "apply"],
+          "properties": {
+            "origins": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Exact origins, such as `https://github.com`: no trailing slash or path. Plain `http` only on this machine (`127.0.0.1`, `localhost` or `[::1]`). Pages open on the first origin; the others are only places a page may navigate to, such as a sign-in hop. A navigation to any origin not listed here, including a redirect, is refused before it is fetched, and so is a pop-up window; images and scripts the page loads from other hosts still load." },
+            "pages": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Literal paths opened on the first origin, such as `/orgs/acme/repositories`. No host, placeholder, query, `%` or `..`. A page is only opened and outlined, never clicked: an interaction would act on the site as the operator." },
+            "apply": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "The project's own commands, run in order, that make the site match the tree under capture, such as `[\"gw reset\", \"gw apply\"]`. Each runs without a shell, through `run`; write a sequence as a list, never with `&&`. If the before tree's run does not undo the change, both frames show the after state. The apply runs without the `authState` variable in its environment." },
+            "authState": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$", "description": "Name of an environment variable whose value is the path to a Playwright storage-state file the operator exported once. forge reads it at capture and never logs or copies it; if declared and unreadable, capture refuses, and a page the site answers with 401 is refused, not recorded." }
+          }
         }
       }
     },

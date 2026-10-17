@@ -408,7 +408,7 @@ function noChangeDetails(demoJsonAbs: string): string[] {
   return cps
     .filter((c) => c.form !== 'test-evidence' && c.delta !== undefined && c.delta !== 'changed')
     .map((c) => {
-      const driver = c.command ?? c.route ?? c.apiPath ?? c.label;
+      const driver = c.command ?? c.route ?? c.apiPath ?? c.page ?? c.label;
       const out = (c.afterOutput ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
       return c.delta === 'unknown'
         ? `"${c.label}" \`${driver}\` could not be compared`

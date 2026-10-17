@@ -8,7 +8,8 @@
  * gate width — each side a 16:9 box at least `--pane-xl` + `--pane-md` wide
  * (forge-nk1y.44, the UI-CONSTRAINTS §2 media pair pane; it was ~544x306 beside
  * a column rail in a fixed 480 px pane). A command checkpoint opens on its
- * captured stdout; frame and video are one press away in the same box; either
+ * captured stdout, a portal checkpoint (forge-8vfn.31) names its page and opens on
+ * its frame; frame and video are one press away in the same box; either
  * side enlarges into a <dialog>.
  *
  * The evidence was captured by the orchestrator (D-15); nothing here grades
@@ -133,8 +134,8 @@ export function DemoGallery({
                   {cp.delta ?? 'unknown'}
                 </span>
                 <h3 title={cp.caption} style={{ margin: 0, fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--text-lg)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cp.caption || cp.label}</h3>
-                {cp.command && (
-                  <code title={cp.command} style={{ ...meta, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: '0 var(--space-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>$ {cp.command}</code>
+                {(cp.command || cp.page) && (
+                  <code title={cp.command ?? cp.page} style={{ ...meta, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: '0 var(--space-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{cp.command ? `$ ${cp.command}` : `page ${cp.page}`}</code>
                 )}
               </div>
 

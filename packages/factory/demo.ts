@@ -48,6 +48,8 @@ import {
 } from '@forge/stations/demo-model.ts';
 import { computeCheckpointDeltas } from '@forge/stations/demo-delta.ts';
 
+import { capturePortalSide, portalCheckpointsOf, resolvePortalAuthState, type PortalCapture } from './demo-portal-capture.ts';
+
 export type CheckpointUrlResolution = { ok: true; url: string } | { ok: false; reason: string };
 
 /**
@@ -176,6 +178,8 @@ export type CaptureCheckpointsInput = {
   build?: boolean;
   /** The project's `demoMeans.run` — how a command head runs from each tree (forge-nk1y.42). */
   runPrefixes?: Readonly<Record<string, string>>;
+  /** Declared portal pages to record per side after that tree's own apply (forge-8vfn.31). */
+  portal?: PortalCapture;
 };
 
 export type CaptureCheckpointsResult = {
@@ -260,6 +264,9 @@ export async function captureCheckpoints(
   const { recordTerminal } = await import('./demo-capture.ts');
   const { captureApiGet } = await import('./demo-api-capture.ts');
   const apiPaths = input.checkpointApiPaths ?? [];
+  const portal = input.portal && input.portal.checkpoints.length > 0 ? input.portal : undefined;
+  // Resolved once, before either tree applies anything: a declared auth state that cannot be read refuses both sides.
+  const portalAuth = portal ? resolvePortalAuthState(portal.means.authState, process.env) : { ok: true as const };
 
   const bundleDir = resolve(input.bundleDir);
   // forge-8vfn.8.5.6: BEFORE anything else — a hard crash on a prior run may
@@ -331,6 +338,15 @@ export async function captureCheckpoints(
         }
       }
 
+      if (portal) {
+        // Best-effort per D-07, like every recorder here: a failure is named and the tree's other evidence still lands.
+        try {
+          captured.push(...await capturePortalSide({ portal, side, worktreePath: wt.path, bundleDir, runPrefixes: input.runPrefixes ?? {}, auth: portalAuth }));
+        } catch (err) {
+          process.stderr.write(`[demo] portal ${side} failed — no portal frames: ${err instanceof Error ? err.message : String(err)}\n`);
+        }
+      }
+
       // Screenshot checkpoints (browser) DO need a working build + a live server.
       if (status.ok && (input.checkpointLabels.length > 0 || apiPaths.length > 0)) {
         const server = await startServer(wt.path, bundleDir);
@@ -393,12 +409,12 @@ export type BrowserCheckpoint = { label: string; route?: string; steps?: Browser
  * name and never driven.
  */
 export function browserCheckpointsOf(
-  cps: ReadonlyArray<{ label?: string; command?: string; apiPath?: string; route?: unknown; form?: string; kind?: string; steps?: unknown; regions?: unknown }>,
+  cps: ReadonlyArray<{ label?: string; command?: string; apiPath?: string; page?: unknown; route?: unknown; form?: string; kind?: string; steps?: unknown; regions?: unknown }>,
 ): { checkpoints: BrowserCheckpoint[]; refused: string[] } {
   const checkpoints: BrowserCheckpoint[] = [];
   const refused: string[] = [];
   for (const c of cps) {
-    if (!c.label || c.command || c.apiPath !== undefined || c.form === 'test-evidence' || c.kind === 'harness') continue;
+    if (!c.label || c.command || c.apiPath !== undefined || c.page !== undefined || c.form === 'test-evidence' || c.form === 'portal-before-after' || c.kind === 'harness') continue;
     const errors: string[] = [];
     checkBrowserSteps(c.steps, c.regions, 'checkpoint', errors);
     if (errors.length > 0) {
@@ -467,7 +483,7 @@ export type CaptureDemoBundleResult = {
  */
 export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<CaptureDemoBundleResult> {
   const demoJson = JSON.parse(readFileSync(input.jsonPath, 'utf8'));
-  const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string; apiPath?: string }>;
+  const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string; apiPath?: string; page?: string; form?: string }>;
   // A checkpoint with a `command` captures real CLI stdout (before/after); one
   // without is a browser screenshot checkpoint (an AC-derived one may carry `route`).
   const checkpointCommands = cps
@@ -482,6 +498,9 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
   const browser = browserCheckpointsOf(cps);
   for (const reason of browser.refused) process.stderr.write(`[demo] refusing browser checkpoint ${reason}\n`);
   const checkpointLabels = browser.checkpoints;
+  // Portal pages too are the project's declaration, never demo.json's: an undeclared page is refused by name.
+  const portal = portalCheckpointsOf(cps, demoMeans?.portal);
+  for (const reason of portal.refused) process.stderr.write(`[demo] refusing portal checkpoint ${reason}\n`);
   await captureCheckpoints({
     projectRepoPath: input.projectRepoPath,
     project: input.project,
@@ -494,6 +513,7 @@ export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<
     checkpointApiPaths,
     build: true,
     runPrefixes: demoMeans?.run ?? {},
+    ...(demoMeans?.portal ? { portal: { means: demoMeans.portal, checkpoints: portal.checkpoints } } : {}),
   });
   const captured = collectCapturedMedia(input.bundleDir);
   const merged = mergeCapturedMedia(JSON.parse(readFileSync(input.jsonPath, 'utf8')), captured);

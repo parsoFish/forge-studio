@@ -296,6 +296,9 @@ export type DemoModelCheckpoint = {
   // CLI/output checkpoint — real captured stdout (before on baseRef, after on the
   // branch HEAD), shown side-by-side as terminal output instead of a prose note.
   command?: string;
+  /** Mirror — evidence form; a `portal-before-after` checkpoint carries the declared portal `page` it opened. */
+  form?: string;
+  page?: string;
   beforeOutput?: string | null;
   afterOutput?: string | null;
   metrics?: DemoHarnessMetricRow[];
