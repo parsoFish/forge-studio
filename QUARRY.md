@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 97 | 26,730 | **26,531** | ratified 26,531 — forge-mfv5.1.57: a later send-back supersedes a failed fix WI (drain, Requeue, dev loop) and every drain park is said once by event + notify; +59 measured on this PR's tree after a read for slack (−5), lane-ratified (≤100, ruling 666). |
+| `flows` | 97 | 26,737 | **26,538** | ratified 26,538 — forge-mfv5.1.57: a later send-back supersedes a failed fix WI (drain, dev loop; Requeue keeps the halt as authority) and every drain park is said once by event + notify; +66 measured on this PR's tree after a read for slack (−5), lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 56 | 13,663 | **13,663** | ratified 13,663 — forge-mfv5.1.57: the dev loop never rebuilds a fix WI a later send-back superseded (devLoopRunList); +6 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **539** | **139,075** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **539** | **139,082** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -351,7 +351,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
 | packages/agents/failure-classifier.ts | agents | verbatim | 768 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 520 |
-| packages/flows/fix-work-items.ts | flows | verbatim | 458 |
+| packages/flows/fix-work-items.ts | flows | verbatim | 462 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 468 |
 | packages/flows/flow-budgets.ts | flows | verbatim | 558 |
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
@@ -479,7 +479,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 47 |
-| packages/flows/run-model-derive-status.ts | flows | verbatim | 515 |
+| packages/flows/run-model-derive-status.ts | flows | verbatim | 518 |
 | packages/flows/run-model-derive-cost.ts | flows | verbatim | 377 |
 | packages/flows/run-model-derive-lineage.ts | flows | verbatim | 135 |
 | packages/flows/run-model-derive-node-id.ts | flows | verbatim | 35 |

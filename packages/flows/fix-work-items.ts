@@ -268,16 +268,20 @@ export function supersededFixWorkItemsIn(items: readonly WorkItem[]): { supersed
   return { superseded, by: superseded.length > 0 ? newest.work_item_id : null };
 }
 
-/** The fix WIs no later send-back replaced — the ones the drain, Requeue and the dev loop still answer for. */
+/** The fix WIs no later send-back replaced — the ones the drain still parks on. */
 function liveFixWorkItems(worktreePath: string): WorkItem[] {
   const items = fixWorkItems(worktreePath);
   const { superseded } = supersededFixWorkItemsIn(items);
   return items.filter((w) => !superseded.includes(w.work_item_id));
 }
 
-/** forge-mfv5.1.56 (D-06): the failed fix WIs a halted round names — a Requeue re-arms them (a kept branch resumes at its tip); never a superseded one. */
+/**
+ * forge-mfv5.1.56 (D-06): the failed fix WIs a halted round names — a Requeue re-arms them (a kept branch resumes at its tip).
+ * The halt is the authority (forge-mfv5.1.57): it names only its own round's WIs, so a WI an earlier send-back superseded is
+ * never among them, and a same-round sibling with a higher id never supersedes a WI the halt names.
+ */
 export function resumableFixWorkItems(worktreePath: string, haltedIds: readonly string[]): WorkItem[] {
-  return liveFixWorkItems(worktreePath).filter((w) => w.status === 'failed' && haltedIds.includes(w.work_item_id));
+  return fixWorkItems(worktreePath).filter((w) => w.status === 'failed' && haltedIds.includes(w.work_item_id));
 }
 
 /** forge-mfv5.1.56: the Requeue of a halted round puts each of its failed fix WIs back to `pending` (`kept_branch` stays); returns their ids. */

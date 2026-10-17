@@ -482,12 +482,12 @@ test('supersededFixWorkItems: a failed fix WI below a later-appended fix WI is s
     seedWorkItem(wt, 'WI-18', { status: 'pending', origin: 'review-fix' });
     assert.deepEqual(supersededFixWorkItems(wt), { superseded: ['WI-17'], by: 'WI-18' });
     assert.equal(failedFixWorkItemIds(wt).length > 0, false, 'a superseded failed fix WI does not park the drain');
-    assert.deepEqual(resumableFixWorkItems(wt, ['WI-17']).map((w) => w.work_item_id), [], 'a Requeue never re-arms a superseded WI');
+    assert.deepEqual(resumableFixWorkItems(wt, ['WI-18']).map((w) => w.work_item_id), [], 'the round halt names only its own WIs: WI-17 is never among them');
 
     seedWorkItem(wt, 'WI-18', { status: 'failed', origin: 'review-fix' });
     assert.deepEqual(supersededFixWorkItems(wt), { superseded: ['WI-17'], by: 'WI-18' });
     assert.equal(failedFixWorkItemIds(wt).length > 0, true, 'the superseding WI failing parks the drain again');
-    assert.deepEqual(resumableFixWorkItems(wt, ['WI-17', 'WI-18']).map((w) => w.work_item_id), ['WI-18']);
+    assert.deepEqual(resumableFixWorkItems(wt, ['WI-18']).map((w) => w.work_item_id), ['WI-18'], 'a Requeue re-arms what the halt names');
   } finally {
     rmSync(wt, { recursive: true, force: true });
   }

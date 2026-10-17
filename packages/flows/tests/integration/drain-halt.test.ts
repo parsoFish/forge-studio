@@ -308,4 +308,5 @@ test('deriveRoundHalt: a drain park reads as needs-operator; a halt in the same 
   const halted = ev('sendback.loop-halted', { round: 2, classification: 'terminal', reason: 'r' });
   assert.deepEqual(deriveRoundHalt([ev('cycle.start'), halted, ev('sendback.loop-halt-refused'), park]), { round: 2, classification: 'terminal', reason: 'r' });
   assert.equal(deriveRoundHalt([park, ev('cycle.start')]), undefined);
+  assert.equal(deriveRoundHalt([ev('cycle.start'), park, ev('reviewer.verdict.send-back')]), undefined, 'the operator\'s send-back answers the park');
 });
