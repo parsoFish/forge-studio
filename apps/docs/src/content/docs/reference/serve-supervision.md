@@ -3,8 +3,8 @@ title: Serve supervision
 description: How forge serve runs, who restarts it, its process-id and lock files, recovery sweeps, and the emergency halt.
 type: reference
 owner: parsoFish
-last_verified: 2026-10-16
-covers: [packages/flows/daemon.ts, packages/flows/scheduler.ts, packages/flows/halt-watch.ts, packages/kernel/halt.ts, apps/forge/serve-supervisor.ts, apps/forge/bridge-halt.ts, apps/forge/forge-watch.ts]
+last_verified: 2026-10-17
+covers: [packages/flows/daemon.ts, packages/flows/scheduler.ts, packages/flows/halt-watch.ts, packages/kernel/halt.ts, apps/forge/serve-supervisor.ts, apps/forge/bridge-halt.ts, apps/forge/forge-watch.ts, packages/flows/scheduler-sweeps.ts, packages/flows/forge-requeue.ts]
 ---
 
 `forge serve` is the daemon that claims pending initiatives and drives each to completion. `forge studio` supervises it.
@@ -17,6 +17,8 @@ covers: [packages/flows/daemon.ts, packages/flows/scheduler.ts, packages/flows/h
 | Allow only one `forge serve` per forge root | `forge serve` itself, by lock |
 | Park work orphaned by a dead process in `failed/`, untouched, for you to resume | `forge serve`, by sweeps |
 | Show serve's health | Studio, read-only |
+
+A parked run's log records why it was parked. Resume or Requeue continues from its kept worktree and branch: a run you had asked to stop counts as a clean stop, one killed without that request as an environment failure. A Requeue that would start fresh and delete a branch carrying commits not on `origin/main` refuses instead, names the commits, and asks you to confirm the discard.
 
 `forge studio` spawns `serve` detached, so closing Studio does not strand in-flight work. On start it adopts a live serve of the same root instead of spawning a second. An attach-only `forge studio --attach` never supervises; it only reads state.
 
