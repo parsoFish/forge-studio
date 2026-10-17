@@ -2,6 +2,7 @@ import { acLabel, gateRequiredPaths, type AcceptanceCheck, type RequiredPathsSou
 import { makeQualityGateFromCmd, parseGateTestSummary, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { WI_GATE_PACKAGE_PLACEHOLDER, type AcceptanceGateConfig } from '@forge/projects';
 
+import { composeAcChecksVerdict } from './ac-checks-brief.ts';
 import { liveAcceptanceEnvFor, liveAcceptanceEnvForCheck } from './live-acceptance-env.ts';
 
 /**
@@ -32,6 +33,8 @@ export type WiQualityGateArgs = {
   onAcCheck?: (run: AcCheckRun) => void;
   /** forge-mfv5.1.43: after a gate pass, the labels whose checks were satisfied this run (all of them ⇔ the composite passed). */
   onChecksJudged?: (satisfied: readonly string[]) => void;
+  /** forge-mfv5.1.55: ONCE per gate pass — the WI gate's run when it fails (or there are no checks), else every check's composite: the next brief. */
+  onVerdict?: (info: AcGateRunInfo) => void;
 };
 
 /** One acceptance check's run: `info` is the gate run with `passed` restated as "satisfied", and `command` labelled. */
@@ -49,21 +52,28 @@ export type AcGateRunInfo = GateRunInfo & { ac?: { label: string; expect: Accept
  * test directly instead of only a hand-written mirror of it.
  */
 export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration: number }) => boolean {
-  const wiGate = args.effective.length > 0 ? buildWiGateOnly(args) : () => true; // no gate: the checks alone decide
+  let wiRun: GateRunInfo | undefined;
+  const wiGate = args.effective.length > 0 ? buildWiGateOnly({ ...args, onRun: (i) => { wiRun = i; args.onRun(i); } }) : () => true; // no gate: the checks alone decide
   const checks = args.wi.acceptance_criteria.flatMap((ac, i) => (ac.check ? [{ label: acLabel(ac, i), check: ac.check }] : []));
-  // forge-mfv5.1.43 (D-20): the WI closes only when its gate AND every criterion's check pass —
-  // first unsatisfied check stops the run (its output is the agent's next brief).
+  // forge-mfv5.1.43 (D-20): the WI closes only when its gate AND every criterion's check pass.
+  // forge-mfv5.1.55: EVERY check runs each pass (own event each) and the verdict names every unsatisfied one.
   return (ctx) => {
-    if (!wiGate(ctx)) return false;
-    const satisfied: string[] = [];
-    for (const { label, check } of checks) {
+    wiRun = undefined;
+    const gatePassed = wiGate(ctx);
+    if (!gatePassed || checks.length === 0) {
+      if (wiRun) args.onVerdict?.(wiRun);
+      if (gatePassed) args.onChecksJudged?.([]);
+      return gatePassed;
+    }
+    const runs = checks.map(({ label, check }) => {
       const run = runAcCheck(args, label, check, ctx);
       args.onRun(run.info);
       args.onAcCheck?.(run);
-      if (!run.satisfied) break;
-      satisfied.push(label);
-    }
+      return run;
+    });
+    const satisfied = runs.filter((r) => r.satisfied).map((r) => r.label);
     args.onChecksJudged?.(satisfied);
+    args.onVerdict?.(composeAcChecksVerdict(runs, ctx?.iteration));
     return satisfied.length === checks.length;
   };
 }

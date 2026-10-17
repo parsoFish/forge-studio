@@ -103,7 +103,7 @@ function renderGateFailureBody(info: GateRunInfo, context: GateFeedbackContext):
     lines.push(`## Repeat failure — the previous gate run (iteration ${prev.iteration ?? '?'})`, '');
     lines.push(`Previous: exit code ${String(prev.exitCode)} at HEAD ${prev.headSha}. Output ${same} this run.`);
     lines.push('Compare the two before you conclude anything: the same failure twice means your change did not reach what the gate runs.', '');
-    lines.push(...tails('### previous', prev.stdoutTail, prev.stderrTail));
+    if (same === 'differs from') lines.push(...tails('### previous', prev.stdoutTail, prev.stderrTail)); // identical: named above, not re-printed (forge-mfv5.1.55)
   }
   return lines.join('\n');
 }

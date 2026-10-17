@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 367 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 166 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 167 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -63,12 +63,12 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
 | `flows` | 97 | 26,583 | **26,384** | ratified 26,384 — forge-mfv5.1.54: Requeue resumes a stranded run and refuses to delete a branch with commits not on origin/main; +69 measured on this PR's tree after a read for slack (−4), lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 54 | 13,473 | **13,473** | ratified 13,473 — forge-8vfn.31: demo.json's portal `page` validated on its form alone and named in DEMO.md; +7 measured on this PR's tree (demo-model.ts held at 800 by compacting two comments), lane-ratified (≤100, ruling 666). |
+| `stations` | 55 | 13,566 | **13,566** | ratified 13,566 — forge-mfv5.1.55: every per-AC check runs each gate pass and one bounded brief names every unsatisfied check (ac-checks-brief.ts); +93 measured on this PR's tree (developer-loop.ts held line-neutral), lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **537** | **138,738** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **538** | **138,831** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -409,7 +409,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 99 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1653 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 41 |
-| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 193 |
+| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 203 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 395 |
@@ -466,6 +466,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/integrate.ts | stations | verbatim | 417 |
 | packages/stations/phases/dev-loop-events.ts | stations | rewritten | 182 |
 | packages/stations/phases/gate-feedback.ts | stations | rewritten | 259 |
+| packages/stations/phases/ac-checks-brief.ts | stations | rewritten | 83 |
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 105 |
 | packages/stations/demo-delta.ts | stations | verbatim | 145 |
 | packages/stations/demo-form.ts | stations | rewritten | 80 |
