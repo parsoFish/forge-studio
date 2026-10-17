@@ -221,11 +221,11 @@ export async function fetchRecovery(initiativeId: string): Promise<RecoveryInspe
   return bridgeReadOr404<RecoveryInspect>(`/api/recovery/${encodeURIComponent(initiativeId)}`);
 }
 
-/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-integrate). */
+/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-integrate / consent to discarding unmerged branch commits). */
 export async function recoveryRequeue(
   initiativeId: string,
-  opts: { resetRetries?: boolean; resumeFromIntegrate?: boolean } = {},
-): Promise<{ ok: boolean; error?: string }> {
+  opts: { resetRetries?: boolean; resumeFromIntegrate?: boolean; discardBranch?: boolean } = {},
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
   return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/requeue`, opts);
 }
 

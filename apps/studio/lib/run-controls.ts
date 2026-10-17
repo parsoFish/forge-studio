@@ -72,7 +72,7 @@ const FAILED_CONTROLS: RunControl[] = [
     action: 'requeue-run',
     label: 'Requeue',
     // `POST /api/recovery/:id/requeue { resetRetries: true }`.
-    detail: 'Re-runs the flow from the start on a fresh worktree, and resets the retry count.',
+    detail: 'Re-runs the flow from the start on a fresh worktree, and resets the retry count. Asks first if that would delete branch commits not on origin/main.',
     destructive: false,
   },
   {
@@ -84,6 +84,16 @@ const FAILED_CONTROLS: RunControl[] = [
     destructive: true,
   },
 ];
+
+/**
+ * forge-mfv5.1.54: the bridge refused a fresh Requeue because it would delete `branch` and its
+ * commits not on origin/main — `commits` is null when the bridge could not count them (UNKNOWN).
+ * Null for any other outcome.
+ */
+export function branchDiscardRefusal(r: { ok: boolean; error?: string; data?: Record<string, unknown> }): { branch: string; commits: number | null } | null {
+  if (r.ok || r.data?.code !== 'branch-discard-refused' || typeof r.data.branch !== 'string') return null;
+  return { branch: r.data.branch, commits: Array.isArray(r.data.unmergedCommits) ? r.data.unmergedCommits.length : null };
+}
 
 /**
  * The recovery controls a run offers right now. A FAILED run offers the

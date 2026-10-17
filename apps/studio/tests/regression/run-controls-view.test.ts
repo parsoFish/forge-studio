@@ -29,7 +29,7 @@
  */
 import { test, expect } from 'vitest';
 
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, queuedServeTone, runAwaitsServe, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
+import { armedControl, branchDiscardRefusal, deriveRunControls, intentForControlClick, mayPostControl, queuedServeTone, runAwaitsServe, runControlsShouldRender, RUN_CONTROL_ACTIONS } from '../../lib/run-controls.ts';
 import type { Run, RunStatus } from '../../lib/studio-client.ts';
 import type { ServeStatus } from '../../lib/bridge-client-core.ts';
 
@@ -298,4 +298,13 @@ test('queuedServeTone: draining/restarting/down are CONFIRMED not-running — th
   for (const state of ['draining', 'restarting', 'down'] as const) {
     expect(queuedServeTone(serveStatus(state)), state).toBe('not-running');
   }
+});
+
+test('forge-mfv5.1.54: a Requeue refused for unmerged branch commits yields the confirm\'s branch + count; any other outcome yields none', () => {
+  const refused = { ok: false, error: 'requeue: refusing…', data: { code: 'branch-discard-refused', branch: 'forge/INIT-x', unmergedCommits: ['a1 Merge WI-1', 'b2 Merge WI-2'] } };
+  expect(branchDiscardRefusal(refused)).toEqual({ branch: 'forge/INIT-x', commits: 2 });
+  expect(branchDiscardRefusal({ ...refused, data: { ...refused.data, unmergedCommits: 'UNKNOWN' } })).toEqual({ branch: 'forge/INIT-x', commits: null });
+  expect(branchDiscardRefusal({ ok: false, error: 'other', data: { error: 'other' } })).toBeNull();
+  expect(branchDiscardRefusal({ ok: true, data: { code: 'branch-discard-refused', branch: 'forge/INIT-x' } })).toBeNull();
+  expect(deriveRunControls(run('failed')).find((c) => c.id === 'requeue')?.detail).toMatch(/origin\/main/);
 });
