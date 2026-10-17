@@ -58,7 +58,7 @@ export async function planDemo(
   const { input, derivedInput: d, cfg } = ctx;
   const processCommands = (cfg?.demoProcess ?? []).filter((s) => s.kind === 'capture').map((s) => extractDrivableCommand(s.text)).flatMap((r) => (r.ok ? [r.command] : []));
   const allowed = allowedDemoMeans(cfg?.demoMeans, d.acceptanceCriteria, processCommands);
-  emit('demo.plan.start', { commands: allowed.commands.length, routes: allowed.routes.length, api_paths: allowed.apiPaths.length, api_commands: allowed.apiCommands.length });
+  emit('demo.plan.start', { commands: allowed.commands.length, routes: allowed.routes.length, api_paths: allowed.apiPaths.length, api_commands: allowed.apiCommands.length, portal_pages: allowed.portalPages.length });
   const base: DemoPlannerInput = {
     initiativeId: input.initiativeId, cycleId: planner.cycleId, worktreePath: input.worktreePath, title: d.title,
     workItems: d.workItems.map((wi) => ({ id: wi.id, title: wi.title, story: wi.story ?? '' })),

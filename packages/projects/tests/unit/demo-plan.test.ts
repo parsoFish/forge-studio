@@ -34,6 +34,7 @@ test('allowed means = declaration ∪ the ACs\' own inline-code spans', () => {
     routes: ['/dashboard', '/teams'],
     apiPaths: ['/api/org'],
     apiCommands: ['gitweave org show --json', 'gitweave rulesets list --json'],
+    portalPages: [],
   });
 });
 
@@ -133,3 +134,45 @@ for (const [name, extra, row] of [
     assert.match(r.ok ? '' : r.errors.join('; '), row);
   });
 }
+
+// forge-8vfn.31 (R70): portal-before-after is planned only from the project's declared portal pages.
+const PORTAL_MEANS: DemoMeans = { ...MEANS, portal: { origins: ['https://github.com'], pages: ['/orgs/acme/repositories', '/acme/svc/pulls'], apply: ['gw apply'] } };
+const PORTAL_ALLOWED = allowedDemoMeans(PORTAL_MEANS, ACS);
+
+test('portal: the declared pages are the allowed portal means', () => {
+  assert.deepEqual(PORTAL_ALLOWED.portalPages, ['/orgs/acme/repositories', '/acme/svc/pulls']);
+});
+
+test('portal: a declared page plans a portal-before-after checkpoint, with steps and regions', () => {
+  const r = validateDemoPlan(plan([
+    { form: 'portal-before-after', caption: 'The org lists the new repository', acRef: 'WI-1', page: '/orgs/acme/repositories', regions: ['#org-repositories'] },
+    { form: 'portal-before-after', caption: 'The empty list is the story: no pull request was opened', page: '/acme/svc/pulls', steps: [{ click: '#closed' }] },
+  ]), PORTAL_ALLOWED);
+  assert.equal(r.ok, true, JSON.stringify(r));
+});
+
+test('portal: an undeclared page is refused by name — not a declared means', () => {
+  const r = validateDemoPlan(plan([{ form: 'portal-before-after', caption: 'c', page: '/acme/other' }]), PORTAL_ALLOWED);
+  assert.equal(r.ok, false);
+  assert.match((r as { errors: string[] }).errors.join('\n'), /plan-invalid:checkpoints\[0\]\.page: "\/acme\/other" is not a declared means/);
+});
+
+test('portal: a page naming a host is refused by name', () => {
+  const r = validateDemoPlan(plan([{ form: 'portal-before-after', caption: 'c', page: 'https://github.com/orgs/acme/repositories' }]), PORTAL_ALLOWED);
+  assert.match((r as { errors: string[] }).errors.join('\n'), /checkpoints\[0\]\.page: .* names a host/);
+});
+
+test('portal control: with no portal declared, a portal checkpoint cannot be planned', () => {
+  const r = validateDemoPlan(plan([{ form: 'portal-before-after', caption: 'c', page: '/orgs/acme/repositories' }]), ALLOWED);
+  assert.equal(r.ok, false);
+  assert.match((r as { errors: string[] }).errors.join('\n'), /checkpoints\[0\]\.page: .* is not a declared means/);
+});
+
+test('portal: the form takes only page — no command, route or apiPath; page belongs to the portal form alone', () => {
+  const both = validateDemoPlan(plan([{ form: 'portal-before-after', caption: 'c', page: '/acme/svc/pulls', route: '/dashboard' }]), PORTAL_ALLOWED);
+  assert.match((both as { errors: string[] }).errors.join('\n'), /checkpoints\[0\]\.route: form portal-before-after takes no route/);
+  const none = validateDemoPlan(plan([{ form: 'portal-before-after', caption: 'c' }]), PORTAL_ALLOWED);
+  assert.match((none as { errors: string[] }).errors.join('\n'), /form portal-before-after needs exactly one of page/);
+  const shot = validateDemoPlan(plan([{ form: 'screenshot', caption: 'c', route: '/dashboard', page: '/acme/svc/pulls' }]), PORTAL_ALLOWED);
+  assert.match((shot as { errors: string[] }).errors.join('\n'), /checkpoints\[0\]\.page: form screenshot takes no page/);
+});

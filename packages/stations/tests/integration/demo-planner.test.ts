@@ -433,3 +433,36 @@ describe('mfv5.1.41: a refused plan gets one error-fed repair turn, then fails b
     assert.match(result.status === 'failed' ? result.detail : '', /is not a declared means/);
   });
 });
+
+// forge-8vfn.31 (R70): a declared portal's pages reach the planner as means; an undeclared page feeds the
+// repair turn by name; a declared one lands in demo.json as a portal-before-after checkpoint with its page.
+describe('forge-8vfn.31: portal-before-after is planned only from declared pages', () => {
+  const PAGES = ['/orgs/acme/repositories', '/acme/svc/pulls'];
+  const portalRaw = (page: string) => ({ narrative: NARRATIVE, checkpoints: [{ form: 'portal-before-after', caption: 'The org lists the repository', acRef: 'WI-2', page, regions: ['#repos'] }] });
+  beforeEach(() => {
+    writeFileSync(join(root, '.forge', 'project.json'), JSON.stringify({
+      name: 'gitweave', testProcess: { local: { cmd: ['npm', 'test'] } },
+      demoMeans: { api: { commands: [API_CMD] }, portal: { origins: ['https://github.com'], pages: PAGES, apply: ['gw apply'], authState: 'GW_PORTAL_STATE' } },
+    }));
+  });
+
+  it('undeclared page → the repair turn is fed the error by name; the declared page lands in demo.json with its page', async () => {
+    const seen: DemoPlannerInput[] = [];
+    const outcomes: DemoPlannerOutcome[] = [{ ok: true, costUsd: 0.1, raw: portalRaw('/acme/other') }, { ok: true, costUsd: 0.1, raw: portalRaw(PAGES[0]!) }];
+    const result = await run({ plan: async (_def, input) => { seen.push(input); return outcomes[seen.length - 1]!; } });
+    assert.equal(result.status, 'complete', result.status === 'failed' ? result.detail : '');
+    assert.deepEqual(seen[0]!.allowed.portalPages, PAGES);
+    assert.deepEqual(seen[1]!.revise!.details, ['plan-invalid:checkpoints[0].page: "/acme/other" is not a declared means (demoMeans or an acceptance criterion\'s span)']);
+    const demo = JSON.parse(readFileSync(join(demoDir(), 'demo.json'), 'utf8'));
+    assert.equal(demo.checkpoints[0].form, 'portal-before-after');
+    assert.equal(demo.checkpoints[0].page, PAGES[0]);
+    assert.deepEqual(demo.checkpoints[0].regions, ['#repos']);
+  });
+
+  it('control: with no portal declared, the planner is offered no portal pages', async () => {
+    writeFileSync(join(root, '.forge', 'project.json'), JSON.stringify({ name: 'gitweave', testProcess: { local: { cmd: ['npm', 'test'] } }, demoMeans: { api: { commands: [API_CMD] } } }));
+    const seen: DemoPlannerInput[] = [];
+    await run(port({ ok: true, costUsd: 0.1, raw: portalRaw(PAGES[0]!) }, seen));
+    assert.deepEqual(seen[0]!.allowed.portalPages, []);
+  });
+});

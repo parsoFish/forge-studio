@@ -28,6 +28,7 @@ export function renderDemoPlannerPrompt(input: DemoPlannerInput): string {
     `API commands (api-before-after, prints JSON):\n${list(input.allowed.apiCommands)}`,
     `API paths on the tree's own server (api-before-after):\n${list(input.allowed.apiPaths)}`,
     `Routes (screenshot):\n${list(input.allowed.routes)}`,
+    `Portal pages (portal-before-after, a page on the project's declared site):\n${list(input.allowed.portalPages)}`,
     '',
     ...(input.revise
       ? [

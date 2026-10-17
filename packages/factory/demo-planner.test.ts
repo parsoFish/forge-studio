@@ -29,7 +29,7 @@ function input(): DemoPlannerInput {
     workItems: [{ id: 'WI-1', title: 'Org read', story: 'As a platform admin I want to read the org back.' }],
     acceptanceCriteria: ['(WI-1) GIVEN an org WHEN `gitweave org show --json` runs THEN it prints the org'],
     diffStat: '1 file changed', changedFiles: ['src/org.py'],
-    allowed: { commands: [], routes: [], apiPaths: [], apiCommands: ['gitweave org show --json'] },
+    allowed: { commands: [], routes: [], apiPaths: [], apiCommands: ['gitweave org show --json'], portalPages: [] },
   };
 }
 
@@ -102,4 +102,13 @@ test('a first turn carries no revise section', async () => {
   const { queryFn, seen } = replying(`\`\`\`json\n${JSON.stringify(PLAN)}\n\`\`\``);
   await createDemoPlanner({ queryFn }).plan(def, input(), logger);
   assert.doesNotMatch(seen[0]!.prompt, /## Revise/);
+});
+
+test('forge-8vfn.31: declared portal pages are listed as the portal-before-after means; none → (none)', async () => {
+  const { queryFn, seen } = replying(JSON.stringify(PLAN));
+  const base = input();
+  await createDemoPlanner({ queryFn }).plan(def, { ...base, allowed: { ...base.allowed, portalPages: ['/orgs/acme/repositories'] } }, logger);
+  assert.match(seen[0]!.prompt, /Portal pages \(portal-before-after, a page on the project's declared site\):\n- `\/orgs\/acme\/repositories`/);
+  await createDemoPlanner({ queryFn }).plan(def, input(), logger);
+  assert.match(seen[1]!.prompt, /Portal pages \(portal-before-after, a page on the project's declared site\):\n- \(none\)/);
 });

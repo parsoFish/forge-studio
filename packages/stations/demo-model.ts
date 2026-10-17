@@ -59,9 +59,10 @@ export type DemoModelCheckpoint = {
   /** Captured stdout of `command` on the before/after worktree (filled by capture). */
   beforeOutput?: string | null;
   afterOutput?: string | null;
-  /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route to navigate
-   *  to (`server.url + route`) instead of the server root. Validated by `isSafeDemoRoute`. */
+  /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route opened as `server.url + route`. */
   route?: string;
+  /** portal-before-after (forge-8vfn.31): a declared page on the project's portal, opened on its first origin. */
+  page?: string;
   /** A planned screenshot's interaction and outlined regions, driven on both sides (row 4 of forge-nk1y.45). */
   steps?: BrowserStepDecl[];
   regions?: string[];
@@ -665,11 +666,10 @@ export function renderDemoMarkdown(model: DemoModel): string {
     lines.push('');
     if (c.beforeNote) lines.push(`- **Before:** ${c.beforeNote}`);
     if (c.afterNote) lines.push(`- **After:** ${c.afterNote}`);
-    // Captured CLI output — the REAL terminal output before/after, fenced so the PR
-    // artifact shows it (the in-UI review renders it side-by-side).
+    const source = sourceLine(c); // a portal page is named even with no output; a command/GET beside its output
+    if (source && (c.page || c.beforeOutput || c.afterOutput)) lines.push(source);
+    // Captured CLI output — the REAL terminal output before/after, fenced (the in-UI review renders it side-by-side).
     if (c.beforeOutput || c.afterOutput) {
-      const source = sourceLine(c);
-      if (source) lines.push(source);
       const fence = (label: string, out?: string | null): void => {
         if (!out) return;
         lines.push('');

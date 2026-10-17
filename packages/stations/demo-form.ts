@@ -27,6 +27,12 @@ export function validateFormFields(cp: Record<string, unknown>, at: string): str
   if (cp.apiPath !== undefined && (cp.command !== undefined || cp.form !== 'api-before-after')) {
     errors.push(`${at}.apiPath belongs to form api-before-after alone — one driver per checkpoint, never with a command`);
   }
+  if (cp.page !== undefined && (typeof cp.page !== 'string' || !isOwnServerPath(cp.page))) {
+    errors.push(`${at}.page must be a literal path on the declared portal — no scheme, host or traversal (got ${JSON.stringify(cp.page)})`);
+  }
+  if (cp.page !== undefined && (cp.command !== undefined || cp.form !== 'portal-before-after')) {
+    errors.push(`${at}.page belongs to form portal-before-after alone — one driver per checkpoint, never with a command`);
+  }
   return errors;
 }
 
@@ -41,9 +47,10 @@ export function validateNarrative(narrative: unknown): string[] {
 export const narrativeLines = (narrative: string | undefined): string[] =>
   narrative ? ['## What this enables', '', '_Agent narrative — not evidence._', '', narrative.trim(), ''] : [];
 
-/** What a captured checkpoint ran: its command, or the GET on the tree's own server. */
+/** What a captured checkpoint ran: its command, the portal page it opened, or the GET on the tree's own server. */
 export function sourceLine(c: DemoModelCheckpoint): string | null {
   if (c.command) return `- **Command:** \`${c.command}\``;
+  if (c.page) return `- **Page (the project's declared site):** \`${c.page}\``;
   return c.apiPath ? `- **GET (each tree's own server):** \`${c.apiPath}\`` : null;
 }
 
