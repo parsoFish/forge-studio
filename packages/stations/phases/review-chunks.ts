@@ -18,8 +18,9 @@
  * is still not a number anybody invented.
  *
  * Files no work item claims become one final `unattributed` chunk, so nothing
- * escapes review. A SINGLE FILE that still exhausts fails LOUDLY naming the file
- * (ruling 290 as amended by 311) — never skipped, never given more budget.
+ * escapes review. A SINGLE FILE that still exhausts is a PARTIAL chunk naming the
+ * file (forge-mfv5.1.61, `review-partial.ts`) — never skipped silently, never
+ * given more budget, and never the end of the review.
  */
 
 import { createHash } from 'node:crypto';
@@ -214,6 +215,8 @@ type StoredChunk = {
   /** The head it was first reviewed at. Provenance only: never the reuse key. */
   headSha: string;
   record: ReviewFindingsRecord;
+  /** forge-mfv5.1.61: the agent hit its cap here — kept so a re-run knows the split, never reused as a judgment. */
+  partial?: boolean;
 };
 
 /**
@@ -254,6 +257,7 @@ export function readChunkRecord(
   cycleId: string,
   key: string,
   expect: { label: string; diffSha: string },
+  opts: { acceptPartial?: boolean } = {},
 ): ReviewFindingsRecord | null {
   const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, key));
   if (raw === null) return null;
@@ -261,6 +265,7 @@ export function readChunkRecord(
     const stored = JSON.parse(raw) as Partial<StoredChunk>;
     if (stored.label !== expect.label || stored.diffSha !== expect.diffSha) return null;
     if (stored.record === undefined) return null;
+    if (stored.partial === true && opts.acceptPartial !== true) return null; // a cap is re-bought, never reused
     return stored.record;
   } catch {
     return null;

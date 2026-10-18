@@ -21,6 +21,7 @@ function baseInput(): AdversarialReviewUserPromptInput {
     changedFiles: ['src/handler.ts', 'src/router.ts'],
     lenses: ['correctness', 'containment', 'test-strength', 'boundary'],
     brainContext: [{ path: 'brain/projects/fix/profile.md', content: 'Convention: handlers never throw.' }],
+    maxTurns: 50,
   };
 }
 

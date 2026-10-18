@@ -54,6 +54,8 @@ export type AdversarialReviewUserPromptInput = {
   lenses: ReadonlyArray<string>;
   /** ADVISORY project-brain context for the convention-drift lens only. */
   brainContext: ReadonlyArray<{ path: string; content: string }>;
+  /** forge-mfv5.1.61: the agent's declared `budgets.maxTurns`, stated in the prompt's bound. */
+  maxTurns: number;
 };
 
 export function renderAdversarialReviewUserPrompt(input: AdversarialReviewUserPromptInput): string {
@@ -120,7 +122,19 @@ export function renderAdversarialReviewUserPrompt(input: AdversarialReviewUserPr
     '',
     `- \`${REVIEW_INPUT_REL_DIR}/diff.patch\` — the full diff vs ${input.baseRef} (WHERE things changed).`,
     `- \`${REVIEW_INPUT_REL_DIR}/diffstat.txt\` and \`${REVIEW_INPUT_REL_DIR}/changed-files.txt\`.`,
-    '- The live worktree — Read/Grep/Glob for full-file context (WHY the change is right or wrong).',
+    '- The live worktree — Read the changed files whole for context (WHY the change is right or wrong).',
+    '',
+    // forge-mfv5.1.61: gitweave I4's reviewer spent 71 tool calls on one 85-line file and authored nothing.
+    '## Your bound',
+    '',
+    '- Read only the files listed under Changed files, the diff, and the criteria below. Grep only for',
+    '  the direct callers of a symbol the diff changes. Do not browse the repository, its tests or its',
+    '  fixtures beyond that.',
+    '- You cannot run anything: every criterion with a runnable check was already run by the',
+    '  orchestrator and is not listed here.',
+    `- You have ${input.maxTurns} turns. Write \`.forge/${REVIEW_FINDINGS_FILENAME}\` early, as soon as you have`,
+    '  judged the criteria, then rewrite it as you go: a run that reaches its turn cap keeps the file',
+    '  you last wrote, and a run that wrote none reaches the operator as unreviewed.',
     '',
     '## Changed files',
     '',

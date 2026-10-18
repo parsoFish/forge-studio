@@ -104,11 +104,11 @@ test('kills "a work item too large for one pass just fails": the chunk is re-rev
   }
 });
 
-test('kills "the split hides an unreviewable file": a SINGLE file that exhausts fails loudly and NAMES the file', async () => {
+test('kills "the split hides an unreviewable file": a SINGLE file that exhausts is NAMED partial, and the split goes on (forge-mfv5.1.61)', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const fx = makeFixture(THREE);
   try {
-    const { logger } = collectLogger(fx.logsRoot);
+    const { logger, events } = collectLogger(fx.logsRoot);
     let calls = 0;
     const qf = ((_p: { prompt: string }) => {
       calls += 1;
@@ -119,13 +119,12 @@ test('kills "the split hides an unreviewable file": a SINGLE file that exhausts 
     }) as unknown as StreamQueryFn;
 
     const res = await run(fx, qf, logger);
-    assert.equal(res.status, 'failed');
-    assert.equal((res as { reason: string }).reason, 'budget-exhausted');
-    const detail = (res as { detail: string }).detail;
-    assert.match(detail, /SINGLE file/, 'the message says the split has bottomed out');
-    assert.match(detail, /src\.ts|a\.ts|b\.ts/, 'and it names the file, which is the only actionable fact left');
-    assert.doesNotMatch(detail, /raise the declared budgets/, 'widening the budget is still what must not be suggested');
-    assert.equal(calls, 2, 'the work item pass, then the FIRST file — a bottomed-out split stops, it does not grind through the rest');
+    assert.equal(res.status, 'complete', 'a capped file never fails the review');
+    const record = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8'));
+    assert.deepEqual(record.partialChunks.map((c: { chunk: string }) => c.chunk), ['src.ts', 'a.ts', 'b.ts', 'unattributed'], 'every capped file is named, which is the only actionable fact left');
+    const details = events.filter((e) => e.message === 'review.chunk.partial').map((e) => String((e.metadata as Record<string, unknown>).detail));
+    for (const d of details) assert.doesNotMatch(d, /raise the declared budgets/, 'widening the budget is still what must not be suggested');
+    assert.equal(calls, 5, 'the work item pass, then EVERY file once, then the unattributed chunk — a capped file no longer strands the files after it');
   } finally {
     fx.cleanup();
     restore();
@@ -228,7 +227,7 @@ test('kills "a failed pass throws away the chunks that passed": the completed ch
       return gen();
     }) as unknown as StreamQueryFn;
 
-    assert.equal((await run(fx, failing, l1)).status, 'failed', 'the second chunk must still fail the pass');
+    assert.equal((await run(fx, failing, l1)).status, 'complete', 'the capped second chunk is partial, never a failed pass (forge-mfv5.1.61)');
     assert.equal(seen, 2);
     const persisted = e1.find((e) => e.message === 'review.chunk.persisted');
     assert.ok(persisted, 'the chunk that COMPLETED is persisted before the next one is attempted');
@@ -392,10 +391,9 @@ test('kills "a stopped split is paid for twice": each per-file record persists, 
       return gen();
     }) as unknown as StreamQueryFn;
 
-    assert.equal((await run(fx, stopMidSplit, l1)).status, 'failed');
-    const persisted = e1.filter((e) => e.message === 'review.chunk.persisted');
-    assert.equal(persisted.length, 1, 'the ONE per-file review that completed is persisted, on its own, before the next is attempted');
-    assert.equal((persisted[0]!.metadata as Record<string, unknown>).index, '0.0');
+    assert.equal((await run(fx, stopMidSplit, l1)).status, 'complete', 'the bottomed-out file is partial; the split goes on (forge-mfv5.1.61)');
+    const persisted = e1.filter((e) => e.message === 'review.chunk.persisted').map((e) => [(e.metadata as Record<string, unknown>).index, (e.metadata as Record<string, unknown>).partial]);
+    assert.deepEqual(persisted, [['0.0', false], ['0.1', true], ['0.2', false], ['0', true], ['1', true]], 'each per-file review persists on its own, the moment it finishes; a capped one is flagged');
     assert.ok(existsSync(join(fx.logsRoot, CYCLE_ID, 'artifacts', 'review-chunks', 'chunk-0.0.json')));
 
     // Pass 2: nothing fails. The persisted per-file record is REUSED, and the
@@ -404,13 +402,13 @@ test('kills "a stopped split is paid for twice": each per-file record persists, 
     const { logger: l2, events: e2 } = collectLogger(fx.logsRoot);
     const calls = { n: 0 };
     assert.equal((await run(fx, countingStub(fx, calls), l2)).status, 'complete');
-    assert.equal(calls.n, 3, 'two remaining files and the unattributed chunk — NOT the reused file, and NOT the work-item attempt that is known to exhaust at this head');
-    const reused = e2.filter((e) => e.message === 'review.chunk.reused');
-    assert.equal(reused.length, 1);
-    assert.equal((reused[0]!.metadata as Record<string, unknown>).index, '0.0');
+    assert.equal(calls.n, 2, 'only the capped file and the capped unattributed chunk — NOT the reused files, and NOT the work-item attempt that is known to exhaust at this head');
+    const reused = e2.filter((e) => e.message === 'review.chunk.reused').map((e) => (e.metadata as Record<string, unknown>).index);
+    assert.deepEqual(reused, ['0.0', '0.2'], 'a partial record is never reused as a judgment');
     // The split is re-entered without re-deriving it from a failure.
     assert.equal(e2.filter((e) => e.message === 'review.chunk.split').length, 1);
-    assert.equal(e2.filter((e) => e.message === 'review.budget-exhausted').length, 0, 'no spawn was made whose only possible outcome was the exhaustion already recorded');
+    assert.equal(e2.filter((e) => e.message === 'review.chunk.partial').length, 0, 'no spawn was made whose only possible outcome was the exhaustion already recorded');
+    assert.equal(record0(fx).partialChunks, undefined, 'the second pass judged everything');
 
     const record = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8'));
     assert.deepEqual(validateReviewFindings(record, EXPECTED), []);
@@ -419,3 +417,7 @@ test('kills "a stopped split is paid for twice": each per-file record persists, 
     restore();
   }
 });
+
+function record0(fx: Fixture): { partialChunks?: unknown } {
+  return JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8'));
+}

@@ -78,6 +78,8 @@ import { loadAndComposeProjectSkills } from './project-skills.ts';
 export { isSafeRunId } from '@forge/kernel';
 import { isSafeRunId } from '@forge/kernel';
 
+/** forge-mfv5.1.61: the recent tool calls a one-shot result names — enough to say what a capped run was doing. */
+const LAST_TOOLS_KEPT = 5;
 
 function assertSafeRunId(runId: string): void {
   if (!isSafeRunId(runId)) {
@@ -239,6 +241,9 @@ export type RunAgentResult = {
   durationMs?: number;
   /** SDK result subtype (one-shot path) — 'success' | 'error_max_turns' | 'error_max_budget_usd' | …. */
   resultSubtype?: string;
+  /** forge-mfv5.1.61 (one-shot path): tool calls the agent made, and the last few as `<name> <input summary>`. */
+  toolUseCount?: number;
+  lastTools?: string[];
 };
 
 /**
@@ -474,20 +479,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   let spawned: RunAgentResult;
   try {
     if (loopStrategy === 'one-shot') {
-      let toolSeq = 0;
-      const callerOnMessage = ctx.onMessage;
-      const observedCtx: RunContext = {
-        ...ctx,
-        onMessage: (msg) => {
-          callerOnMessage?.(msg);
-          const m = msg as { type?: string; message?: unknown };
-          if (m?.type !== 'assistant') return;
-          const details = extractLiveToolDetails(m.message, toolSeq);
-          for (const detail of details) turnSink.onToolUse(detail);
-          toolSeq += details.length;
-        },
-      };
-      spawned = await runOneShotSpawn(def, observedCtx, spec, runMarker, turnSink);
+      spawned = await runOneShotSpawn(def, ctx, spec, runMarker, turnSink);
     } else {
       spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, runMarker, turnSink);
     }
@@ -625,6 +617,7 @@ async function runOneShotSpawn(
     // other path's heartbeat already means. One event name, one fact.
     let heartbeatHandle: unknown = null;
     let lastTool = '';
+    const lastTools: string[] = [];
     if (turnSink !== undefined) {
       const timers = ctx.heartbeatTimers ?? {
         setInterval: (fn: () => void, ms: number) => setInterval(fn, ms),
@@ -658,6 +651,10 @@ async function runOneShotSpawn(
           for (const detail of details) {
             if (detail.filePath) outputRefs.add(detail.filePath);
             lastTool = detail.name;
+            lastTools.push(`${detail.name} ${detail.inputSummary}`.trim());
+            if (lastTools.length > LAST_TOOLS_KEPT) lastTools.shift();
+            // forge-mfv5.1.61: BOTH lifecycles log the transcript; a 'caller' spawn used to log heartbeats only.
+            turnSink?.onToolUse(detail);
           }
           toolSeq += details.length;
         }
@@ -679,6 +676,7 @@ async function runOneShotSpawn(
         const timers = ctx.heartbeatTimers ?? { clearInterval: (h: unknown) => clearInterval(h as ReturnType<typeof setInterval>) };
         timers.clearInterval(heartbeatHandle);
       }
+      turnSink?.flushIteration(1);
     }
 
     return {
@@ -689,6 +687,8 @@ async function runOneShotSpawn(
       suppressed: false,
       durationMs,
       resultSubtype,
+      toolUseCount: toolSeq,
+      lastTools,
     };
   });
 }
