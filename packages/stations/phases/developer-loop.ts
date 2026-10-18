@@ -14,7 +14,6 @@ import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
 import { sdkHooksForAgent } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
-import { classifyCrash } from '@forge/agents';
 import {
   resolveDevSpawnModel, buildDevSystemPrompt,
   prepareDevWorkspace,
@@ -40,8 +39,8 @@ import { makeToolEventSink } from '@forge/agents';
 import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
-import { createWiWorktree, wedgeKillRunnerError } from '@forge/flows';
-import { closeWiWorktree, devLoopRunList, recordWiOutcome, roundFixWorkItemIds, stopIncompleteFixRound } from './dev-loop-keep.ts';
+import { createWiWorktree } from '@forge/flows';
+import { closeWiWorktree, devLoopRunList, recordWiOutcome, roundFixWorkItemIds, runWithCrashRetry, stopIncompleteFixRound } from './dev-loop-keep.ts';
 import { emitDepsLinkProblems, emitGateEvent, emitGateFeedbackEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
 import { createGateFeedbackTracker, writeMergeConflictFeedback } from './gate-feedback.ts';
 // forge-nk1y.35: the feedback writers moved to gate-feedback.ts; re-exported for their existing tests.
@@ -659,17 +658,13 @@ export async function runDeveloperLoop(
       },
     );
 
-    let result: LoopResult | null = null, acsSatisfied: string[] = []; // acsSatisfied: forge-mfv5.1.43, ticked at close
-    let runnerError: { kind: string; message: string } | undefined;
-    // G3 (plan 2.3): remember the previous crash so classifyCrash can spot an
-    // IDENTICAL repeat — the deterministic no-third-attempt rule.
-    let priorCrashMessage: string | null = null;
-    // F-44: bounded retry on transient agent-subprocess crash only.
-    for (let attempt = 0; attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
-      // R2-03-F4: a wedge-kill mid-flight must not spawn a fresh retry attempt.
-      if (signal?.aborted) { runnerError = wedgeKillRunnerError(signal, 'wedge-kill: node aborted'); break; }
-      runnerError = undefined;
-      try {
+    // `as`: set inside the attempt closure, so the declared type must survive narrowing.
+    let result = null as LoopResult | null, acsSatisfied: string[] = []; // acsSatisfied: forge-mfv5.1.43, ticked at close
+    // F-44: bounded retry on transient agent-subprocess crash only; forge-mfv5.1.60: never under an operator stop.
+    const { runnerError, stoppedByOperator } = await runWithCrashRetry({
+      logger, initiativeId: input.initiativeId, parentEventId: wiStart.event_id, skill: agentDef.slug, workItemId: wi.work_item_id, specPath,
+      signal, operatorStopRequested: input.operatorStopRequested, maxRetries: DEV_AGENT_CRASH_MAX_RETRIES, backoffMs: DEV_AGENT_CRASH_BACKOFF_MS, sleep,
+      attempt: async () => {
         // re-review #1: captured by the gate's onRun each run; read by the
         // runner's gateErrored predicate to stop early on a broken gate.
         let lastGateErrored = false;
@@ -788,77 +783,8 @@ export async function runDeveloperLoop(
         },
         agent,
       );
-      } catch (err) {
-        runnerError = {
-          kind: 'agent_threw',
-          message: err instanceof Error ? err.message : String(err),
-        };
-      }
-
-      // R2-03-F4: a wedge-kill that fires MID-attempt surfaces here as a thrown
-      // abort — it must not be misclassified as a transient agent crash and
-      // retried (that would re-spawn the very work the kill was meant to stop).
-      // Reclassify to `aborted` and break, mirroring the between-attempt guard
-      // at the top of this loop.
-      if (runnerError && signal?.aborted) {
-        runnerError = wedgeKillRunnerError(signal, 'wedge-kill: node aborted mid-attempt');
-        break;
-      }
-
-      // F-44: success (or a real quality-gate `result`) → done, no retry.
-      // Only a thrown agent-subprocess crash is retryable, and only while
-      // attempts remain. A persistent crash exhausts retries → fails as
-      // before. Quality-gate failures come back as `result` (not a throw)
-      // and intentionally fall through here without retry.
-      if (!runnerError || attempt === DEV_AGENT_CRASH_MAX_RETRIES) break;
-      // G3 (plan 2.3): classify the crash BEFORE an identical re-spawn.
-      // Deterministic (context overflow / same crash twice at the same point)
-      // → give up now with a terminal classified event; a further identical
-      // attempt provably repeats the crash and only wastes spend. Transient/
-      // unknown → retry with backoff as before (retry-with-cause).
-      const crashClass = classifyCrash(runnerError.message, priorCrashMessage);
-      if (crashClass.kind === 'deterministic') {
-        logger.emit({
-          initiative_id: input.initiativeId,
-          parent_event_id: wiStart.event_id,
-          phase: 'developer-loop',
-          skill: agentDef.slug,
-          event_type: 'error',
-          input_refs: [specPath],
-          output_refs: [],
-          message: 'dev-loop.crash-deterministic',
-          metadata: {
-            work_item_id: wi.work_item_id,
-            attempts_made: attempt + 1,
-            max_retries: DEV_AGENT_CRASH_MAX_RETRIES,
-            crash_class: crashClass.kind,
-            crash_reason: crashClass.reason,
-            runner_error: runnerError,
-          },
-        });
-        break;
-      }
-      priorCrashMessage = runnerError.message;
-      logger.emit({
-        initiative_id: input.initiativeId,
-        parent_event_id: wiStart.event_id,
-        phase: 'developer-loop',
-        skill: agentDef.slug,
-        event_type: 'log',
-        input_refs: [specPath],
-        output_refs: [],
-        message: 'dev-loop.agent-crash-retry',
-        metadata: {
-          work_item_id: wi.work_item_id,
-          attempt: attempt + 1,
-          max_retries: DEV_AGENT_CRASH_MAX_RETRIES,
-          crash_class: crashClass.kind,
-          crash_reason: crashClass.reason,
-          runner_error: runnerError,
-        },
-      });
-      await sleep(DEV_AGENT_CRASH_BACKOFF_MS);
-    }
+      },
+    });
 
     // F-34b: brain-first runtime gate REMOVED from the dev-loop. Brain
     // context is for design (architect / PM / reflector); the dev agent's
@@ -955,8 +881,8 @@ export async function runDeveloperLoop(
         }
       }
     } else {
-      // M7-A: a cost-ceiling halt settles 'pending' (resumable), not 'failed'.
-      finalStatus = isCostCeilingHalt(result) ? 'pending' : 'failed';
+      // M7-A: a cost-ceiling halt settles 'pending' (resumable), not 'failed'; so does an operator stop (forge-mfv5.1.60).
+      finalStatus = isCostCeilingHalt(result) || stoppedByOperator ? 'pending' : 'failed';
     }
     if (!requeueForMergeConflict && finalStatus !== 'complete') {
       writeWorkItemStatus(specPath, finalStatus);
@@ -1003,6 +929,7 @@ export async function runDeveloperLoop(
         ...(mergeConflict ? { failure_kind: 'merge-conflict', merge_detail: mergeDetail } : {}),
         // M7-A: names the cost ceiling, reusing dispatchWi's failure_kind.
         ...(isCostCeilingHalt(result) ? { failure_kind: 'cost-ceiling' } : {}),
+        ...(stoppedByOperator ? { failure_kind: 'operator-stop' } : {}),
       },
     });
 
@@ -1086,7 +1013,7 @@ export async function runDeveloperLoop(
         // SAME way an environment failure does (they stay pending, not
         // failed) — prerequisiteBlockage generalizes over this single flag
         // regardless of which non-work reason set it.
-        ...(environmentFailure || mergeConflict || isCostCeilingHalt(result) ? { environment: true } : {}),
+        ...(environmentFailure || mergeConflict || isCostCeilingHalt(result) || stoppedByOperator ? { environment: true } : {}),
       });
     }
     } finally {

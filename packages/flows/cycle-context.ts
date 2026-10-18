@@ -159,6 +159,8 @@ export type CycleInput = {
    * stop check).
    */
   shouldStopBeforeWorkItem?: (workItemId: string) => string | null;
+  /** forge-mfv5.1.60 (D-06): injected by `runFlow` — the operator-stop flag is set. An agent that dies under it was stopped, never crashed. */
+  operatorStopRequested?: () => boolean;
   /** M7-A: the SAME tracker's live remaining budget (`Infinity` while
    *  unenforced), read every Ralph iteration by `dev-cost-bound.ts`. */
   remainingCostBudgetUsd?: () => number;
