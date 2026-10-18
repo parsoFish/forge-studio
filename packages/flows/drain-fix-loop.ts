@@ -291,7 +291,7 @@ export async function drainPendingFixWorkItems(
         resumeFrom: 'develop',
         ...(deps.logsRoot ? { logsRoot } : {}),
       };
-      let halted = false;
+      let inFailed = false;
       const headBefore = worktreeHeadSha(worktreePath);
       try {
         // A THROWN cycle (runCycle classifies and returns every failure inside its own try) keeps the pinned
@@ -311,7 +311,7 @@ export async function drainPendingFixWorkItems(
             annotateManifest(inFlightPath, { round_halt: halt.classification, round_halt_reason: JSON.stringify(halt.reason).replace(/\$/g, '\\u0024') }); // `$` is a String.replace pattern there
           } catch (err) { deps.notify?.(`${initiativeId} · halted round's manifest record not written: ${err instanceof Error ? err.message : String(err)}`); }
           try { moveTo(file, 'failed', paths); } catch (err) { throw new Error(`fix round halted, but the move to failed/ failed: ${err instanceof Error ? err.message : String(err)}`); }
-          halted = true;
+          inFailed = true;
           deps.notify?.(`${initiativeId} · fix round ${round} halted (${halt.classification}): ${halt.reason} — fix the worktree, then Requeue`);
           out.push({ initiativeId, status: 'halted', detail: halt.reason });
           continue;
@@ -332,13 +332,21 @@ export async function drainPendingFixWorkItems(
             metadata: { round, head_sha: worktreeHeadSha(worktreePath), cycle_status: result.status },
           });
         } catch { /* best-effort — never fail the drain on logging */ }
+        // forge-mfv5.1.62: a failed round that leaves no fix WI pending (gitweave I4: the fix WI delivered, the review
+        // failed) has nothing the drain can re-run — it lands in failed/, the scheduler's own placement for a failed
+        // cycle, where Requeue resumes it; ready-for-review/ is for a round that reached its verdict gate.
+        // A failed fix WI with no recorded halt stays: the drain parks it needs-operator, and a send-back supersedes it.
+        if (result.status === 'failed' && after.length === 0 && failedFixWorkItemIds(worktreePath).length === 0) {
+          try { moveTo(file, 'failed', paths); } catch (err) { throw new Error(`fix round failed with no fix work item pending, but the move to failed/ failed: ${err instanceof Error ? err.message : String(err)}`); }
+          inFailed = true;
+        }
         out.push({ initiativeId, status: 'drained', detail: result.status });
       } finally {
         clearInterval(heartbeat);
         // Closure is the single terminal-move authority. If the cycle
         // threw/crashed before closure, the manifest is stranded in in-flight —
         // return it to ready-for-review so it's never lost.
-        if (!halted && existsSync(inFlightPath)) {
+        if (!inFailed && existsSync(inFlightPath)) {
           try { moveTo(file, 'ready-for-review', paths); } catch { /* best-effort */ }
         }
       }

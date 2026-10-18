@@ -240,6 +240,7 @@ test('runRequeue: non-resume requeue REMOVES stale <id>.pr-feedback.md', () => {
 
 import { execFileSync } from 'node:child_process';
 import { serializeWorkItem, type WorkItem } from '../../work-item.ts';
+import { failureCauseEvents } from '../test-fixtures/failure-cause-events.ts';
 
 const N7_INIT = 'INIT-2026-05-24-rq-test';
 
@@ -295,7 +296,7 @@ function n7Worktree(root: string, statuses: Array<WorkItem['status']>): string {
   return wt;
 }
 
-/** Cycle log with a failure_classification event. */
+/** Cycle log with the failure's cause and its failure_classification record. */
 function n7CycleLog(root: string, cycleId: string, environment: boolean): void {
   const dir = join(root, '_logs', cycleId);
   mkdirSync(dir, { recursive: true });
@@ -313,7 +314,9 @@ function n7CycleLog(root: string, cycleId: string, environment: boolean): void {
       ? { failure_mode: 'transient', recoverable: true, environment: true, reason: 'rate-limited (environment failure)' }
       : { failure_mode: 'terminal', recoverable: false, environment: false, reason: 'unifier did not pass' },
   };
-  writeFileSync(join(dir, 'events.jsonl'), JSON.stringify(entry) + '\n');
+  // forge-mfv5.1.62: the cause first — the classifier re-reads it; the record is not the input.
+  const cause = failureCauseEvents(environment ? 'environment' : 'terminal', N7_INIT);
+  writeFileSync(join(dir, 'events.jsonl'), [...cause, entry].map((e) => JSON.stringify(e)).join('\n') + '\n');
 }
 
 function n7Manifest(worktreePath: string, projectRepoPath: string, cycleId: string): string {

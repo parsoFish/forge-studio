@@ -20,6 +20,7 @@ import { join } from 'node:path';
 
 import { inferRequeueResume, readPriorFailureSignalFromLog, strandedFailureClassification } from '../../requeue-resume.ts';
 import { serializeWorkItem, type WorkItem } from '../../work-item.ts';
+import { failureCauseEvents } from '../test-fixtures/failure-cause-events.ts';
 
 const I4 = 'INIT-2026-10-17-i4-modules-overlays';
 const CYCLE = `2026-10-17T02-17-04_${I4}`;
@@ -97,7 +98,8 @@ test('control: a genuine code failure (terminal classification, no strand) still
 });
 
 test('the LATEST signal wins: a terminal classification written after a strand (a later attempt) is read, not the strand', () => {
-  const f = i4Root([I4_STRANDED_ROW, TERMINAL]);
+  // A later attempt opens with its own cycle.start (forge-mfv5.1.62: a record in the strand's own attempt is boot's, and the strand is its cause).
+  const f = i4Root([I4_STRANDED_ROW, row('cycle.start', {}), ...failureCauseEvents('terminal', I4).map((e) => JSON.stringify(e)), TERMINAL]);
   try {
     assert.deepEqual(readPriorFailureSignalFromLog(logOf(f.root)), { environment: false, cleanBoundaryHalt: false });
   } finally {
@@ -123,7 +125,8 @@ test('one contract: the classification a strand maps to is the reader\'s own fai
   assert.equal(c.recoverable, false, 'a boot never re-dispatches (D-06) — the operator Requeues');
   assert.equal(c.failure_kind, 'terminal');
   assert.match(String(c.reason), /stale-heartbeat/);
-  const f = i4Root([row('failure_classification', c)]);
+  // The boot's own pair (scheduler-sweeps.ts announceRecovery): the strand, then the record it stands for — the strand is the cause read.
+  const f = i4Root([stranded('stale-heartbeat', true), row('failure_classification', c)]);
   try {
     assert.deepEqual(readPriorFailureSignalFromLog(logOf(f.root)), { environment: false, cleanBoundaryHalt: true });
   } finally {
@@ -136,6 +139,27 @@ test('a strand of a run that was itself a narrow pr-open re-entry keeps resume_f
   try {
     assert.deepEqual(readPriorFailureSignalFromLog(logOf(f.root)), { environment: true, cleanBoundaryHalt: false, resumeFrom: 'pr-open' });
     assert.equal(strandedFailureClassification({ reason: 'stale-heartbeat', stopFlag: false, resumeFrom: 'develop' })?.resume_from, undefined, 'only the narrow markers pass through');
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('forge-mfv5.1.62: the record boot writes after its strand is read as the strand (its cause), and a later attempt\'s own record is re-classified', () => {
+  const stopped = i4Root([I4_STRANDED_ROW, row('failure_classification', { environment: true, cleanBoundaryHalt: false })]);
+  const later = i4Root([I4_STRANDED_ROW, row('cycle.start', {}), ...failureCauseEvents('review', I4).map((e) => JSON.stringify(e)), TERMINAL]);
+  try {
+    assert.deepEqual(readPriorFailureSignalFromLog(logOf(stopped.root)), { environment: false, cleanBoundaryHalt: true }, 'the strand (stop flag set) is the cause, not the record beside it');
+    assert.deepEqual(readPriorFailureSignalFromLog(logOf(later.root)), { environment: false, cleanBoundaryHalt: false, resumeFrom: 'review' });
+  } finally {
+    rmSync(stopped.root, { recursive: true, force: true });
+    rmSync(later.root, { recursive: true, force: true });
+  }
+});
+
+test('forge-mfv5.1.62: a strand is not the cause of a record written after it with other events between (a wedged run that later failed)', () => {
+  const f = i4Root([I4_STRANDED_ROW, row('failure_classification', { environment: true }), ...failureCauseEvents('terminal', I4).map((e) => JSON.stringify(e)), TERMINAL]);
+  try {
+    assert.deepEqual(readPriorFailureSignalFromLog(logOf(f.root)), { environment: false, cleanBoundaryHalt: false });
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

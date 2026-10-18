@@ -46,8 +46,10 @@ import { join } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
 import { isSafeCycleId } from './manifest-path-guard.ts';
-import { readPendingFixWorkItems, resumableFixWorkItems } from './fix-work-items.ts';
+import { readPendingFixWorkItems, resumableFixWorkItems, supersededFixWorkItemsIn } from './fix-work-items.ts';
 import { fixRoundDeliveredHead, fixRoundHeadVerdict } from '@forge/contracts';
+import { classifyCycleFailure } from '@forge/agents';
+import type { EventLogEntry } from '@forge/kernel';
 
 export type RequeueResumeDecision =
   | { resume: false; reason: string }
@@ -66,8 +68,8 @@ export type RequeueResumeDecision =
       reason: string;
     };
 
-/** WI status summary read from the preserved worktree. */
-export type WorkItemStatusSummary = { total: number; complete: number };
+/** WI status summary read from the preserved worktree; forge-mfv5.1.62 (D-20): a superseded fix WI is resolved, left out of `total`. */
+export type WorkItemStatusSummary = { total: number; complete: number; superseded?: number };
 
 /**
  * M7 row 150 addendum (ruling 1794, round 3): whether the prior cycle was an
@@ -112,10 +114,12 @@ export function strandedFailureClassification(s: { reason: unknown; stopFlag: un
 }
 
 /**
- * Read the prior cycle's latest `failure_classification` — or `recovery.stranded-classified`,
- * mapped through `strandedFailureClassification` (forge-mfv5.1.54) — straight from its
- * `events.jsonl` path. Missing log / no such event both yield the all-false signal — the
- * caller then behaves exactly as it would for an unclassified failure (fresh re-run).
+ * Classify the prior cycle's latest failure straight from its `events.jsonl` path: a failure
+ * `cycle.ts` recorded is re-classified from the events before its record
+ * (`derivedFailureClassification`, forge-mfv5.1.62); a strand boot recorded
+ * (`recovery.stranded-classified`, and the record boot writes after it) maps through
+ * `strandedFailureClassification` (forge-mfv5.1.54). Missing log / no such event both yield the
+ * all-false signal — the caller then behaves exactly as it would for an unclassified failure (fresh re-run).
  *
  * row 163 (S10 run 42, ruling 1899): factored out of `readPriorFailureSignal`
  * so `scheduler-run-one.ts`'s own end-of-attempt cleanup can read the SAME
@@ -126,14 +130,29 @@ export function strandedFailureClassification(s: { reason: unknown; stopFlag: un
  */
 export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSignal {
   const events = readLogEvents(logPath) ?? [];
-  const e = events[lastIndex(events, (ev) => ev.message === 'failure_classification' || ev.message === 'recovery.stranded-classified')];
-  const md = e?.message === 'recovery.stranded-classified' ? strandedFailureClassification({ reason: e.metadata?.reason, stopFlag: e.metadata?.stop_flag, resumeFrom: e.metadata?.resume_from }) : e?.metadata;
+  const at = lastIndex(events, (ev) => ev.message === 'failure_classification' || ev.message === 'recovery.stranded-classified');
+  if (at < 0) return NO_PRIOR_FAILURE_SIGNAL;
+  // Boot writes its record directly after its strand event (scheduler-sweeps.ts announceRecovery): that pair is read as the strand.
+  const strandAt = events[at]!.message === 'recovery.stranded-classified' ? at : events[at - 1]?.message === 'recovery.stranded-classified' ? at - 1 : -1;
+  const strand = strandAt >= 0 ? events[strandAt]!.metadata ?? {} : undefined;
+  const derived = strand ? null : derivedFailureClassification(events, at);
+  const md = derived ? { ...derived, resume_from: derived.resumeFrom } : strandedFailureClassification({ reason: strand?.reason, stopFlag: strand?.stop_flag, resumeFrom: strand?.resume_from });
   if (!md) return NO_PRIOR_FAILURE_SIGNAL;
   return {
     environment: md.environment === true,
     cleanBoundaryHalt: md.cleanBoundaryHalt === true,
     ...(md.resume_from === 'plan' || md.resume_from === 'pr-open' || md.resume_from === 'review' ? { resumeFrom: md.resume_from as 'plan' | 'pr-open' | 'review' } : {}),
   };
+}
+
+/**
+ * forge-mfv5.1.62 (D-20): a stored `failure_classification` is a record, never the input — the CURRENT classifier
+ * re-reads the events it was derived from (everything before it), so older code's record (gitweave I4's, without
+ * #1234's `resume_from: review`) reads as the classifier reads it now; this code's record derives identical to itself.
+ */
+export function derivedFailureClassification(events: readonly LogEvent[], recordAt: number): ReturnType<typeof classifyCycleFailure> {
+  // The lines are the logger's own EventLogEntry records; LogEvent is this file's narrow read view of them.
+  return classifyCycleFailure(events.slice(0, recordAt) as unknown as readonly EventLogEntry[]);
 }
 
 /** forge-mfv5.1.60 (D-06): the latest attempt ended stranded (boot classified it) — its dev loop died without recording its WIs' outcomes. */
@@ -194,10 +213,12 @@ export function derivePmValidationErrors(logPath: string): string[] {
  */
 export function roundHaltFromLog(logPath: string): { classification: string; reason: string } | null {
   const events = readLogEvents(logPath) ?? [];
-  const attempt = events.slice(Math.max(0, lastIndex(events, (e) => e.message === 'cycle.start')));
-  const cls = attempt[lastIndex(attempt, (e) => e.message === 'failure_classification')]?.metadata;
-  if (cls?.failure_kind === 'transient' || cls?.cleanBoundaryHalt === true) return null;
-  const classification = cls?.failure_kind === 'terminal' ? 'terminal' : 'UNKNOWN'; // a closed set: it is written raw into the manifest
+  const start = Math.max(0, lastIndex(events, (e) => e.message === 'cycle.start'));
+  const attempt = events.slice(start);
+  const recordAt = lastIndex(attempt, (e) => e.message === 'failure_classification');
+  const cls = recordAt < 0 ? undefined : derivedFailureClassification(events, start + recordAt);
+  if (cls?.kind === 'transient' || cls?.cleanBoundaryHalt === true) return null;
+  const classification = cls?.kind === 'terminal' ? 'terminal' : 'UNKNOWN'; // a closed set: it is written raw into the manifest
   const error = attempt[lastIndex(attempt, (e) => e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end')]?.metadata?.error;
   const reason = typeof error === 'string' ? error.replace(/^\w*Error: /, '') : typeof cls?.reason === 'string' ? cls.reason : 'the run failed with no failure classification and no error recorded in its attempt';
   return { classification, reason };
@@ -328,9 +349,11 @@ export function summarizeWorkItemStatuses(worktreePath: string): WorkItemStatusS
   try {
     const { items } = readWorkItemsFromDir(dir);
     if (items.length === 0) return null;
+    const { superseded } = supersededFixWorkItemsIn(items);
     return {
-      total: items.length,
+      total: items.length - superseded.length,
       complete: items.filter((i) => i.status === 'complete').length,
+      superseded: superseded.length,
     };
   } catch {
     return null;
