@@ -29,7 +29,7 @@ import { runPmRepairLoop, validatePmSet } from './pm-set-repair.ts';
 import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '@forge/flows';
 import { requireCycleId } from './cycle-id.ts';
-import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
+import { makeToolEventSink } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
@@ -310,16 +310,14 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   let turnWarningEmitted = false;
   const turnWarningThreshold = Math.ceil(pmMaxTurns * PM_TURN_WARNING_FRACTION);
 
-  // Phase A — per-tool live telemetry for the PM (no work-item yet).
-  // The PM feeds the sink manually via `extractLiveToolDetails` from the
-  // onMessage observer rather than `createClaudeAgent`'s `onToolUse`.
+  // Phase A — per-tool live telemetry for the PM (no work-item yet). runAgent
+  // feeds the sink from the stream (forge-mfv5.1.61); the PM flushes it below.
   const pmToolSink = makeToolEventSink(logger, {
     initiativeId: input.initiativeId,
     parentEventId,
     phase: 'project-manager',
     skill: def.slug,
   });
-  let pmToolSeq = 0;
 
   const spawn = repairMode ? { costUsd: 0, durationMs: 0, resultSubtype: 'success' } : await runAgent(def, {
     runId: requireCycleId(input, 'runProjectManager'),
@@ -363,10 +361,6 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
         });
       }
       tallyToolUse(m.message, toolUseSummary);
-      for (const detail of extractLiveToolDetails(m.message, pmToolSeq)) {
-        pmToolSink.onToolUse(detail);
-        pmToolSeq = detail.seq;
-      }
     },
     queryFn,
   });

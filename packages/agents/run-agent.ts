@@ -676,7 +676,6 @@ async function runOneShotSpawn(
         const timers = ctx.heartbeatTimers ?? { clearInterval: (h: unknown) => clearInterval(h as ReturnType<typeof setInterval>) };
         timers.clearInterval(heartbeatHandle);
       }
-      turnSink?.flushIteration(1);
     }
 
     return {

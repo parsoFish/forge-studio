@@ -59,16 +59,16 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,108 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 55 | 12,134 | **10,337** | ratified 10,337 — forge-8vfn.31: `demoMeans.portal` (`demo-portal.ts`) and the `portal-before-after` plan form; +94 measured on this PR's tree after a read for slack (−8), lane-ratified (≤100, ruling 666). |
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
-| `agents` | 46 | 12,630 | **12,630** | ratified 12,630 — forge-mfv5.1.61: a caller-lifecycle one-shot spawn logs its `tool.*` events and names its last tools; a review failure classifies `resumeFrom: review`; +1 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
+| `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
 | `flows` | 97 | 26,825 | **26,626** | ratified 26,626 — forge-mfv5.1.61: `resume_from: review` (manifest, requeue inference, re-entry) and the findings record's `partialChunks`; +38 measured on this PR's tree after a read for slack, lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,452 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 57 | 13,779 | **13,779** | ratified 13,779 — forge-mfv5.1.61: a turn-capped review chunk is partial, never a failed review (`review-partial.ts`); the reviewer is told its bound; integrate skips on a review resume; +77 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
+| `stations` | 57 | 13,771 | **13,771** | ratified 13,771 — forge-mfv5.1.61: a turn-capped review chunk is partial, never a failed review (`review-partial.ts`); the reviewer is told its bound; integrate skips on a review resume; +69 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **540** | **139,292** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **540** | **139,283** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -384,7 +384,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/notify.ts | flows | verbatim | 73 |
 | packages/agents/phase-agent.ts | agents | verbatim | 101 |
 | packages/stations/phases/adversarial-review-binding.ts | stations | verbatim | 180 |
-| packages/stations/phases/adversarial-review.ts | stations | verbatim | 745 |
+| packages/stations/phases/adversarial-review.ts | stations | verbatim | 743 |
 | packages/stations/phases/review-refusal.ts | stations | rewritten | 135 |
 | packages/stations/phases/review-input-scope.ts | stations | rewritten | 76 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
@@ -415,7 +415,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 395 |
-| packages/stations/phases/project-manager.ts | stations | verbatim | 727 |
+| packages/stations/phases/project-manager.ts | stations | verbatim | 721 |
 | packages/stations/phases/pm-acceptance-gate.ts | stations | rewritten | 183 |
 | packages/stations/phases/pm-set-repair.ts | stations | rewritten | 203 **New file, forge-mfv5.1.34 (D-49):** the PM's set validation as one list of named errors + the bounded repair turns; replaces `runPmAcceptanceRevise` and the validate/revise block of `project-manager.ts`. |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
@@ -477,7 +477,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 497 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
-| packages/agents/run-agent.ts | agents | verbatim | 800 |
+| packages/agents/run-agent.ts | agents | verbatim | 799 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 47 |
 | packages/flows/run-model-derive-status.ts | flows | verbatim | 518 |

@@ -528,6 +528,7 @@ async function reviewInitiative(
         // chunk (ruling 526) — `kickoffCeilingUsd` wins over the agent's own budget.
         let spawn;
         const refusalTracker = trackSpawnRefusal();
+        const toolSink = makeToolEventSink(logger, { initiativeId: input.initiativeId, parentEventId: input.cycleId, phase: 'orchestrator', skill: def.slug });
         try {
           spawn = await runAgent(def, {
             runId: requireCycleId(input, 'adversarialReview'),
@@ -537,12 +538,7 @@ async function reviewInitiative(
             systemPrompt,
             lifecycle: 'caller',
             logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
-            turnSink: makeToolEventSink(logger, {
-              initiativeId: input.initiativeId,
-              parentEventId: input.cycleId,
-              phase: 'orchestrator',
-              skill: def.slug,
-            }),
+            turnSink: toolSink,
             ...(opts.heartbeatTimers !== undefined ? { heartbeatTimers: opts.heartbeatTimers } : {}),
             streamGuard: { label: def.slug, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
@@ -552,13 +548,15 @@ async function reviewInitiative(
             ...writeFence,
           });
         } catch (err) {
+          toolSink.flushIteration(attempt);
           const detail = err instanceof Error ? err.message : String(err);
           // 'spawn-error' (not '…failed') — the failure-classifier's reviewer
           // signature matches 'review'+'failed' substrings (finding #12).
           emit('review.spawn-error', { detail, attempt, chunk: label }, { event_type: 'error' });
           return { ok: false, failure: { status: 'failed', reason: 'spawn-failed', detail } };
         }
-        emit('review.agent-pass', { attempt, chunk: label, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
+        toolSink.flushIteration(attempt); // what the sampler dropped is said, never silent
+        emit('review.agent-pass', { attempt, chunk: label, result_subtype: spawn.resultSubtype, tool_use_count: spawn.toolUseCount ?? 0 }, { cost_usd: spawn.costUsd });
 
         // Only a turn/budget cap degrades (forge-mfv5.1.61, below); every other error_* subtype
         // (e.g. error_during_execution) is a spawn failure (finding #3).
