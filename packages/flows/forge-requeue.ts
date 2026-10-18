@@ -46,7 +46,8 @@ import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, persistManifestSpecs, serializeManifest } from './manifest.ts';
 import { readWorkItemsFromDir } from './work-item.ts';
 import { KICKOFF_SOURCE_FLOW_ID } from '@forge/contracts';
-import { FixRoundRefusedError, fixRoundHeadRefusal, haltedFixIds, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, unmergedBranchCommits, type RequeueResumeDecision } from './requeue-resume.ts';
+import { FixRoundRefusedError, fixRoundHeadRefusal, haltedFixIds, inferRequeueResume, latestCycleEndStatus, readPriorFailureSignal, recordedPmValidationErrors, strandedAtBoot, unmergedBranchCommits, type RequeueResumeDecision } from './requeue-resume.ts';
+import { keepStrandedWorkItems } from './wi-worktree.ts';
 import { emitOrchestratorEvent } from './orchestrator-event.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
@@ -238,6 +239,11 @@ export function runRequeue(
     opts.resumeFromIntegrate && !priorFailure.cleanBoundaryHalt && !fixRound
       ? { resume: true, resume_from: 'integrate', reason: 'operator-requested --resume-from=integrate' }
       : inferred;
+  // forge-mfv5.1.60 (D-06): a stranded run's stopped WIs resume from their committed branches, never parked and re-cut —
+  // first, so an unanswerable branch refuses before any mutation.
+  if (resumeDecision.resume && projectRepoPath !== '' && existsSync(projectRepoPath) && existsSync(worktreePath) && strandedAtBoot(cycleLog)) {
+    for (const k of keepStrandedWorkItems({ worktreePath, projectRepoPath, initiativeId })) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'wi.kept-at-classification', { initiative_id: initiativeId, ...k });
+  }
   if (fixRound) {
     const logPath = join(forgeRoot, '_logs', manifest.cycle_id ?? initiativeId, 'events.jsonl');
     const refusal = fixRoundHeadRefusal({ worktreePath, logPath, projectRepoPath, branch: `forge/${initiativeId}` });
