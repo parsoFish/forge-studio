@@ -72,7 +72,7 @@ const FAILED_CONTROLS: RunControl[] = [
     action: 'requeue-run',
     label: 'Requeue',
     // `POST /api/recovery/:id/requeue { resetRetries: true }`.
-    detail: 'Re-runs the flow from the start on a fresh worktree, and resets the retry count. Asks first if that would delete branch commits not on origin/main.',
+    detail: 'Re-runs the flow from where its failure allows — only the review after a review failure, else from the start on a fresh worktree — and resets the retry count. Asks first if that would delete branch commits not on origin/main.',
     destructive: false,
   },
   {

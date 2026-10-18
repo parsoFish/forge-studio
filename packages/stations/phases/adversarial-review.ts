@@ -55,6 +55,8 @@ import {
 } from './adversarial-review-binding.ts';
 import { trackSpawnRefusal, spawnRefusalFailure, harvestFindings } from './review-refusal.ts';
 import { REVIEW_GIT_MAX_BUFFER_BYTES, agentTouchedPaths, parseNumstatZ, scopeChunks } from './review-input-scope.ts';
+import { capDetail, isCapExhaustion, partialChunk, unreviewedRecord } from './review-partial.ts';
+import type { PartialChunk } from '@forge/flows';
 
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;
@@ -84,7 +86,7 @@ export type AdversarialReviewResult =
   | {
       status: 'failed';
       reason:
-        | 'derive-failed' | 'author-invalid' | 'scope-violation' | 'budget-exhausted'
+        | 'derive-failed' | 'author-invalid' | 'scope-violation'
         | 'spawn-suppressed' | 'spawn-failed' | 'lens-narrowing-invalid' | 'rate-limited';
       detail: string;
     };
@@ -166,6 +168,11 @@ function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: s
     return { ok: false, out: '', err: stderr.slice(-500) };
   }
 }
+
+/** One chunk's review: its record (with any chunk that hit its cap named), or the failure that ends the review. */
+type ChunkOutcome =
+  | { ok: true; record: ReviewFindingsRecord; partials: PartialChunk[] }
+  | { ok: false; failure: AdversarialReviewResult };
 
 type ReviewOpts = {
   queryFn?: StreamQueryFn;
@@ -459,6 +466,12 @@ async function reviewInitiative(
       return null;
     };
 
+    /** A partial record is kept flagged: it marks a known split, and is re-bought, never reused. */
+    const persist = (key: string, label: string, sha: string, o: { record: ReviewFindingsRecord; partials: PartialChunk[] }): void => {
+      const at = writeChunkRecord(input.logsRoot, input.cycleId, key, { label, diffSha: sha, headSha, record: o.record, ...(o.partials.length > 0 ? { partial: true } : {}) });
+      emit('review.chunk.persisted', { chunk: label, index: key, partial: o.partials.length > 0, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
+    };
+
     const reviewChunk = async (
       chunk: ReviewChunk,
       derived: { diff: string; stat: string },
@@ -467,7 +480,7 @@ async function reviewInitiative(
       // actionable fact left, and inheriting the work item's label would report
       // the same anonymous failure ruling 290 exists to forbid.
       labelOverride?: string,
-    ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
+    ): Promise<ChunkOutcome> => {
       const label = labelOverride ?? chunkLabel(chunk);
       const wi = chunk.workItemId === null ? undefined : byId.get(chunk.workItemId);
       const criteria = wi ? agentCriteriaOf(wi) : [];
@@ -488,6 +501,7 @@ async function reviewInitiative(
         changedFiles: [...chunk.files],
         lenses,
         brainContext,
+        maxTurns: def.budgets.maxTurns!, // asserted declared by assertAdversarialReviewDeclaration
       });
 
       // Guard integrity fails LOUD in both directions (finding #1): a failed
@@ -514,6 +528,7 @@ async function reviewInitiative(
         // chunk (ruling 526) — `kickoffCeilingUsd` wins over the agent's own budget.
         let spawn;
         const refusalTracker = trackSpawnRefusal();
+        const toolSink = makeToolEventSink(logger, { initiativeId: input.initiativeId, parentEventId: input.cycleId, phase: 'orchestrator', skill: def.slug });
         try {
           spawn = await runAgent(def, {
             runId: requireCycleId(input, 'adversarialReview'),
@@ -523,12 +538,7 @@ async function reviewInitiative(
             systemPrompt,
             lifecycle: 'caller',
             logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
-            turnSink: makeToolEventSink(logger, {
-              initiativeId: input.initiativeId,
-              parentEventId: input.cycleId,
-              phase: 'orchestrator',
-              skill: def.slug,
-            }),
+            turnSink: toolSink,
             ...(opts.heartbeatTimers !== undefined ? { heartbeatTimers: opts.heartbeatTimers } : {}),
             streamGuard: { label: def.slug, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
@@ -538,41 +548,20 @@ async function reviewInitiative(
             ...writeFence,
           });
         } catch (err) {
+          toolSink.flushIteration(attempt);
           const detail = err instanceof Error ? err.message : String(err);
           // 'spawn-error' (not '…failed') — the failure-classifier's reviewer
           // signature matches 'review'+'failed' substrings (finding #12).
           emit('review.spawn-error', { detail, attempt, chunk: label }, { event_type: 'error' });
           return { ok: false, failure: { status: 'failed', reason: 'spawn-failed', detail } };
         }
-        emit('review.agent-pass', { attempt, chunk: label, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
+        toolSink.flushIteration(attempt); // what the sampler dropped is said, never silent
+        emit('review.agent-pass', { attempt, chunk: label, result_subtype: spawn.resultSubtype, tool_use_count: spawn.toolUseCount ?? 0 }, { cost_usd: spawn.costUsd });
 
-        // Only budget/turn kills are exhaustion; other error_* subtypes (e.g.
-        // error_during_execution) are spawn failures — telling the operator to
-        // raise budgets for those is a misdiagnosis (finding #3).
-        if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_max_')) {
-          emit('review.budget-exhausted', { result_subtype: spawn.resultSubtype, attempt, chunk: label }, { event_type: 'error' });
-          // Ruling 290: name the chunk. A budget kill on ONE work item is a
-          // fact about that work item's diff, and reporting it anonymously is
-          // what made G2's failure unactionable. Never skipped, never retried
-          // with a wider budget.
-          return {
-            ok: false,
-            failure: {
-              status: 'failed',
-              reason: 'budget-exhausted',
-              detail:
-                `${label} is too large for review: its spawn was terminated by the SDK (${spawn.resultSubtype}). ` +
-                (chunk.files.length === 1
-                  // Bottomed out: one file's own diff exceeded the pass. There is
-                  // no smaller unit to cut to, so the fact worth reporting is the
-                  // FILE — and the action is still upstream, never the budget.
-                  ? `The chunk is a SINGLE file and cannot be split further: ${chunk.files[0]}. ` +
-                    `Split the work item, not the budget.`
-                  : `${chunk.files.length} file(s) in this chunk. Split the work item, not the budget.`),
-            },
-          };
-        }
-        if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+        // Only a turn/budget cap degrades (forge-mfv5.1.61, below); every other error_* subtype
+        // (e.g. error_during_execution) is a spawn failure (finding #3).
+        const capped = isCapExhaustion(spawn.resultSubtype);
+        if (!capped && spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
           emit('review.spawn-error', { result_subtype: spawn.resultSubtype, attempt, chunk: label }, { event_type: 'error' });
           return {
             ok: false,
@@ -608,18 +597,24 @@ async function reviewInitiative(
         }
 
         // Band 4 — harvest + validate (+ identity-echo verification).
-        const harvest = harvestFindings(
-          findingsAbs,
-          findingsRel,
-          { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha },
-          { lenses, criteria, scope: `chunk ${label}` },
-        );
+        const harvest = harvestFindings(findingsAbs, findingsRel, runIdentity, { lenses, criteria, scope: `chunk ${label}` });
+        if (capped) {
+          // forge-mfv5.1.61: the cap ends this chunk PARTIAL, never the review — the agent's own early
+          // file when it is valid, else the orchestrator's `unreviewed` finding naming the files.
+          const capSpawn = { ...spawn, resultSubtype: spawn.resultSubtype! };
+          const detail = capDetail(label, capSpawn);
+          const partial = partialChunk(label, chunk, capSpawn, harvest.ok ? 'agent' : 'orchestrator');
+          emit('review.chunk.partial', { chunk: label, work_item_id: chunk.workItemId, files: chunk.files, result_subtype: spawn.resultSubtype,
+            tool_use_count: partial.toolUses, last_tools: partial.lastTools, source: partial.source, attempt, detail }); // a log: a split may still cure it
+          const record = harvest.ok ? harvest.record : unreviewedRecord({ identity: runIdentity, files: chunk.files, criteria, lenses, detail });
+          return { ok: true, record, partials: [partial] };
+        }
         if (!harvest.ok) {
           lastErrors = harvest.errors;
           emit('review.author.invalid', { attempt, chunk: label, errors: harvest.errors });
           continue;
         }
-        return { ok: true, record: harvest.record };
+        return { ok: true, record: harvest.record, partials: [] };
       }
       return { ok: false, failure: { status: 'failed', reason: 'author-invalid', detail: `${label}: ${lastErrors.join('; ')}` } };
     };
@@ -634,8 +629,9 @@ async function reviewInitiative(
     const reviewSplit = async (
       chunk: ReviewChunk,
       index: number,
-    ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
+    ): Promise<ChunkOutcome> => {
       const subs: Array<{ label: string; record: ReviewFindingsRecord }> = [];
+      const partials: PartialChunk[] = [];
       for (const [subIndex, sub] of splitChunkPerFile(chunk).entries()) {
         const subLabel = sub.files[0]!;
         const subKey = `${index}.${subIndex}`;
@@ -649,18 +645,18 @@ async function reviewInitiative(
           continue;
         }
         const subOutcome = await reviewChunk(sub, subDerived, subLabel);
-        // A file that exhausts on its own has bottomed out — reported by
-        // `reviewChunk` with the file named, and NOT ground through the
-        // remaining files, which would buy nothing and cost a spawn each.
         if (!subOutcome.ok) return { ok: false, failure: subOutcome.failure };
-        const at = writeChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, diffSha: subDiffSha, headSha, record: subOutcome.record });
-        emit('review.chunk.persisted', { chunk: subLabel, index: subKey, path: at ?? '(not persisted — this file will be re-reviewed)' });
+        // forge-mfv5.1.61: a file that hits the cap is PARTIAL and the split goes on — the
+        // files after it are each their own bounded spawn, and stopping here discarded them.
+        persist(subKey, subLabel, subDiffSha, subOutcome);
         subs.push({ label: subLabel, record: subOutcome.record });
+        partials.push(...subOutcome.partials);
       }
-      return { ok: true, record: mergeSplitRecords(subs) };
+      return { ok: true, record: mergeSplitRecords(subs), partials };
     };
 
     const chunkRecords: Array<{ label: string; record: ReviewFindingsRecord }> = [];
+    const partialChunks: PartialChunk[] = [];
     for (const [index, chunk] of chunks.entries()) {
       const label = chunkLabel(chunk);
       const key = String(index);
@@ -690,9 +686,9 @@ async function reviewInitiative(
         : null;
       const knownSplit =
         firstSub !== null && firstSub.ok &&
-        readChunkRecord(input.logsRoot, input.cycleId, `${index}.0`, { label: firstFile!, diffSha: diffSha(firstSub.diff) }) !== null;
+        readChunkRecord(input.logsRoot, input.cycleId, `${index}.0`, { label: firstFile!, diffSha: diffSha(firstSub.diff) }, { acceptPartial: true }) !== null;
 
-      let outcome: { ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult };
+      let outcome: ChunkOutcome;
       if (knownSplit) {
         emit('review.chunk.split', { chunk: label, files: chunk.files.length, reentered: true });
         outcome = await reviewSplit(chunk, index);
@@ -703,7 +699,7 @@ async function reviewInitiative(
         // at a time — same criteria, same fence, narrower evidence. Measured on
         // G2: `WI-2` exhausted 50 turns on eight files while `WI-1` passed, so
         // the work item's own size, not the reviewer, was the bound.
-        if (!outcome.ok && outcome.failure.status === 'failed' && outcome.failure.reason === 'budget-exhausted' && chunk.files.length > 1) {
+        if (outcome.ok && outcome.partials.length > 0 && chunk.files.length > 1) {
           emit('review.chunk.split', { chunk: label, files: chunk.files.length });
           outcome = await reviewSplit(chunk, index);
         }
@@ -713,9 +709,9 @@ async function reviewInitiative(
       // Persisted the moment it is finished, never at the end: the chunk AFTER
       // this one is exactly what might fail, and that is the case this exists
       // for.
-      const at = writeChunkRecord(input.logsRoot, input.cycleId, key, { label, diffSha: chunkDiffSha, headSha, record: outcome.record });
-      emit('review.chunk.persisted', { chunk: label, index: key, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
+      persist(key, label, chunkDiffSha, outcome);
       chunkRecords.push({ label, record: outcome.record });
+      partialChunks.push(...outcome.partials);
     }
 
     // Band 5 — merge into the ONE artifact the verdict gate reads, validate the
@@ -726,6 +722,7 @@ async function reviewInitiative(
       ...mergedChunks,
       findings: escalateAcFindings(mergedChunks.findings, acceptanceCriteria), // forge-mfv5.1.43
       ...(scope.notReviewed.length > 0 ? { notReviewed: scope.notReviewed } : {}),
+      ...(partialChunks.length > 0 ? { partialChunks } : {}),
     };
     const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria, scope: 'the initiative' });
     if (mergedErrors.length > 0) {
@@ -738,7 +735,7 @@ async function reviewInitiative(
     }
     const counts: Record<string, number> = { total: merged.findings.length, blocker: 0, major: 0, minor: 0, info: 0 };
     for (const f of merged.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
-    emit('review.findings.authored', { ...counts, path: persisted, head_sha: headSha, chunks: chunkRecords.length });
+    emit('review.findings.authored', { ...counts, path: persisted, head_sha: headSha, chunks: chunkRecords.length, partial_chunks: partialChunks.map((p) => p.chunk) });
     return { status: 'complete', findingsPath: persisted, counts };
   } finally {
     scrub();

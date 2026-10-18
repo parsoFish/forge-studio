@@ -62,11 +62,11 @@ this yourself:
 - Advisory project-brain context (conventions, profile), inlined in the
   launch prompt, for the conventions lens where the class has one.
 
-You also have the live worktree for full-file context via `Read`/`Grep`/
-`Glob`. The diff tells you WHERE something changed; the worktree tells you
-WHY it's safe or unsafe — read enough of the surrounding file, its callers,
-and its tests to back every finding with real evidence, not diff-hunk
-guesswork.
+You also have the live worktree, inside a bound. Your chunk is its changed
+files, the diff, and the criteria in the prompt: read those files whole, and
+`Grep` for the direct callers of a symbol the diff changes. Do not browse the
+repository, its tests or its fixtures beyond that. The diff tells you WHERE
+something changed; the changed file tells you WHY it is safe or unsafe.
 
 ## The lenses
 
@@ -89,8 +89,8 @@ risky."
 Hunt what the diff breaks in code it did NOT touch: callers/consumers of a
 changed function or type signature, contract or shape changes that ripple to
 other files, removed guarantees (a check, a lock, a validation) that other
-code was relying on. Use `Grep`/`Glob` to find the consumers, don't assume
-none exist.
+code was relying on. `Grep` for the direct callers of what changed; don't
+assume none exist.
 
 ### Contract-fit
 
@@ -191,6 +191,11 @@ result nobody believes.
 **`whyWhatHow`** is your narrative of the change: why it was made, what it
 does, how it works. Three short paragraphs, written from the diff and the
 worktree — not from the initiative's own description of itself.
+
+Write the file early, once you have judged the criteria, and rewrite it as
+you go. Your turns are capped (`budgets.maxTurns`, stated in the prompt): a run
+that reaches the cap keeps the file you last wrote, and a run that wrote none
+reaches the operator as unreviewed.
 
 An all-clean review still writes the file, with `findings: []` and an honest
 summary explaining why nothing was found. Absence of the file is a pipeline

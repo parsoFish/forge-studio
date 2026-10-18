@@ -42,6 +42,8 @@ export type ReviewFindingsDoc = {
   whyWhatHow?: { why?: string; what?: string; how?: string };
   /** forge-nk1y.39: changed paths not derived for review — a binary, or the orchestrator's demo bundle. */
   notReviewed?: Array<{ path?: string; reason?: 'binary' | 'demo-bundle' }>;
+  /** forge-mfv5.1.61: chunks whose review agent reached its turn or budget cap — reviewed partially. */
+  partialChunks?: Array<{ chunk?: string; files?: string[]; resultSubtype?: string; toolUses?: number; source?: 'agent' | 'orchestrator' }>;
   findings?: Array<{
     id?: string;
     severity?: 'blocker' | 'major' | 'minor' | 'info';

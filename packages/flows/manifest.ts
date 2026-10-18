@@ -163,7 +163,8 @@ export function parseManifest(content: string): InitiativeManifest {
     data.resume_from === 'integrate' ||
     data.resume_from === 'develop' ||
     data.resume_from === 'plan' ||
-    data.resume_from === 'pr-open'
+    data.resume_from === 'pr-open' ||
+    data.resume_from === 'review'
   ) {
     manifest.resume_from = data.resume_from;
   }
@@ -245,7 +246,8 @@ export function serializeManifest(m: InitiativeManifest): string {
     m.resume_from === 'integrate' ||
     m.resume_from === 'develop' ||
     m.resume_from === 'plan' ||
-    m.resume_from === 'pr-open'
+    m.resume_from === 'pr-open' ||
+    m.resume_from === 'review'
   ) {
     data.resume_from = m.resume_from;
   }

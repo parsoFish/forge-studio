@@ -4,7 +4,7 @@
 
 The stories drive Studio by reading `data-*` attributes; the convention (what to mirror, how `data-page-ready` is derived, the disabled-reason and boundary rules) lives in `.claude/rules/studio-ui.md`. This page is the generated inventory of attributes and the values source gives them.
 
-It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 752 attributes.
+It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-literal values only: a computed value is shown as (dynamic), a bare boolean attribute and an attribute built by spreading an object are not seen, and `data-x="v"` text inside a selector string counts as a use. 753 attributes.
 
 | attribute | values | files |
 |---|---|---|
@@ -517,6 +517,7 @@ It scans `apps/studio` .ts/.tsx outside tests with a regex, so it sees string-li
 | `data-panel-error-count` | (dynamic) | apps/studio/app/projects/[id]/page.tsx |
 | `data-panel-node-id` | (dynamic) | apps/studio/components/studio/flow-builder/NodeMiniPanel.tsx |
 | `data-pannable` | `true` | apps/studio/components/studio/FlowTopology.tsx |
+| `data-partial-chunks` | (dynamic) | apps/studio/components/studio/gate/FindingsPane.tsx |
 | `data-pending-draft-count` | (dynamic) | apps/studio/components/studio/knowledge/KbDrainPanel.tsx |
 | `data-pending-id` | (dynamic) | apps/studio/app/projects/[id]/page.tsx |
 | `data-phase-active` | (dynamic) | apps/studio/components/studio/ActivityLog.tsx |

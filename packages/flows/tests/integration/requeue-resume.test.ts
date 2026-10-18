@@ -30,6 +30,8 @@ import {
   summarizeWorkItemStatuses,
 } from '../../requeue-resume.ts';
 import { serializeWorkItem, type WorkItem } from '../../work-item.ts';
+import { rebasesAtEntry } from '../../flow-runner.ts';
+import { parseManifest, serializeManifest } from '../../manifest.ts';
 
 const INIT = 'INIT-2026-07-11-n7-fixture';
 
@@ -464,4 +466,56 @@ test('inferRequeueResume: terminal failure → no resume even with preserved sta
     rmSync(wt, { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// forge-mfv5.1.61 row 3 — a review failure resumes at the review node
+// ---------------------------------------------------------------------------
+
+/** gitweave I4 round 4: terminal, no auto-retry — but every WI complete and the branch green. */
+const REVIEW_FAILED = {
+  failure_mode: 'terminal', failure_kind: 'terminal', recoverable: false, environment: false, cleanBoundaryHalt: false,
+  resume_from: 'review', reason: 'the adversarial-review pipeline failed to produce a findings artifact',
+};
+
+test('readPriorFailureSignal: resume_from:"review" in the classification → resumeFrom "review"', () => {
+  const root = makeForgeRoot('cyc-review-signal', REVIEW_FAILED);
+  try {
+    assert.equal(readPriorFailureSignal(root, 'cyc-review-signal').resumeFrom, 'review');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('inferRequeueResume: review failure + every WI complete + preserved branch → resume_from review (not a fresh re-run)', () => {
+  const repo = initRepo();
+  const wt = makeWorktree([wi('WI-1', 'complete'), wi('WI-19', 'complete')]);
+  const root = makeForgeRoot('cyc-review-infer', REVIEW_FAILED);
+  try {
+    addBranch(repo, `forge/${INIT}`, true);
+    const d = inferRequeueResume({ forgeRoot: root, cycleId: 'cyc-review-infer', initiativeId: INIT, worktreePath: wt, projectRepoPath: repo });
+    assert.equal(d.resume, true, JSON.stringify(d));
+    if (d.resume) assert.equal(d.resume_from, 'review');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(wt, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('decideRequeueResume: review failure but the preserved worktree is gone → fresh re-run, said by name', () => {
+  const d = decideRequeueResume({ environmentFailure: false, resumeFromReview: true, worktreePresent: false, branchHasWork: true, workItems: { total: 1, complete: 1 } });
+  assert.equal(d.resume, false);
+  assert.match(d.reason, /review/);
+});
+
+test('decideRequeueResume: review failure with a work item NOT complete → no review resume (the review never judged an unfinished set)', () => {
+  const d = decideRequeueResume({ environmentFailure: false, resumeFromReview: true, worktreePresent: true, branchHasWork: true, workItems: { total: 2, complete: 1 } });
+  assert.ok(!(d.resume && d.resume_from === 'review'), JSON.stringify(d));
+});
+
+test('a manifest stamped resume_from: review round-trips, and the review resume rebases once at entry', () => {
+  const base = parseManifest(`---\ninitiative_id: ${INIT}\nproject: fix\ncreated_at: 2026-10-18T00:00:00Z\niteration_budget: 3\ncost_budget_usd: 5\nclass: code\n---\nbody\n`);
+  assert.equal(parseManifest(serializeManifest({ ...base, resume_from: 'review' })).resume_from, 'review');
+  assert.equal(rebasesAtEntry({ resumeFrom: 'review' }), true);
 });

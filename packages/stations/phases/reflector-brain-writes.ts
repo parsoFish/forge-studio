@@ -157,7 +157,7 @@ export async function runReflectorBrainWrites(
         if (m.type === 'assistant') tallyReflectorToolUse(m.message, toolUseSummary);
       },
       queryFn: deps.sdkQuery,
-    });
+    }).finally(() => turnSink.flushIteration(1)); // forge-mfv5.1.61: runAgent now feeds this sink every tool call
     costUsd = spawn.costUsd;
     durationMs = spawn.durationMs ?? 0;
     resultSubtype = spawn.resultSubtype;

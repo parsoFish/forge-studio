@@ -165,3 +165,19 @@ test('a current review names the files it did not review, by reason (the I3a sha
   expect(pane.getAttribute('data-not-reviewed-count')).toBe('68');
   expect(pane.textContent).toContain('68 files not reviewed (66 binary, 2 demo-bundle)');
 });
+
+test('forge-mfv5.1.61: a review with a turn-capped chunk names it on the pane, amber, beside the findings (the I4 round-4 shape)', async () => {
+  const partialChunks = [{ chunk: 'gitweave/apply.py', workItemId: 'WI-19', files: ['gitweave/apply.py'], resultSubtype: 'error_max_turns', toolUses: 71, lastTools: ['Read gitweave/apply.py'], source: 'orchestrator' as const }];
+  await render({ doc: null, error: false }, { ...PRIOR, partialChunks });
+  const pane = q('[data-section="review-findings"]');
+  expect(pane.getAttribute('data-findings-state')).toBe('present');
+  expect(pane.getAttribute('data-partial-chunks')).toBe('gitweave/apply.py');
+  expect(pane.textContent).toContain('partially reviewed (turn cap): gitweave/apply.py');
+});
+
+test('forge-mfv5.1.61 CONTROL: a fully judged review carries an empty partial marker and no label', async () => {
+  await render({ doc: null, error: false }, PRIOR);
+  const pane = q('[data-section="review-findings"]');
+  expect(pane.getAttribute('data-partial-chunks')).toBe('');
+  expect(pane.textContent).not.toContain('partially reviewed');
+});

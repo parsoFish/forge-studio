@@ -207,56 +207,61 @@ test('scope guard: reviewer edits project code → hard scope-violation', async 
   }
 });
 
-test('kills "a budget kill is reported anonymously": the failure NAMES the work item whose chunk was too large (ruling 290)', async () => {
+test('kills "a budget kill is reported anonymously": the capped chunk is NAMED, with turns spent, never "raise the budget" (ruling 290; forge-mfv5.1.61)', async () => {
   // G2's failure read `adversarial-review spawn terminated by the SDK
   // (error_max_turns) — raise the declared budgets or shrink the diff`. It named
-  // nothing, so the only actions it suggested were the two that must not be
-  // taken: widen the budget, or guess which part of the diff was the problem.
+  // nothing. forge-mfv5.1.61: the cap no longer fails the review — the chunk is
+  // partial — but it is still named, and widening the budget is still never offered.
   const restore = withoutSpawnSuppressionEnv();
   const fx = makeFixture();
   try {
     const { logger, events } = collectLogger(fx.logsRoot);
     let calls = 0;
-    const qf = ((_p: { prompt: string }) => {
+    const qf = ((p: { prompt: string }) => {
       calls += 1;
+      const capped = calls === 1;
       async function* gen(): AsyncGenerator<unknown> {
-        yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.0, usage: { input_tokens: 1, output_tokens: 1 } };
+        if (!capped) writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(p.prompt, { findings: [] }));
+        yield { type: 'result', subtype: capped ? 'error_max_turns' : 'success', total_cost_usd: 1.0, usage: { input_tokens: 1, output_tokens: 1 } };
       }
       return gen();
     }) as unknown as StreamQueryFn;
-    const res = await run(fx, qf, logger);
-    assert.equal(res.status, 'failed');
-    assert.equal((res as { reason: string }).reason, 'budget-exhausted');
-    const detail = (res as { detail: string }).detail;
-    assert.match(detail, /^WI-1 is too large for review/, 'the message opens with the work item, not with the SDK');
-    assert.match(detail, /Split the work item, not the budget/, 'and it names the action that is allowed');
-    assert.doesNotMatch(detail, /raise the declared budgets/, 'widening the budget is exactly what must not be suggested');
-    assert.equal(calls, 1, 'no retry, and no later chunk is attempted once one has failed');
-    const evt = events.find((e) => e.message === 'review.budget-exhausted');
+    await run(fx, qf, logger);
+    const evt = events.find((e) => e.message === 'review.chunk.partial');
     assert.equal((evt!.metadata as Record<string, unknown>).chunk, 'WI-1');
+    const detail = String((evt!.metadata as Record<string, unknown>).detail);
+    assert.match(detail, /^WI-1: the review agent reached its cap \(error_max_turns\) after 0 tool call/, 'the message opens with the work item, then the turns');
+    assert.doesNotMatch(detail, /raise the declared budgets|too large/, 'neither widening the budget nor an unmeasured size claim');
+    assert.equal(calls, 2, 'no retry of the capped chunk; the next chunk still runs');
   } finally {
     fx.cleanup();
     restore();
   }
 });
 
-test('budget-exhausted spawn: hard failure, one call', async () => {
+test('budget-capped spawn (error_max_budget_usd): partial chunk, one call for it, the review completes', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const fx = makeFixture();
   try {
     const { logger } = collectLogger(fx.logsRoot);
-    let calls = 0;
-    const qf = ((_p: { prompt: string }) => {
-      calls += 1;
+    const prompts: string[] = [];
+    const qf = ((p: { prompt: string }) => {
+      prompts.push(p.prompt);
       async function* gen(): AsyncGenerator<unknown> {
-        yield { type: 'result', subtype: 'error_max_budget_usd', total_cost_usd: 2.0, usage: { input_tokens: 1, output_tokens: 1 } };
+        if (prompts.length === 1) {
+          yield { type: 'result', subtype: 'error_max_budget_usd', total_cost_usd: 2.0, usage: { input_tokens: 1, output_tokens: 1 } };
+          return;
+        }
+        writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(p.prompt, { findings: [] }));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.1, usage: { input_tokens: 1, output_tokens: 1 } };
       }
       return gen();
     }) as unknown as StreamQueryFn;
     const res = await run(fx, qf, logger);
-    assert.equal(res.status, 'failed');
-    assert.equal((res as { reason: string }).reason, 'budget-exhausted');
-    assert.equal(calls, 1);
+    assert.equal(res.status, 'complete', JSON.stringify(res));
+    assert.equal(prompts.length, 2, 'the capped WI-1 chunk is spawned once, then the unattributed chunk');
+    const record = JSON.parse(readFileSync(join(fx.logsRoot, CYCLE_ID, 'artifacts', 'review-findings.json'), 'utf8'));
+    assert.deepEqual(record.partialChunks.map((c: { chunk: string; resultSubtype: string }) => [c.chunk, c.resultSubtype]), [['WI-1', 'error_max_budget_usd']]);
   } finally {
     fx.cleanup();
     restore();

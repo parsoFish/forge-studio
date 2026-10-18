@@ -53,6 +53,7 @@ const unattributedPrompt = () =>
     changedFiles: ['docs/gap-registry.md'],
     lenses: ['correctness'],
     brainContext: [],
+    maxTurns: 50,
   });
 
 test('the unattributed chunk is TOLD to judge nothing, not merely told there are no criteria', () => {

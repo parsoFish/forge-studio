@@ -10,7 +10,7 @@
  * so none is shown; resolution lives on the operator's comments.
  *
  * DOM: [data-section="review-findings"][data-findings-state][data-findings-count]
- * [data-review-stale][data-not-reviewed-count]; `data-findings-state="not-current"`
+ * [data-review-stale][data-not-reviewed-count][data-partial-chunks] (forge-mfv5.1.61); `data-findings-state="not-current"`
  * + [data-review-failed-head] when the latest review failed (forge-nk1y.39); [data-finding-group], [data-finding][data-finding-severity]
  * [data-finding-category], [data-section="why-what-how"] > [data-www-group] >
  * [data-narrative="why|what|how"].
@@ -40,6 +40,10 @@ function notReviewedLabel(rows: ReadonlyArray<{ reason?: string }>): string {
   const bundle = rows.filter((r) => r.reason === 'demo-bundle').length;
   const parts = [binary > 0 ? `${binary} binary` : '', bundle > 0 ? `${bundle} demo-bundle` : ''].filter(Boolean);
   return `${rows.length} file${rows.length === 1 ? '' : 's'} not reviewed (${parts.join(', ')})`;
+}
+/** forge-mfv5.1.61: the chunks a turn or budget cap stopped, named. */
+function partialLabel(rows: ReadonlyArray<{ chunk?: string }>): string {
+  return `partially reviewed (turn cap): ${rows.map((r) => r.chunk ?? '?').join(', ')}`;
 }
 const SENTENCES_PER_BLOCK = 2;
 
@@ -84,6 +88,7 @@ export function FindingsPane({
   const count = doc.findings?.length ?? 0;
   const stale = reviewHeadIsStale(doc.headSha, headSha);
   const notReviewed = doc.notReviewed ?? [];
+  const partial = doc.partialChunks ?? [];
   const title = (id: string): string => workItemTitle(id) || (id === 'unattributed' || id === '' ? 'Not tied to a work item' : id);
   const wwwSlices = WWW.map((k) => ({ k, slices: splitByWorkItem(doc.whyWhatHow?.[k]) }));
   const wwwIds = [...new Set(wwwSlices.flatMap((x) => x.slices.map((s) => s.id)))];
@@ -96,6 +101,7 @@ export function FindingsPane({
       data-review-stale={stale ? 'true' : 'false'}
       data-review-lenses={(doc.lenses ?? []).join(',')}
       data-not-reviewed-count={notReviewed.length}
+      data-partial-chunks={partial.map((p) => p.chunk ?? '').join(',')}
       style={pane}
     >
       <header style={paneHeader}>
@@ -105,6 +111,7 @@ export function FindingsPane({
           {doc.headSha ? ` · reviewed ${doc.headSha.slice(0, 7)}` : ''}
           {stale && headSha ? ` ≠ head ${headSha.slice(0, 7)}` : ''}
           {notReviewed.length > 0 ? ` · ${notReviewedLabel(notReviewed)}` : ''}
+          {partial.length > 0 ? <span style={{ color: 'var(--amber)' }}>{` · ${partialLabel(partial)}`}</span> : null}
         </span>
         <span role="tablist" style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-1)' }}>
           {(['findings', 'why-what-how'] as const).map((t) => (

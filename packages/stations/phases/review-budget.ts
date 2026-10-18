@@ -31,8 +31,8 @@
  *
  * `adversarial-review` re-reviews a budget-killed chunk one file at a time,
  * but only `if (chunk.files.length > 1)`. A chunk that is already ONE file has
- * no smaller cut, so it fails `budget-exhausted` and stops. A work item can be
- * cut to its files; a file cannot be cut.
+ * no smaller cut, so it ends partial (forge-mfv5.1.61, `review-partial.ts`). A
+ * work item can be cut to its files; a file cannot be cut.
  *
  * Ruling 290 forbids the fourth answer ("raise the budget"), and hunk-level
  * splitting was refused in the proposal: a hunk review cannot judge whether a

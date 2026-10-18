@@ -253,9 +253,26 @@ export type ReviewFindingsRecord = {
    * (D-15). Named here so "not reviewed" is a stated fact, never an absence.
    */
   notReviewed?: NotReviewedPath[];
+  /**
+   * forge-mfv5.1.61: chunks whose review agent reached its turn or budget cap. Each
+   * carries what was spent, and whether its record is the agent's own early file
+   * (`agent`) or the orchestrator's `unreviewed` finding (`orchestrator`). Absent
+   * when every chunk finished.
+   */
+  partialChunks?: PartialChunk[];
 };
 
 export type NotReviewedPath = { path: string; reason: 'binary' | 'demo-bundle' };
+
+export type PartialChunk = {
+  chunk: string;
+  workItemId: string | null;
+  files: string[];
+  resultSubtype: string;
+  toolUses: number;
+  lastTools: string[];
+  source: 'agent' | 'orchestrator';
+};
 
 export function reviewFindingsJsonPath(logsRoot: string, cycleId: string): string {
   return resolve(logsRoot, cycleId, 'artifacts', 'review-findings.json');
