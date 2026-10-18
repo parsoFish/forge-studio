@@ -63,12 +63,12 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
 | `flows` | 97 | 26,737 | **26,538** | ratified 26,538 — forge-mfv5.1.57: a later send-back supersedes a failed fix WI (drain, dev loop; Requeue keeps the halt as authority) and every drain park is said once by event + notify; +66 measured on this PR's tree after a read for slack (−5), lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 56 | 13,663 | **13,663** | ratified 13,663 — forge-mfv5.1.57: the dev loop never rebuilds a fix WI a later send-back superseded (devLoopRunList); +6 measured on this PR's tree, lane-ratified (≤100, ruling 666). |
+| `stations` | 56 | 13,702 | **13,702** | ratified 13,702 — forge-mfv5.1.59: a per-AC check's inline program and its own argv are never matched as the suite (per-interpreter options), and a no-tests refusal names the classing argv token; +39 measured on this PR's tree after a read for slack, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **539** | **139,082** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **539** | **139,121** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -409,8 +409,8 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 99 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
 | packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 133 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1617 |
-| packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 41 |
-| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 203 |
+| packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 75 |
+| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 208 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 395 |
