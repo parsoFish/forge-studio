@@ -3,7 +3,7 @@ import { makeQualityGateFromCmd, parseGateTestSummary, resolveGateTimeoutMs, typ
 import { WI_GATE_PACKAGE_PLACEHOLDER, type AcceptanceGateConfig } from '@forge/projects';
 
 import { composeAcChecksVerdict } from './ac-checks-brief.ts';
-import { liveAcceptanceEnvFor, liveAcceptanceEnvForCheck } from './live-acceptance-env.ts';
+import { liveAcceptanceClassOf, liveAcceptanceEnvFor } from './live-acceptance-env.ts';
 
 /**
  * `buildWiQualityGate`'s arguments — exactly what `developer-loop.ts`'s
@@ -78,13 +78,16 @@ export function buildWiQualityGate(args: WiQualityGateArgs): (ctx?: { iteration:
   };
 }
 
+const TOKEN_MAX = 120;
+const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max)}…` : s);
+
 function runAcCheck(args: WiQualityGateArgs, label: string, check: AcceptanceCheck, ctx?: { iteration: number }): AcCheckRun {
   const unsetEnv = [...(args.ciGateUnsetEnv ?? []), ...(check.unsetEnv ?? [])];
-  const suiteEnv = liveAcceptanceEnvForCheck(args.accGate, check.argv); // forge-mfv5.1.44: classing keys on the suite match, never on requiredEnv presence
-  const requiredEnv = [...(suiteEnv ?? []), ...(check.requiresEnv ?? [])].filter((n) => !unsetEnv.includes(n));
+  const suite = liveAcceptanceClassOf(args.accGate, check.argv); // forge-mfv5.1.44: classing keys on the suite match, never on requiredEnv presence
+  const requiredEnv = [...(suite?.requiresEnv ?? []), ...(check.requiresEnv ?? [])].filter((n) => !unsetEnv.includes(n));
   let got: GateRunInfo | undefined;
   makeQualityGateFromCmd(args.worktreePath, check.argv, (i) => { got = i; }, {
-    acceptance: suiteEnv !== undefined,
+    acceptance: suite !== undefined,
     ...(requiredEnv.length > 0 ? { requiredEnv } : {}),
     ...(unsetEnv.length > 0 ? { unsetEnv } : {}),
     initiativeId: args.initiativeId,
@@ -93,7 +96,9 @@ function runAcCheck(args: WiQualityGateArgs, label: string, check: AcceptanceChe
   const ran: GateRunInfo = got ?? { passed: false, exitCode: -1, durationMs: 0, stdoutTail: '', stderrTail: '[forge] the check reported no run', command: check.argv.join(' '), errored: true };
   const why = check.expect === 'pass' ? null : expectFailVerdict(ran);
   const satisfied = check.expect === 'pass' ? ran.passed : why === null;
-  const stderrTail = why === null ? ran.stderrTail : `${ran.stderrTail}\n[forge ac-check] ${label} expected the check to FAIL: ${why}`;
+  // forge-mfv5.1.59: a refusal for no runner summary names the argv token that classed the check, so a misclass reads at once.
+  const classed = suite && ran.rejectReason === 'no-tests-ran' ? `\n[forge ac-check] ${label} classed acceptance by argv[${suite.index}] '${clip(suite.token, TOKEN_MAX)}'` : '';
+  const stderrTail = `${ran.stderrTail}${classed}${why === null ? '' : `\n[forge ac-check] ${label} expected the check to FAIL: ${why}`}`;
   const info = { ...ran, passed: satisfied, stderrTail, command: `[${label} expect ${check.expect}] ${ran.command}`, ac: { label, expect: check.expect } };
   return { label, expect: check.expect, satisfied, info };
 }
