@@ -119,3 +119,17 @@ test('row 1: a stopped WI branch whose commit count cannot be read refuses the R
     rmSync(s.root, { recursive: true, force: true });
   }
 });
+
+test('row 1: an owed work item whose id is not a work-item id refuses the Requeue by name — no ref is read, nothing is written outside the queue', () => {
+  const s = strandedStop(3);
+  try {
+    const raw = readFileSync(s.specPath, 'utf8');
+    writeFileSync(s.specPath, raw.replace('work_item_id: WI-6', 'work_item_id: ../../escape'));
+    assert.throws(() => runRequeue(FIX_INIT, { forgeRoot: s.root }), /requeue: work item id "\.\.\/\.\.\/escape" is not a work-item id — refusing to keep its branch/);
+    assert.equal(existsSync(join(s.fx.worktree, '.forge', 'escape.md')), false);
+    assert.equal(readFileSync(s.specPath, 'utf8'), raw.replace('work_item_id: WI-6', 'work_item_id: ../../escape'), 'the spec is untouched');
+    assert.ok(existsSync(join(s.root, '_queue', 'failed', `${FIX_INIT}.md`)));
+  } finally {
+    rmSync(s.root, { recursive: true, force: true });
+  }
+});
