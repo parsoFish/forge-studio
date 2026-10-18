@@ -24,17 +24,26 @@ export function liveAcceptanceEnvFor(
 }
 
 /**
- * A non-shell interpreter (a shell's `-c` operand is a command line and stays readable) and its inline-program flags, per
- * interpreter: one shared pattern read php's `-c` (a config file) and python's `-E` as program flags. `joined` is a flag that
- * carries its program in the same token (`--eval=…`, python's `-c…`).
+ * A non-shell interpreter (a shell's `-c` operand is a command line and stays readable), per interpreter: `flag` is its
+ * inline-program flag (clustered only with flags that take no value, so `ruby -rtime` is not `-e`), `joined` one carrying its
+ * program in the same token, `valued` an option whose value is the next token, `stop` the module form (`python3 -m`).
  */
-const INLINE: ReadonlyArray<{ name: RegExp; flag: RegExp; joined?: RegExp }> = [
-  { name: /^python[\d.]*$/, flag: /^-[bBdEhiIOPqsSuvVx]*c$/, joined: /^-[bBdEhiIOPqsSuvVx]*c./ },
-  { name: /^(?:node|nodejs)$/, flag: /^(?:-[ep]|-pe|--eval|--print)$/, joined: /^--(?:eval|print)=/ },
-  { name: /^ruby$/, flag: /^-[adlnpsvwW]*e$/ },
-  { name: /^perl$/, flag: /^-[adlnpsTtvwW]*[eE]$/ },
-  { name: /^php$/, flag: /^-r$/ },
+type Interpreter = { name: RegExp; flag: RegExp; joined?: RegExp; valued?: RegExp; stop?: RegExp };
+const INLINE: readonly Interpreter[] = [
+  { name: /^(?:python|pypy)[\d.]*$/, flag: /^-[bBdEhiIOPqRsSuvVx]*c$/, joined: /^-[bBdEhiIOPqRsSuvVx]*c./, valued: /^(?:-[WX]|--check-hash-based-pycs)$/, stop: /^-[bBdEhiIOPqRsSuvVx]*m/ },
+  { name: /^(?:node|nodejs)$/, flag: /^(?:-[ep]|-pe|--eval|--print)$/, joined: /^--(?:eval|print)=/, valued: /^(?:-[rC]|--(?:require|import|loader|experimental-loader|conditions|input-type))$/ },
+  { name: /^ruby[\d.]*$/, flag: /^-(?:0[0-7]*)?[acdlnpsSvwWy]*e$/, valued: /^-[ICEr]$/ },
+  { name: /^perl[\d.]*$/, flag: /^-(?:0[0-9a-fA-Fx]*)?[aclnpstTuUvwWX]*[eE]$/ },
+  { name: /^php[\d.]*$/, flag: /^-r$/, valued: /^-[cdz]$/ },
 ];
+
+/** Whether `argv[index]` ends the interpreter's options: its program flag (`'inline'`), its program file or module (`'program'`). */
+function optionEnd(i: Interpreter, argv: readonly string[], index: number): 'inline' | 'program' | undefined {
+  const t = argv[index]!;
+  if (i.flag.test(t) || i.joined?.test(t)) return 'inline';
+  if (t === '-' || t === '--' || !t.startsWith('-') || i.stop?.test(t)) return 'program';
+  return undefined;
+}
 
 /** A check's acceptance class: the tier's env, and the argv token that classed it (named when the gate refuses — forge-mfv5.1.59). */
 export type LiveAcceptanceClass = { requiresEnv: string[]; index: number; token: string };
@@ -49,10 +58,12 @@ export type LiveAcceptanceClass = { requiresEnv: string[]; index: number; token:
  */
 export function liveAcceptanceClassOf(accGate: AcceptanceGateConfig | undefined, argv: readonly string[]): LiveAcceptanceClass | undefined {
   if (!accGate?.requires_env || accGate.requires_env.length === 0) return undefined;
-  const inline = INLINE.find((i) => i.name.test(basename(argv[0] ?? '')));
+  let options = INLINE.find((i) => i.name.test(basename(argv[0] ?? '')));
   for (let index = 0; index < argv.length; index++) {
     const token = argv[index]!;
-    if (index > 0 && inline && (inline.flag.test(token) || inline.joined?.test(token))) return undefined;
+    const end = options && index > 0 && !options.valued?.test(argv[index - 1]!) ? optionEnd(options, argv, index) : undefined;
+    if (end === 'inline') return undefined;
+    if (end === 'program') options = undefined;
     if (token.includes(accGate.match)) return { requiresEnv: accGate.requires_env, index, token };
   }
   return undefined;

@@ -82,3 +82,31 @@ test('forge-mfv5.1.59: the class names the argv token that made it', () => {
   assert.equal(liveAcceptanceClassOf(gw, ['python3', '-c', 'x', 'tests/acceptance']), undefined);
   assert.equal(liveAcceptanceClassOf({ match: 'tests/acceptance' }, ['pytest', 'tests/acceptance']), undefined, 'no requires_env, no class');
 });
+
+test('forge-mfv5.1.59: options are read only up to the program, a script file or a module — a script\'s own -c/-p/-e is its argument', () => {
+  const gw = { match: 'tests/acceptance', requires_env: ['X'] };
+  for (const argv of [
+    ['python3', '-m', 'pytest', '-c', 'tests/acceptance/pytest.ini'],
+    ['python3', '-m', 'pytest', '-cconf.ini', 'tests/acceptance'],
+    ['python3', 'run.py', '-c', 'tests/acceptance'],
+    ['python3', '-W', 'ignore', 'run.py', '-c', 'tests/acceptance'],
+    ['python3', '-', '-c', 'tests/acceptance'],
+    ['node', 'run.mjs', '-p', 'tests/acceptance'],
+    ['node', '-r', './setup.cjs', 'run.mjs', '-e', 'tests/acceptance'],
+    ['ruby', 'x.rb', '-e', 'tests/acceptance'],
+    ['ruby', '-rtime', 'x.rb', 'tests/acceptance'],
+    ['perl', 'x.pl', '-e', 'tests/acceptance'],
+    ['php', 'x.php', '-r', 'tests/acceptance'],
+  ]) assert.deepEqual(liveAcceptanceEnvForCheck(gw, argv), ['X'], argv.join(' '));
+  for (const argv of [
+    ['python3', '-W', 'ignore', '-X', 'dev', '-c', 'x', 'tests/acceptance'],
+    ['python3', '-Rc', 'x', 'tests/acceptance'],
+    ['pypy3', '-c', 'x', 'tests/acceptance'],
+    ['node', '-r', './setup.cjs', '-e', 'x', 'tests/acceptance'],
+    ['node', '-pe', 'x', 'tests/acceptance'],
+    ['ruby3.2', '-e', 'x', 'tests/acceptance'],
+    ['ruby', '-I', 'lib', '-ne', 'x', 'tests/acceptance'],
+    ['perl', '-0777ne', 'x', 'tests/acceptance'],
+    ['php8.3', '-d', 'x=1', '-r', 'x', 'tests/acceptance'],
+  ]) assert.equal(liveAcceptanceEnvForCheck(gw, argv), undefined, argv.join(' '));
+});
