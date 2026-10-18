@@ -48,6 +48,28 @@ No AI-attribution lines (`Co-authored-by: …`) in commit messages.
 
 Each PR touches one seam, one fix, or one phase. Stacked PRs are fine; squash-merge on stacked PRs is not (the lesson lives in `brain/forge-dev/`).
 
+## Branches
+
+A local branch lives from the moment its PR opens to the moment that PR
+merges, and not a day longer. On 2026-10-18 this checkout held 286 local
+branches, 256 of them with nothing beyond `main`; every one had been merged or
+abandoned weeks earlier and never deleted. Worktree runs multiply this: each
+run that branches and finishes leaves its branch behind unless the run deletes
+it.
+
+- After a merge, delete the branch here and prune the remote view in the same
+  breath: `git branch -d <branch> && git fetch --prune`.
+- A run or a worktree that ends removes what it made: `git worktree remove
+  <path>` then `git worktree prune`; a finished run's branch goes with it.
+- Sweep weekly, or whenever `git branch | wc -l` passes 20:
+  `git branch --merged main | grep -v '^\*\|main' | xargs -r git branch -d`.
+  `-d` refuses anything unmerged, so the sweep cannot lose work.
+- A branch that is ahead of `main` but has not moved in 30 days is a decision,
+  not a keepsake: open its PR, rebase it, or delete it (`-D`, named, one at a
+  time).
+- The hub's repo-health job counts local branches per checkout and proposes a
+  sweep past 20; it never deletes.
+
 ## The decision rule
 
 If your change conflicts with or supersedes a decision in `DECISIONS.md` or `SPEC.md`, **update that row first** — rationale required — before changing the code. Those rows are load-bearing; a code change that contradicts one without updating it will be sent back.
