@@ -119,9 +119,9 @@ function forgeEvent(message: string, metadata: Record<string, unknown> | undefin
 
 /** Write `_logs/<CYCLE>/events.jsonl` under an already-set-up `root`, carrying
  *  the `failure_classification` event `emitFailureClassification` (cycle.ts)
- *  would have stamped for the given halt — `cleanBoundaryHalt` is the
- *  STRUCTURED field `readPriorFailureSignal` reads (round 3); `reason` is
- *  free-text kept realistic but never parsed by production code. */
+ *  would have stamped for the given halt, after the halt's own error event —
+ *  `readPriorFailureSignal` re-classifies that cause (forge-mfv5.1.62); the
+ *  record's `reason` prose is never parsed by production code. */
 function writeClassification(
   root: string,
   reason: string,
@@ -132,6 +132,8 @@ function writeClassification(
   mkdirSync(logDir, { recursive: true });
   const lines = [
     forgeEvent('cycle.start', undefined, '2026-09-27T00:00:00.000Z'),
+    // forge-mfv5.1.62: the halt's own thrown message — the cause the classifier re-reads; the record below is not the input.
+    JSON.stringify({ ...JSON.parse(forgeEvent(reason, undefined, '2026-09-27T00:00:30.000Z')), event_type: 'error' }),
     forgeEvent(
       'failure_classification',
       {
@@ -204,7 +206,7 @@ test(
     const repo = initProjectRepo(root);
     const worktree = makeWorktree(root, repo, [wi('WI-1', 'complete'), wi('WI-2', 'pending')]);
     const costCeilingReason =
-      'cost ceiling reached — cost-ceiling: flow spent $10.00 which meets or exceeds the $5.00 ceiling.';
+      'cost-ceiling: flow spent $10.00 which meets or exceeds the $5.00 ceiling.';
     writeClassification(root, costCeilingReason, false, true);
     writeFileSync(join(root, '_queue', 'failed', `${INIT}.md`), manifestFor(repo, worktree));
 

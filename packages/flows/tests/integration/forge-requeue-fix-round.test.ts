@@ -17,6 +17,7 @@ import { parseManifest } from '../../manifest.ts';
 import { readWorkItemsFromDir } from '../../work-item.ts';
 import { FixRoundRefusedError } from '../../requeue-resume.ts';
 import { FIX_BRANCH, FIX_INIT, plantStrandedFixRound } from '../test-fixtures/stranded-fix-round.ts';
+import { failureCauseEvents } from '../test-fixtures/failure-cause-events.ts';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' }).trim();
@@ -100,7 +101,7 @@ test('sec 3: a REVIEW send-back fix round keeps today\'s behaviour — no head c
 }, { fixOrigin: 'review-fix' }));
 
 test('sec 8: a resume_from:plan classification wins over pending fix WIs', () => withFixRound((root, fx) => {
-  appendFileSync(join(fx.logDir, 'events.jsonl'), `${JSON.stringify({ phase: 'orchestrator', skill: 'cycle', event_type: 'log', message: 'failure_classification', started_at: '2026-10-10T06:00:00.000Z', metadata: { environment: false, cleanBoundaryHalt: false, resume_from: 'plan' } })}\n`);
+  appendFileSync(join(fx.logDir, 'events.jsonl'), `${[...failureCauseEvents('plan', FIX_INIT)].map((e) => JSON.stringify(e)).join('\n')}\n${JSON.stringify({ phase: 'orchestrator', skill: 'cycle', event_type: 'log', message: 'failure_classification', started_at: '2026-10-10T06:00:00.000Z', metadata: { environment: false, cleanBoundaryHalt: false, resume_from: 'plan' } })}\n`);
   const r = runRequeue(FIX_INIT, { forgeRoot: root });
   assert.equal(r.resumeDecision.resume && r.resumeDecision.resume_from, 'plan', r.resumeDecision.reason);
 }));

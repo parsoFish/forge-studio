@@ -141,6 +141,8 @@ function writeClassification(
   mkdirSync(logDir, { recursive: true });
   const lines = [
     forgeEvent('cycle.start', undefined, '2026-09-20T08:00:00.000Z'),
+    // forge-mfv5.1.62: the halt's own thrown message — the cause the classifier re-reads; the record below is not the input.
+    JSON.stringify({ ...JSON.parse(forgeEvent(reason, undefined, '2026-09-20T08:00:30.000Z')), event_type: 'error' }),
     forgeEvent(
       'failure_classification',
       { failure_mode: 'terminal', failure_kind: 'terminal', recoverable: false, environment, cleanBoundaryHalt, reason },

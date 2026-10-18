@@ -30,6 +30,7 @@ import { deriveRoundHalt } from '../../run-model-derive-status.ts';
 import type { PhaseWiring } from '../../phase-wiring.ts';
 import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 import { FIX_INIT, plantStrandedFixRound, type StrandedFixRound } from '../test-fixtures/stranded-fix-round.ts';
+import { failureCauseEvents } from '../test-fixtures/failure-cause-events.ts';
 
 type Ev = { message?: string; event_type?: string; metadata?: Record<string, unknown> };
 
@@ -144,7 +145,10 @@ test('CONTROL: a clean worktree re-enters and the round runs as today', async ()
     assert.equal(r?.status, 'drained', JSON.stringify(r));
     assert.equal(events(fx).some((e) => e.message === 'sendback.loop-halted'), false);
     assert.ok(events(fx).some((e) => e.message === 'sendback.loop-completed'), 'the round reads as completed, as today');
-    assert.ok(existsSync(queue(root, 'ready-for-review')), 'the stranded-manifest return is unchanged');
+    // forge-mfv5.1.62 row 3: the round FAILED (the later nodes are unreached) with no fix WI left pending — failed/, where
+    // Requeue resumes it; before, this asserted the ready-for-review/ return that stranded gitweave I4.
+    assert.equal(r?.detail, 'failed', JSON.stringify(r));
+    assert.ok(existsSync(queue(root, 'failed')), 'a failed round with nothing left to drain lands in failed/');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -159,6 +163,7 @@ test('a transient failure that leaves the round untouched keeps today\'s return 
       runDrainCycle: async () => {
         writeFileSync(join(fx.logDir, 'events.jsonl'), readFileSync(join(fx.logDir, 'events.jsonl'), 'utf8') + [
           JSON.stringify({ message: 'cycle.start', phase: 'orchestrator', skill: 'cycle', event_type: 'start' }),
+          ...failureCauseEvents('environment', FIX_INIT).map((e) => JSON.stringify(e)),
           JSON.stringify({ message: 'failure_classification', phase: 'orchestrator', skill: 'cycle', event_type: 'log', metadata: { failure_kind: 'transient', reason: 'rate limited' } }),
         ].join('\n') + '\n');
         return { status: 'failed' };
@@ -218,7 +223,7 @@ test('an operator stop or a cost-ceiling stop is a clean boundary: never a round
   const root = mkdtempSync(join(tmpdir(), 'drain-halt-stop-'));
   try {
     const fx = plant(root, { dirty: false });
-    const r = await drainWith(root, fx, { lines: [{ message: 'failure_classification', metadata: { failure_kind: 'terminal', cleanBoundaryHalt: true } }] });
+    const r = await drainWith(root, fx, { lines: [...failureCauseEvents('operator-stop', FIX_INIT), { message: 'failure_classification', metadata: { failure_kind: 'terminal', cleanBoundaryHalt: true } }] });
     assert.equal(r?.status, 'drained', JSON.stringify(r));
     assert.ok(existsSync(queue(root, 'ready-for-review')));
   } finally {
@@ -309,4 +314,64 @@ test('deriveRoundHalt: a drain park reads as needs-operator; a halt in the same 
   assert.deepEqual(deriveRoundHalt([ev('cycle.start'), halted, ev('sendback.loop-halt-refused'), park]), { round: 2, classification: 'terminal', reason: 'r' });
   assert.equal(deriveRoundHalt([park, ev('cycle.start')]), undefined);
   assert.equal(deriveRoundHalt([ev('cycle.start'), park, ev('reviewer.verdict.send-back')]), undefined, 'the operator\'s send-back answers the park');
+});
+
+// ---------------------------------------------------------------------------
+// forge-mfv5.1.62 row 3 — a round that fails at review with its fix WI delivered: one placement, and Requeue resumes it at review
+// ---------------------------------------------------------------------------
+
+/** gitweave I4 round 4: the fix WI delivers (complete, committed), then the review pipeline fails — the cycle's own events. */
+function deliverThenFailReview(fx: StrandedFixRound): () => Promise<{ status: string }> {
+  return async () => {
+    const spec = join(fx.worktree, '.forge', 'work-items', 'WI-6.md');
+    writeFileSync(spec, readFileSync(spec, 'utf8').replace('status: pending', 'status: complete'));
+    writeFileSync(join(fx.worktree, 'wi-6.txt'), 'delivered\n');
+    execFileSync('git', ['add', 'wi-6.txt'], { cwd: fx.worktree, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-q', '-m', 'feat: WI-6'], { cwd: fx.worktree, stdio: 'pipe' });
+    const log = join(fx.logDir, 'events.jsonl');
+    writeFileSync(log, readFileSync(log, 'utf8') + [
+      { message: 'cycle.start', phase: 'orchestrator', skill: 'cycle', event_type: 'log' },
+      ...failureCauseEvents('review', FIX_INIT),
+      // the record as pre-#1234 code wrote it: no resume_from
+      { message: 'failure_classification', phase: 'orchestrator', skill: 'cycle', event_type: 'log', metadata: { failure_kind: 'terminal', recoverable: false, environment: false, cleanBoundaryHalt: false, reason: 'the adversarial-review pipeline failed to produce a findings artifact' } },
+      { message: 'cycle.end', phase: 'orchestrator', skill: 'cycle', event_type: 'end', metadata: { status: 'failed', error: 'Error: adversarial review pipeline failed (budget-exhausted: …)' } },
+    ].map((l) => JSON.stringify(l)).join('\n') + '\n');
+    return { status: 'failed' };
+  };
+}
+
+test('a round whose fix WI delivered but whose review failed lands in failed/ — never back in ready-for-review/ with nothing to drain', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-review-failed-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    const results = await drainPendingFixWorkItems({
+      queueRoot: join(root, '_queue'), logsRoot: join(root, '_logs'), phaseWiring: UNREACHED_PHASE_WIRING, confirmMerge: () => false,
+      runDrainCycle: deliverThenFailReview(fx),
+    });
+    assert.deepEqual(results.find((x) => x.initiativeId === FIX_INIT), { initiativeId: FIX_INIT, status: 'drained', detail: 'failed' });
+    assert.ok(existsSync(queue(root, 'failed')), 'failed/');
+    assert.equal(existsSync(queue(root, 'ready-for-review')), false);
+    assert.equal(existsSync(queue(root, 'in-flight')), false);
+    assert.equal(events(fx).filter((e) => e.message === 'sendback.loop-halted').length, 0, 'not a halt: the round ran');
+    const r = runRequeue(FIX_INIT, { forgeRoot: root });
+    assert.deepEqual([r.fromQueueDir, r.resumeDecision.resume && r.resumeDecision.resume_from, r.worktreeRemoved], ['failed', 'review', false], r.resumeDecision.reason);
+    assert.equal(parseManifest(readFileSync(queue(root, 'pending'), 'utf8')).resume_from, 'review');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the placement the pre-fix drain left (failed-at-review manifest in ready-for-review/) still Requeues to resume_from review — no hand move', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-review-failed-rfr-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    await deliverThenFailReview(fx)(); // the round ran under the old drain, whose finally returned it to ready-for-review/
+    assert.ok(existsSync(queue(root, 'ready-for-review')));
+    const r = runRequeue(FIX_INIT, { forgeRoot: root });
+    assert.deepEqual([r.fromQueueDir, r.resumeDecision.resume && r.resumeDecision.resume_from, r.worktreeRemoved, r.branchDeleted], ['ready-for-review', 'review', false, false], r.resumeDecision.reason);
+    assert.equal(parseManifest(readFileSync(queue(root, 'pending'), 'utf8')).resume_from, 'review');
+    assert.equal(existsSync(queue(root, 'ready-for-review')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
