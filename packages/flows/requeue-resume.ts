@@ -208,11 +208,25 @@ export function haltedRoundRefusal(logPath: string, pendingIds: readonly string[
   const at = lastIndex(events, (e) => e.message === 'sendback.loop-halted');
   if (at < 0 || at < lastIndex(events, (e) => e.message === 'cycle.start')) return null;
   const halt = events[at]!;
-  const alreadyRefused = events[events.length - 1]?.message === 'sendback.loop-halt-refused';
+  const alreadyRefused = lastIndex(events, (e) => e.message === 'sendback.loop-halt-refused') > at; // forge-mfv5.1.57: a park event may follow it
   const halted = halt.metadata?.pending_work_items;
   if (!Array.isArray(halted)) return { detail: 'fix round halted, but its record names no pending work items (unreadable) — fix the worktree, then Requeue', alreadyRefused };
   if (halted.join(',') !== [...pendingIds].sort().join(',')) return null;
   return { detail: `fix round halted (${String(halt.metadata?.classification)}): ${String(halt.metadata?.reason)} — fix the worktree, then Requeue`, alreadyRefused };
+}
+
+/**
+ * forge-mfv5.1.57: the drain already said this park (`fix-loop.needs-operator` with the same detail) since the last
+ * `cycle.start` — one event + one notify per distinct park. An unreadable log reads as not said: the park is said again.
+ */
+export function drainParkAlreadySaid(logPath: string, detail: string): boolean {
+  const events = readLogEvents(logPath) ?? [];
+  return lastIndex(events, (e) => e.message === 'fix-loop.needs-operator' && e.metadata?.detail === detail) > lastIndex(events, (e) => e.message === 'cycle.start');
+}
+
+/** forge-mfv5.1.57: this supersession (`sendback.superseded`, the same ids by the same WI) is already recorded in the cycle's log. */
+export function supersessionAlreadySaid(logPath: string, superseded: readonly string[], by: string): boolean {
+  return (readLogEvents(logPath) ?? []).some((e) => e.message === 'sendback.superseded' && e.metadata?.by === by && JSON.stringify(e.metadata?.superseded) === JSON.stringify(superseded));
 }
 
 /** forge-mfv5.1.35: the latest attempt's `cycle.end` status, or null (no log / no end). */

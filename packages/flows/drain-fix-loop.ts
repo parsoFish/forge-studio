@@ -37,14 +37,15 @@ import { createLogger } from '@forge/kernel';
 import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from './manifest-path-guard.ts';
 import { resolveReviewLoopCaps } from '@forge/kernel';
 import {
+  failedFixWorkItemIds,
   fixWorkItemCount,
-  hasFailedFixWorkItem,
   hasMergeGateConfigErrorMarker,
   hasReviewCapExhaustedMarker,
   pendingFixWorkItems,
+  supersededFixWorkItems,
 } from './fix-work-items.ts';
 import type { CycleInput } from './cycle-context.ts';
-import { fixRoundHeadRefusal, haltedRoundRefusal, recordedRoundHalt, roundHaltFromLog } from './requeue-resume.ts';
+import { drainParkAlreadySaid, fixRoundHeadRefusal, haltedRoundRefusal, recordedRoundHalt, roundHaltFromLog, supersessionAlreadySaid } from './requeue-resume.ts';
 import { annotateManifest } from './scheduler-run-one.ts';
 import { normaliseLegacyFixGatesAtReentry } from './legacy-fix-gate.ts';
 
@@ -134,7 +135,7 @@ export async function drainPendingFixWorkItems(
       // adversarial-review) against these two values, plus `spawnSync('git',
       // …, {cwd: worktreePath})`. The check must precede the `existsSync`
       // probe below, because every later use — `hasReviewCapExhaustedMarker`,
-      // `hasMergeGateConfigErrorMarker`, `hasFailedFixWorkItem`,
+      // `hasMergeGateConfigErrorMarker`, `failedFixWorkItemIds`,
       // `pendingFixWorkItems`, `confirmMerge`, `fixWorkItemCount`,
       // `worktreeHeadSha` — takes the raw value.
       // Absent (`''`) stays absent: the `no-worktree` branch owns that case.
@@ -172,23 +173,31 @@ export async function drainPendingFixWorkItems(
         out.push({ initiativeId, status: 'no-worktree' });
         continue;
       }
+      const logPath = join(logsRoot, cycleId, 'events.jsonl');
+      const round = m.review_rounds ?? 0;
+      // forge-mfv5.1.57: every park is said — one error event + one notify per distinct detail since the last cycle.start.
+      const park = (detail: string): void => {
+        if (!drainParkAlreadySaid(logPath, detail)) {
+          createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'fix-loop.needs-operator', metadata: { round, detail } });
+          deps.notify?.(`${initiativeId} · fix round ${round} parked (needs operator): ${detail}`);
+        }
+        out.push({ initiativeId, status: 'needs-operator', detail });
+      };
 
-      // Operator territory — never auto-retry. The cap marker was already
-      // notified loudly at rejection time by whichever writer set it (the
-      // verdict handler for a review-fix send-back, or the integrate node's
-      // demo-fix loop, R4-10-F1 — both fire notify()); don't re-notify every
-      // sweep, just report the parked status. Both writers respect the marker,
-      // so its presence means no fresh fix WI was enqueued behind it.
+      // Operator territory — never auto-retry. Both marker writers respect the
+      // marker, so its presence means no fresh fix WI was enqueued behind it.
       if (hasReviewCapExhaustedMarker(worktreePath)) {
-        out.push({ initiativeId, status: 'needs-operator', detail: 'review-cap-exhausted marker present' });
+        park('review-cap-exhausted marker present');
         continue;
       }
       if (hasMergeGateConfigErrorMarker(worktreePath)) {
-        out.push({ initiativeId, status: 'needs-operator', detail: 'merge-gate-config-error marker present' });
+        park('merge-gate-config-error marker present');
         continue;
       }
-      if (hasFailedFixWorkItem(worktreePath)) {
-        out.push({ initiativeId, status: 'needs-operator', detail: 'failed fix work-item' });
+      // forge-mfv5.1.57: a failed fix WI a later send-back appended behind is superseded — only the others park the drain.
+      const failed = failedFixWorkItemIds(worktreePath);
+      if (failed.length > 0) {
+        park(`failed fix work-item ${failed.join(', ')} — send back a new fix work item to supersede it, or take the worktree over`);
         continue;
       }
 
@@ -207,19 +216,18 @@ export async function drainPendingFixWorkItems(
         continue;
       }
       // forge-mfv5.1.27: a gate-fix round re-enters only on the head it was parked on — checked BEFORE the claim.
-      const headRefusal = fixRoundHeadRefusal({ worktreePath, logPath: join(logsRoot, cycleId, 'events.jsonl'), projectRepoPath, branch: `forge/${initiativeId}` });
+      const headRefusal = fixRoundHeadRefusal({ worktreePath, logPath, projectRepoPath, branch: `forge/${initiativeId}` });
       if (headRefusal !== null) {
-        createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'fix-round.head-moved', metadata: { detail: headRefusal } });
-        out.push({ initiativeId, status: 'needs-operator', detail: headRefusal });
+        if (!drainParkAlreadySaid(logPath, headRefusal)) createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'fix-round.head-moved', metadata: { detail: headRefusal } });
+        park(headRefusal);
         continue;
       }
 
       // forge-mfv5.1.39: a round that halted on this pending set stays halted until the operator's Requeue (a new cycle.start).
-      const logPath = join(logsRoot, cycleId, 'events.jsonl');
       const haltRefusal = haltedRoundRefusal(logPath, pending.map((p) => p.work_item_id));
       if (haltRefusal !== null) {
         if (!haltRefusal.alreadyRefused) createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'error', input_refs: [manifestPath], output_refs: [], message: 'sendback.loop-halt-refused', metadata: { detail: haltRefusal.detail } });
-        out.push({ initiativeId, status: 'needs-operator', detail: haltRefusal.detail });
+        park(haltRefusal.detail);
         continue;
       }
 
@@ -232,7 +240,6 @@ export async function drainPendingFixWorkItems(
 
       // Caps (defence in depth — the verdict handler enforces them at append).
       const totalFix = fixWorkItemCount(worktreePath);
-      const round = m.review_rounds ?? 0;
       if (totalFix > caps.maxTotalFixWorkItems || round > caps.maxSendBackRounds) {
         deps.notify?.(
           `${initiativeId} · fix-loop cap reached (round ${round}/${caps.maxSendBackRounds}, ` +
@@ -265,6 +272,12 @@ export async function drainPendingFixWorkItems(
       // (the send-back stamped resume_from:'develop' on the manifest).
       writeHeartbeat(file, paths);
       const heartbeat = setInterval(() => { try { writeHeartbeat(file, paths); } catch { /* best-effort */ } }, DRAIN_HEARTBEAT_MS);
+
+      // forge-mfv5.1.57: the round runs over the failed fix WIs it supersedes — recorded once, by name.
+      const { superseded, by } = supersededFixWorkItems(worktreePath);
+      if (by !== null && !supersessionAlreadySaid(logPath, superseded, by)) {
+        createLogger(cycleId, logsRoot).emit({ initiative_id: initiativeId, phase: 'review-loop', skill: 'fix-loop-drain', event_type: 'log', input_refs: [inFlightPath], output_refs: [], message: 'sendback.superseded', metadata: { round, superseded, by } });
+      }
 
       // forge-nk1y.22: a pre-#1172 gate-fix WI carries the no-op gate ['true'] — give it the failing gate's own command.
       normaliseLegacyFixGatesAtReentry({ worktreePath, initiativeId, cycleId, logsRoot });

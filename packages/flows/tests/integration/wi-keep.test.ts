@@ -230,6 +230,51 @@ test('Requeue of a round halted on a budget-failed fix WI resumes develop from t
   }
 });
 
+// forge-mfv5.1.57: a WI an earlier send-back superseded stays failed through a later round's halt and its Requeue.
+const haltLine = (ids: string[]) => `${JSON.stringify({ phase: 'review-loop', skill: 'developer-ralph', event_type: 'error', message: 'sendback.loop-halted', started_at: '2026-10-10T06:00:00.000Z', metadata: { round: 2, classification: 'fix-work-items-failed', reason: `fix work item(s) failed at the iteration budget: ${ids.join(', ')}`, pending_work_items: ids } })}\n`;
+
+test('Requeue re-arms only what the halt names: the superseded WI-6 stays failed, the halted WI-7 resumes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wi-keep-requeue-superseded-'));
+  try {
+    const fx = plantStrandedFixRound(root, { withGit: true, fixOrigin: 'review-fix' });
+    const specPath = join(fx.worktree, '.forge', 'work-items', 'WI-6.md');
+    const wi6 = parseWorkItem(readFileSync(specPath, 'utf8'));
+    writeFileSync(specPath, serializeWorkItem({ ...wi6, status: 'failed' })); // round 1, before a halt existed (gitweave I4 WI-17)
+    const wi7Path = join(fx.worktree, '.forge', 'work-items', 'WI-7.md');
+    writeFileSync(wi7Path, serializeWorkItem({ ...wi6, work_item_id: 'WI-7', status: 'failed', body: '## WI-7' })); // the send-back's WI, halted in round 2
+    appendFileSync(join(fx.logDir, 'events.jsonl'), haltLine(['WI-7']));
+    renameSync(fx.manifestPath, join(root, '_queue', 'failed', `${FIX_INIT}.md`));
+
+    const r = runRequeue(FIX_INIT, { forgeRoot: root });
+
+    assert.deepEqual([r.resumeDecision.resume, r.resumeDecision.resume && r.resumeDecision.resume_from], [true, 'develop'], r.resumeDecision.reason);
+    assert.equal(parseWorkItem(readFileSync(specPath, 'utf8')).status, 'failed', 'the superseded WI is never re-armed');
+    assert.equal(parseWorkItem(readFileSync(wi7Path, 'utf8')).status, 'pending');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a same-round sibling never supersedes a halted WI: WI-6 failed + WI-7 complete, the halt names WI-6 → Requeue re-arms WI-6', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wi-keep-requeue-sibling-'));
+  try {
+    const fx = plantStrandedFixRound(root, { withGit: true, fixOrigin: 'review-fix' });
+    const specPath = join(fx.worktree, '.forge', 'work-items', 'WI-6.md');
+    const wi6 = parseWorkItem(readFileSync(specPath, 'utf8'));
+    writeFileSync(specPath, serializeWorkItem({ ...wi6, status: 'failed' }));
+    writeFileSync(join(fx.worktree, '.forge', 'work-items', 'WI-7.md'), serializeWorkItem({ ...wi6, work_item_id: 'WI-7', status: 'complete', body: '## WI-7' }));
+    appendFileSync(join(fx.logDir, 'events.jsonl'), haltLine(['WI-6']));
+    renameSync(fx.manifestPath, join(root, '_queue', 'failed', `${FIX_INIT}.md`));
+
+    const r = runRequeue(FIX_INIT, { forgeRoot: root });
+
+    assert.deepEqual([r.resumeDecision.resume, r.resumeDecision.resume && r.resumeDecision.resume_from], [true, 'develop'], r.resumeDecision.reason);
+    assert.equal(parseWorkItem(readFileSync(specPath, 'utf8')).status, 'pending', 'the halted WI is re-armed — a higher-numbered sibling is not a send-back');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('drain: a round the dev loop halted on a failed fix WI lands in failed/ by name — round_halt on the manifest, one halt event, never ready-for-review or "completed"', async () => {
   const root = mkdtempSync(join(tmpdir(), 'wi-keep-drain-'));
   try {

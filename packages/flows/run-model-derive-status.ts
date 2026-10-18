@@ -480,16 +480,24 @@ export function deriveOperatorStop(events: readonly EventLogEntry[]): boolean {
   return events.some((e) => e.message === 'flow.operator-stop');
 }
 
-/** forge-mfv5.1.39: the halted fix round, when the LATEST attempt (after the last `cycle.start`) ended in `sendback.loop-halted`. */
+/**
+ * forge-mfv5.1.39: the halted fix round, when the LATEST attempt (after the last `cycle.start`) ended in `sendback.loop-halted`.
+ * forge-mfv5.1.57: else the drain's latest park in it (`fix-loop.needs-operator`) no send-back has answered since — classification
+ * `needs-operator`, its detail the reason.
+ */
 export function deriveRoundHalt(events: readonly EventLogEntry[]): { round: number; classification: string; reason: string } | undefined {
+  let park: { round: number; classification: string; reason: string } | undefined;
+  let sentBack = false;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    if (e.message === 'cycle.start') return undefined;
-    if (e.message !== 'sendback.loop-halted') continue;
+    if (e.message === 'cycle.start') break;
     const md = e.metadata ?? {};
-    return { round: typeof md.round === 'number' ? md.round : 0, classification: String(md.classification ?? 'UNKNOWN'), reason: String(md.reason ?? 'no reason recorded') };
+    const round = typeof md.round === 'number' ? md.round : 0;
+    if (e.message === 'sendback.loop-halted') return { round, classification: String(md.classification ?? 'UNKNOWN'), reason: String(md.reason ?? 'no reason recorded') };
+    if (e.message === 'reviewer.verdict.send-back') sentBack = true; // a send-back after the park answers it
+    if (e.message === 'fix-loop.needs-operator' && park === undefined && !sentBack) park = { round, classification: 'needs-operator', reason: String(md.detail ?? 'no detail recorded') };
   }
-  return undefined;
+  return park;
 }
 
 /**

@@ -219,6 +219,36 @@ test('second send-back: round 2, next WI id (WI-2)', async () => {
   }
 });
 
+// forge-mfv5.1.57: gitweave I4 — the send-back accepted WI-18 behind a failed WI-17 without naming what it replaced.
+test('send-back onto a queue holding a failed fix WI names it: supersedes in the 200 JSON and the reviewer.verdict.send-back metadata', async () => {
+  const { forgeRoot, worktreePath, initiativeId, cycleId } = setup('supersedes');
+  const ac = { given: 'a user', when: 'clicking submit', then: 'data is saved' };
+  const { url, close } = await startBridge({
+    forgeRoot,
+    port: 0,
+    mergePr: () => { throw new Error('mergePr must not be called on send-back'); },
+    finalizeAfterMerge: async () => { throw new Error('finalizeAfterMerge must not be called on send-back'); },
+  });
+  try {
+    const first = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'round 1', acceptanceCriteria: [ac], derivedFrom: 'comments' });
+    assert.equal(first.status, 200, JSON.stringify(first.json));
+    assert.deepEqual((first.json as Record<string, unknown>).supersedes, [], 'nothing failed, nothing superseded');
+    const wi1 = join(worktreePath, '.forge', 'work-items', 'WI-1.md');
+    writeFileSync(wi1, readFileSync(wi1, 'utf8').replace(/^status: pending$/m, 'status: failed')); // round 1's fix WI failed
+    const second = await postVerdict(url, { initiativeId, kind: 'send-back', rationale: 'round 2', acceptanceCriteria: [ac], derivedFrom: 'comments' });
+    assert.equal(second.status, 200, JSON.stringify(second.json));
+    const body = second.json as Record<string, unknown>;
+    assert.deepEqual(body.appendedWorkItems, ['WI-2']);
+    assert.deepEqual(body.supersedes, ['WI-1']);
+    const sendBacks = readEvents(forgeRoot, cycleId).filter((e) => e.message === 'reviewer.verdict.send-back');
+    assert.equal(sendBacks.length, 2);
+    assert.deepEqual((sendBacks[1]!.metadata as Record<string, unknown>).supersedes, ['WI-1']);
+  } finally {
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
 test('send-back cap exhaustion: round cap reached → 409 parked needs-operator, marker written, no new WI', async () => {
   const { forgeRoot, worktreePath, initiativeId } = setup('cap');
   const ac = { given: 'a user', when: 'clicking submit', then: 'data is saved' };

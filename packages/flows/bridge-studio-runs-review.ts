@@ -406,7 +406,7 @@ export async function applyReviewVerdict(
     // would enqueue work that never runs).
     const caps = resolveReviewLoopCaps();
     const currentRound = (manifest.review_rounds ?? 0) + 1;
-    const { appended, workItem } = compileFixWorkItems({
+    const { appended, workItem, supersedes } = compileFixWorkItems({
       worktreePath,
       initiativeId,
       source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd, filesInScope: body.filesInScope, requireChecks: body.derivedFrom !== 'comments' },
@@ -455,6 +455,7 @@ export async function applyReviewVerdict(
           files_in_scope: workItem.files_in_scope,
           estimated_iterations: workItem.estimated_iterations,
           work_item_gate_cmd: workItem.quality_gate_cmd,
+          supersedes, // forge-mfv5.1.57: the failed fix WIs this one replaces — the drain no longer parks on them
         },
       });
       for (const id of appended) {
@@ -495,6 +496,7 @@ export async function applyReviewVerdict(
       ok: true,
       kind,
       appendedWorkItems: appended,
+      supersedes,
       round,
       note: 'fix work items appended to the initiative queue; the fix loop re-dispatches the develop agent in the same cycle',
     }, origin);

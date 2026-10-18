@@ -235,9 +235,9 @@ export function describeOperatorStop(): string {
   return 'Stopped by the operator — resumable; the worktree and branch are kept.';
 }
 
-/** forge-mfv5.1.39: the ONE wording of a halted fix round — the run page, the rail and the verdict headline. */
+/** forge-mfv5.1.39: the ONE wording of a halted fix round — the run page, the rail and the verdict headline; a drain park (forge-mfv5.1.57) reads "parked". */
 export function describeRoundHalt(h: NonNullable<Run['roundHalt']>): string {
-  return `Round ${h.round} halted: ${h.reason}`;
+  return `Round ${h.round} ${h.classification === 'needs-operator' ? 'parked' : 'halted'}: ${h.reason}`;
 }
 
 /**

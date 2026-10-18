@@ -113,6 +113,13 @@ test('the same halted round re-presented to the drain is refused by name before 
     assert.equal(starts(fx), before, 'no re-entry');
     assert.ok(existsSync(queue(root, 'ready-for-review')), 'no claim');
     assert.ok(events(fx).some((e) => e.message === 'sendback.loop-halt-refused'), 'a named event');
+    // forge-mfv5.1.57: the park is said once — a second sweep adds neither a refusal nor a park event
+    const again = await drain(root);
+    assert.equal(again?.status, 'needs-operator');
+    assert.equal(events(fx).filter((e) => e.message === 'sendback.loop-halt-refused').length, 1);
+    const parks = events(fx).filter((e) => e.message === 'fix-loop.needs-operator');
+    assert.equal(parks.length, 1, JSON.stringify(parks));
+    assert.equal(parks[0]!.metadata?.detail, r?.detail);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -274,4 +281,32 @@ test('deriveRoundHalt: only the LATEST attempt counts — a Requeue\'s cycle.sta
   assert.deepEqual(deriveRoundHalt([ev('cycle.start'), halted]), { round: 2, classification: 'terminal', reason: 'r' });
   assert.equal(deriveRoundHalt([ev('cycle.start'), halted, ev('cycle.start')]), undefined);
   assert.equal(deriveRoundHalt([ev('cycle.start'), ev('sendback.loop-completed')]), undefined);
+});
+
+// forge-mfv5.1.57: a drain park reaches the run model the verdict card reads — never a silent ready-for-review.
+test('a parked drain (a failed fix WI alone) reads on the run model as roundHalt needs-operator with the detail', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-park-run-model-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    const spec = join(fx.worktree, '.forge', 'work-items', 'WI-6.md');
+    writeFileSync(spec, readFileSync(spec, 'utf8').replace(/^status: pending$/m, 'status: failed'));
+    const r = await drain(root);
+    assert.equal(r?.status, 'needs-operator', JSON.stringify(r));
+    assert.ok(existsSync(queue(root, 'ready-for-review')), 'no claim');
+    const run = aggregateRun({ root, queueState: 'ready-for-review', manifestPath: queue(root, 'ready-for-review'), nowMs: Date.now() });
+    assert.deepEqual(run.roundHalt, { round: 1, classification: 'needs-operator', reason: r?.detail });
+    assert.match(run.roundHalt?.reason ?? '', /^failed fix work-item WI-6 /);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('deriveRoundHalt: a drain park reads as needs-operator; a halt in the same attempt outranks it; a cycle.start clears both', () => {
+  const ev = (message: string, metadata?: Record<string, unknown>) => ({ message, metadata }) as unknown as EventLogEntry;
+  const park = ev('fix-loop.needs-operator', { round: 3, detail: 'failed fix work-item WI-17' });
+  assert.deepEqual(deriveRoundHalt([ev('cycle.start'), park]), { round: 3, classification: 'needs-operator', reason: 'failed fix work-item WI-17' });
+  const halted = ev('sendback.loop-halted', { round: 2, classification: 'terminal', reason: 'r' });
+  assert.deepEqual(deriveRoundHalt([ev('cycle.start'), halted, ev('sendback.loop-halt-refused'), park]), { round: 2, classification: 'terminal', reason: 'r' });
+  assert.equal(deriveRoundHalt([park, ev('cycle.start')]), undefined);
+  assert.equal(deriveRoundHalt([ev('cycle.start'), park, ev('reviewer.verdict.send-back')]), undefined, 'the operator\'s send-back answers the park');
 });
