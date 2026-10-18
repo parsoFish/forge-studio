@@ -39,7 +39,7 @@ import { makeToolEventSink } from '@forge/agents';
 import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
-import { createWiWorktree } from '@forge/flows';
+import { createWiWorktree, OperatorStopError } from '@forge/flows';
 import { closeWiWorktree, devLoopRunList, recordWiOutcome, roundFixWorkItemIds, runWithCrashRetry, stopIncompleteFixRound } from './dev-loop-keep.ts';
 import { emitDepsLinkProblems, emitGateEvent, emitGateFeedbackEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
 import { createGateFeedbackTracker, writeMergeConflictFeedback } from './gate-feedback.ts';
@@ -431,6 +431,8 @@ export async function runDeveloperLoop(
   // WI-level cancellation (this file's top-of-function AbortSignal note)
   // would close.
   const pushFailedRef = { current: false };
+  // forge-mfv5.1.60: the WIs whose agent died under the operator stop (runWithCrashRetry).
+  const operatorStoppedWis: string[] = [];
 
   /**
    * Run ONE work item's full dev-loop turn: prerequisite check, isolated
@@ -883,6 +885,7 @@ export async function runDeveloperLoop(
     } else {
       // M7-A: a cost-ceiling halt settles 'pending' (resumable), not 'failed'; so does an operator stop (forge-mfv5.1.60).
       finalStatus = isCostCeilingHalt(result) || stoppedByOperator ? 'pending' : 'failed';
+      if (stoppedByOperator) operatorStoppedWis.push(wi.work_item_id);
     }
     if (!requeueForMergeConflict && finalStatus !== 'complete') {
       writeWorkItemStatus(specPath, finalStatus);
@@ -1141,6 +1144,9 @@ export async function runDeveloperLoop(
     },
   });
 
+  // forge-mfv5.1.60: a WI stopped by the operator mid-loop ends the node as the operator stop it is (a clean-boundary
+  // halt, resumable) — never as a total failure or an incomplete fix round.
+  if (operatorStoppedWis.length > 0) throw new OperatorStopError();
   stopIncompleteFixRound({ logger, initiativeId: input.initiativeId, parentEventId: start.event_id, skill: agentDef.slug, items, roundFixIds, outcomes: wiOutcomes, manifestPath: input.manifestPath, worktreePath: input.worktreePath });
 
   // Partial dev-loop completion is NOT fatal to the cycle. The reviewer's

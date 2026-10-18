@@ -133,3 +133,16 @@ test('row 1: an owed work item whose id is not a work-item id refuses the Requeu
     rmSync(s.root, { recursive: true, force: true });
   }
 });
+
+test('row 1 control: a stranded run that re-enters at plan stamps nothing — the PM rewrites the work items', () => {
+  const plan = (row: string) => row.replace('"resume_from":"develop"', '"resume_from":"plan"').replace('"cleanBoundaryHalt":true,', '"cleanBoundaryHalt":true,"resume_from":"plan",');
+  const s = strandedStop(3, [plan(STRANDED_ROW), plan(STRANDED_CLASS_ROW)]);
+  try {
+    const r = runRequeue(FIX_INIT, { forgeRoot: s.root });
+    assert.deepEqual([r.resumeDecision.resume, r.resumeDecision.resume && r.resumeDecision.resume_from], [true, 'plan'], r.resumeDecision.reason);
+    assert.equal(parseWorkItem(readFileSync(s.specPath, 'utf8')).kept_branch, undefined);
+    assert.equal(s.events().some((e) => e.message === 'wi.kept-at-classification'), false);
+  } finally {
+    rmSync(s.root, { recursive: true, force: true });
+  }
+});

@@ -239,15 +239,17 @@ export function runRequeue(
     opts.resumeFromIntegrate && !priorFailure.cleanBoundaryHalt && !fixRound
       ? { resume: true, resume_from: 'integrate', reason: 'operator-requested --resume-from=integrate' }
       : inferred;
+  if (fixRound) {
+    const refusal = fixRoundHeadRefusal({ worktreePath, logPath: cycleLog, projectRepoPath, branch: `forge/${initiativeId}` });
+    if (refusal !== null) throw new FixRoundRefusedError(`requeue: ${refusal}`);
+  }
   // forge-mfv5.1.60 (D-06): a stranded run's stopped WIs resume from their committed branches, never parked and re-cut —
-  // first, so an unanswerable branch refuses before any mutation.
-  if (resumeDecision.resume && projectRepoPath !== '' && existsSync(projectRepoPath) && existsSync(worktreePath) && strandedAtBoot(cycleLog)) {
+  // before the re-entry's own mutations, so an unanswerable branch refuses with nothing written. Only a develop re-entry
+  // runs the WIs (a plan re-entry rewrites them; integrate skips them).
+  if (resumeDecision.resume && (resumeDecision.resume_from === 'develop' || resumeDecision.resume_from === null) && projectRepoPath !== '' && existsSync(projectRepoPath) && existsSync(worktreePath) && strandedAtBoot(cycleLog)) {
     for (const k of keepStrandedWorkItems({ worktreePath, projectRepoPath, initiativeId })) emitOrchestratorEvent(join(forgeRoot, '_logs'), manifest.cycle_id ?? initiativeId, 'log', 'wi.kept-at-classification', { initiative_id: initiativeId, ...k });
   }
   if (fixRound) {
-    const logPath = join(forgeRoot, '_logs', manifest.cycle_id ?? initiativeId, 'events.jsonl');
-    const refusal = fixRoundHeadRefusal({ worktreePath, logPath, projectRepoPath, branch: `forge/${initiativeId}` });
-    if (refusal !== null) throw new FixRoundRefusedError(`requeue: ${refusal}`);
     // forge-nk1y.22: a pre-#1172 gate-fix WI carries the no-op gate ['true'] — give it the failing gate's own command.
     normaliseLegacyFixGatesAtReentry({ worktreePath, initiativeId, cycleId: manifest.cycle_id ?? initiativeId, logsRoot: join(forgeRoot, '_logs') });
     // forge-mfv5.1.56: a round halted on budget-failed fix WIs resumes them from their kept branches.
