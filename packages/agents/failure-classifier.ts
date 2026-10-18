@@ -329,7 +329,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // live develop flow; their delivery-gate throws must be diagnosed accurately,
   // not swept into the retired unifier / reviewer-Ralph vocabulary below.
   let integrateBandDetail = '';
-  let integrateBandFailed = false, adversarialReviewFailed = false, adversarialReviewDeriveFailed = false;
+  let integrateBandFailed = false, adversarialReviewFailed = false, adversarialReviewDeriveFailed = false, reviewScopeViolation = false;
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false, transientLint = false;
@@ -533,7 +533,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
         // forge-nk1y.39: the ORCHESTRATOR's git read failed — nothing was judged.
         adversarialReviewDeriveFailed = true; ev(e);
       } else if (msg.includes('adversarial review pipeline failed')) {
-        adversarialReviewFailed = true; ev(e);
+        adversarialReviewFailed = true; ev(e); reviewScopeViolation ||= msg.includes('adversarial review pipeline failed (scope-violation');
       // F1.I1: distinguish unifier-no-demo from generic reviewer failure.
       // Order matters — check the more specific signature first.
       } else if (msg.includes('reviewer.pr-open-failed') || msg.includes('DEMO.md') || msg.includes('demo.json') || msg.includes('pr-description.md')) {
@@ -741,8 +741,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       ? `the integrate band failed ${integrateBandDetail} — the branch is not review-ready and no PR opened`
       : 'the integrate band failed to derive the delivery bundle — the branch is not review-ready and no PR opened; the error event carries the band\'s own reason', evidence);
   }
-  // forge-mfv5.1.61: every work item already passed its gate — Requeue resumes AT the review node.
-  if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / authoring) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then Requeue, which re-runs only the review', evidence, false, false, 'review');
+  // forge-mfv5.1.61: Requeue resumes AT the review node — never after a scope violation (its stray write would be the resume's baseline).
+  if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / authoring) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then Requeue' + (reviewScopeViolation ? '' : ', which re-runs only the review'), evidence, false, false, reviewScopeViolation ? undefined : 'review');
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 
   // Transient — auto-retry within MAX_AUTO_RETRIES.

@@ -61,6 +61,15 @@ test('a review-pipeline failure classifies with resume point "review" (the I4 ro
   assert.equal(cls.resumeFrom, 'review');
 });
 
+test('a review SCOPE VIOLATION gets no review resume — the stray write would join the resumed pass\'s own baseline', () => {
+  const cls = classifyCycleFailure([{
+    event_id: 'e1', initiative_id: 'INIT-x', started_at: '2026-10-18T10:03:29.000Z', phase: 'orchestrator', skill: 'flow-runner', event_type: 'error',
+    input_refs: [], output_refs: [], message: 'delivery gate: adversarial review pipeline failed (scope-violation: adversarial-review wrote outside .forge/review-findings.json: .forge/x) — no findings artifact',
+  } as unknown as EventLogEntry]);
+  assert.equal(cls.kind, 'terminal');
+  assert.equal(cls.resumeFrom, undefined);
+});
+
 test('resumeFrom "review" skips the per-WI dev loop, like the other post-develop resume points', () => {
   assert.equal(resumeSkipsPerWiWork('review'), true);
 });
