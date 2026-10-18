@@ -267,7 +267,7 @@
   "class": "other",
   "guard": null,
   "verified": "exec",
-  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`"
+  "note": "`POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project`; forge-mfv5.1.60: existsSync(projectRepoPath / worktreePath) gating the stranded-WI keep, both validated by assertManifestPathFields above it"
  },
  "packages/flows/gate-fix-loop.ts": {
   "class": "other",
@@ -1125,7 +1125,7 @@
   "class": "other",
   "guard": null,
   "verified": null,
-  "note": "forge-mfv5.1.56: git -C projectRepoPath (rev-parse / rev-list --count / branch -D / branch -m to `forge/parked/…`) on `forge/wi/<initiativeId>/<workItemId>` refs, and a `merge` of the cycle tip inside the per-WI worktree it just created; projectRepoPath reaches here only from a claimed manifest scheduler-run-one / drain-fix-loop containment-check (isContainedProjectRepoPath), ids are WORK_ITEM_ID_PATTERN / validated initiative ids, execFileSync with argv arrays, never a shell."
+  "note": "forge-mfv5.1.56: git -C projectRepoPath (rev-parse / rev-list --count / branch -D / branch -m to `forge/parked/…`) on `forge/wi/<initiativeId>/<workItemId>` refs, and a `merge` of the cycle tip inside the per-WI worktree it just created; projectRepoPath reaches here only from a claimed manifest scheduler-run-one / drain-fix-loop containment-check (isContainedProjectRepoPath), ids are WORK_ITEM_ID_PATTERN / validated initiative ids, execFileSync with argv arrays, never a shell. forge-mfv5.1.60: keepStrandedWorkItems (reached from runRequeue after assertManifestPathFields) reads git for-each-ref / rev-parse on the same forge/wi refs and writes kept_branch into <worktree>/.forge/work-items/<id>.md — every id refused by name unless DEV_WORK_ITEM_ID_PATTERN, before any git call or write."
  },
  "packages/flows/worktree.ts": {
   "class": "other",
