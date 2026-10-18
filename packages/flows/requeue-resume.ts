@@ -132,6 +132,13 @@ export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSign
   };
 }
 
+/** forge-mfv5.1.60 (D-06): the latest attempt ended stranded (boot classified it) — its dev loop died without recording its WIs' outcomes. */
+export function strandedAtBoot(logPath: string): boolean {
+  const events = readLogEvents(logPath) ?? [];
+  const at = lastIndex(events, (ev) => ev.message === 'recovery.stranded-classified');
+  return at >= 0 && at > lastIndex(events, (ev) => ev.message === 'cycle.start');
+}
+
 type LogEvent = { phase?: string; skill?: string; event_type?: string; message?: string; metadata?: Record<string, unknown> };
 
 const lastIndex = (events: LogEvent[], pred: (e: LogEvent) => boolean): number => {

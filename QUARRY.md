@@ -61,14 +61,14 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,559 | **12,978** | ratified 12,978 — forge-nk1y.28: the brain-write lease lives under `_logs/`, is released on the bridge's exit, and a starting bridge reaps a dead holder's lock (`reapDeadBrainWriteLease`); +60 measured on main 12,918, lane-ratified (≤100, ruling 666) |
 | `agents` | 46 | 12,629 | **12,629** | ratified 12,629 — forge-mfv5.1.52: a directory files_in_scope entry meets the required-paths gate (one shared scope matcher, the −3 text lists the diff it saw); +23 measured on this PR's tree after a read for slack found none, lane-ratified (≤100, ruling 666). |
 | `sessions` | 65 | 21,346 | **21,308** | ratified 21,308 — forge-mfv5.1.32: the demo-builder lock writes demoMeans.commands (`withCaptureCommands`); +11 measured on main 21,297 (after #1204), lane-ratified (≤100, ruling 666). |
-| `flows` | 97 | 26,737 | **26,538** | ratified 26,538 — forge-mfv5.1.57: a later send-back supersedes a failed fix WI (drain, dev loop; Requeue keeps the halt as authority) and every drain park is said once by event + notify; +66 measured on this PR's tree after a read for slack (−5), lane-ratified (≤100, ruling 666). |
+| `flows` | 97 | 26,787 | **26,588** | ratified 26,588 — forge-mfv5.1.60: a Requeue of a stranded run stamps each stopped WI kept (its committed branch resumes, never parked) and CycleInput carries the operator-stop flag to the dev loop; +50 measured on this PR's tree after a read for slack, lane-ratified (≤100, ruling 666). |
 | `factory` | 18 | 3,447 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 56 | 13,702 | **13,702** | ratified 13,702 — forge-mfv5.1.59: a per-AC check's inline program and its own argv are never matched as the suite (per-interpreter options), and a no-tests refusal names the classing argv token; +39 measured on this PR's tree after a read for slack, lane-ratified (≤100, ruling 666). |
+| `stations` | 56 | 13,680 | **13,702** | ratified 13,702 — forge-mfv5.1.59: a per-AC check's inline program and its own argv are never matched as the suite (per-interpreter options), and a no-tests refusal names the classing argv token; +39 measured on this PR's tree after a read for slack, lane-ratified (≤100, ruling 666). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 40 | 9,177 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. R4 row 205 (forge-8vfn.8.5.54): 8,041 → 8,366 (+325) for the Studio serve supervisor and its exit sequencing, ratified at the measured figure by T1 1973mu (operator veto open until merge, handoff Q35); `flows` +21 net (cap 24,918) in the same PR. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | `apps/docs` | 0 | 0 | — | the published docs site (R20), owner `apps/docs`; it quarries nothing and imports nothing from the product (`check-boundaries.mjs` rule `docs-app-imports-product`). Its content is pages, not production code: word ceilings (`check-docs-budget.mjs --strict`) bound it, not a LOC cap. |
-| **total** | **539** | **139,121** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **539** | **139,149** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -209,7 +209,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/dry-bridge.ts | kernel | rewritten | 332 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 788 |
-| packages/flows/forge-requeue.ts | flows | verbatim | 367 |
+| packages/flows/forge-requeue.ts | flows | verbatim | 375 |
 | apps/forge/forge-watch.ts | apps/forge | verbatim | 800 |
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 742 |
 | packages/knowledge/brain-write-lease.ts | knowledge | verbatim | 197 |
@@ -333,7 +333,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/constraint-blocks.ts | projects | verbatim | 270 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |
 | packages/flows/ci-gate.ts | flows | verbatim | 147 |
-| packages/flows/cycle-context.ts | flows | verbatim | 391 |
+| packages/flows/cycle-context.ts | flows | verbatim | 393 |
 | packages/flows/cycle-helpers.ts | flows | verbatim | 721 |
 | packages/flows/cycle-pr-open.ts | flows | rewritten | 148 |
 | packages/flows/cycle-report.ts | flows | verbatim | 31 |
@@ -357,7 +357,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
 | packages/flows/flow-node-context.ts | flows | verbatim | 54 |
 | packages/flows/flow-node-kind.ts | flows | verbatim | 66 |
-| packages/flows/flow-runner.ts | flows | rewritten | 791 |
+| packages/flows/flow-runner.ts | flows | rewritten | 792 |
 | packages/flows/flow-fanout.ts | flows | verbatim | 34 |
 | packages/flows/flow-accepts-class.ts | flows | rewritten | 34 |
 | packages/flows/flow-trigger.ts | flows | verbatim | 222 |
@@ -407,8 +407,8 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
 | packages/stations/phases/dev-work-items-restore.ts | stations | rewritten | 99 **New file, forge-mfv5.1.47:** a develop resume restores a lost work-item queue or refuses by name |
-| packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 133 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
-| packages/stations/phases/developer-loop.ts | stations | verbatim | 1617 |
+| packages/stations/phases/dev-loop-keep.ts | stations | rewritten | 178 **New file, forge-mfv5.1.56:** an unmerged WI keeps its branch (dev-loop.kept) and a fix round whose fix WIs failed halts before integrate |
+| packages/stations/phases/developer-loop.ts | stations | verbatim | 1550 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 75 |
 | packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 208 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
@@ -474,7 +474,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/demo-planner-port.ts | stations | rewritten | 177 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 288 |
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
-| packages/flows/requeue-resume.ts | flows | verbatim | 474 |
+| packages/flows/requeue-resume.ts | flows | verbatim | 481 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 313 |
@@ -555,7 +555,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/webhook-verify.ts | flows | verbatim | 114 |
 | packages/flows/wi-dispatch-scheduler.ts | flows | verbatim | 151 |
 | packages/flows/wi-merge-back.ts | flows | verbatim | 466 |
-| packages/flows/wi-worktree.ts | flows | verbatim | 365 |
+| packages/flows/wi-worktree.ts | flows | verbatim | 397 |
 | packages/flows/work-item.ts | flows | verbatim | 771 |
 | packages/flows/worktree.ts | flows | verbatim | 209 |
 | packages/flows/testing.ts | flows | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `hasMergeGateConfigErrorMarker`/`mergeGateConfigErrorPath` (fix-work-items.ts), `CostTracker` (flow-budgets.ts) and `validateCompiledWorkItemSet` (phases/wi-spec-compile.ts) have no production consumer outside this package, only `apps/forge`/`packages/factory` tests reach for them.** |

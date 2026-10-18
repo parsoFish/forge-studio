@@ -527,6 +527,7 @@ export async function runFlow({
       if (costReason !== null) return costReason;
       return checkOperatorStop() ? new OperatorStopError().message : null;
     },
+    operatorStopRequested: () => checkOperatorStop() !== null,
     // M7-A: the SAME tracker's live remaining-budget reading (field doc above).
     remainingCostBudgetUsd: () => costTracker.remainingUsd,
     // Operator ruling 97 (seam F6 half 2): THIS flow's own declared review

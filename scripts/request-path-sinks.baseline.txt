@@ -171,7 +171,7 @@ packages/flows/forge-metrics.ts readdirSync 2
 packages/flows/forge-metrics.ts readFileSync 8
 packages/flows/forge-metrics.ts statSync 1
 packages/flows/forge-requeue.ts execFileSync 4
-packages/flows/forge-requeue.ts existsSync 5
+packages/flows/forge-requeue.ts existsSync 7
 packages/flows/forge-requeue.ts readFileSync 1
 packages/flows/forge-requeue.ts renameSync 1
 packages/flows/forge-requeue.ts rmSync 3
@@ -269,9 +269,10 @@ packages/flows/stale-remote-branch-guard.ts execFileSync 1
 packages/flows/wi-merge-back.ts execFileSync 5
 packages/flows/wi-merge-back.ts rmSync 1
 packages/flows/wi-worktree.ts cpSync 1
-packages/flows/wi-worktree.ts execFileSync 10
+packages/flows/wi-worktree.ts execFileSync 11
 packages/flows/wi-worktree.ts existsSync 2
 packages/flows/wi-worktree.ts mkdirSync 1
+packages/flows/wi-worktree.ts writeFileSync 1
 packages/flows/work-item.ts existsSync 2
 packages/flows/work-item.ts mkdirSync 1
 packages/flows/work-item.ts readdirSync 3

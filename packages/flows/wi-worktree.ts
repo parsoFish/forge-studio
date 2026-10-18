@@ -43,13 +43,15 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { FORGE_ROOT, gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 import { add, list, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
 import { linkProjectDeps } from './scheduler-run-one.ts'; // bead forge-8vfn.15: moved from scheduler.ts
 import { createLogger } from '@forge/kernel';
+import { readWorkItemsFromDir, serializeWorkItem } from './work-item.ts';
+import { DEV_WORK_ITEM_ID_PATTERN } from '@forge/contracts';
 
 export type WiWorktreeHandle = {
   path: string;
@@ -135,6 +137,36 @@ function selfHealWiCollision(opts: {
   const parkedAs = `forge/parked/${opts.initiativeId}/${opts.workItemId}-${tip.slice(0, 12)}`;
   git(['branch', '-m', opts.branch, parkedAs]);
   return { resumeTip: null, parkedAs };
+}
+
+/**
+ * forge-mfv5.1.60 (D-06): a stranded run's dev loop died (operator stop + kill)
+ * before it recorded any WI outcome, so an owed WI's committed branch carries
+ * no `kept_branch` and `createWiWorktree` would park it. Stamp each owed WI
+ * (pending / in-progress) whose branch carries commits outside the cycle
+ * branch as kept, so it resumes at its tip; status stays owed. One with no
+ * such commits is left to be re-cut. Every count is read before any write; an
+ * unanswerable one refuses by name.
+ */
+export function keepStrandedWorkItems(o: { worktreePath: string; projectRepoPath: string; initiativeId: string }): Array<{ work_item_id: string; branch: string; tip: string; commits: number }> {
+  const dir = join(o.worktreePath, '.forge', 'work-items');
+  const { items, parseErrors } = readWorkItemsFromDir(dir);
+  const bad = Object.keys(parseErrors);
+  if (bad.length > 0) throw new Error(`requeue: cannot read work item(s) ${bad.join(', ')} in ${dir} — refusing to resume or re-cut them (D-06)`);
+  const owed = items.filter((w) => (w.status === 'pending' || w.status === 'in-progress') && w.kept_branch === undefined);
+  const badId = owed.find((w) => !DEV_WORK_ITEM_ID_PATTERN.test(w.work_item_id));
+  if (badId) throw new Error(`requeue: work item id ${JSON.stringify(badId.work_item_id)} is not a work-item id — refusing to keep its branch`);
+  const cycleBranch = `forge/${o.initiativeId}`;
+  const git = (args: string[]): string => execFileSync('git', ['-C', o.projectRepoPath, ...args], { stdio: 'pipe', encoding: 'utf8' }).trim();
+  const kept = owed.flatMap((w) => {
+    const branch = wiBranchName({ initiativeId: o.initiativeId, workItemId: w.work_item_id });
+    if (git(['for-each-ref', '--format=%(refname)', `refs/heads/${branch}`]) === '') return [];
+    const commits = unmergedCommitCount(o.projectRepoPath, branch, [`refs/heads/${cycleBranch}`]);
+    if (commits === 'UNKNOWN') throw new Error(`requeue: cannot tell whether ${branch} carries commits outside ${cycleBranch} — refusing to resume or re-cut it (D-06)`);
+    return commits === 0 ? [] : [{ wi: w, branch, tip: git(['rev-parse', `refs/heads/${branch}`]), commits }];
+  });
+  for (const k of kept) writeFileSync(join(dir, `${k.wi.work_item_id}.md`), serializeWorkItem({ ...k.wi, kept_branch: k.branch }));
+  return kept.map((k) => ({ work_item_id: k.wi.work_item_id, branch: k.branch, tip: k.tip, commits: k.commits }));
 }
 
 export function createWiWorktree(opts: {

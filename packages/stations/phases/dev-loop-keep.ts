@@ -8,7 +8,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest, parseWorkItem, removeWiWorktree, serializeWorkItem, supersededFixWorkItemsIn, unmergedCommitCount, type WorkItem } from '@forge/flows';
+import { classifyCrash } from '@forge/agents';
+import { parseManifest, parseWorkItem, removeWiWorktree, serializeWorkItem, supersededFixWorkItemsIn, unmergedCommitCount, wedgeKillRunnerError, type WorkItem } from '@forge/flows';
 import { gitNetDelta, wiDeliveryEvent, type WiOutcome } from './developer-loop.ts';
 
 export type WiCloseContext = { logger: EventLogger; initiativeId: string; parentEventId: string; skill: string };
@@ -43,6 +44,50 @@ export function recordWiOutcome(o: WiCloseContext & { workItemId: string; specPa
       files_changed: delta.files, insertions: delta.insertions, deletions: delta.deletions, commits, outcome: o.finalStatus, resumable: true });
   }
   return delta;
+}
+
+export type RunnerError = { kind: string; message: string };
+
+/**
+ * F-44 + G3: one WI's agent attempts — a thrown agent crash retries with
+ * backoff while attempts remain, unless deterministic (classifyCrash) or a
+ * wedge-kill aborted the node. forge-mfv5.1.60 (D-06): an agent that dies
+ * while the operator-stop flag is set was stopped, not crashed — it stops at
+ * once (`dev-loop.agent-stopped`): no retry, so no iteration-0 gate re-run.
+ */
+export async function runWithCrashRetry(o: WiCloseContext & { workItemId: string; specPath: string; attempt: () => Promise<void>; signal?: AbortSignal; operatorStopRequested?: () => boolean; maxRetries: number; backoffMs: number; sleep: (ms: number) => Promise<unknown> }): Promise<{ runnerError: RunnerError | undefined; stoppedByOperator: boolean }> {
+  const emit = (message: string, eventType: 'log' | 'error', metadata: Record<string, unknown>): void => void o.logger.emit({ initiative_id: o.initiativeId, parent_event_id: o.parentEventId, phase: 'developer-loop', skill: o.skill, event_type: eventType, input_refs: [o.specPath], output_refs: [], message, metadata: { work_item_id: o.workItemId, ...metadata } });
+  let runnerError: RunnerError | undefined;
+  // G3 (plan 2.3): the previous crash, so classifyCrash can spot an IDENTICAL repeat.
+  let priorCrashMessage: string | null = null;
+  for (let attempt = 0; attempt <= o.maxRetries; attempt++) {
+    // R2-03-F4: a wedge-kill mid-flight must not spawn a fresh retry attempt.
+    if (o.signal?.aborted) return { runnerError: wedgeKillRunnerError(o.signal, 'wedge-kill: node aborted'), stoppedByOperator: false };
+    runnerError = undefined;
+    try {
+      await o.attempt();
+    } catch (err) {
+      runnerError = { kind: 'agent_threw', message: err instanceof Error ? err.message : String(err) };
+    }
+    if (runnerError && o.operatorStopRequested?.() === true) {
+      emit('dev-loop.agent-stopped', 'log', { attempt: attempt + 1, reason: 'operator-stop', runner_error: runnerError });
+      return { runnerError, stoppedByOperator: true };
+    }
+    // R2-03-F4: a wedge-kill that fires MID-attempt surfaces as a thrown abort — never a transient crash to retry.
+    if (runnerError && o.signal?.aborted) return { runnerError: wedgeKillRunnerError(o.signal, 'wedge-kill: node aborted mid-attempt'), stoppedByOperator: false };
+    // Only a thrown agent crash is retryable; a quality-gate failure comes back as a result, not a throw.
+    if (!runnerError || attempt === o.maxRetries) break;
+    const crashClass = classifyCrash(runnerError.message, priorCrashMessage);
+    const md = { max_retries: o.maxRetries, crash_class: crashClass.kind, crash_reason: crashClass.reason, runner_error: runnerError };
+    if (crashClass.kind === 'deterministic') {
+      emit('dev-loop.crash-deterministic', 'error', { attempts_made: attempt + 1, ...md });
+      break;
+    }
+    priorCrashMessage = runnerError.message;
+    emit('dev-loop.agent-crash-retry', 'log', { attempt: attempt + 1, ...md });
+    await o.sleep(o.backoffMs);
+  }
+  return { runnerError, stoppedByOperator: false };
 }
 
 /** Paths `git status` lists in the WI worktree (gitignored scratch excluded), or UNKNOWN. */
