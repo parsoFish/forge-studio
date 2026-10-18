@@ -515,7 +515,7 @@ test('decideRequeueResume: review failure with a work item NOT complete → no r
 });
 
 test('a manifest stamped resume_from: review round-trips, and the review resume rebases once at entry', () => {
-  const base = parseManifest(`---\ninitiative_id: ${INIT}\nproject: fix\ncreated_at: 2026-10-18T00:00:00Z\niteration_budget: 3\ncost_budget_usd: 5\n---\nbody\n`);
+  const base = parseManifest(`---\ninitiative_id: ${INIT}\nproject: fix\ncreated_at: 2026-10-18T00:00:00Z\niteration_budget: 3\ncost_budget_usd: 5\nclass: code\n---\nbody\n`);
   assert.equal(parseManifest(serializeManifest({ ...base, resume_from: 'review' })).resume_from, 'review');
   assert.equal(rebasesAtEntry({ resumeFrom: 'review' }), true);
 });

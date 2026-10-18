@@ -391,7 +391,7 @@ export function checkFlowVersionSeam(
  * `pm` node, which still rebases itself (executor-table.ts's `execPm`).
  */
 const RESUME_POINTS_INTO_DEVELOP: ReadonlySet<CycleInput['resumeFrom']> = new Set([
-  'integrate', 'pr-open', 'develop',
+  'integrate', 'pr-open', 'develop', 'review',
 ]);
 
 /**

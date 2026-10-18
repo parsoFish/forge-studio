@@ -163,7 +163,7 @@ export type InitiativeManifest = {
    *     signal.
    * Absent ⇒ normal full cycle.
    */
-  resume_from?: 'integrate' | 'develop' | 'plan' | 'pr-open';
+  resume_from?: 'integrate' | 'develop' | 'plan' | 'pr-open' | 'review';
   /**
    * D-20: send-back round counter. Incremented by the review verdict
    * handler (`persistManifestSendBack`) each time review feedback compiles

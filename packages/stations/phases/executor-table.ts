@@ -169,11 +169,13 @@ const execDev: NodeExecutor = async (ctx) => {
  * before PR-open failed, and its artifacts (demo.json, DEMO.md,
  * .forge/pr-description.md) already sit in the preserved worktree. Re-running
  * it would re-derive a bundle that is already correct, at the cost of a full
- * merge-boundary gate pass for nothing.
+ * merge-boundary gate pass for nothing. forge-mfv5.1.61: a `resumeFrom: 'review'`
+ * run (a review-pipeline failure, every work item already through its gate) skips
+ * it for the same reason; the review band below is the node that re-runs.
  */
 const execIntegrate: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
-  if (input.resumeFrom === 'pr-open') {
+  if (input.resumeFrom === 'pr-open' || input.resumeFrom === 'review') {
     nodeLogger.emit({
       initiative_id: input.initiativeId,
       phase: 'orchestrator',

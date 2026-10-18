@@ -33,6 +33,10 @@
  * `resume_from: pr-open` — the whole post-develop band already succeeded, so
  * only the review node re-enters, not the generic `'integrate'` case above.
  *
+ * forge-mfv5.1.61: a review-PIPELINE failure (classified `resumeFrom:'review'`)
+ * with every work item complete resumes `resume_from: review` — integrate is
+ * skipped and the review re-buys only the chunks it has no record for.
+ *
  * All helpers are read-only; the caller (`runRequeue`) owns every mutation.
  */
 
@@ -58,7 +62,7 @@ export type RequeueResumeDecision =
        * `null` → preserve the worktree with NO marker; the scheduler's
        * preserved work-items reuse path re-runs the dev-loop in place.
        */
-      resume_from: 'integrate' | 'plan' | 'pr-open' | 'develop' | null;
+      resume_from: 'integrate' | 'plan' | 'pr-open' | 'develop' | 'review' | null;
       reason: string;
     };
 
@@ -84,7 +88,7 @@ export type PriorFailureSignal = {
    *  node; row 122: `'pr-open'` when it named the review node instead — both
    *  read structured, off `failure_classification`'s `resume_from`
    *  metadata, never by re-sniffing `reason` prose. */
-  resumeFrom?: 'plan' | 'pr-open';
+  resumeFrom?: 'plan' | 'pr-open' | 'review';
 };
 
 const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanBoundaryHalt: false };
@@ -102,7 +106,7 @@ export function strandedFailureClassification(s: { reason: unknown; stopFlag: un
   return {
     failure_mode: 'terminal', failure_kind: 'terminal', recoverable: false, environment: !stop, cleanBoundaryHalt: stop,
     // The manifest's own narrow re-entry (an earlier pr-open / plan resume) survives the strand.
-    ...(s.resumeFrom === 'plan' || s.resumeFrom === 'pr-open' ? { resume_from: s.resumeFrom } : {}),
+    ...(s.resumeFrom === 'plan' || s.resumeFrom === 'pr-open' || s.resumeFrom === 'review' ? { resume_from: s.resumeFrom } : {}),
     reason: `stranded run classified at boot (${s.reason}${stop ? ', operator stop flag set' : ''}) — Requeue resumes from the preserved worktree`,
   };
 }
@@ -128,7 +132,7 @@ export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSign
   return {
     environment: md.environment === true,
     cleanBoundaryHalt: md.cleanBoundaryHalt === true,
-    ...(md.resume_from === 'plan' || md.resume_from === 'pr-open' ? { resumeFrom: md.resume_from as 'plan' | 'pr-open' } : {}),
+    ...(md.resume_from === 'plan' || md.resume_from === 'pr-open' || md.resume_from === 'review' ? { resumeFrom: md.resume_from as 'plan' | 'pr-open' | 'review' } : {}),
   };
 }
 
@@ -364,6 +368,8 @@ export function decideRequeueResume(args: {
    * does not apply).
    */
   resumeFromPrOpen?: boolean;
+  /** forge-mfv5.1.61: the classifier's own `resumeFrom:'review'` — the review pipeline failed. */
+  resumeFromReview?: boolean;
   worktreePresent: boolean;
   branchHasWork: boolean;
   workItems: WorkItemStatusSummary | null;
@@ -394,6 +400,15 @@ export function decideRequeueResume(args: {
       "prior failure was an environment failure at the review node's PR-open call — dev, integrate " +
       'and adversarial-review already succeeded; resume at the pr-open node to re-open the PR only';
     return { resume: true, resume_from: 'pr-open', reason };
+  }
+  if (args.resumeFromReview) {
+    if (!args.worktreePresent) return { resume: false, reason: 'prior failure was the review pipeline, but the preserved worktree is gone — fresh re-run' };
+    // Only a complete set reached the review; anything else falls through to the generic inference.
+    if (args.branchHasWork && args.workItems && args.workItems.complete === args.workItems.total) {
+      const reason = `the review pipeline failed with all ${args.workItems.total} WIs complete on the preserved branch — ` +
+        'resume at the review node; integrate is skipped and chunks judged at this head are reused';
+      return { resume: true, resume_from: 'review', reason };
+    }
   }
   const resumable = args.environmentFailure || args.cleanBoundaryHalt === true;
   if (!resumable) {
@@ -445,6 +460,7 @@ export function inferRequeueResume(args: {
     cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
     resumeFromPlan: priorFailure.resumeFrom === 'plan' || args.pmValidationErrors === true,
     resumeFromPrOpen: priorFailure.resumeFrom === 'pr-open',
+    resumeFromReview: priorFailure.resumeFrom === 'review',
     worktreePresent: existsSync(args.worktreePath),
     branchHasWork:
       existsSync(args.projectRepoPath) &&

@@ -54,7 +54,7 @@ export type FailureClassification = {
    * the whole post-develop band the generic `environment: true` + all-WI-
    * complete inference would otherwise pick (`'integrate'`).
    */
-  resumeFrom?: 'plan' | 'pr-open';
+  resumeFrom?: 'plan' | 'pr-open' | 'review';
   /** Up to 5 event_ids whose content drove the classification. */
   evidence_event_ids: string[];
 };
@@ -76,7 +76,7 @@ const T = (
   evidence: string[],
   environment = false,
   cleanBoundaryHalt = false,
-  resumeFrom?: 'plan' | 'pr-open',
+  resumeFrom?: 'plan' | 'pr-open' | 'review',
 ): FailureClassification => ({
   kind,
   reason,
@@ -741,7 +741,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       ? `the integrate band failed ${integrateBandDetail} — the branch is not review-ready and no PR opened`
       : 'the integrate band failed to derive the delivery bundle — the branch is not review-ready and no PR opened; the error event carries the band\'s own reason', evidence);
   }
-  if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / budget) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then re-run', evidence);
+  // forge-mfv5.1.61: every work item already passed its gate — Requeue resumes AT the review node.
+  if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / authoring) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then Requeue, which re-runs only the review', evidence, false, false, 'review');
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 
   // Transient — auto-retry within MAX_AUTO_RETRIES.

@@ -292,7 +292,9 @@ export function runRequeue(
             ? ('pr-open' as const)
             : resumeDecision.resume && resumeDecision.resume_from === 'develop'
               ? ('develop' as const)
-              : undefined,
+              : resumeDecision.resume && resumeDecision.resume_from === 'review'
+                ? ('review' as const) // forge-mfv5.1.61: a review-pipeline failure re-runs only the review
+                : undefined,
   };
 
   // 3. Atomic move to pending/ via tmp+rename.

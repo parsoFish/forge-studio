@@ -120,7 +120,7 @@ export type CycleInput = {
    *     by `openPrInline` directly, or by `forge requeue`'s inference.
    * Absent ⇒ normal full cycle.
    */
-  resumeFrom?: 'integrate' | 'develop' | 'plan' | 'pr-open';
+  resumeFrom?: 'integrate' | 'develop' | 'plan' | 'pr-open' | 'review';
   /**
    * forge-mfv5.1.37: the scheduler REUSED a preserved worktree and branch for
    * this run (`decideWorktreeStrategy` → `'reuse'`) — the Kickoff hand-off,
@@ -181,7 +181,7 @@ export type CycleInput = {
  * entirely (see `resumeFrom`'s own doc above for the full enumeration).
  */
 export function resumeSkipsPerWiWork(resumeFrom: CycleInput['resumeFrom']): boolean {
-  return resumeFrom === 'integrate' || resumeFrom === 'pr-open';
+  return resumeFrom === 'integrate' || resumeFrom === 'pr-open' || resumeFrom === 'review';
 }
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
