@@ -149,6 +149,7 @@ test('CONTROL: a clean worktree re-enters and the round runs as today', async ()
     // Requeue resumes it; before, this asserted the ready-for-review/ return that stranded gitweave I4.
     assert.equal(r?.detail, 'failed', JSON.stringify(r));
     assert.ok(existsSync(queue(root, 'failed')), 'a failed round with nothing left to drain lands in failed/');
+    assert.equal(existsSync(queue(root, 'ready-for-review')), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -371,6 +372,26 @@ test('the placement the pre-fix drain left (failed-at-review manifest in ready-f
     assert.deepEqual([r.fromQueueDir, r.resumeDecision.resume && r.resumeDecision.resume_from, r.worktreeRemoved, r.branchDeleted], ['ready-for-review', 'review', false, false], r.resumeDecision.reason);
     assert.equal(parseManifest(readFileSync(queue(root, 'pending'), 'utf8')).resume_from, 'review');
     assert.equal(existsSync(queue(root, 'ready-for-review')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a failed round whose fix WI FAILED with no recorded halt stays in ready-for-review/ — the drain parks it, a send-back supersedes it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'drain-review-failed-wi-'));
+  try {
+    const fx = plant(root, { dirty: false });
+    const results = await drainPendingFixWorkItems({
+      queueRoot: join(root, '_queue'), logsRoot: join(root, '_logs'), phaseWiring: UNREACHED_PHASE_WIRING, confirmMerge: () => false,
+      runDrainCycle: async () => {
+        const spec = join(fx.worktree, '.forge', 'work-items', 'WI-6.md');
+        writeFileSync(spec, readFileSync(spec, 'utf8').replace('status: pending', 'status: failed'));
+        return { status: 'failed' };
+      },
+    });
+    assert.equal(results.find((x) => x.initiativeId === FIX_INIT)?.status, 'drained');
+    assert.ok(existsSync(queue(root, 'ready-for-review')));
+    assert.equal(existsSync(queue(root, 'failed')), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

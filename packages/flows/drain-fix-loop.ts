@@ -335,7 +335,8 @@ export async function drainPendingFixWorkItems(
         // forge-mfv5.1.62: a failed round that leaves no fix WI pending (gitweave I4: the fix WI delivered, the review
         // failed) has nothing the drain can re-run — it lands in failed/, the scheduler's own placement for a failed
         // cycle, where Requeue resumes it; ready-for-review/ is for a round that reached its verdict gate.
-        if (result.status === 'failed' && after.length === 0) {
+        // A failed fix WI with no recorded halt stays: the drain parks it needs-operator, and a send-back supersedes it.
+        if (result.status === 'failed' && after.length === 0 && failedFixWorkItemIds(worktreePath).length === 0 && existsSync(inFlightPath)) {
           try { moveTo(file, 'failed', paths); } catch (err) { throw new Error(`fix round failed with no fix work item pending, but the move to failed/ failed: ${err instanceof Error ? err.message : String(err)}`); }
           inFailed = true;
         }

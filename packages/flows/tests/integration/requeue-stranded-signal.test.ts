@@ -155,3 +155,12 @@ test('forge-mfv5.1.62: the record boot writes after its strand is read as the st
     rmSync(later.root, { recursive: true, force: true });
   }
 });
+
+test('forge-mfv5.1.62: a strand is not the cause of a record written after it with other events between (a wedged run that later failed)', () => {
+  const f = i4Root([I4_STRANDED_ROW, row('failure_classification', { environment: true }), ...failureCauseEvents('terminal', I4).map((e) => JSON.stringify(e)), TERMINAL]);
+  try {
+    assert.deepEqual(readPriorFailureSignalFromLog(logOf(f.root)), { environment: false, cleanBoundaryHalt: false });
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});

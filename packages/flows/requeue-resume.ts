@@ -132,9 +132,9 @@ export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSign
   const events = readLogEvents(logPath) ?? [];
   const at = lastIndex(events, (ev) => ev.message === 'failure_classification' || ev.message === 'recovery.stranded-classified');
   if (at < 0) return NO_PRIOR_FAILURE_SIGNAL;
-  // A boot's record follows its strand event (scheduler-sweeps.ts announceRecovery): the strand, in the same attempt, is the cause.
-  const strandAt = lastIndex(events.slice(0, at + 1), (ev) => ev.message === 'recovery.stranded-classified');
-  const strand = strandAt > lastIndex(events.slice(0, at), (ev) => ev.message === 'cycle.start') ? events[strandAt]!.metadata : undefined;
+  // Boot writes its record directly after its strand event (scheduler-sweeps.ts announceRecovery): that pair is read as the strand.
+  const strandAt = events[at]!.message === 'recovery.stranded-classified' ? at : events[at - 1]?.message === 'recovery.stranded-classified' ? at - 1 : -1;
+  const strand = strandAt >= 0 ? events[strandAt]!.metadata ?? {} : undefined;
   const derived = strand ? null : derivedFailureClassification(events, at);
   const md = derived ? { ...derived, resume_from: derived.resumeFrom } : strandedFailureClassification({ reason: strand?.reason, stopFlag: strand?.stop_flag, resumeFrom: strand?.resume_from });
   if (!md) return NO_PRIOR_FAILURE_SIGNAL;

@@ -596,7 +596,7 @@ test('readPriorFailureSignal: a record whose stored fields claim more than its c
   }
 });
 
-test('derivedFailureClassification: a record the current classifier wrote derives identical to itself (every cause)', () => {
+test('derivedFailureClassification: reads exactly what the classifier says over the events before the record, whatever the record holds (every cause)', () => {
   for (const cause of ['environment', 'operator-stop', 'cost-ceiling', 'plan', 'pr-open', 'review', 'terminal'] as const) {
     const events = [{ event_id: 's', initiative_id: INIT, started_at: 't0', phase: 'orchestrator', skill: 'cycle', event_type: 'start', input_refs: [], output_refs: [], message: 'cycle.start' }, ...failureCauseEvents(cause, INIT)];
     const written = classifyCycleFailure(events as never);
