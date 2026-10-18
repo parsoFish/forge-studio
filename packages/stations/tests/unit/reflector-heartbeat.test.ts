@@ -154,3 +154,33 @@ test('8.1.30: a reflector turn that is SLOW emits agent_heartbeat, named for the
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test('forge-mfv5.1.61: the reflector logs its tool calls and SAYS what the sampler dropped (its sink is flushed)', async () => {
+  const cycleId = uniqueCycleId();
+  const tmp = mkdtempSync(join(tmpdir(), 'reflector-tools-'));
+  const logsRoot = join(tmp, '_logs');
+  try {
+    const manifestPath = join(tmp, 'manifest.md');
+    writeFileSync(manifestPath, ['---', 'initiative_id: INIT-2026-10-18-rt', 'project: demo-project', 'created_at: 2026-10-18T00:00:00Z',
+      'iteration_budget: 3', 'cost_budget_usd: 1.0', 'class: code', 'phase: done', 'origin: architect', '---', '', 'body', ''].join('\n'));
+    const logger = createLogger(cycleId, logsRoot);
+    async function* fiveReads(): AsyncIterable<unknown> {
+      for (const f of ['brain/INDEX.md', 'a.md', 'b.md', 'c.md', 'd.md']) {
+        yield { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: f } }] } };
+      }
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0.05, duration_ms: 10 };
+    }
+    const result = await runReflector(
+      { initiativeId: 'INIT-2026-10-18-rt', manifestPath, projectRepoPath: FORGE_ROOT, worktreePath: FORGE_ROOT, cycleId, logsRoot },
+      logger,
+      { sdkQuery: fiveReads, brainLint: () => ({ findings: [], exitCode: 0 }), acquireBrainWriteLease: acquireIsolatedReflectorLease, agentDef: canonicalDef('reflector'), heartbeatTimers: fakeTimers(0) },
+    );
+    assert.equal(result.reflection_status, 'closed');
+    const events = readEvents(logger.logFilePath);
+    assert.ok(events.some((e) => e.message === 'tool.Read' && e.phase === 'reflection'), 'tool.Read logged under the reflection phase');
+    const coalesced = events.find((e) => e.message === 'tool.coalesced');
+    assert.equal((coalesced?.metadata as { sampled_out_count?: number } | undefined)?.sampled_out_count, 3, 'the three sampled-out Reads are said, never silent');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});

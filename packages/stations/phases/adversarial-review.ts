@@ -605,7 +605,7 @@ async function reviewInitiative(
           const detail = capDetail(label, capSpawn);
           const partial = partialChunk(label, chunk, capSpawn, harvest.ok ? 'agent' : 'orchestrator');
           emit('review.chunk.partial', { chunk: label, work_item_id: chunk.workItemId, files: chunk.files, result_subtype: spawn.resultSubtype,
-            tool_use_count: partial.toolUses, last_tools: partial.lastTools, source: partial.source, attempt, detail }, { event_type: 'error' });
+            tool_use_count: partial.toolUses, last_tools: partial.lastTools, source: partial.source, attempt, detail }); // a log: a split may still cure it
           const record = harvest.ok ? harvest.record : unreviewedRecord({ identity: runIdentity, files: chunk.files, criteria, lenses, detail });
           return { ok: true, record, partials: [partial] };
         }
